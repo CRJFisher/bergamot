@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "PKM Navigation Tracker",
+  "version": "1.0",
+  "description": "Tracks browsing navigation chains for personal knowledge management.",
+  "permissions": ["scripting", "webRequest", "tabs", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "scripts": ["dist/background.bundle.js"],
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["dist/content.bundle.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_title": "PKM Navigation Tracker"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "pkm-assistant@example.com"
+    }
+  }
+} 

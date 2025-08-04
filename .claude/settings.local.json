@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test)",
+      "Bash(npm run test:unit:*)",
+      "Bash(npm test:*)",
+      "Bash(backlog task edit:*)",
+      "Bash(npm search:*)",
+      "Bash(npm run compile:*)",
+      "Bash(backlog task create:*)"
+    ],
+    "deny": []
+  }
+}

@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "target": "ES2022",
+        "lib": ["ES2022", "DOM"],
+        "module": "ES2022",
+        "moduleResolution": "node",
+        "allowSyntheticDefaultImports": true,
+        "esModuleInterop": true,
+        "strict": false,
+        "skipLibCheck": true,
+        "types": ["node", "@playwright/test", "@types/chrome"]
+    },
+    "include": [
+        "src/**/*",
+        "e2e/**/*"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist"
+    ]
+}

@@ -1,0 +1,40 @@
+{
+  "name": "firefox_local_post_extension",
+  "version": "1.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "test:unit": "node --experimental-vm-modules node_modules/.bin/jest --testMatch='**/*.test.js'",
+    "test:integration": "node --experimental-vm-modules node_modules/.bin/jest --testMatch='**/*.integration.test.js'",
+    "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --watch",
+    "build": "esbuild content.js --bundle --outfile=dist/content.bundle.js --format=iife --allow-overwrite"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cheerio": "^1.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.4",
+    "@jest/globals": "^29.7.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "puppeteer": "^22.0.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "setupFilesAfterEnv": ["<rootDir>/test-setup.js"],
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    },
+    "verbose": true,
+    "transform": {},
+    "globals": {
+      "TextEncoder": true,
+      "TextDecoder": true
+    }
+  }
+}

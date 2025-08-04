@@ -1,0 +1,1 @@
+in typescript use snake case for all names (files, variables, functions etc) except classes

@@ -1,0 +1,30 @@
+{
+    "compilerOptions": {
+        "module": "commonjs",
+        "target": "ES2022",
+        "outDir": "out",
+        "lib": [
+            "ES2022",
+            "DOM"
+        ],
+        "sourceMap": true,
+        "rootDir": "src",
+        "strict": false,
+        "moduleResolution": "node",
+        "types": [
+            "node",
+            "jest",
+            "vscode"
+        ],
+        "skipLibCheck": true,
+        "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true
+    },
+    "exclude": [
+        "node_modules",
+        ".vscode-test",
+        "referrer_tracker_extension",
+        "src/__mocks__/**/*",
+        "**/*.test.ts"
+    ]
+}

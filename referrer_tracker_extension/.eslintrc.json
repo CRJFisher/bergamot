@@ -1,0 +1,18 @@
+{
+    "env": {
+        "browser": true,
+        "webextensions": true,
+        "es2020": true
+    },
+    "globals": {
+        "browser": "readonly",
+        "chrome": "readonly"
+    },
+    "parserOptions": {
+        "ecmaVersion": 2020,
+        "sourceType": "module"
+    },
+    "rules": {
+        "no-undef": "error"
+    }
+}
