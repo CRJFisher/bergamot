@@ -11,6 +11,9 @@ import { OpenAIEmbeddings } from "./workflow/embeddings";
 import { MarkdownDatabase } from "./markdown_db";
 import { get_filter_config } from "./config/filter_config";
 import { global_filter_metrics } from "./workflow/filter_metrics";
+import { EpisodicMemoryStore } from "./memory/episodic_memory_store";
+import { FeedbackDocumentGenerator } from "./memory/feedback_document_generator";
+import { register_feedback_commands } from "./memory/feedback_commands";
 import { DuckDB, get_page_sessions_with_tree_id } from "./duck_db";
 import path from "path";
 import { PageActivitySessionWithoutTreeOrContent } from "./duck_db_models";
@@ -121,6 +124,22 @@ async function start_webpage_categoriser_service(
     }),
   });
 
+  // Initialize episodic memory if enabled
+  let episodic_store: EpisodicMemoryStore | undefined;
+  const memory_config = vscode.workspace.getConfiguration('pkm-assistant.agentMemory');
+  
+  if (memory_config.get<boolean>('enabled', true)) {
+    episodic_store = new EpisodicMemoryStore(duck_db, memory_db);
+    await episodic_store.initialize();
+    
+    // Register feedback commands
+    const feedback_generator = new FeedbackDocumentGenerator(
+      episodic_store,
+      markdown_db
+    );
+    register_feedback_commands(context, episodic_store, feedback_generator);
+  }
+  
   const filter_config = get_filter_config();
   const webpage_categoriser_app = build_workflow(
     openai_api_key,
@@ -128,7 +147,8 @@ async function start_webpage_categoriser_service(
     duck_db,
     markdown_db,
     memory_db,
-    filter_config
+    filter_config,
+    episodic_store
   );
 
   // Create a queue that will persist between requests

@@ -148,6 +148,63 @@ export class DuckDB {
   async close(): Promise<void> {
     this.connection.disconnectSync();
   }
+
+  // Helper methods for episodic memory compatibility
+  async exec(sql: string): Promise<void> {
+    await this.connection.run(sql);
+  }
+
+  async run(sql: string, params: any[] = []): Promise<void> {
+    if (params.length === 0) {
+      await this.connection.run(sql);
+      return;
+    }
+    
+    const param_obj: Record<string, DuckDBValue> = {};
+    let param_index = 0;
+    
+    // Replace ? with $1, $2, etc.
+    const modified_sql = sql.replace(/\?/g, () => {
+      param_index++;
+      return `$${param_index}`;
+    });
+    
+    // Build parameter object
+    params.forEach((value, index) => {
+      param_obj[`${index + 1}`] = value;
+    });
+    
+    await this.connection.run(modified_sql, param_obj);
+  }
+
+  async all<T = any>(sql: string, params: any[] = []): Promise<T[]> {
+    if (params.length === 0) {
+      const result = await this.connection.runAndReadAll(sql);
+      return result.getRowObjects() as T[];
+    }
+    
+    const param_obj: Record<string, DuckDBValue> = {};
+    let param_index = 0;
+    
+    // Replace ? with $1, $2, etc.
+    const modified_sql = sql.replace(/\?/g, () => {
+      param_index++;
+      return `$${param_index}`;
+    });
+    
+    // Build parameter object
+    params.forEach((value, index) => {
+      param_obj[`${index + 1}`] = value;
+    });
+    
+    const result = await this.connection.runAndReadAll(modified_sql, param_obj);
+    return result.getRowObjects() as T[];
+  }
+
+  async get<T = any>(sql: string, params: any[] = []): Promise<T | null> {
+    const results = await this.all<T>(sql, params);
+    return results.length > 0 ? results[0] : null;
+  }
 }
 
 export async function insert_webpage_analysis(

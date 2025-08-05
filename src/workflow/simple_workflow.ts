@@ -12,6 +12,9 @@ import {
   FilterConfig
 } from './webpage_filter';
 import { global_filter_metrics } from './filter_metrics';
+import { MemoryEnhancedClassifier } from '../memory/memory_enhanced_classifier';
+import { EpisodicMemoryStore } from '../memory/episodic_memory_store';
+import { extract_content_features } from './content_analyzer';
 import {
   DuckDB,
   get_last_modified_trees_with_members_and_analysis,
@@ -92,19 +95,27 @@ export class WebpageWorkflow {
   private markdown_db: MarkdownDatabase;
   private memory_db: LanceDBMemoryStore;
   private filter_config: FilterConfig;
+  private episodic_store?: EpisodicMemoryStore;
+  private memory_classifier?: MemoryEnhancedClassifier;
 
   constructor(
     openai_key: string,
     duck_db: DuckDB,
     markdown_db: MarkdownDatabase,
     memory_db: LanceDBMemoryStore,
-    filter_config?: FilterConfig
+    filter_config?: FilterConfig,
+    episodic_store?: EpisodicMemoryStore
   ) {
     this.openai_key = openai_key;
     this.duck_db = duck_db;
     this.markdown_db = markdown_db;
     this.memory_db = memory_db;
     this.filter_config = filter_config || DEFAULT_FILTER_CONFIG;
+    this.episodic_store = episodic_store;
+    
+    if (episodic_store) {
+      this.memory_classifier = new MemoryEnhancedClassifier(episodic_store);
+    }
   }
 
   async run(inputs: {
@@ -128,12 +139,49 @@ export class WebpageWorkflow {
 
       const llm_client = await get_llm_client(this.openai_key);
       
-      // First, classify the webpage to determine if it should be processed
-      const classification = await classify_webpage(
+      // Extract content features for memory storage
+      const content_features = extract_content_features(
         inputs.new_page.url,
-        inputs.raw_content,
-        llm_client.complete_json.bind(llm_client)
+        inputs.raw_content
       );
+      
+      // Classify with memory enhancement if available
+      let classification;
+      let episode_id: string | undefined;
+      
+      if (this.memory_classifier && this.episodic_store) {
+        const memory_classification = await this.memory_classifier.classify_with_memory(
+          inputs.new_page.url,
+          inputs.raw_content,
+          llm_client.complete_json.bind(llm_client),
+          this.filter_config
+        );
+        
+        classification = memory_classification.final_classification;
+        
+        // Store the episode for future learning
+        episode_id = await this.memory_classifier.store_classification_episode(
+          inputs.new_page.url,
+          memory_classification,
+          content_features,
+          inputs.raw_content.substring(0, 2000)
+        );
+        
+        // Log memory influence if any
+        if (memory_classification.memory_adjustments.influenced_by.length > 0) {
+          console.log(`  Memory influence: ${memory_classification.memory_adjustments.influenced_by.length} similar episodes`);
+          if (memory_classification.base_classification.should_process !== classification.should_process) {
+            console.log(`  Decision changed by memory: ${memory_classification.base_classification.should_process} → ${classification.should_process}`);
+          }
+        }
+      } else {
+        // Fallback to basic classification
+        classification = await classify_webpage(
+          inputs.new_page.url,
+          inputs.raw_content,
+          llm_client.complete_json.bind(llm_client)
+        );
+      }
       
       const should_process = should_process_page(classification, this.filter_config);
       log_filter_decision(inputs.new_page.url, classification, should_process, this.filter_config);

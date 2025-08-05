@@ -6,23 +6,6 @@ Working on **Intelligent Filtering & Agent Memory** - implementing learning and 
 
 **Next Task**: Task 8 - Add agent memory and feedback system for webpage filtering
 
-### Recently Completed
-
-✅ **Task 5: Tidy up extension code and document core webpage processing functionality** [COMPLETED]
-   - Created comprehensive architecture documentation
-   - Removed 3 dead code files (1100+ lines)
-   - Documented webpage processing pipeline
-
-✅ **Task 6: Replace LangChain with lightweight alternative** [COMPLETED]
-   - Removed all LangChain dependencies
-   - Implemented vanilla TypeScript with OpenAI SDK
-   - 70% reduction in dependency footprint
-
-✅ **Task 7: Add webpage filtering step using LLM classification** [COMPLETED]
-   - Implemented 6 page type classifications
-   - Configurable filter rules via VS Code settings
-   - Comprehensive metrics tracking
-
 ### Intelligent Filtering & Memory
 
 1. **Task 8: Add agent memory and feedback system for webpage filtering** [HIGH]

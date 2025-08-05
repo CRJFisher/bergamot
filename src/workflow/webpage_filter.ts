@@ -21,7 +21,7 @@ Return your analysis as a JSON object with this structure:
 {
   "page_type": "category",
   "confidence": 0.0-1.0,
-  "reasoning": "Brief explanation of classification",
+  "reasoning": "Very brief reason (max 10 words)",
   "should_process": true/false
 }
 

@@ -154,6 +154,12 @@ export class MarkdownDatabase {
   private content = "";
   constructor(private readonly path: string) {}
 
+  get_file_path(filename: string): string {
+    // Return the path to a file in the same directory as the database
+    const dir = dirname(this.path);
+    return `${dir}/${filename}`;
+  }
+
   private async load(): Promise<void> {
     if (this.textDoc) {
       this.content = this.textDoc.getText();
@@ -225,6 +231,21 @@ export class MarkdownDatabase {
       spec.addEmptyLineBetweenBlocks,
       spec.addAnEmptyLineAtEndOfBlocks
     );
+  }
+
+  /**
+   * Insert or replace raw content at a file path
+   */
+  async upsert_raw(
+    filename: string,
+    content: string
+  ): Promise<MarkdownDatabase> {
+    const file_path = this.get_file_path(filename);
+    await fs.mkdir(dirname(file_path), { recursive: true });
+    await fs.writeFile(file_path, content);
+    
+    // Return a new MarkdownDatabase instance for the created file
+    return new MarkdownDatabase(file_path);
   }
 
   /**

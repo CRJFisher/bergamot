@@ -23,6 +23,26 @@
       {
         "command": "pkm-assistant.showFilterMetrics",
         "title": "PKM Assistant: Show Filter Metrics"
+      },
+      {
+        "command": "pkm-assistant.generateFilteringReview",
+        "title": "PKM Assistant: Generate Filtering Review"
+      },
+      {
+        "command": "pkm-assistant.showMemoryStats",
+        "title": "PKM Assistant: Show Memory Statistics"
+      },
+      {
+        "command": "pkm-assistant.correctDecision",
+        "title": "PKM Assistant: Correct Filtering Decision"
+      },
+      {
+        "command": "pkm-assistant.correctType",
+        "title": "PKM Assistant: Correct Page Type"
+      },
+      {
+        "command": "pkm-assistant.addExplanation",
+        "title": "PKM Assistant: Add Feedback Explanation"
       }
     ],
     "configuration": {
@@ -41,11 +61,20 @@
         },
         "pkm-assistant.webpageFilter.allowedTypes": {
           "type": "array",
-          "default": ["knowledge"],
+          "default": [
+            "knowledge"
+          ],
           "description": "Types of pages to process",
           "items": {
             "type": "string",
-            "enum": ["knowledge", "interactive_app", "aggregator", "leisure", "navigation", "other"]
+            "enum": [
+              "knowledge",
+              "interactive_app",
+              "aggregator",
+              "leisure",
+              "navigation",
+              "other"
+            ]
           }
         },
         "pkm-assistant.webpageFilter.minConfidence": {
@@ -59,6 +88,25 @@
           "type": "boolean",
           "default": true,
           "description": "Log filtering decisions to console"
+        },
+        "pkm-assistant.agentMemory.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable agent memory for learning from feedback"
+        },
+        "pkm-assistant.agentMemory.recentPagesDays": {
+          "type": "number",
+          "default": 7,
+          "minimum": 1,
+          "maximum": 30,
+          "description": "Days to show accepted pages in feedback document"
+        },
+        "pkm-assistant.agentMemory.filteredPagesHours": {
+          "type": "number",
+          "default": 48,
+          "minimum": 1,
+          "maximum": 168,
+          "description": "Hours to show filtered pages in feedback document"
         }
       }
     }
@@ -107,8 +155,10 @@
     "@mongodb-js/zstd": "^2.0.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.1",
+    "@types/uuid": "^10.0.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "uuid": "^11.1.0",
     "xstate": "^5.20.1",
     "zod": "^3.23.8"
   }
