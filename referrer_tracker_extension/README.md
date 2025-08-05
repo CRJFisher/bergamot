@@ -27,22 +27,38 @@ The extension follows a functional programming paradigm with immutable data stru
 
 ### 1. Build the Extension
 ```bash
+npm install
 npm run build
 ```
 
-### 2. Load in Firefox for Testing
+### 2. Load in Chrome for Testing
+
+See [Chrome Extension Debugging Guide](../docs/CHROME_EXTENSION_DEBUGGING.md) for detailed instructions.
+
+**Quick Start:**
+```bash
+# From referrer_tracker_extension directory
+./scripts/debug-chrome.sh
+```
+
+Or manually:
+1. Open Chrome and go to `chrome://extensions/`
+2. Enable "Developer mode"
+3. Click "Load unpacked" and select the `chrome/` folder
+
+### 3. Load in Firefox for Testing
 
 #### Method A: Firefox Developer Edition (Recommended)
 1. Open Firefox Developer Edition
 2. Go to `about:debugging`
 3. Click "This Firefox" in the sidebar
 4. Click "Load Temporary Add-on"
-5. Navigate to this directory and select `manifest.json`
+5. Navigate to this directory and select `firefox/manifest.json`
 
 #### Method B: Regular Firefox
 1. Go to `about:debugging#/runtime/this-firefox`
 2. Click "Load Temporary Add-on"
-3. Select the `manifest.json` file
+3. Select the `firefox/manifest.json` file
 
 ### 3. Test the Extension
 

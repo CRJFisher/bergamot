@@ -13,7 +13,10 @@
     "test:cdp": "npm run build && npx ts-node e2e/cdp_extension_test.ts",
     "test:cdp:multi": "npm run build && npx ts-node e2e/cdp_multi_page_tests.ts",
     "test:cdp:background": "npm run build && npx ts-node e2e/cdp_background_state_tests.ts",
-    "test": "npm run test:unit"
+    "test": "npm run test:unit",
+    "chrome": "node scripts/load-extension.js",
+    "chrome:debug": "node scripts/load-extension.js --auto-open-devtools-for-tabs",
+    "debug": "npm run build && npm run chrome:debug"
   },
   "keywords": [],
   "author": "",

@@ -2,23 +2,35 @@
 
 ## Current Focus
 
-Working on **Intelligent Filtering & Agent Memory** - implementing learning and feedback systems for webpage processing.
+Working on **Enhanced User Experience** - implementing UI features for better interaction with collected webpage data.
 
-**Next Task**: Task 8 - Add agent memory and feedback system for webpage filtering
-
-### Intelligent Filtering & Memory
-
-1. **Task 8: Add agent memory and feedback system for webpage filtering** [HIGH]
-   - Implement learning from user feedback
-   - Create interactive markdown document for recent pages (24h configurable)
-   - Allow users to correct filtering decisions
+**Next Priority**: Task 9 - Expose webpage vector DB as RAG service in MCP server
 
 ### API & Integration
 
-1. **Task 9: Expose webpage vector DB as RAG service in MCP server** [MEDIUM]
+1. **Task 9: Expose webpage vector DB as RAG service in MCP server** [HIGH]
    - Add RAG endpoint to MCP server
    - Enable vector DB queries for webpage content
-   - Core functionality now documented (Task 5 complete)
+   - Build on existing MCP infrastructure
+
+### User Interface Enhancements
+
+1. **Task 11: Add command to search webpages with dropdown selection** [MEDIUM]
+   - VS Code command for webpage search
+   - Dropdown list of search results
+   - Button to add selected pages to document
+
+2. **Task 12: Add tooltip for webpage links showing database content** [MEDIUM]
+   - Hover detection for links in documents
+   - Database lookup for matching URLs
+   - Display webpage metadata in tooltips
+
+### Advanced Filtering
+
+1. **Task 10: Implement procedural memory for custom filtering rules** [MEDIUM]
+   - User-defined filtering rules
+   - Pattern-based filtering
+   - Integration with episodic memory
 
 ## Other Backlog Tasks
 
@@ -42,4 +54,12 @@ Working on **Intelligent Filtering & Agent Memory** - implementing learning and 
 - ✅ Documented core webpage processing architecture (Task 5)
 - ✅ Replaced LangChain with vanilla TypeScript (Task 6)
 - ✅ Implemented intelligent webpage filtering with LLM (Task 7)
+- ✅ Added agent memory and feedback system with episodic memory (Task 8)
+- ✅ Created automated Chrome extension debugging scripts (Task 13)
 - ✅ MCP server integration for RAG queries (Task 1)
+
+## Next Steps
+
+1. Implement RAG service endpoints in MCP server (Task 9)
+2. Add user-friendly search and tooltip features (Tasks 11, 12)
+3. Extend memory system with procedural rules (Task 10)
