@@ -2,40 +2,42 @@
 
 ## Current Focus
 
-Working on **Task 4: Browser Extension Overhaul**
+Working on **Core Extension Functionality** - documenting and cleaning up the webpage processing pipeline.
 
-### Completed (Archived)
+**Next Task**: Task 5 - Tidy up extension code and document core webpage processing functionality
 
-- ✅ Task 4.1: Document current browser extension project layout and functionality
-- ✅ Task 4.2: Document code structure and identify refactoring opportunities  
-- ✅ Task 4.3: Refactor code to improve modularity and feature encapsulation
+### Core Extension Functionality
 
-### In Progress
+1. **Task 5: Tidy up extension code and document core webpage processing functionality** [HIGH]
+   - Document core functionality: browse event listening, workflow processing, vector DB storage
+   - Remove remaining dead code from /src
+   - Focus on essential webpage processing components
 
-- 🔄 Task 4.4: Research and implement alternative to Playwright for extension testing
-  - Researched alternatives and selected Chrome DevTools Protocol (CDP)
-  - Created CDP test runner implementation
-  - Next: Test the CDP implementation and ensure it works correctly
+2. **Task 6: Replace LangChain with lightweight alternative** [HIGH]
+   - Remove LangChain dependency
+   - Implement PocketFlow-ts or similar lightweight library
+   - Migrate all LLM functionality
 
-### Up Next (Priority Order)
+### Intelligent Filtering
 
-1. **Task 4.5: Ensure comprehensive test coverage** [HIGH]
-   - Depends on completing Task 4.4
-   - Add unit tests for all new functional modules
-   - Add CDP integration tests for multi-page navigation
-   - Add tests for all navigation types
+1. **Task 7: Add webpage filtering step using LLM classification** [MEDIUM]
+   - Use cheap model for page type classification
+   - Filter out: interactive web apps, aggregators, leisure content
+   - Keep: knowledge and information-rich pages
 
-2. **Task 4.6: Document main functionality with links to key modules** [MEDIUM]
-   - Can start now (Task 4.3 complete)
-   - Document the refactored module structure
-   - Add links to key modules in documentation
+2. **Task 8: Add agent memory and feedback system for webpage filtering** [MEDIUM]
+   - Implement learning from user feedback
+   - Create interactive markdown document for recent pages (24h configurable)
+   - Allow users to correct filtering decisions
 
-3. **Task 4.7: Clean up test scripts, dead code and outdated documentation** [LOW]
-   - Final cleanup task
-   - Remove old Playwright tests if CDP works well
-   - Update all documentation
+### API & Integration
 
-## Other Backlog Tasks (Not Started)
+1. **Task 9: Expose webpage vector DB as RAG service in MCP server** [MEDIUM]
+   - Add RAG endpoint to MCP server
+   - Enable vector DB queries for webpage content
+   - Relates to Task 1 (MCP functionality for RAG)
+
+## Other Backlog Tasks
 
 - Task 1: Investigate adding MCP functionality for RAG on webpage history
 - Task 2: Migrate IDE browser communication from HTTP to Native Messaging
@@ -44,7 +46,8 @@ Working on **Task 4: Browser Extension Overhaul**
 
 ## Recent Achievements
 
-- Successfully refactored browser extension to functional programming style
-- Implemented immutable data classes
-- Adopted Python naming conventions (snake_case)
-- Researched and implemented CDP as testing solution for state persistence
+- ✅ Complete browser extension overhaul to functional architecture
+- ✅ 89%+ test coverage with Jest and Chrome DevTools Protocol
+- ✅ Comprehensive documentation with API reference
+- ✅ Clean functional programming style with immutable state
+- ✅ Smart URL normalization and SPA navigation detection

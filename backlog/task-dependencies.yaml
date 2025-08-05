@@ -7,19 +7,16 @@ task-2: []  # Migrate to Native Messaging - no dependencies
 task-3: []  # Release as npm package - no dependencies
 task-3.1: [task-3]  # Tidy repository structure depends on npm package task
 
-# Browser extension overhaul epic
-task-4: []  # Epic task - no dependencies
-task-4.1: [task-4]  # Document project layout - COMPLETED
-task-4.2: [task-4, task-4.1]  # Document code structure - COMPLETED
-task-4.3: [task-4, task-4.2]  # Refactor code - COMPLETED
-task-4.4: [task-4]  # Research testing alternatives - IN PROGRESS
-task-4.5: [task-4, task-4.3, task-4.4]  # Ensure test coverage
-task-4.6: [task-4, task-4.3]  # Document main functionality
-task-4.7: [task-4, task-4.5, task-4.6]  # Clean up dead code
+# New webpage processing tasks
+task-5: []  # Tidy up extension code and document core functionality
+task-6: [task-5]  # Replace LangChain - depends on understanding core functionality
+task-7: [task-5, task-6]  # Add webpage filtering - needs core cleanup and new LLM library
+task-8: [task-7]  # Add agent memory - builds on filtering
+task-9: [task-5]  # Expose vector DB as RAG - needs core functionality documented
 
-# Notes:
-# - Tasks 4.1, 4.2, 4.3 have been completed and archived
-# - Task 4.4 is currently in progress
-# - Task 4.5 depends on both refactoring (4.3) and testing framework (4.4)
-# - Task 4.6 can proceed once refactoring (4.3) is done
-# - Task 4.7 should be done last after all other subtasks
+# COMPLETED AND ARCHIVED:
+# - task-4: Browser extension overhaul epic (and all subtasks 4.1-4.7)
+#   - Complete functional refactoring
+#   - CDP testing implementation
+#   - 89%+ test coverage
+#   - Comprehensive documentation
