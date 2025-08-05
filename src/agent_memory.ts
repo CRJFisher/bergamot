@@ -1,10 +1,29 @@
-import {
-  SearchItem,
-  Operation,
-  OperationResults,
-  BaseStore,
-} from "@langchain/langgraph-checkpoint";
-import { OpenAIEmbeddings } from "@langchain/openai";
+// Vanilla TypeScript implementation of memory store, replacing LangGraph checkpoint
+import { Embeddings } from './workflow/embeddings';
+
+// Type definitions to replace LangGraph types
+export interface SearchItem extends Record<string, any> {
+  key: string;
+  created_at?: string;
+  updated_at?: string;
+  _distance?: number;
+}
+
+export interface Operation {
+  type: 'get' | 'put' | 'delete' | 'search';
+  namespace?: string[];
+  namespacePrefix?: string[];
+  key?: string;
+  value?: Record<string, any>;
+  query?: string;
+}
+
+export type OperationResults<T extends Operation[]> = {
+  [K in keyof T]: T[K]['type'] extends 'get' ? SearchItem | null :
+                  T[K]['type'] extends 'search' ? SearchItem[] :
+                  T[K]['type'] extends 'put' | 'delete' ? undefined :
+                  never;
+};
 import * as lancedb from "@lancedb/lancedb";
 import {
   // WebpageCategorisationAndMetadata,
@@ -22,23 +41,22 @@ export const MEMORY_NAMESPACES = {
  * LanceDB-based implementation of BaseStore for LangGraph
  * Provides persistent memory with vector search capabilities
  */
-export class LanceDBMemoryStore extends BaseStore {
+export class LanceDBMemoryStore {
   private db: lancedb.Connection;
   private tableCache = new Map();
-  public embeddings?: OpenAIEmbeddings;
+  public embeddings?: Embeddings;
 
   private constructor(
     db: lancedb.Connection,
-    options?: { embeddings?: OpenAIEmbeddings }
+    options?: { embeddings?: Embeddings }
   ) {
-    super();
     this.db = db;
     this.embeddings = options?.embeddings;
   }
 
   static async create(
     dbPath: string,
-    options?: { embeddings?: OpenAIEmbeddings }
+    options?: { embeddings?: Embeddings }
   ): Promise<LanceDBMemoryStore> {
     const db = await lancedb.connect(dbPath);
     const store = new LanceDBMemoryStore(db, options);

@@ -7,7 +7,7 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { LanceDBMemoryStore } from "./agent_memory";
-import { OpenAIEmbeddings } from "@langchain/openai";
+import { OpenAIEmbeddings } from "./workflow/embeddings";
 import { DuckDB } from "./duck_db";
 import { get_webpage_content } from "./duck_db";
 import path from "path";

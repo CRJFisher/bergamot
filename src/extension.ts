@@ -5,11 +5,10 @@ import cors from "cors";
 import {
   run_workflow,
   build_workflow,
-} from "./reconcile_webpage_trees_workflow";
+} from "./reconcile_webpage_trees_workflow_vanilla";
 import { LanceDBMemoryStore } from "./agent_memory";
-import { OpenAIEmbeddings } from "@langchain/openai";
+import { OpenAIEmbeddings } from "./workflow/embeddings";
 import { MarkdownDatabase } from "./markdown_db";
-import { MemorySaver } from "@langchain/langgraph";
 import { DuckDB, get_page_sessions_with_tree_id } from "./duck_db";
 import path from "path";
 import { PageActivitySessionWithoutTreeOrContent } from "./duck_db_models";
@@ -120,11 +119,9 @@ async function start_webpage_categoriser_service(
     }),
   });
 
-  const persistent_memory = new MemorySaver();
-
   const webpage_categoriser_app = build_workflow(
     openai_api_key,
-    persistent_memory,
+    null, // checkpointer no longer used
     duck_db,
     markdown_db,
     memory_db
