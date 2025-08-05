@@ -443,7 +443,7 @@ export function build_workflow(
   duck_db: DuckDB,
   markdown_db: MarkdownDatabase,
   memory_db: LanceDBMemoryStore
-): ReturnType<typeof workflow.compile> {
+): any {
   const workflow = new StateGraph(AgentStateAnnotation)
     .addNode(NodeNames.ANALYSE_NEW_PAGE, (state: AgentState) =>
       analyse_new_page(state, openai_key, duck_db, markdown_db, memory_db)
