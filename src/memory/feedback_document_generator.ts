@@ -34,14 +34,13 @@ export class FeedbackDocumentGenerator {
       filtered_hours
     );
     
-    // Save to markdown database
-    const feedback_doc = await this.markdown_db.upsert_raw(
+    // Save to markdown database - upsert_raw writes the file directly
+    await this.markdown_db.upsert_raw(
       '__recent_webpages__.md',
       content
     );
     
-    await feedback_doc.save();
-    
+    // Note: Don't call save() on the returned instance as it has empty content
     return this.markdown_db.get_file_path('__recent_webpages__.md');
   }
 

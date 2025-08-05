@@ -221,16 +221,16 @@ export class EpisodicMemoryStore {
 
     const corrections_by_type: Record<string, number> = {};
     for (const row of type_corrections) {
-      corrections_by_type[row.correction_type] = row.count;
+      corrections_by_type[row.correction_type] = Number(row.count);
     }
 
     return {
-      total_episodes: stats.total_episodes,
-      total_corrections: stats.total_corrections,
-      correction_rate: stats.total_episodes > 0 ? stats.total_corrections / stats.total_episodes : 0,
+      total_episodes: Number(stats.total_episodes || 0),
+      total_corrections: Number(stats.total_corrections || 0),
+      correction_rate: stats.total_episodes > 0 ? Number(stats.total_corrections) / Number(stats.total_episodes) : 0,
       corrections_by_type,
-      false_positives: stats.false_positives,
-      false_negatives: stats.false_negatives
+      false_positives: Number(stats.false_positives || 0),
+      false_negatives: Number(stats.false_negatives || 0)
     };
   }
 

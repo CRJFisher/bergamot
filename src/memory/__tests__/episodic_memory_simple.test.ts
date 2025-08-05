@@ -109,15 +109,16 @@ describe('Episodic Memory System (Simple)', () => {
       'content'
     );
 
-    const doc_path = await feedback_generator.generate_feedback_document(24);
+    const doc_path = await feedback_generator.generate_feedback_document(1, 1); // 1 day, 1 hour
     expect(doc_path).toContain('__recent_webpages__.md');
     
     const content = fs.readFileSync(doc_path, 'utf-8');
-    expect(content).toContain('✅ [React Hooks Tutorial]');
+    expect(content).toContain('## Recent webpages');
+    expect(content).toContain('## Filtered out webpages');
+    expect(content).toContain('[React Hooks Tutorial]');
     expect(content).toContain('Tutorial on React hooks');
-    expect(content).toContain('❌ [Space Invaders]');
+    expect(content).toContain('[Space Invaders]');
     expect(content).toContain('Online game interface');
-    expect(content).toContain('Recent Webpages (Last 24h)');
   });
 
   it('should track correction statistics', async () => {
