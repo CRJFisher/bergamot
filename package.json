@@ -43,6 +43,10 @@
       {
         "command": "pkm-assistant.addExplanation",
         "title": "PKM Assistant: Add Feedback Explanation"
+      },
+      {
+        "command": "pkm-assistant.searchWebpages",
+        "title": "PKM Assistant: Search Webpages"
       }
     ],
     "configuration": {

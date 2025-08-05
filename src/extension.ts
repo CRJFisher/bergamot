@@ -23,6 +23,8 @@ import { md5_hash } from "./hash_utils";
 import { decompress } from "@mongodb-js/zstd";
 import { createAndStartMCPServer, WebpageRAGMCPServer } from "./mcp_server";
 import * as child_process from "child_process";
+import { register_webpage_search_commands } from "./webpage_search_commands";
+import { register_webpage_hover_provider } from "./webpage_hover_provider";
 
 let server: http.Server | undefined;
 let duck_db: DuckDB;
@@ -63,12 +65,16 @@ export async function activate(
 
   // Start express server to handle requests from the extension
   console.log("Starting webpage categorizer service...");
-  start_webpage_categoriser_service(
+  const memory_db = await start_webpage_categoriser_service(
     context,
     openai_api_key,
     duck_db,
     markdown_db
   );
+  
+  // Register webpage search and hover commands
+  register_webpage_search_commands(context, memory_db, duck_db);
+  register_webpage_hover_provider(context, duck_db, memory_db);
 
   // Start MCP server
   console.log("Starting MCP server...");
@@ -111,7 +117,7 @@ async function start_webpage_categoriser_service(
   openai_api_key: string,
   duck_db: DuckDB,
   markdown_db: MarkdownDatabase
-) {
+): Promise<LanceDBMemoryStore> {
   const app = express();
   app.use(express.json());
   app.use(cors());
@@ -291,6 +297,8 @@ async function start_webpage_categoriser_service(
       }
     },
   });
+  
+  return memory_db;
 }
 
 function get_percentage(count: number, total: number): string {

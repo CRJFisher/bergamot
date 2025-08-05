@@ -729,3 +729,34 @@ export async function get_webpage_content(
     throw error;
   }
 }
+
+export async function get_webpage_by_url(
+  db: DuckDB,
+  url: string
+): Promise<{ url: string; title: string; visited_at: string } | null> {
+  try {
+    const result = await db.connection.runAndReadAll(
+      `
+      SELECT url, title, visited_at
+      FROM ${WEBPAGE_ACTIVITY_SESSIONS_TABLE}
+      WHERE url = $url
+      ORDER BY visited_at DESC
+      LIMIT 1
+      `,
+      { url }
+    );
+
+    const rows = result.getRowObjects();
+    if (rows.length === 0) return null;
+
+    const row = rows[0];
+    return {
+      url: row.url.toString(),
+      title: row.title.toString(),
+      visited_at: row.visited_at.toString()
+    };
+  } catch (error) {
+    console.error("Error getting webpage by URL:", error);
+    throw error;
+  }
+}

@@ -1,10 +1,10 @@
 ---
 id: task-9
 title: Expose webpage vector DB as RAG service in MCP server
-status: To Do
+status: Done
 assignee: []
-created_date: "2025-08-05 06:23"
-updated_date: "2025-08-05 11:23"
+created_date: '2025-08-05 06:23'
+updated_date: '2025-08-05 11:27'
 labels: []
 dependencies: []
 ---
