@@ -1,10 +1,10 @@
 ---
 id: task-6
 title: Replace LangChain with lightweight alternative
-status: In Progress
+status: Done
 assignee: []
 created_date: '2025-08-05 06:22'
-updated_date: '2025-08-05 08:33'
+updated_date: '2025-08-05 08:44'
 labels: []
 dependencies: []
 ---

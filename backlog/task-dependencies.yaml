@@ -2,21 +2,21 @@
 # Format: task_id: [list of dependency task_ids]
 
 # Core tasks
-task-1: []  # MCP functionality for RAG - no dependencies
 task-2: []  # Migrate to Native Messaging - no dependencies
 task-3: []  # Release as npm package - no dependencies
 task-3.1: [task-3]  # Tidy repository structure depends on npm package task
 
-# New webpage processing tasks
-task-5: []  # Tidy up extension code and document core functionality
-task-6: [task-5]  # Replace LangChain - depends on understanding core functionality
-task-7: [task-5, task-6]  # Add webpage filtering - needs core cleanup and new LLM library
-task-8: [task-7]  # Add agent memory - builds on filtering
-task-9: [task-5]  # Expose vector DB as RAG - needs core functionality documented
+# Webpage processing tasks
+task-8: []  # Add agent memory - filtering is complete, no active dependencies
+task-9: []  # Expose vector DB as RAG - core functionality is documented
 
 # COMPLETED AND ARCHIVED:
+# - task-1: MCP functionality for RAG - integrated MCP server
 # - task-4: Browser extension overhaul epic (and all subtasks 4.1-4.7)
 #   - Complete functional refactoring
 #   - CDP testing implementation
 #   - 89%+ test coverage
 #   - Comprehensive documentation
+# - task-5: Tidy up extension code - documented architecture, removed dead code
+# - task-6: Replace LangChain - implemented vanilla TypeScript with OpenAI SDK
+# - task-7: Add webpage filtering - LLM classification with configurable rules
