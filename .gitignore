@@ -9,5 +9,5 @@
 .env.test.local
 .env.production.local
 CLAUDE.local.md
-.claude/settings.local.json
+.claude
 coverage

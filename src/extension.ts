@@ -99,59 +99,7 @@ export async function activate(
     vscode.window.showErrorMessage(`Failed to start MCP server: ${error.message}`);
   }
 
-  // Setup decorations
-  // setup_decorations(context, markdown_db);
-  // setup_code_lens_decorations(context, duck_db);
-
-  // await repopulate_home_page(front_page_path, duck_db, markdown_db, context);
-
   console.log("PKM Assistant extension activated!");
-}
-
-async function repopulate_home_page(
-  front_page_path: string,
-  duck_db: DuckDB,
-  markdown_db: MarkdownDatabase,
-  context: vscode.ExtensionContext
-) {
-  const handle_front_page = async (document: vscode.TextDocument) => {
-    if (document.uri.fsPath === front_page_path) {
-      // await populate_home_page(duck_db, markdown_db, 10);
-    }
-  };
-
-  // Add file watcher for Front Page.md
-  const front_page_watcher =
-    vscode.workspace.onDidOpenTextDocument(handle_front_page);
-
-  // Add active editor change watcher
-  const active_editor_watcher = vscode.window.onDidChangeActiveTextEditor(
-    (editor) => {
-      if (editor) {
-        handle_front_page(editor.document);
-      }
-    }
-  );
-
-  // Add window state change watcher (fires when VS Code window becomes active)
-  const window_state_watcher = vscode.window.onDidChangeWindowState(
-    (windowState) => {
-      if (windowState.focused) {
-        // Window has been focused (became active)
-        const active_editor = vscode.window.activeTextEditor;
-        if (active_editor) {
-          handle_front_page(active_editor.document);
-        }
-      }
-    }
-  );
-
-  // Add the watchers to the extension's subscriptions
-  context.subscriptions.push(
-    front_page_watcher,
-    active_editor_watcher,
-    window_state_watcher
-  );
 }
 
 async function start_webpage_categoriser_service(
