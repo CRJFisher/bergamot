@@ -7,6 +7,7 @@ import { DuckDB } from "./duck_db";
 import { PageActivitySessionWithMeta } from "./reconcile_webpage_trees_workflow_models";
 import { MarkdownDatabase } from "./markdown_db";
 import { LanceDBMemoryStore } from "./agent_memory";
+import { FilterConfig } from "./workflow/webpage_filter";
 
 export async function run_workflow(
   inputs: {
@@ -30,8 +31,9 @@ export function build_workflow(
   checkpointer: any, // Legacy parameter, no longer used
   duck_db: DuckDB,
   markdown_db: MarkdownDatabase,
-  memory_db: LanceDBMemoryStore
+  memory_db: LanceDBMemoryStore,
+  filter_config?: FilterConfig
 ): WebpageWorkflow {
   // Return the new WebpageWorkflow instance instead of LangGraph app
-  return new WebpageWorkflow(openai_key, duck_db, markdown_db, memory_db);
+  return new WebpageWorkflow(openai_key, duck_db, markdown_db, memory_db, filter_config);
 }

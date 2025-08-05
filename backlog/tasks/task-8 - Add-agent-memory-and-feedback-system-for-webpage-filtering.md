@@ -14,6 +14,7 @@ Implement agent memory for webpage processing that can take human feedback and u
 
 ## Acceptance Criteria
 
+- [ ] Read `langmem course notebooks/langgraph_memory_guide.md` and extract the key ideas into a document so we can use this to implement non-langgraph code
 - [ ] Agent memory system implemented for filter learning
 - [ ] Feedback collection mechanism created
 - [ ] Markdown document generator for recent pages

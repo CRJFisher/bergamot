@@ -19,6 +19,10 @@
       {
         "command": "pkm-assistant.addHighlight",
         "title": "Add Highlight to Bullet Point"
+      },
+      {
+        "command": "pkm-assistant.showFilterMetrics",
+        "title": "PKM Assistant: Show Filter Metrics"
       }
     ],
     "configuration": {
@@ -29,6 +33,32 @@
           "default": "",
           "description": "Your OpenAI API key for the PKM Assistant",
           "scope": "application"
+        },
+        "pkm-assistant.webpageFilter.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable webpage filtering based on content type"
+        },
+        "pkm-assistant.webpageFilter.allowedTypes": {
+          "type": "array",
+          "default": ["knowledge"],
+          "description": "Types of pages to process",
+          "items": {
+            "type": "string",
+            "enum": ["knowledge", "interactive_app", "aggregator", "leisure", "navigation", "other"]
+          }
+        },
+        "pkm-assistant.webpageFilter.minConfidence": {
+          "type": "number",
+          "default": 0.7,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum confidence threshold for page classification"
+        },
+        "pkm-assistant.webpageFilter.logDecisions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Log filtering decisions to console"
         }
       }
     }

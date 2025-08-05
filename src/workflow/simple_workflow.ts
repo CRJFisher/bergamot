@@ -5,6 +5,14 @@ import {
   TREE_INTENTIONS_PROMPT 
 } from './prompts';
 import {
+  classify_webpage,
+  should_process_page,
+  log_filter_decision,
+  DEFAULT_FILTER_CONFIG,
+  FilterConfig
+} from './webpage_filter';
+import { global_filter_metrics } from './filter_metrics';
+import {
   DuckDB,
   get_last_modified_trees_with_members_and_analysis,
   get_webpage_analysis_for_ids,
@@ -83,17 +91,20 @@ export class WebpageWorkflow {
   private duck_db: DuckDB;
   private markdown_db: MarkdownDatabase;
   private memory_db: LanceDBMemoryStore;
+  private filter_config: FilterConfig;
 
   constructor(
     openai_key: string,
     duck_db: DuckDB,
     markdown_db: MarkdownDatabase,
-    memory_db: LanceDBMemoryStore
+    memory_db: LanceDBMemoryStore,
+    filter_config?: FilterConfig
   ) {
     this.openai_key = openai_key;
     this.duck_db = duck_db;
     this.markdown_db = markdown_db;
     this.memory_db = memory_db;
+    this.filter_config = filter_config || DEFAULT_FILTER_CONFIG;
   }
 
   async run(inputs: {
@@ -116,6 +127,42 @@ export class WebpageWorkflow {
       );
 
       const llm_client = await get_llm_client(this.openai_key);
+      
+      // First, classify the webpage to determine if it should be processed
+      const classification = await classify_webpage(
+        inputs.new_page.url,
+        inputs.raw_content,
+        llm_client.complete_json.bind(llm_client)
+      );
+      
+      const should_process = should_process_page(classification, this.filter_config);
+      log_filter_decision(inputs.new_page.url, classification, should_process, this.filter_config);
+      
+      // Record metrics
+      let filter_reason: string | undefined;
+      if (!should_process) {
+        if (!this.filter_config.allowed_types.includes(classification.page_type)) {
+          filter_reason = 'type_not_allowed';
+        } else if (classification.confidence < this.filter_config.min_confidence) {
+          filter_reason = 'low_confidence';
+        } else if (!classification.should_process) {
+          filter_reason = 'model_recommendation';
+        }
+      }
+      
+      global_filter_metrics.record_classification(
+        inputs.new_page.url,
+        classification.page_type,
+        classification.confidence,
+        should_process,
+        filter_reason
+      );
+      
+      if (!should_process) {
+        console.log('\n--- Workflow Skipped: Page filtered out ---');
+        console.log('State: completed, Status: completed (filtered)');
+        return;
+      }
       
       // Process content with LLM to extract main content as markdown
       const processed_content = await llm_client.complete(

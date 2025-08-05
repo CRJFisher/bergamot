@@ -9,6 +9,8 @@ import {
 import { LanceDBMemoryStore } from "./agent_memory";
 import { OpenAIEmbeddings } from "./workflow/embeddings";
 import { MarkdownDatabase } from "./markdown_db";
+import { get_filter_config } from "./config/filter_config";
+import { global_filter_metrics } from "./workflow/filter_metrics";
 import { DuckDB, get_page_sessions_with_tree_id } from "./duck_db";
 import path from "path";
 import { PageActivitySessionWithoutTreeOrContent } from "./duck_db_models";
@@ -119,12 +121,14 @@ async function start_webpage_categoriser_service(
     }),
   });
 
+  const filter_config = get_filter_config();
   const webpage_categoriser_app = build_workflow(
     openai_api_key,
     null, // checkpointer no longer used
     duck_db,
     markdown_db,
-    memory_db
+    memory_db,
+    filter_config
   );
 
   // Create a queue that will persist between requests
@@ -221,6 +225,43 @@ async function start_webpage_categoriser_service(
     console.log(`PKM Assistant server running at http://localhost:${port}`);
   });
 
+  // Register commands
+  const show_metrics_command = vscode.commands.registerCommand(
+    'pkm-assistant.showFilterMetrics',
+    () => {
+      const metrics = global_filter_metrics.get_metrics();
+      const output = vscode.window.createOutputChannel('PKM Assistant Filter Metrics');
+      output.clear();
+      output.appendLine('=== Webpage Filter Metrics ===');
+      output.appendLine(`Total pages analyzed: ${metrics.total_pages}`);
+      output.appendLine(`Pages processed: ${metrics.processed_pages} (${get_percentage(metrics.processed_pages, metrics.total_pages)}%)`);
+      output.appendLine(`Pages filtered: ${metrics.filtered_pages} (${get_percentage(metrics.filtered_pages, metrics.total_pages)}%)`);
+      output.appendLine(`Average confidence: ${metrics.average_confidence.toFixed(2)}`);
+      output.appendLine('');
+      output.appendLine('Page types:');
+      Object.entries(metrics.page_types)
+        .sort(([, a], [, b]) => b - a)
+        .forEach(([type, count]) => {
+          output.appendLine(`  ${type}: ${count} (${get_percentage(count, metrics.total_pages)}%)`);
+        });
+      if (Object.keys(metrics.filter_reasons).length > 0) {
+        output.appendLine('');
+        output.appendLine('Filter reasons:');
+        Object.entries(metrics.filter_reasons)
+          .sort(([, a], [, b]) => b - a)
+          .forEach(([reason, count]) => {
+            output.appendLine(`  ${reason}: ${count}`);
+          });
+      }
+      output.show();
+      
+      // Also log to console
+      global_filter_metrics.log_summary();
+    }
+  );
+  
+  context.subscriptions.push(show_metrics_command);
+  
   // Add server cleanup to extension subscriptions
   context.subscriptions.push({
     dispose: () => {
@@ -230,6 +271,11 @@ async function start_webpage_categoriser_service(
       }
     },
   });
+}
+
+function get_percentage(count: number, total: number): string {
+  if (total === 0) return '0';
+  return ((count / total) * 100).toFixed(1);
 }
 
 export async function deactivate(): Promise<void> {
