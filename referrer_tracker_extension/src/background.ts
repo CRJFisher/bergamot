@@ -1,19 +1,22 @@
-// PKM Extension Background Script - Navigation History Tracker
+import { 
+  TabHistoryStore, 
+  create_tab_history_store, 
+  create_tab_history,
+  add_tab_history,
+  remove_tab_history,
+  get_tab_history,
+  update_tab_history
+} from './core/tab_history_manager';
+import { handle_message } from './core/message_router';
+import { TabHistory } from './types/navigation';
+
 console.log("🚀 PKM Extension: Background script initialized");
 
-// Store navigation history per tab
-interface TabHistory {
-  previousUrl?: string;
-  currentUrl?: string;
-  timestamp: number;
-  previousUrlTimestamp?: number; // Track when the previous URL was set
-  openerTabId?: number; // Track which tab opened this one
-}
+// Mutable state - the only non-functional part
+let tab_history_store: TabHistoryStore = create_tab_history_store();
 
-const tabHistories = new Map<number, TabHistory>();
-
-// Track when new tabs are created (for link clicks that open in new tabs)
-chrome.tabs.onCreated.addListener(async (tab) => {
+// Tab event handlers
+const handle_tab_created = async (tab: chrome.tabs.Tab) => {
   console.log(`🆕 Tab created:`, {
     tab_id: tab.id,
     opener_tab_id: tab.openerTabId,
@@ -21,124 +24,114 @@ chrome.tabs.onCreated.addListener(async (tab) => {
     url: tab.url,
   });
 
-  // Store initial tab info even if we don't have opener info yet
   if (tab.id) {
-    tabHistories.set(tab.id, {
-      currentUrl: tab.url || tab.pendingUrl,
-      timestamp: Date.now(),
-      openerTabId: tab.openerTabId,
-    });
+    const history = create_tab_history(
+      tab.url || tab.pendingUrl,
+      tab.openerTabId
+    );
+    tab_history_store = add_tab_history(tab_history_store, tab.id, history);
   }
 
   if (tab.id && tab.openerTabId) {
-    await handleTabOpener(tab.id, tab.openerTabId);
+    await handle_tab_opener(tab.id, tab.openerTabId);
   }
-});
+};
 
-// Handle tab updates to catch opener information that might come after creation
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  // If we get opener info after tab creation
-  if (tab.openerTabId && !tabHistories.get(tabId)?.openerTabId) {
-    console.log(`📌 Tab ${tabId} got opener info after creation:`, {
+const handle_tab_updated = async (
+  tab_id: number,
+  change_info: chrome.tabs.TabChangeInfo,
+  tab: chrome.tabs.Tab
+) => {
+  // Handle delayed opener info
+  if (tab.openerTabId && !get_tab_history(tab_history_store, tab_id)?.opener_tab_id) {
+    console.log(`📌 Tab ${tab_id} got opener info after creation:`, {
       opener_tab_id: tab.openerTabId,
       url: tab.url,
     });
-    await handleTabOpener(tabId, tab.openerTabId);
+    await handle_tab_opener(tab_id, tab.openerTabId);
   }
 
   // Handle URL changes
-  if (changeInfo.status === "loading" && changeInfo.url) {
-    const previousEntry = tabHistories.get(tabId);
-    const currentUrl = changeInfo.url;
-    const now = Date.now();
+  if (change_info.status === "loading" && change_info.url) {
+    const current_history = get_tab_history(tab_history_store, tab_id);
+    const updated_history = update_tab_history(current_history, change_info.url, tab.openerTabId);
+    tab_history_store = add_tab_history(tab_history_store, tab_id, updated_history);
 
-    // Only update the previous URL if this is the first navigation
-    // or if we're navigating to a different URL
-    const shouldUpdatePreviousUrl =
-      !previousEntry?.previousUrl || previousEntry.currentUrl !== currentUrl;
-
-    tabHistories.set(tabId, {
-      previousUrl: shouldUpdatePreviousUrl
-        ? previousEntry?.currentUrl
-        : previousEntry?.previousUrl,
-      previousUrlTimestamp: shouldUpdatePreviousUrl
-        ? previousEntry?.timestamp
-        : previousEntry?.previousUrlTimestamp,
-      currentUrl: currentUrl,
-      timestamp: now,
-      openerTabId: previousEntry?.openerTabId || tab.openerTabId,
-    });
-
-    console.log(`📍 Tab ${tabId} navigated to: ${currentUrl}`, {
-      previous_url: previousEntry?.currentUrl,
-      preserved_referrer: previousEntry?.previousUrl,
+    console.log(`📍 Tab ${tab_id} navigated to: ${change_info.url}`, {
+      previous_url: current_history?.current_url,
+      preserved_referrer: updated_history.previous_url,
       opener: tab.openerTabId || "none",
-      updated_previous: shouldUpdatePreviousUrl,
+      updated_previous: current_history?.current_url !== change_info.url,
     });
   }
-});
+};
 
-// Helper function to handle tab opener relationship
-async function handleTabOpener(tabId: number, openerTabId: number) {
+const handle_tab_removed = (tab_id: number) => {
+  tab_history_store = remove_tab_history(tab_history_store, tab_id);
+};
+
+const handle_tab_opener = async (tab_id: number, opener_tab_id: number) => {
   console.log(`🔍 Handling tab opener relationship:`, {
-    tab_id: tabId,
-    opener_tab_id: openerTabId,
+    tab_id: tab_id,
+    opener_tab_id: opener_tab_id,
   });
 
-  let openerHistory = tabHistories.get(openerTabId);
+  let opener_history = get_tab_history(tab_history_store, opener_tab_id);
   const now = Date.now();
 
-  // If we don't have the opener's URL in our history, query it directly
-  if (!openerHistory?.currentUrl) {
+  // If we don't have the opener's URL, query it
+  if (!opener_history?.current_url) {
     try {
-      const openerTab = await chrome.tabs.get(openerTabId);
-      if (openerTab.url) {
-        // Update our history with the opener's current URL
-        tabHistories.set(openerTabId, {
-          previousUrl: openerHistory?.previousUrl,
-          currentUrl: openerTab.url,
-          timestamp: now,
-          previousUrlTimestamp: openerHistory?.previousUrlTimestamp,
-          openerTabId: openerHistory?.openerTabId,
-        });
-        openerHistory = tabHistories.get(openerTabId);
-        console.log(`✅ Updated opener history for tab ${tabId}:`, {
-          opener_url: openerTab.url,
-          opener_tab_id: openerTabId,
+      const opener_tab = await chrome.tabs.get(opener_tab_id);
+      if (opener_tab.url) {
+        const new_opener_history = new TabHistory(
+          opener_history?.previous_url,
+          opener_tab.url,
+          now,
+          opener_history?.previous_url_timestamp,
+          opener_history?.opener_tab_id
+        );
+        tab_history_store = add_tab_history(tab_history_store, opener_tab_id, new_opener_history);
+        opener_history = new_opener_history;
+        
+        console.log(`✅ Updated opener history for tab ${tab_id}:`, {
+          opener_url: opener_tab.url,
+          opener_tab_id: opener_tab_id,
         });
       }
     } catch (error) {
-      console.warn(`Failed to get opener tab ${openerTabId}:`, error);
+      console.warn(`Failed to get opener tab ${opener_tab_id}:`, error);
     }
   }
 
-  if (openerHistory?.currentUrl) {
-    // Set the opener's current URL as this tab's referrer
-    const currentHistory = tabHistories.get(tabId) || {};
-    tabHistories.set(tabId, {
-      ...currentHistory,
-      previousUrl: openerHistory.currentUrl,
-      previousUrlTimestamp: openerHistory.timestamp,
-      timestamp: now,
-      openerTabId: openerTabId,
-    });
-    console.log(`✅ Set referrer for tab ${tabId}:`, {
-      referrer: openerHistory.currentUrl,
-      referrer_timestamp: openerHistory.timestamp,
-      opener_tab_id: openerTabId,
+  if (opener_history?.current_url) {
+    const current_history = get_tab_history(tab_history_store, tab_id);
+    const new_history = new TabHistory(
+      opener_history.current_url,
+      current_history?.current_url,
+      now,
+      opener_history.timestamp,
+      opener_tab_id
+    );
+    tab_history_store = add_tab_history(tab_history_store, tab_id, new_history);
+    
+    console.log(`✅ Set referrer for tab ${tab_id}:`, {
+      referrer: opener_history.current_url,
+      referrer_timestamp: opener_history.timestamp,
+      opener_tab_id: opener_tab_id,
     });
   } else {
-    console.log(`⚠️  Could not determine opener URL for tab ${tabId}`);
+    console.log(`⚠️  Could not determine opener URL for tab ${tab_id}`);
   }
-}
+};
 
-// Clean up when tabs are closed
-chrome.tabs.onRemoved.addListener((tabId) => {
-  tabHistories.delete(tabId);
-});
+// Set up event listeners
+chrome.tabs.onCreated.addListener(handle_tab_created);
+chrome.tabs.onUpdated.addListener(handle_tab_updated);
+chrome.tabs.onRemoved.addListener(handle_tab_removed);
 
-// Listen for requests from content scripts
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+// Message handling
+chrome.runtime.onMessage.addListener((request, sender, send_response) => {
   console.log(
     `📨 Background received message:`,
     request.action,
@@ -146,142 +139,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sender.tab?.id
   );
 
-  if (request.action === "getReferrer" && sender.tab?.id) {
-    const history = tabHistories.get(sender.tab.id);
-    let referrer = history?.previousUrl || "";
-    let referrerTimestamp = history?.previousUrlTimestamp || Date.now();
-
-    // Special case: if previousUrl is about:blank and we have an opener,
-    // get the referrer from the opener tab instead
-    if (
-      history?.openerTabId &&
-      (history?.previousUrl === "about:blank" ||
-        history?.previousUrl === "" ||
-        !history?.previousUrl)
-    ) {
-      const openerHistory = tabHistories.get(history.openerTabId);
-      if (openerHistory?.currentUrl) {
-        referrer = openerHistory.currentUrl;
-        referrerTimestamp = openerHistory.timestamp;
+  handle_message(request, sender.tab?.id, tab_history_store)
+    .then(({ response, new_store }) => {
+      if (new_store) {
+        tab_history_store = new_store;
       }
-    }
-
-    const response = {
-      referrer: referrer,
-      referrerTimestamp: referrerTimestamp,
-    };
-    console.log(`📍 Sending referrer response for tab ${sender.tab.id}:`, {
-      current_url: history?.currentUrl,
-      previous_url: history?.previousUrl,
-      opener_tab_id: history?.openerTabId,
-      computed_referrer: referrer,
-      referrer_timestamp: referrerTimestamp,
-      response: response,
-    });
-    sendResponse(response);
-  } else if (request.action === "spaNavigation" && sender.tab?.id) {
-    // Handle SPA navigation events
-    const previousEntry = tabHistories.get(sender.tab.id);
-    const now = Date.now();
-
-    tabHistories.set(sender.tab.id, {
-      previousUrl: previousEntry?.currentUrl, // The current URL becomes the previous URL
-      previousUrlTimestamp: previousEntry?.timestamp, // Store the timestamp when the previous URL was current
-      currentUrl: request.url,
-      timestamp: now,
-      openerTabId: previousEntry?.openerTabId,
+      send_response(response);
+    })
+    .catch(error => {
+      console.error(`Error handling message ${request.action}:`, error);
+      send_response({ error: error.message });
     });
 
-    console.log(
-      `📍 SPA Navigation in tab ${sender.tab.id} to: ${
-        request.url
-      } (previous: ${previousEntry?.currentUrl || "none"})`
-    );
-    sendResponse({ success: true });
-  } else if (request.action === "sendToPKMServer") {
-    console.log(`🌐 Forwarding to PKM server:`, request.endpoint, request.data);
-    // Forward the request to the PKM server and wait for response
-    sendToPKMServer(request.apiBaseUrl, request.endpoint, request.data)
-      .then(() => sendResponse({ success: true }))
-      .catch((error) => sendResponse({ success: false, error: error.message }));
-    return true; // Keep message channel open for async response
-  }
   return true; // Keep message channel open for async response
 });
-
-// Send POST request to the PKM server from background script
-async function sendToPKMServer(
-  apiBaseUrl: string,
-  endpoint: string,
-  data: any
-): Promise<void> {
-  console.log(`🚀 Making request to: ${apiBaseUrl}${endpoint}`);
-  const response = await fetch(`${apiBaseUrl}${endpoint}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to send to ${endpoint}: ${response.status}`);
-  }
-  console.log(`✅ Successfully sent to ${endpoint}`);
-}
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("PKM Extension: Installed and ready to track browsing chains");
 });
 
-export async function handleTabUpdate(
-  tabId: number,
-  changeInfo: chrome.tabs.TabChangeInfo,
-  tab: chrome.tabs.Tab
-) {
-  // If we get opener info after tab creation
-  if (tab.openerTabId && !tabHistories.get(tabId)?.openerTabId) {
-    console.log(`📌 Tab ${tabId} got opener info after creation:`, {
-      opener_tab_id: tab.openerTabId,
-      url: tab.url,
-    });
-    await handleTabOpener(tabId, tab.openerTabId);
-  }
+// Export for testing - using a function to get current state
+export const get_tab_history_store = () => tab_history_store;
 
-  // Handle URL changes
-  if (changeInfo.status === "loading" && changeInfo.url) {
-    const previousEntry = tabHistories.get(tabId);
-    const currentUrl = changeInfo.url;
-    const now = Date.now();
-
-    // Only update the previous URL if this is the first navigation
-    // or if we're navigating to a different URL
-    const shouldUpdatePreviousUrl =
-      !previousEntry?.previousUrl || previousEntry.currentUrl !== currentUrl;
-
-    tabHistories.set(tabId, {
-      previousUrl: shouldUpdatePreviousUrl
-        ? previousEntry?.currentUrl
-        : previousEntry?.previousUrl,
-      previousUrlTimestamp: shouldUpdatePreviousUrl
-        ? previousEntry?.timestamp
-        : previousEntry?.previousUrlTimestamp,
-      currentUrl: currentUrl,
-      timestamp: now,
-      openerTabId: previousEntry?.openerTabId || tab.openerTabId,
-    });
-
-    console.log(`📍 Tab ${tabId} navigated to: ${currentUrl}`, {
-      previous_url: previousEntry?.currentUrl,
-      preserved_referrer: previousEntry?.previousUrl,
-      opener: tab.openerTabId || "none",
-      updated_previous: shouldUpdatePreviousUrl,
-    });
-  }
-}
-
-export async function handleTabRemove(tabId: number) {
-  tabHistories.delete(tabId);
-}
-
-export { tabHistories };
+// Make it available globally for CDP testing
+(globalThis as any).get_tab_history_store = get_tab_history_store;

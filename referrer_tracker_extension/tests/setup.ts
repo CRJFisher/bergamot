@@ -1,4 +1,10 @@
 import { jest } from "@jest/globals";
+import { TextEncoder, TextDecoder } from "util";
+
+// Add TextEncoder/TextDecoder to global scope for jsdom
+global.TextEncoder = TextEncoder as any;
+global.TextDecoder = TextDecoder as any;
+
 // Mock chrome API
 global.chrome = {
   tabs: {

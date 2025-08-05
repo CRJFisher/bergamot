@@ -1,184 +1,157 @@
 import { jest, describe, it, expect, beforeEach } from "@jest/globals";
-import {
-  handleTabUpdate,
-  handleTabRemove,
-  tabHistories,
-} from "../src/background";
+import { 
+  create_tab_history_store,
+  add_tab_history,
+  remove_tab_history,
+  get_tab_history,
+  update_tab_history,
+  create_tab_history,
+  get_referrer_from_history
+} from "../src/core/tab_history_manager";
+import { TabHistory } from "../src/types/navigation";
 
-describe("Background Script", () => {
+describe("Background Script - Functional Tab History", () => {
   let mock_tabs: { [key: number]: chrome.tabs.Tab };
-  let mock_storage: { [key: string]: any };
 
   beforeEach(() => {
     // Reset mocks
     mock_tabs = {};
-    mock_storage = {};
 
     // Mock chrome.tabs API
     global.chrome = {
       tabs: {
-        get: jest.fn((tabId: number) => Promise.resolve(mock_tabs[tabId])),
+        get: jest.fn((tab_id: number) => Promise.resolve(mock_tabs[tab_id])),
         query: jest.fn(() => Promise.resolve(Object.values(mock_tabs))),
+        onCreated: {
+          addListener: jest.fn(),
+        },
         onUpdated: {
           addListener: jest.fn(),
         },
         onRemoved: {
           addListener: jest.fn(),
         },
-        onActivated: {
-          addListener: jest.fn(),
-        },
-      },
-      storage: {
-        local: {
-          get: jest.fn((keys: string[]) => Promise.resolve(mock_storage)),
-          set: jest.fn((items: { [key: string]: any }) => {
-            Object.assign(mock_storage, items);
-            return Promise.resolve();
-          }),
-        },
       },
       runtime: {
         onMessage: {
+          addListener: jest.fn(),
+        },
+        onInstalled: {
           addListener: jest.fn(),
         },
       },
     } as any;
   });
 
-  describe("New Tab Behavior", () => {
-    it("should track referrer when opening URL in new tab", async () => {
+  describe("Tab History Management", () => {
+    it("should track referrer when opening URL in new tab", () => {
       // Setup initial state
       const source_tab_id = 1;
       const target_tab_id = 2;
       const source_url = "https://example.com/source";
       const target_url = "https://example.com/target";
-
-      // Mock source tab
-      mock_tabs[source_tab_id] = {
-        id: source_tab_id,
-        url: source_url,
-        active: true,
-      } as chrome.tabs.Tab;
-
-      // Set the opener's history in tabHistories
-      tabHistories.set(source_tab_id, {
-        currentUrl: source_url,
-        timestamp: Date.now(),
-      });
-
-      // Mock target tab
-      mock_tabs[target_tab_id] = {
-        id: target_tab_id,
-        url: target_url,
-        active: false,
-        openerTabId: source_tab_id,
-      } as chrome.tabs.Tab;
-
-      // Simulate opening target URL in new tab
-      await handleTabUpdate(
-        target_tab_id,
-        { status: "loading", url: target_url },
-        mock_tabs[target_tab_id]
-      );
-
-      // Simulate a second navigation to update previousUrl
       const second_url = "https://example.com/second";
-      await handleTabUpdate(
-        target_tab_id,
-        { status: "loading", url: second_url },
-        { ...mock_tabs[target_tab_id], url: second_url }
-      );
 
-      // Verify tabHistories was updated with correct referrer
-      const targetHistory = tabHistories.get(target_tab_id);
-      expect(targetHistory?.previousUrl).toBe(target_url);
-      expect(targetHistory?.currentUrl).toBe(second_url);
-      expect(targetHistory?.openerTabId).toBe(source_tab_id);
+      // Create initial store
+      let store = create_tab_history_store();
+
+      // Add source tab history
+      const source_history = create_tab_history(source_url);
+      store = add_tab_history(store, source_tab_id, source_history);
+
+      // Create target tab with opener
+      const target_history = new TabHistory(
+        source_url, // Previous URL from opener
+        target_url,
+        Date.now(),
+        source_history.timestamp,
+        source_tab_id
+      );
+      store = add_tab_history(store, target_tab_id, target_history);
+
+      // Update target tab navigation
+      const updated_history = update_tab_history(
+        get_tab_history(store, target_tab_id),
+        second_url
+      );
+      store = add_tab_history(store, target_tab_id, updated_history);
+
+      // Verify final state
+      const final_history = get_tab_history(store, target_tab_id);
+      expect(final_history?.previous_url).toBe(target_url);
+      expect(final_history?.current_url).toBe(second_url);
+      expect(final_history?.opener_tab_id).toBe(source_tab_id);
     });
 
-    it("should track referrer through about:blank -> actual URL navigation (Chrome/Firefox behavior)", async () => {
+    it("should handle referrer through about:blank navigation", () => {
       // Setup initial state
       const source_tab_id = 59;
       const target_tab_id = 73;
       const source_url = "https://safebrowsing.google.com/";
       const target_url = "https://support.google.com/websearch/answer/45449";
 
-      // Mock source tab
-      mock_tabs[source_tab_id] = {
-        id: source_tab_id,
-        url: source_url,
-        active: true,
-      } as chrome.tabs.Tab;
+      // Create initial store
+      let store = create_tab_history_store();
 
-      // Set the opener's history in tabHistories
-      tabHistories.set(source_tab_id, {
-        currentUrl: source_url,
-        timestamp: Date.now(),
-      });
+      // Add source tab history
+      const source_history = create_tab_history(source_url);
+      store = add_tab_history(store, source_tab_id, source_history);
 
-      // Mock target tab starting with about:blank (typical browser behavior)
-      mock_tabs[target_tab_id] = {
-        id: target_tab_id,
-        url: "about:blank",
-        active: false,
-        openerTabId: source_tab_id,
-      } as chrome.tabs.Tab;
-
-      // Step 1: Simulate initial about:blank navigation
-      await handleTabUpdate(
-        target_tab_id,
-        { status: "loading", url: "about:blank" },
-        mock_tabs[target_tab_id]
+      // Create target tab with about:blank
+      const initial_target_history = new TabHistory(
+        source_url, // Referrer from opener
+        "about:blank",
+        Date.now(),
+        source_history.timestamp,
+        source_tab_id
       );
+      store = add_tab_history(store, target_tab_id, initial_target_history);
 
-      // Step 2: Simulate navigation to actual target URL
-      mock_tabs[target_tab_id].url = target_url;
-      await handleTabUpdate(
-        target_tab_id,
-        { status: "loading", url: target_url },
-        mock_tabs[target_tab_id]
+      // Navigate to actual URL
+      const updated_history = update_tab_history(
+        get_tab_history(store, target_tab_id),
+        target_url
       );
+      store = add_tab_history(store, target_tab_id, updated_history);
 
-      // Verify tabHistories preserved the referrer through about:blank
-      const targetHistory = tabHistories.get(target_tab_id);
-      expect(targetHistory?.previousUrl).toBe("about:blank");
-      expect(targetHistory?.currentUrl).toBe(target_url);
-      expect(targetHistory?.openerTabId).toBe(source_tab_id);
+      // Verify state
+      const final_history = get_tab_history(store, target_tab_id);
+      expect(final_history?.previous_url).toBe("about:blank");
+      expect(final_history?.current_url).toBe(target_url);
+      expect(final_history?.opener_tab_id).toBe(source_tab_id);
 
-      // We need to manually call the message handler since we can't easily test the listener
-      // Let's verify the logic by checking what should be returned
-      const openerHistory = tabHistories.get(source_tab_id);
-
-      // The key test: when previousUrl is about:blank, getReferrer should return the opener's URL
-      expect(openerHistory?.currentUrl).toBe(source_url);
-      expect(targetHistory?.previousUrl).toBe("about:blank");
-
-      // This simulates what the getReferrer logic should do:
-      // Since previousUrl is "about:blank" and we have an opener, use opener's URL
-      const expectedReferrer =
-        targetHistory?.openerTabId &&
-        targetHistory?.previousUrl === "about:blank"
-          ? openerHistory?.currentUrl
-          : targetHistory?.previousUrl;
-
-      expect(expectedReferrer).toBe(source_url);
+      // Test get_referrer logic
+      const referrer_info = get_referrer_from_history(
+        final_history,
+        get_tab_history(store, source_tab_id)
+      );
+      expect(referrer_info.referrer).toBe(source_url);
     });
 
-    it("should clean up referrer data when tab is closed", async () => {
-      // Setup initial state with referrer data
+    it("should clean up tab history on removal", () => {
+      // Setup initial state
       const tab_id = 1;
-      tabHistories.set(tab_id, {
-        previousUrl: "https://example.com",
-        currentUrl: "https://example.com",
-        timestamp: Date.now(),
-      });
+      let store = create_tab_history_store();
 
-      // Simulate tab removal
-      await handleTabRemove(tab_id);
+      // Add tab history
+      const history = create_tab_history("https://example.com");
+      store = add_tab_history(store, tab_id, history);
+      expect(get_tab_history(store, tab_id)).toBeDefined();
 
-      // Verify tabHistories was updated to remove referrer data
-      expect(tabHistories.has(tab_id)).toBe(false);
+      // Remove tab
+      store = remove_tab_history(store, tab_id);
+      expect(get_tab_history(store, tab_id)).toBeUndefined();
+    });
+
+    it("should maintain immutability of store", () => {
+      const store1 = create_tab_history_store();
+      const history = create_tab_history("https://example.com");
+      const store2 = add_tab_history(store1, 1, history);
+
+      // Original store should be unchanged
+      expect(store1.size).toBe(0);
+      expect(store2.size).toBe(1);
+      expect(store1).not.toBe(store2);
     });
   });
 });

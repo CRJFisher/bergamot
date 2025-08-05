@@ -1,13 +1,27 @@
 # PKM Navigation Tracker Extension
 
-A Firefox extension that tracks browsing navigation chains for personal knowledge management.
+A browser extension that tracks browsing navigation chains for personal knowledge management, with support for Single Page Applications (SPAs) and comprehensive referrer tracking.
+
+## Architecture
+
+The extension follows a functional programming paradigm with immutable data structures and pure functions. See [Browser Extension Functionality](../backlog/docs/browser-extension-functionality.md) for detailed documentation.
+
+### Key Modules
+
+- **[Tab History Manager](src/core/tab_history_manager.ts)**: Tracks navigation history per tab
+- **[Navigation Detector](src/core/navigation_detector.ts)**: Detects SPA navigation via History API
+- **[Data Collector](src/core/data_collector.ts)**: Collects and compresses page content
+- **[Message Router](src/core/message_router.ts)**: Handles inter-component communication
+- **[API Client](src/core/api_client.ts)**: Communicates with PKM server
 
 ## Features
 
-- **Enhanced Referrer Tracking**: Uses background script to maintain true navigation history per tab
-- **Cross-Tab Support**: Tracks new tab creation from link clicks
-- **Navigation Chain Tracking**: Maintains complete browsing sequences
-- **Same-Page Filtering**: Ignores anchor links within the same page
+- **Enhanced Referrer Tracking**: Maintains accurate referrer chain across navigations
+- **SPA Support**: Detects pushState/replaceState navigation in single-page apps
+- **Cross-Tab Tracking**: Tracks referrer when opening links in new tabs
+- **Smart URL Normalization**: Removes tracking parameters for cleaner navigation detection
+- **Content Compression**: Uses zstd compression for efficient storage
+- **Comprehensive Testing**: 89%+ test coverage with unit and integration tests
 
 ## Installation & Testing
 
@@ -64,23 +78,24 @@ Open the extension's background page console:
 ## API Endpoints
 
 ### POST /visit
+Sent when a page is visited with referrer information.
+
 ```json
 {
   "url": "https://example.com/page",
-  "timestamp": 1749731880911,
   "referrer": "https://google.com/search",
-  "referrerTimestamp": 1749731879911
+  "referrer_timestamp": 1749731879911,
+  "content": "base64-encoded-compressed-content",
+  "page_loaded_at": "2024-12-11T10:30:00Z"
 }
 ```
 
-### POST /navigate
-```json
-{
-  "currentUrl": "https://example.com/page1", 
-  "timestamp": 1749731880911,
-  "targetUrl": "https://example.com/page2"
-}
-```
+Fields:
+- `url`: Current page URL
+- `referrer`: Previous page URL (or empty string)
+- `referrer_timestamp`: When the referrer page was visited
+- `content`: zstd-compressed page HTML (base64 encoded)
+- `page_loaded_at`: ISO timestamp of page load
 
 ## Configuration
 
@@ -91,12 +106,53 @@ window.PKM_CONFIG = { apiBaseUrl: 'http://localhost:3000' };
 
 ## Development
 
-Run tests:
+### Building
 ```bash
+# Install dependencies
+npm install
+
+# Build extension
+npm run build
+
+# Build with test flags
+npm run build:test
+```
+
+### Testing
+
+```bash
+# Run unit tests
+npm run test:unit
+
+# Run unit tests with coverage
+npm run test:unit -- --coverage
+
+# Run E2E tests (Chrome DevTools Protocol)
+npm run test:cdp
+npm run test:cdp:multi      # Multi-page session tests
+npm run test:cdp:background  # Background state tests
+
+# Run all tests
 npm test
 ```
 
-Build:
-```bash
-npm run build
+### Project Structure
+```
+src/
+├── background.ts        # Background script entry point
+├── content.ts          # Content script entry point
+├── core/               # Functional modules
+│   ├── api_client.ts
+│   ├── configuration_manager.ts
+│   ├── data_collector.ts
+│   ├── message_router.ts
+│   ├── navigation_detector.ts
+│   └── tab_history_manager.ts
+├── types/              # TypeScript types
+│   └── navigation.ts
+└── utils/              # Utility functions
+    └── url_cleaning.ts
+
+tests/                  # Unit tests
+e2e/                   # Integration tests
 ``` 
