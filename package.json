@@ -12,9 +12,12 @@
     "test": "npm run test --workspaces",
     "lint": "npm run lint --workspaces",
     "clean": "npm run clean --workspaces --if-present",
-    "package:vscode": "cd vscode && vsce package",
-    "package:chrome": "cd browser && npm run build && cd chrome && zip -r ../chrome-extension.zip .",
-    "package:firefox": "cd browser && npm run build && cd firefox && zip -r ../firefox-extension.zip ."
+    "package:all": "./scripts/package-all.sh",
+    "package:all:node": "node scripts/package-all.js",
+    "package:vscode": "cd vscode && npm run package",
+    "package:chrome": "cd browser && npm run build && cd chrome && zip -r ../chrome-extension.zip . -x '*.DS_Store'",
+    "package:firefox": "cd browser && npm run build && cd firefox && zip -r ../firefox-extension.zip . -x '*.DS_Store'",
+    "release:prepare": "npm run clean && npm install && npm run build && npm run package:all"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
