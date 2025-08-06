@@ -56,6 +56,34 @@
       {
         "command": "pkm-assistant.searchWebpages",
         "title": "PKM Assistant: Search Webpages"
+      },
+      {
+        "command": "pkm-assistant.createFilterRule",
+        "title": "PKM Assistant: Create Filter Rule"
+      },
+      {
+        "command": "pkm-assistant.manageFilterRules",
+        "title": "PKM Assistant: Manage Filter Rules"
+      },
+      {
+        "command": "pkm-assistant.createDomainRule",
+        "title": "PKM Assistant: Create Domain Rule"
+      },
+      {
+        "command": "pkm-assistant.createContentPatternRule",
+        "title": "PKM Assistant: Create Content Pattern Rule"
+      },
+      {
+        "command": "pkm-assistant.showRuleStatistics",
+        "title": "PKM Assistant: Show Rule Statistics"
+      },
+      {
+        "command": "pkm-assistant.exportFilterRules",
+        "title": "PKM Assistant: Export Filter Rules"
+      },
+      {
+        "command": "pkm-assistant.importFilterRules",
+        "title": "PKM Assistant: Import Filter Rules"
       }
     ],
     "configuration": {

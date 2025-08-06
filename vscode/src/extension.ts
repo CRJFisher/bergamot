@@ -12,6 +12,8 @@ import { MarkdownDatabase } from "./markdown_db";
 import { get_filter_config } from "./config/filter_config";
 import { global_filter_metrics } from "./workflow/filter_metrics";
 import { EpisodicMemoryStore } from "./memory/episodic_memory_store";
+import { ProceduralMemoryStore } from "./memory/procedural_memory_store";
+import { register_procedural_rule_commands } from "./memory/procedural_rule_commands";
 import { FeedbackDocumentGenerator } from "./memory/feedback_document_generator";
 import { register_feedback_commands } from "./memory/feedback_commands";
 import { DuckDB, get_page_sessions_with_tree_id } from "./duck_db";
@@ -132,11 +134,19 @@ async function start_webpage_categoriser_service(
 
   // Initialize episodic memory if enabled
   let episodic_store: EpisodicMemoryStore | undefined;
+  let procedural_store: ProceduralMemoryStore | undefined;
   const memory_config = vscode.workspace.getConfiguration('pkm-assistant.agentMemory');
   
   if (memory_config.get<boolean>('enabled', true)) {
     episodic_store = new EpisodicMemoryStore(duck_db, memory_db);
     await episodic_store.initialize();
+    
+    console.log("Initializing procedural memory store...");
+    procedural_store = new ProceduralMemoryStore(duck_db);
+    await procedural_store.initialize();
+    
+    // Register procedural rule commands
+    register_procedural_rule_commands(context, procedural_store);
     
     // Register feedback commands
     const feedback_generator = new FeedbackDocumentGenerator(
@@ -154,7 +164,8 @@ async function start_webpage_categoriser_service(
     markdown_db,
     memory_db,
     filter_config,
-    episodic_store
+    episodic_store,
+    procedural_store
   );
 
   // Create a queue that will persist between requests

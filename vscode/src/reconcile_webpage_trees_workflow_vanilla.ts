@@ -9,6 +9,7 @@ import { MarkdownDatabase } from "./markdown_db";
 import { LanceDBMemoryStore } from "./agent_memory";
 import { FilterConfig } from "./workflow/webpage_filter";
 import { EpisodicMemoryStore } from "./memory/episodic_memory_store";
+import { ProceduralMemoryStore } from "./memory/procedural_memory_store";
 
 export async function run_workflow(
   inputs: {
@@ -34,8 +35,9 @@ export function build_workflow(
   markdown_db: MarkdownDatabase,
   memory_db: LanceDBMemoryStore,
   filter_config?: FilterConfig,
-  episodic_store?: EpisodicMemoryStore
+  episodic_store?: EpisodicMemoryStore,
+  procedural_store?: ProceduralMemoryStore
 ): WebpageWorkflow {
   // Return the new WebpageWorkflow instance instead of LangGraph app
-  return new WebpageWorkflow(openai_key, duck_db, markdown_db, memory_db, filter_config, episodic_store);
+  return new WebpageWorkflow(openai_key, duck_db, markdown_db, memory_db, filter_config, episodic_store, procedural_store);
 }

@@ -14,6 +14,8 @@ import {
 import { global_filter_metrics } from './filter_metrics';
 import { MemoryEnhancedClassifier } from '../memory/memory_enhanced_classifier';
 import { EpisodicMemoryStore } from '../memory/episodic_memory_store';
+import { ProceduralMemoryStore } from '../memory/procedural_memory_store';
+import { EnhancedWebpageFilter } from './enhanced_webpage_filter';
 import { extract_content_features } from './content_analyzer';
 import {
   DuckDB,
@@ -97,6 +99,8 @@ export class WebpageWorkflow {
   private filter_config: FilterConfig;
   private episodic_store?: EpisodicMemoryStore;
   private memory_classifier?: MemoryEnhancedClassifier;
+  private procedural_store?: ProceduralMemoryStore;
+  private enhanced_filter?: EnhancedWebpageFilter;
 
   constructor(
     openai_key: string,
@@ -104,7 +108,8 @@ export class WebpageWorkflow {
     markdown_db: MarkdownDatabase,
     memory_db: LanceDBMemoryStore,
     filter_config?: FilterConfig,
-    episodic_store?: EpisodicMemoryStore
+    episodic_store?: EpisodicMemoryStore,
+    procedural_store?: ProceduralMemoryStore
   ) {
     this.openai_key = openai_key;
     this.duck_db = duck_db;
@@ -112,9 +117,18 @@ export class WebpageWorkflow {
     this.memory_db = memory_db;
     this.filter_config = filter_config || DEFAULT_FILTER_CONFIG;
     this.episodic_store = episodic_store;
+    this.procedural_store = procedural_store;
     
     if (episodic_store) {
       this.memory_classifier = new MemoryEnhancedClassifier(episodic_store);
+    }
+    
+    if (episodic_store && procedural_store) {
+      this.enhanced_filter = new EnhancedWebpageFilter(
+        procedural_store,
+        episodic_store,
+        this.filter_config
+      );
     }
   }
 

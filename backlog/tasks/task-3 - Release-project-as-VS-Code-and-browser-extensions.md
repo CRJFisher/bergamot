@@ -3,8 +3,8 @@ id: task-3
 title: Release project as VS Code and browser extensions
 status: To Do
 assignee: []
-created_date: '2025-07-29'
-updated_date: '2025-08-05 12:25'
+created_date: "2025-07-29"
+updated_date: "2025-08-05 12:25"
 labels: []
 dependencies: []
 ---
@@ -38,22 +38,26 @@ Package and publish the PKM Assistant as a VS Code extension to the marketplace 
 Repository has been restructured as a monorepo. The good news is that the monorepo structure will still help with managing both extensions.
 
 ### Completed
+
 - Monorepo structure (still useful for managing both extensions)
 - Build scripts working for both packages
 - VS Code extension package.json configured
 - Browser extension build process working
 
 ### Next Steps for VS Code Extension
+
 1. Install vsce: npm install -g @vscode/vsce
 2. Package extension: vsce package
 3. Create publisher account on VS Code Marketplace
 4. Publish: vsce publish
 
 ### Next Steps for Browser Extensions
+
 1. Create zip files for Chrome and Firefox
 2. Set up Chrome Web Store developer account
 3. Set up Firefox Add-ons developer account
 4. Submit for review on both platforms
 
 ### Note on Changesets
+
 Changesets are less critical for extension publishing (compared to npm), but can still be useful for version management.

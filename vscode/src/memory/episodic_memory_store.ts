@@ -234,6 +234,66 @@ export class EpisodicMemoryStore {
     };
   }
 
+  async get_similar_decisions(
+    url: string,
+    page_type: string,
+    accepted: boolean
+  ): Promise<EpisodicMemory[]> {
+    const domain = new URL(url).hostname;
+    
+    const rows = await this.duck_db.all(`
+      SELECT * FROM ${EPISODIC_MEMORY_TABLE}
+      WHERE domain = ? 
+        AND page_type = ?
+        AND original_decision = ?
+      ORDER BY timestamp DESC
+      LIMIT 10
+    `, [domain, page_type, accepted]);
+    
+    return rows.map(row => this.row_to_episodic_memory(row));
+  }
+
+  async update_decision_feedback(
+    url: string,
+    was_correct: boolean,
+    correct_type?: string,
+    feedback?: string
+  ): Promise<void> {
+    const memory = await this.get_by_url(url);
+    if (!memory) return;
+
+    if (!was_correct) {
+      await this.correct_decision(
+        memory.id,
+        !memory.original_decision,
+        correct_type || memory.page_type,
+        feedback
+      );
+    }
+  }
+
+  async get_domain_error_count(domain: string): Promise<number> {
+    const result = await this.duck_db.get(`
+      SELECT COUNT(*) as error_count
+      FROM ${EPISODIC_MEMORY_TABLE}
+      WHERE domain = ?
+        AND correction_timestamp IS NOT NULL
+    `, [domain]);
+    
+    return Number(result?.error_count || 0);
+  }
+
+  private async get_by_url(url: string): Promise<EpisodicMemory | null> {
+    const row = await this.duck_db.get(`
+      SELECT * FROM ${EPISODIC_MEMORY_TABLE}
+      WHERE url = ?
+      ORDER BY timestamp DESC
+      LIMIT 1
+    `, [url]);
+    
+    return row ? this.row_to_episodic_memory(row) : null;
+  }
+
   private row_to_episodic_memory(row: any): EpisodicMemory {
     const memory: EpisodicMemory = {
       id: row.id,
