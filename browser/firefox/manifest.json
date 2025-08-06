@@ -3,7 +3,7 @@
   "name": "PKM Navigation Tracker",
   "version": "1.0",
   "description": "Tracks browsing navigation chains for personal knowledge management.",
-  "permissions": ["scripting", "webRequest", "tabs", "activeTab"],
+  "permissions": ["scripting", "webRequest", "tabs", "activeTab", "nativeMessaging"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "scripts": ["dist/background.bundle.js"],

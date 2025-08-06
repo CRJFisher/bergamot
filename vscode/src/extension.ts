@@ -2,6 +2,8 @@ import * as vscode from "vscode";
 import express from "express";
 import * as http from "http";
 import cors from "cors";
+import * as fs from "fs";
+import * as os from "os";
 import {
   run_workflow,
   build_workflow,
@@ -32,6 +34,20 @@ let server: http.Server | undefined;
 let duck_db: DuckDB;
 let mcp_server: WebpageRAGMCPServer | undefined;
 let mcp_process: child_process.ChildProcess | undefined;
+
+function write_port_file(port: number): void {
+  const port_dir = path.join(os.homedir(), '.pkm-assistant');
+  const port_file = path.join(port_dir, 'port.json');
+  
+  // Create directory if it doesn't exist
+  if (!fs.existsSync(port_dir)) {
+    fs.mkdirSync(port_dir, { recursive: true });
+  }
+  
+  // Write port to file
+  fs.writeFileSync(port_file, JSON.stringify({ port, pid: process.pid }));
+  console.log(`Port file written to ${port_file}`);
+}
 
 export async function activate(
   context: vscode.ExtensionContext
@@ -216,6 +232,15 @@ async function start_webpage_categoriser_service(
     }
   }
 
+  // Add status endpoint for native host health checks
+  app.get("/status", (req, res) => {
+    res.json({ 
+      status: "running", 
+      version: "1.0.0",
+      uptime: process.uptime()
+    });
+  });
+
   app.post("/visit", async (req, res) => {
     console.log("Received request from:", req.body.url);
     const id = md5_hash(`${req.body.url}:${req.body.page_loaded_at}`);
@@ -256,10 +281,14 @@ async function start_webpage_categoriser_service(
     res.json({ status: "queued", position: request_queue.length });
   });
 
-  // Start the server
-  const port = 5000;
-  server = app.listen(port, () => {
+  // Start the server on a dynamic port
+  server = app.listen(0, () => {
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 5000;
     console.log(`PKM Assistant server running at http://localhost:${port}`);
+    
+    // Write port to file for native messaging host
+    write_port_file(port);
   });
 
   // Register commands
@@ -323,6 +352,12 @@ export async function deactivate(): Promise<void> {
   }
   if (server) {
     server.close();
+  }
+  
+  // Remove port file
+  const port_file = path.join(os.homedir(), '.pkm-assistant', 'port.json');
+  if (fs.existsSync(port_file)) {
+    fs.unlinkSync(port_file);
   }
   if (mcp_process) {
     console.log("Stopping MCP server process...");

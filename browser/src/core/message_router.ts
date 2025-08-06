@@ -1,5 +1,6 @@
 import { TabHistoryStore, get_tab_history, get_referrer_from_history, update_tab_history, add_tab_history } from './tab_history_manager';
 import { send_to_server } from './api_client';
+import { create_api_client, ApiClientV2 } from './api_client_v2';
 import { ReferrerInfo } from '../types/navigation';
 
 export type MessageAction = 
@@ -73,6 +74,16 @@ export const handle_spa_navigation = (
   };
 };
 
+// Create API client with native messaging support
+let api_client: ApiClientV2 | null = null;
+
+const get_api_client = (api_base_url: string): ApiClientV2 => {
+  if (!api_client) {
+    api_client = create_api_client(api_base_url);
+  }
+  return api_client;
+};
+
 export const handle_server_request = async (
   endpoint: string,
   data: any,
@@ -81,10 +92,19 @@ export const handle_server_request = async (
   console.log(`🌐 Forwarding to PKM server:`, endpoint, data);
   
   try {
-    await send_to_server(api_base_url, endpoint, data);
+    // Try native messaging first
+    const client = get_api_client(api_base_url);
+    await client.send_to_server(endpoint, data);
     return { success: true };
   } catch (error: any) {
-    return { success: false, error: error.message };
+    console.warn('Native messaging failed, trying HTTP:', error);
+    // Fallback to direct HTTP
+    try {
+      await send_to_server(api_base_url, endpoint, data);
+      return { success: true };
+    } catch (http_error: any) {
+      return { success: false, error: http_error.message };
+    }
   }
 };
 

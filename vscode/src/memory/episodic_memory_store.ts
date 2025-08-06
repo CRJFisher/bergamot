@@ -263,12 +263,13 @@ export class EpisodicMemoryStore {
     if (!memory) return;
 
     if (!was_correct) {
-      await this.correct_decision(
-        memory.id,
-        !memory.original_decision,
-        correct_type || memory.page_type,
-        feedback
-      );
+      // Add user correction
+      await this.add_user_correction(memory.id, {
+        corrected_decision: !memory.original_decision,
+        corrected_type: correct_type || memory.page_type,
+        explanation: feedback,
+        feedback_timestamp: new Date()
+      });
     }
   }
 
@@ -294,6 +295,47 @@ export class EpisodicMemoryStore {
     return row ? this.row_to_episodic_memory(row) : null;
   }
 
+  async record_filtering_decision(
+    url: string,
+    page_type: string,
+    decision: boolean,
+    confidence: number,
+    metadata?: any
+  ): Promise<string> {
+    const domain = new URL(url).hostname;
+    const episode_id = `ep_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    await this.duck_db.run(
+      `INSERT INTO ${EPISODIC_MEMORY_TABLE} (
+        id, timestamp, url, domain, page_type, confidence,
+        original_decision, reasoning
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        episode_id,
+        new Date().toISOString(),
+        url,
+        domain,
+        page_type,
+        confidence,
+        decision,
+        metadata?.reasoning || ''
+      ]
+    );
+    
+    return episode_id;
+  }
+  
+  async get_filtering_statistics(): Promise<any> {
+    const stats = await this.get_correction_statistics();
+    return {
+      total_decisions: stats.total_episodes,
+      corrections: stats.total_corrections,
+      correction_rate: stats.correction_rate,
+      false_positives: stats.false_positives,
+      false_negatives: stats.false_negatives
+    };
+  }
+  
   private row_to_episodic_memory(row: any): EpisodicMemory {
     const memory: EpisodicMemory = {
       id: row.id,
