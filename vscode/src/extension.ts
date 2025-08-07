@@ -245,6 +245,7 @@ async function start_webpage_categoriser_service(
           // Normal processing for successful inserts
           const tree_members = await get_page_sessions_with_tree_id(
             duck_db,
+            memory_db,
             inserted.tree_id
           );
           const page_with_tree_id = {

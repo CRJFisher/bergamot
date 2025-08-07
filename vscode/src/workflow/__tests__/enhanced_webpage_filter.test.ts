@@ -38,8 +38,7 @@ describe('EnhancedWebpageFilter', () => {
     duck_db = new DuckDB({ database_path: test_db_path });
     await duck_db.init();
 
-    memory_db = new LanceDBMemoryStore(test_memory_path);
-    await memory_db.initialize();
+    memory_db = await LanceDBMemoryStore.create(test_memory_path);
     
     procedural_store = new ProceduralMemoryStore(duck_db);
     await procedural_store.initialize();

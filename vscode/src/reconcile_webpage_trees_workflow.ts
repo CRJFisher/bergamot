@@ -15,7 +15,6 @@ import {
   get_webpage_analysis_for_ids,
   insert_webpage_analysis,
   insert_webpage_tree_intentions,
-  insert_webpage_content,
 } from "./duck_db";
 import { get_tree_with_id } from "./webpage_tree";
 type Status = "error" | "running" | "paused" | "completed";
@@ -284,8 +283,7 @@ async function analyse_new_page(
     })) as AIMessage;
     const processed_content = result.text;
 
-    // Store processed content in database (compressed)
-    await insert_webpage_content(duck_db, state.new_page.id, processed_content);
+    // Content is now stored in LanceDB only (see memory_db.put below)
 
     const analysis_chain = await create_analysis_chain(openai_key);
     const analysis = (await analysis_chain.invoke({
@@ -392,7 +390,8 @@ export async function run_workflow(
     raw_content: string;
   },
   app: ReturnType<typeof build_workflow>,
-  duck_db: DuckDB
+  duck_db: DuckDB,
+  memory_db: LanceDBMemoryStore
 ): Promise<void> {
   const config = {
     configurable: { thread_id: "1" },
@@ -406,6 +405,7 @@ export async function run_workflow(
     const other_recent_trees =
       await get_last_modified_trees_with_members_and_analysis(
         duck_db,
+        memory_db,
         inputs.members[0].tree_id,
         5
       );

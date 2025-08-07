@@ -33,7 +33,7 @@ export interface RuleAction {
 export class ProceduralMemoryStore {
   private db: DuckDB;
   private rules_cache: Map<string, ProceduralRule> = new Map();
-  private compiled_rules: Map<string, Function> = new Map();
+  private compiled_rules: Map<string, (context: any) => boolean> = new Map();
 
   constructor(db: DuckDB) {
     this.db = db;
@@ -125,7 +125,7 @@ export class ProceduralMemoryStore {
     }
   }
 
-  private create_condition_evaluator(condition: RuleCondition): Function {
+  private create_condition_evaluator(condition: RuleCondition): (context: any) => boolean {
     return (context: any): boolean => {
       if (condition.operator === 'and') {
         return condition.conditions?.every(c => this.create_condition_evaluator(c)(context)) ?? true;

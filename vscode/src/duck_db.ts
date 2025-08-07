@@ -6,6 +6,7 @@ import {
 import { compress, decompress } from "@mongodb-js/zstd";
 import * as path from "path";
 import * as fs from "fs";
+import { LanceDBMemoryStore } from "./agent_memory";
 import {
   PageAnalysis,
   PageActivitySessionWithMeta,
@@ -26,7 +27,7 @@ const WEBPAGE_ANALYSIS_TABLE = "webpage_analysis";
 const WEBPAGE_ACTIVITY_SESSIONS_TABLE = "webpage_activity_sessions";
 const WEBPAGE_TREES_TABLE = "webpage_trees";
 const WEBPAGE_TREE_INTENTIONS_TABLE = "webpage_tree_intentions";
-const WEBPAGE_CONTENT_TABLE = "webpage_content";
+// REMOVED: webpage_content table - content now stored in LanceDB only
 
 export class DuckDB {
   private db: DuckDBInstance;
@@ -70,12 +71,7 @@ export class DuckDB {
       activity_sessions_schema
     );
 
-    const webpage_content_schema = [
-      "activity_session_id TEXT PRIMARY KEY",
-      "content_compressed TEXT", // base64 encoded compressed zstd processed content
-      `FOREIGN KEY (activity_session_id) REFERENCES ${WEBPAGE_ACTIVITY_SESSIONS_TABLE}(id)`,
-    ].join(", ");
-    await this.create_table(WEBPAGE_CONTENT_TABLE, webpage_content_schema);
+    // REMOVED: webpage_content table creation - content now stored in LanceDB only
 
     // Define and create the webpage_categorizations table
     const webpage_analysis_schema = [
@@ -229,33 +225,7 @@ export async function insert_webpage_analysis(
   }
 }
 
-export async function insert_webpage_content(
-  db: DuckDB,
-  activity_session_id: string,
-  processed_content: string
-): Promise<void> {
-  try {
-    // Compress the processed content using zstd
-    const content_buffer = Buffer.from(processed_content, "utf-8");
-    const compressed_content = await compress(content_buffer, 6); // Level 6 compression
-
-    // Convert to base64 for storage
-    const base64_compressed = compressed_content.toString("base64");
-
-    await db.execute(
-      `INSERT OR REPLACE INTO ${WEBPAGE_CONTENT_TABLE} 
-      (activity_session_id, content_compressed)
-      VALUES ($activity_session_id, $content_compressed)`,
-      {
-        activity_session_id: activity_session_id,
-        content_compressed: base64_compressed,
-      }
-    );
-  } catch (error) {
-    console.error("Error inserting webpage content:", error);
-    throw error;
-  }
-}
+// REMOVED: insert_webpage_content() function - content now stored in LanceDB only
 
 export async function get_webpage_analysis_for_ids(
   db: DuckDB,
@@ -371,6 +341,7 @@ export async function find_tree_containing_url(
 
 export async function get_page_sessions_with_tree_id(
   db: DuckDB,
+  memory_db: LanceDBMemoryStore,
   tree_id: string
 ): Promise<PageActivitySessionWithMeta[]> {
   try {
@@ -380,18 +351,16 @@ export async function get_page_sessions_with_tree_id(
          a.title as analysis_title,
          a.summary as analysis_summary,
          a.intentions as analysis_intentions,
-         ti.intentions as tree_intentions,
-         c.content_compressed
+         ti.intentions as tree_intentions
        FROM ${WEBPAGE_ACTIVITY_SESSIONS_TABLE} s
        LEFT JOIN ${WEBPAGE_ANALYSIS_TABLE} a ON s.id = a.page_session_id
        LEFT JOIN ${WEBPAGE_TREE_INTENTIONS_TABLE} ti ON s.tree_id = ti.tree_id AND s.id = ti.activity_session_id
-       LEFT JOIN ${WEBPAGE_CONTENT_TABLE} c ON s.id = c.activity_session_id
        WHERE s.tree_id = $tree_id`,
       { tree_id }
     );
 
     return await Promise.all(
-      result.getRowObjects().map(row_to_page_activity_session_with_meta)
+      result.getRowObjects().map(row => row_to_page_activity_session_with_meta(row, memory_db))
     );
   } catch (error) {
     console.error("Error getting page sessions with tree ID:", error);
@@ -461,6 +430,7 @@ export async function update_webpage_tree_activity_time(
 
 export async function get_last_modified_trees_with_members_and_analysis(
   db: DuckDB,
+  memory_db: LanceDBMemoryStore,
   table_id_to_exclude: string,
   limit = 5
 ): Promise<Record<string, PageActivitySessionWithMeta[]>> {
@@ -488,7 +458,7 @@ export async function get_last_modified_trees_with_members_and_analysis(
     );
 
     const all_tree_members = await Promise.all(
-      result.getRowObjects().map(row_to_page_activity_session_with_meta)
+      result.getRowObjects().map(row => row_to_page_activity_session_with_meta(row, memory_db))
     );
     return all_tree_members.reduce((acc, member) => {
       const tree_id = member.tree_id;
@@ -560,23 +530,19 @@ export async function update_page_activity_session(
 }
 
 async function row_to_page_activity_session_with_meta(
-  row: Record<string, DuckDBValue>
+  row: Record<string, DuckDBValue>,
+  memory_db: LanceDBMemoryStore
 ): Promise<PageActivitySessionWithMeta> {
   const base_session = row_to_page_activity_session(row);
 
-  // Decompress content if available
+  // Fetch content from LanceDB
+  const WEBPAGE_CONTENT_NAMESPACE = "webpage_content";
   let content = "";
-  if (row.content_compressed) {
-    try {
-      const compressed_data = Buffer.from(
-        row.content_compressed.toString(),
-        "base64"
-      );
-      const decompressed_data = await decompress(compressed_data);
-      content = decompressed_data.toString("utf-8");
-    } catch (error) {
-      console.warn("Failed to decompress content:", error);
-    }
+  try {
+    const content_result = await memory_db.get([WEBPAGE_CONTENT_NAMESPACE], base_session.id);
+    content = content_result?.pageContent as string || "";
+  } catch (error) {
+    console.warn("Failed to fetch content from LanceDB:", error);
   }
 
   const analysis_exists =
@@ -605,34 +571,31 @@ async function row_to_page_activity_session_with_meta(
 }
 
 export async function get_all_pages_for_rag(
-  db: DuckDB
+  db: DuckDB,
+  memory_db: LanceDBMemoryStore
 ): Promise<{ title: string; content: string }[]> {
   try {
+    // Get all pages with analysis (title) from DuckDB
     const result = await db.connection.runAndReadAll(
       `SELECT 
-         a.title,
-         c.content_compressed
-       FROM ${WEBPAGE_ANALYSIS_TABLE} a
-       JOIN ${WEBPAGE_CONTENT_TABLE} c ON a.page_session_id = c.activity_session_id`
+         a.page_session_id,
+         a.title
+       FROM ${WEBPAGE_ANALYSIS_TABLE} a`
     );
 
+    // Fetch content from LanceDB for each page
+    const WEBPAGE_CONTENT_NAMESPACE = "webpage_content";
     return await Promise.all(
       result.getRowObjects().map(async (row) => {
-        let content = "";
-        if (row.content_compressed) {
-          try {
-            const compressed_data = Buffer.from(
-              row.content_compressed.toString(),
-              "base64"
-            );
-            const decompressed_data = await decompress(compressed_data);
-            content = decompressed_data.toString("utf-8");
-          } catch (error) {
-            console.warn("Failed to decompress content:", error);
-          }
-        }
+        const page_session_id = row.page_session_id.toString();
+        const title = row.title.toString();
+        
+        // Fetch content from LanceDB
+        const content_result = await memory_db.get([WEBPAGE_CONTENT_NAMESPACE], page_session_id);
+        const content = content_result?.pageContent as string || "";
+        
         return {
-          title: row.title.toString(),
+          title,
           content,
         };
       })
@@ -645,15 +608,16 @@ export async function get_all_pages_for_rag(
 
 export async function get_page_by_title(
   db: DuckDB,
+  memory_db: LanceDBMemoryStore,
   title: string
 ): Promise<{ title: string; content: string } | null> {
   try {
+    // Get page session ID from DuckDB
     const result = await db.connection.runAndReadAll(
       `SELECT 
-         a.title,
-         c.content_compressed
+         a.page_session_id,
+         a.title
        FROM ${WEBPAGE_ANALYSIS_TABLE} a
-       JOIN ${WEBPAGE_CONTENT_TABLE} c ON a.page_session_id = c.activity_session_id
        WHERE a.title = $title
        LIMIT 1`,
       { title }
@@ -665,19 +629,13 @@ export async function get_page_by_title(
     }
 
     const row = rows[0];
-    let content = "";
-    if (row.content_compressed) {
-      try {
-        const compressed_data = Buffer.from(
-          row.content_compressed.toString(),
-          "base64"
-        );
-        const decompressed_data = await decompress(compressed_data);
-        content = decompressed_data.toString("utf-8");
-      } catch (error) {
-        console.warn("Failed to decompress content:", error);
-      }
-    }
+    const page_session_id = row.page_session_id.toString();
+    
+    // Fetch content from LanceDB
+    const WEBPAGE_CONTENT_NAMESPACE = "webpage_content";
+    const content_result = await memory_db.get([WEBPAGE_CONTENT_NAMESPACE], page_session_id);
+    const content = content_result?.pageContent as string || "";
+    
     return {
       title: row.title.toString(),
       content,
@@ -689,43 +647,24 @@ export async function get_page_by_title(
 }
 
 export async function get_webpage_content(
-  db: DuckDB,
+  memory_db: LanceDBMemoryStore,
   page_session_id: string
 ): Promise<{ content_compressed: string } | null> {
   try {
-    const result = await db.connection.runAndReadAll(
-      `SELECT content_compressed
-       FROM ${WEBPAGE_CONTENT_TABLE}
-       WHERE activity_session_id = $page_session_id
-       LIMIT 1`,
-      { page_session_id }
-    );
-
-    const rows = result.getRowObjects();
-    if (rows.length === 0) {
+    // Fetch content from LanceDB using key-based lookup
+    const WEBPAGE_CONTENT_NAMESPACE = "webpage_content";
+    const result = await memory_db.get([WEBPAGE_CONTENT_NAMESPACE], page_session_id);
+    
+    if (!result || !result.pageContent) {
       return null;
     }
 
-    const row = rows[0];
-    let content = "";
-    if (row.content_compressed) {
-      try {
-        const compressed_data = Buffer.from(
-          row.content_compressed.toString(),
-          "base64"
-        );
-        const decompressed_data = await decompress(compressed_data);
-        content = decompressed_data.toString("utf-8");
-      } catch (error) {
-        console.warn("Failed to decompress content:", error);
-        content = row.content_compressed.toString();
-      }
-    }
+    // Return content in the expected format (already decompressed in LanceDB)
     return {
-      content_compressed: content,
+      content_compressed: result.pageContent as string,
     };
   } catch (error) {
-    console.error("Error getting webpage content:", error);
+    console.error("Error getting webpage content from LanceDB:", error);
     throw error;
   }
 }

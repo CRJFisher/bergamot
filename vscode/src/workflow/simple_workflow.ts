@@ -23,7 +23,6 @@ import {
   get_webpage_analysis_for_ids,
   insert_webpage_analysis,
   insert_webpage_tree_intentions,
-  insert_webpage_content,
 } from '../duck_db';
 import { WebpageTreeNode } from '../webpage_tree_models';
 import { get_tree_with_id } from '../webpage_tree';
@@ -147,6 +146,7 @@ export class WebpageWorkflow {
       
       const other_recent_trees = await get_last_modified_trees_with_members_and_analysis(
         this.duck_db,
+        this.memory_db,
         inputs.members[0].tree_id,
         5
       );
@@ -233,8 +233,7 @@ export class WebpageWorkflow {
         'gpt-4o-mini'
       );
 
-      // Store processed content in database (compressed)
-      await insert_webpage_content(this.duck_db, inputs.new_page.id, processed_content);
+      // Content is now stored in LanceDB only (see memory_db.put below)
 
       // Analyze the webpage
       const analysis = await llm_client.complete_json<PageAnalysisWithoutPageSessionId>(

@@ -174,8 +174,8 @@ export class WebpageRAGMCPServer {
         };
       }
 
-      // Fallback to DuckDB if not in memory store
-      const content = await get_webpage_content(this.duckDb, page_session_id);
+      // Fallback to fetch from memory store directly
+      const content = await get_webpage_content(this.memoryStore, page_session_id);
       
       if (!content) {
         throw new McpError(

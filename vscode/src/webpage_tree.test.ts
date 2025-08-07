@@ -8,6 +8,7 @@ import {
   PageActivitySessionWithoutTreeOrContent,
 } from "./duck_db_models";
 import * as hash_utils from "./hash_utils";
+import { LanceDBMemoryStore } from "./agent_memory";
 
 jest.mock("./hash_utils");
 
@@ -15,11 +16,19 @@ const mock_md5_hash = jest.spyOn(hash_utils, 'md5_hash');
 
 describe("Webpage Tree Management", () => {
   let db: DuckDB;
+  let memory_db: any; // Mock memory store
 
   beforeEach(async () => {
     db = new DuckDB({ database_path: ":memory:" });
     await db.init();
     mock_md5_hash.mockClear();
+    
+    // Create a mock memory_db
+    memory_db = {
+      get: jest.fn().mockResolvedValue(null),
+      put: jest.fn(),
+      search: jest.fn().mockResolvedValue([]),
+    };
   });
 
   afterEach(async () => {
@@ -159,7 +168,7 @@ describe("Webpage Tree Management", () => {
     });
 
     it("should build a simple tree with root only", async () => {
-      const tree_members = await get_page_sessions_with_tree_id(db, "test-tree-id");
+      const tree_members = await get_page_sessions_with_tree_id(db, memory_db, "test-tree-id");
       const tree = get_tree_with_id(tree_members);
       expect(tree).toBeDefined();
       expect(tree?.webpage_session.id).toEqual("root-session");
