@@ -27,7 +27,7 @@ export class OrphanedVisitsManager {
     console.log(`🚸 Adding orphaned visit for tab ${opener_tab_id}:`, {
       url: visit.url,
       opener_tab_id,
-      visit_tab_id: (visit as any).tab_id
+      visit_tab_id: (visit as PageActivitySessionWithoutTreeOrContent & { tab_id?: number }).tab_id
     });
 
     const orphan: OrphanedVisit = {
@@ -68,7 +68,7 @@ export class OrphanedVisitsManager {
     
     const orphans_to_retry: OrphanedVisit[] = [];
     
-    for (const [tab_id, orphans] of this.orphaned_visits.entries()) {
+    for (const [_tab_id, orphans] of this.orphaned_visits.entries()) {
       for (const orphan of orphans) {
         if (orphan.retry_count < this.max_retries) {
           orphans_to_retry.push(orphan);
@@ -176,7 +176,7 @@ export class OrphanedVisitsManager {
     visit: PageActivitySessionWithoutTreeOrContent
   ): boolean {
     // Check if visit has opener_tab_id field (from browser extension)
-    const has_opener = !!(visit as any).opener_tab_id;
+    const has_opener = !!(visit as PageActivitySessionWithoutTreeOrContent & { opener_tab_id?: number }).opener_tab_id;
     
     // Also check if it has a referrer but we might not find the parent
     const has_referrer = !!visit.referrer;

@@ -390,8 +390,6 @@ describe('EnhancedWebpageFilter', () => {
     });
 
     it('should stop evaluation after accept/reject actions', async () => {
-      let evaluate_count = 0;
-
       // First rule: reject
       await procedural_store.add_rule({
         name: 'Reject rule',

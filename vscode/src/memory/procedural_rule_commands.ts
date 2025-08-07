@@ -356,7 +356,7 @@ async function show_rule_manager(procedural_store: ProceduralMemoryStore): Promi
       );
       break;
 
-    case 'Edit':
+    case 'Edit': {
       // Simple edit for priority
       const new_priority = await vscode.window.showInputBox({
         prompt: 'Enter new priority',
@@ -369,8 +369,9 @@ async function show_rule_manager(procedural_store: ProceduralMemoryStore): Promi
         vscode.window.showInformationMessage(`Rule priority updated`);
       }
       break;
+    }
 
-    case 'Delete':
+    case 'Delete': {
       const confirm = await vscode.window.showWarningMessage(
         `Delete rule "${selected.rule.name}"?`,
         'Delete',
@@ -381,8 +382,9 @@ async function show_rule_manager(procedural_store: ProceduralMemoryStore): Promi
         vscode.window.showInformationMessage(`Rule deleted`);
       }
       break;
+    }
 
-    case 'View Details':
+    case 'View Details': {
       const panel = vscode.window.createWebviewPanel(
         'ruleDetails',
         selected.rule.name,
@@ -400,6 +402,7 @@ async function show_rule_manager(procedural_store: ProceduralMemoryStore): Promi
         </html>
       `;
       break;
+    }
   }
 }
 

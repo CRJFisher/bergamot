@@ -165,7 +165,7 @@ describe('OrphanedVisitsManager', () => {
         referrer: 'https://example.com',
         page_loaded_at: new Date().toISOString(),
         opener_tab_id: 123
-      } as any;
+      } as PageActivitySessionWithoutTreeOrContent & { opener_tab_id: number };
 
       expect(OrphanedVisitsManager.is_potential_orphan(visit)).toBe(true);
     });
@@ -203,7 +203,7 @@ describe('OrphanedVisitsManager', () => {
 
       // Wait for orphan to expire (set max_age_ms to 100ms for testing)
       const test_manager = new OrphanedVisitsManager();
-      (test_manager as any).max_age_ms = 100; // Override for testing
+      (test_manager as unknown as { max_age_ms: number }).max_age_ms = 100; // Override for testing
       
       test_manager.add_orphan(visit, 123);
       expect(test_manager.get_orphans_for_tab(123)).toHaveLength(1);
