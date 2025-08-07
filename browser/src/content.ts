@@ -37,12 +37,18 @@ const get_true_referrer = async (): Promise<ReferrerInfo> => {
     console.log("PKM: Received referrer response:", {
       referrer: response?.referrer,
       referrer_timestamp: response?.referrer_timestamp,
+      tab_id: response?.tab_id,
+      group_id: response?.group_id,
+      opener_tab_id: response?.opener_tab_id,
       current_url: window.location.href,
       document_referrer: document.referrer,
     });
     return new ReferrerInfo(
       response?.referrer || "",
-      response?.referrer_timestamp
+      response?.referrer_timestamp,
+      response?.tab_id,
+      response?.group_id,
+      response?.opener_tab_id
     );
   } catch (error) {
     console.warn("PKM: Failed to get referrer from background script:", error);
@@ -79,13 +85,19 @@ const handle_page_visit = async (url: string) => {
     url,
     referrer_info.referrer,
     referrer_info.referrer_timestamp,
-    zstd_instance
+    zstd_instance,
+    referrer_info.tab_id,
+    referrer_info.group_id,
+    referrer_info.opener_tab_id
   );
 
   console.log("PKM: Sending visit data:", {
     url: visit_data.url,
     referrer: visit_data.referrer,
     referrer_timestamp: visit_data.referrer_timestamp,
+    tab_id: visit_data.tab_id,
+    group_id: visit_data.group_id,
+    opener_tab_id: visit_data.opener_tab_id,
   });
 
   // Notify background script about SPA navigation (except initial load)

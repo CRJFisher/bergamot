@@ -24,6 +24,10 @@ export interface MessageResponse {
   error?: string;
   referrer?: string;
   referrer_timestamp?: number;
+  // Group connection fields
+  tab_id?: number;
+  group_id?: string;
+  opener_tab_id?: number;
 }
 
 // Pure message handlers
@@ -36,20 +40,27 @@ export const handle_get_referrer = (
     ? get_tab_history(tab_history_store, history.opener_tab_id)
     : undefined;
   
-  const referrer_info = get_referrer_from_history(history, opener_history);
+  const referrer_info = get_referrer_from_history(history, opener_history, tab_id);
   
   console.log(`📍 Sending referrer response for tab ${tab_id}:`, {
     current_url: history?.current_url,
     previous_url: history?.previous_url,
-    opener_tab_id: history?.opener_tab_id,
+    opener_tab_id: history?.opener_tab_id || 'NONE',
+    group_id: history?.group_id || 'NONE',
     computed_referrer: referrer_info.referrer,
     referrer_timestamp: referrer_info.referrer_timestamp,
+    response_tab_id: referrer_info.tab_id,
+    response_group_id: referrer_info.group_id || 'NONE',
+    response_opener_tab_id: referrer_info.opener_tab_id || 'NONE',
   });
 
   return {
     success: true,
     referrer: referrer_info.referrer,
-    referrer_timestamp: referrer_info.referrer_timestamp
+    referrer_timestamp: referrer_info.referrer_timestamp,
+    tab_id: referrer_info.tab_id,
+    group_id: referrer_info.group_id,
+    opener_tab_id: referrer_info.opener_tab_id
   };
 };
 

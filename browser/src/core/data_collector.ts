@@ -40,7 +40,10 @@ export const create_visit_data = async (
   url: string,
   referrer: string,
   referrer_timestamp: number | undefined,
-  zstd: any
+  zstd: any,
+  tab_id?: number,
+  group_id?: string,
+  opener_tab_id?: number
 ): Promise<VisitData> => {
   const content = extract_page_content();
   const compressed_content = await compress_content(content, zstd);
@@ -50,7 +53,10 @@ export const create_visit_data = async (
     new Date().toISOString(),
     referrer,
     compressed_content,
-    referrer_timestamp
+    referrer_timestamp,
+    tab_id,
+    group_id,
+    opener_tab_id
   );
 };
 

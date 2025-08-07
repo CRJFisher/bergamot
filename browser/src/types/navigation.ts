@@ -5,7 +5,8 @@ export class TabHistory {
     public readonly current_url?: string,
     public readonly timestamp: number = Date.now(),
     public readonly previous_url_timestamp?: number,
-    public readonly opener_tab_id?: number
+    public readonly opener_tab_id?: number,
+    public readonly group_id?: string
   ) {}
 }
 
@@ -15,7 +16,11 @@ export class VisitData {
     public readonly page_loaded_at: string,
     public readonly referrer: string,
     public readonly content: string,
-    public readonly referrer_timestamp?: number
+    public readonly referrer_timestamp?: number,
+    // Group connection fields
+    public readonly tab_id?: number,
+    public readonly group_id?: string,
+    public readonly opener_tab_id?: number
   ) {}
 
   // Allow spreading for compatibility with Record<string, unknown>
@@ -42,6 +47,10 @@ export class PKMConfig {
 export class ReferrerInfo {
   constructor(
     public readonly referrer: string,
-    public readonly referrer_timestamp?: number
+    public readonly referrer_timestamp?: number,
+    // Group connection info
+    public readonly tab_id?: number,
+    public readonly group_id?: string,
+    public readonly opener_tab_id?: number
   ) {}
 }

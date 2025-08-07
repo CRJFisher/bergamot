@@ -138,33 +138,44 @@ class PureServerE2ETest {
     console.log('📝 Scenario 3: Tab relationships (opener tracking)');
     this.mock_pkm_server.clear_visits();
     
-    // Open initial page
-    await this.runner.navigate_to(this.test_server.getUrl('/'));
-    await this.wait(1000);
-    
-    // Open new tab via target="_blank"
-    await this.runner.open_new_tab(this.test_server.getUrl('/page1'));
+    // Open initial page (page1 has links)
+    await this.runner.navigate_to(this.test_server.getUrl('/page1'));
     await this.wait(1500);
+    
+    // Open new tab via window.open (real opener relationship)
+    const client = this.runner['client'];
+    if (client) {
+      await client.Runtime.evaluate({
+        expression: `window.open('${this.test_server.getUrl('/page2')}', '_blank');`
+      });
+    }
+    await this.wait(2000);
     
     // Validate server data
     const visits = this.mock_pkm_server.get_visits();
     const has_referrer = visits.some(v => v.referrer && v.referrer !== '');
     
-    // Check for group connection data (which we know is missing)
+    // Check for group connection data
     const has_group_id = visits.every(v => v.group_id);
     const has_tab_id = visits.every(v => v.tab_id);
     const has_opener_info = visits.some(v => v.opener_tab_id);
     
-    // Currently passes if we get 2+ visits with referrer
-    // NOTE: Extension doesn't send group_id/tab_id/opener_tab_id yet
-    const passed = visits.length >= 2 && has_referrer;
-    const missing_fields = [];
-    if (!has_group_id) missing_fields.push('group_id');
-    if (!has_tab_id) missing_fields.push('tab_id');
-    if (!has_opener_info) missing_fields.push('opener_tab_id');
+    // Check if all visits share the same group_id (key requirement!)
+    const unique_group_ids = new Set(visits.map(v => v.group_id).filter(Boolean));
+    const shares_group_id = unique_group_ids.size === 1 && has_group_id;
     
-    const details = `${visits.length} visits, referrer ${has_referrer ? 'preserved' : 'missing'}` + 
-                   (missing_fields.length > 0 ? ` (missing: ${missing_fields.join(', ')})` : '');
+    // Test passes if tabs share group_id AND have opener info
+    const passed = visits.length >= 2 && shares_group_id && has_opener_info;
+    
+    let details = `${visits.length} visits`;
+    if (shares_group_id) {
+      details += `, shared group_id: ${[...unique_group_ids][0]?.substring(0, 8)}...`;
+    } else {
+      details += `, ${unique_group_ids.size} different group_ids`;
+    }
+    if (has_opener_info) {
+      details += ', opener tracked';
+    }
     
     this.results.push({
       scenario: 'Tab relationships',

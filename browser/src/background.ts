@@ -25,10 +25,31 @@ const handle_tab_created = async (tab: chrome.tabs.Tab) => {
   });
 
   if (tab.id) {
+    // Get opener's group_id if there's an opener
+    let opener_group_id: string | undefined = undefined;
+    if (tab.openerTabId) {
+      const opener_history = get_tab_history(tab_history_store, tab.openerTabId);
+      opener_group_id = opener_history?.group_id;
+      console.log(`🔗 Tab ${tab.id} has opener ${tab.openerTabId}:`, {
+        opener_has_history: !!opener_history,
+        opener_group_id: opener_group_id || 'NOT SET YET',
+        opener_url: opener_history?.current_url || 'NO URL YET'
+      });
+    }
+      
     const history = create_tab_history(
       tab.url || tab.pendingUrl,
-      tab.openerTabId
+      tab.openerTabId,
+      undefined,
+      opener_group_id
     );
+    
+    console.log(`📝 Created history for tab ${tab.id}:`, {
+      group_id: history.group_id,
+      opener_tab_id: history.opener_tab_id,
+      inherited_from_opener: !!opener_group_id
+    });
+    
     tab_history_store = add_tab_history(tab_history_store, tab.id, history);
   }
 
@@ -89,7 +110,8 @@ const handle_tab_opener = async (tab_id: number, opener_tab_id: number) => {
           opener_tab.url,
           now,
           opener_history?.previous_url_timestamp,
-          opener_history?.opener_tab_id
+          opener_history?.opener_tab_id,
+          opener_history?.group_id
         );
         tab_history_store = add_tab_history(tab_history_store, opener_tab_id, new_opener_history);
         opener_history = new_opener_history;
@@ -111,7 +133,8 @@ const handle_tab_opener = async (tab_id: number, opener_tab_id: number) => {
       current_history?.current_url,
       now,
       opener_history.timestamp,
-      opener_tab_id
+      opener_tab_id,
+      opener_history.group_id // Inherit group_id from opener
     );
     tab_history_store = add_tab_history(tab_history_store, tab_id, new_history);
     
