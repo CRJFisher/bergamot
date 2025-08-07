@@ -84,16 +84,17 @@ class PureServerE2ETest {
     const passed = visits.length >= 3;
     const details = `Server received ${visits.length} visits`;
     
-    // Check URLs are correct
+    // Check URLs are correct (order may vary due to async loading)
     const expected_urls = ['/', '/page1', '/page2'];
-    const all_urls_match = expected_urls.every((url, i) => 
-      visits[i]?.url?.includes(url)
+    const actual_urls = visits.map(v => new URL(v.url).pathname);
+    const all_urls_present = expected_urls.every(url => 
+      actual_urls.includes(url)
     );
     
     this.results.push({
       scenario: 'Basic navigation',
-      passed: passed && all_urls_match,
-      details: all_urls_match ? details : `${details} but URLs don't match expected`
+      passed: passed && all_urls_present,
+      details: all_urls_present ? details : `${details} but URLs don't match expected`
     });
   }
 

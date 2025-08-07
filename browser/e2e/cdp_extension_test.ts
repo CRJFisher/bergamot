@@ -172,19 +172,18 @@ export class ExtensionTestRunner {
     
     await Page.navigate({ url });
     
-    // Wait for load event with timeout (especially important for headless mode)
+    // For simple test pages, just wait for DOM content instead of full load
     try {
       await Promise.race([
-        Page.loadEventFired(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Load timeout')), 3000))
+        Page.domContentEventFired(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('DOM timeout')), 500))
       ]);
     } catch (error) {
-      // In headless mode, load event might not always fire, continue anyway
-      console.log(`  ⚠️ Load event timeout for ${url}, continuing...`);
+      // Continue anyway - our test pages are simple and load fast
     }
     
-    // Wait a bit for extension to process
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Wait a bit for extension to initialize and send visit
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
 
   async open_new_tab(url: string): Promise<string> {

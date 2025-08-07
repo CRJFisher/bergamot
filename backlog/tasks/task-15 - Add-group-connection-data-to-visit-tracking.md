@@ -1,10 +1,10 @@
 ---
 id: task-15
 title: Add group connection data to visit tracking
-status: In Progress
+status: Done
 assignee: []
-created_date: "2025-08-07 08:45"
-updated_date: "2025-08-07 08:46"
+created_date: '2025-08-07 08:45'
+updated_date: '2025-08-07 08:58'
 labels:
   - browser
   - navigation

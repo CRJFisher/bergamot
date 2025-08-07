@@ -65,11 +65,32 @@ async function working_e2e_test(): Promise<void> {
     const visits = mock_pkm_server.get_visits();
     console.log(`\n📊 Mock PKM server received ${visits.length} visits:`);
     visits.forEach((visit, i) => {
-      console.log(`  ${i + 1}. ${visit.url} (referrer: ${visit.referrer || 'none'})`);
+      console.log(`  ${i + 1}. ${visit.url}`);
+      console.log(`     - referrer: ${visit.referrer || 'none'}`);
+      console.log(`     - group_id: ${visit.group_id || '❌ MISSING'}`);
+      console.log(`     - tab_id: ${visit.tab_id || '❌ MISSING'}`);
     });
+    
+    // Check group_id consistency
+    const unique_groups = new Set(visits.map(v => v.group_id).filter(Boolean));
+    const all_have_group_id = visits.every(v => v.group_id);
+    const all_have_tab_id = visits.every(v => v.tab_id);
     
     if (visits.length >= 3) {
       console.log('\n✅ Extension successfully sent visit data to PKM server!');
+      
+      // Validate group tracking
+      if (all_have_group_id && all_have_tab_id) {
+        if (unique_groups.size === 1) {
+          console.log(`✅ All visits share same group_id: ${[...unique_groups][0]?.substring(0, 13)}...`);
+        } else {
+          console.log(`⚠️ Multiple group_ids found: ${unique_groups.size} different groups`);
+        }
+      } else {
+        console.log('❌ Missing group tracking data:');
+        if (!all_have_group_id) console.log('   - Some visits missing group_id');
+        if (!all_have_tab_id) console.log('   - Some visits missing tab_id');
+      }
     } else if (visits.length > 0) {
       console.log('\n⚠️  Some visits were tracked but not all expected');
     } else {
