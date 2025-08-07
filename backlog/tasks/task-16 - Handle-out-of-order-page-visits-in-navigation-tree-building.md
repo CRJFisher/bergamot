@@ -1,9 +1,11 @@
 ---
 id: task-16
 title: Handle out-of-order page visits in navigation tree building
-status: To Do
-assignee: []
-created_date: "2025-08-07 08:57"
+status: Done
+assignee:
+  - '@claude'
+created_date: '2025-08-07 08:57'
+updated_date: '2025-08-07 16:13'
 labels:
   - vscode
   - navigation
@@ -63,13 +65,85 @@ When the Issues page visit arrives first:
 
 ## Acceptance Criteria
 
-- [ ] VS Code extension temporarily stores orphaned pages (visits with unmatched opener_tab_id)
-- [ ] When parent page arrives later check for orphaned children and reconnect them
-- [ ] Update or re-insert child pages to maintain proper tree structure
-- [ ] Reconcile group_id if parent and child have different group_ids
-- [ ] Navigation trees correctly reflect parent-child relationships regardless of arrival order
-- [ ] Add tests for out-of-order page visit scenarios
+- [x] VS Code extension temporarily stores orphaned pages (visits with unmatched opener_tab_id)
+- [x] When parent page arrives later check for orphaned children and reconnect them
+- [x] Update or re-insert child pages to maintain proper tree structure
+- [x] Reconcile group_id if parent and child have different group_ids
+- [x] Navigation trees correctly reflect parent-child relationships regardless of arrival order
+- [x] Add tests for out-of-order page visit scenarios
 
+
+## Implementation Plan
+
+1. Analyze current navigation tree building logic in VSCode extension
+2. Identify where orphaned pages are currently handled
+3. Implement temporary storage for orphaned pages with unmatched opener_tab_id
+4. Add logic to check for orphaned children when parent pages arrive
+5. Implement reconnection logic for orphaned pages
+6. Handle group_id reconciliation if needed
+7. Add comprehensive tests for out-of-order scenarios
+8. Test with real-world navigation patterns
+
+## Implementation Notes
+
+### Solution Implemented
+
+Created a comprehensive orphaned visits management system to handle out-of-order page arrivals:
+
+1. **OrphanedVisitsManager Class** (`vscode/src/orphaned_visits.ts`):
+   - Stores visits that arrive before their parent/opener pages
+   - Tracks orphans by opener_tab_id for efficient lookup
+   - Implements automatic cleanup of old orphans (60s max age)
+   - Provides retry mechanism with configurable max retries (5)
+   - Maintains statistics for monitoring orphan status
+
+2. **Modified Visit Processing** (`vscode/src/extension.ts:203-265`):
+   - Detects potential orphans when visits create unexpected new trees
+   - Stores orphaned visits for later retry
+   - When parent arrives, automatically checks for and reconnects orphaned children
+   - Re-queues orphaned children with updated referrer_page_session_id
+   - Processes reconnected children immediately (unshift to queue front)
+
+3. **Automatic Retry Mechanism** (`vscode/src/extension.ts:197-208`):
+   - Periodic retry interval (every 5 seconds) for unresolved orphans
+   - Increments retry count to prevent infinite loops
+   - Automatically removes orphans after max retries exceeded
+
+### Key Features
+
+- **Orphan Detection**: Identifies visits with opener_tab_id but no matching parent in DB
+- **Temporary Storage**: Holds orphaned visits in memory with metadata (arrival time, retry count)
+- **Parent-Child Reconnection**: Automatically links orphans when parent arrives
+- **Group ID Inheritance**: Orphans inherit group_id from parent when reconnected
+- **Cleanup Mechanisms**: 
+  - Age-based cleanup (60 seconds)
+  - Retry-based cleanup (5 max retries)
+  - Manual cleanup after successful reconnection
+
+### Testing
+
+Created comprehensive test suite (`vscode/src/orphaned_visits.test.ts`) covering:
+- Adding and retrieving orphans
+- Removing orphans after processing
+- Retry mechanism and count limits
+- Automatic cleanup of old orphans
+- Statistics tracking
+- Potential orphan identification
+
+### Performance Considerations
+
+- Orphans stored in memory (Map structure) for O(1) lookups
+- Automatic cleanup prevents memory leaks
+- Retry interval tuned to balance responsiveness vs CPU usage
+- Queue manipulation optimized (unshift for immediate processing)
+
+### Edge Cases Handled
+
+- Multiple orphans for same parent tab
+- Orphans that never find their parent (max age/retry cleanup)
+- Rapid navigation causing multiple orphans
+- Parent arrives much later than child
+- Multiple levels of parent-child relationships
 ## Implementation Approach
 
 ### 1. Orphan Queue System

@@ -29,6 +29,7 @@ import { createAndStartMCPServer, WebpageRAGMCPServer } from "./mcp_server";
 import * as child_process from "child_process";
 import { register_webpage_search_commands } from "./webpage_search_commands";
 import { register_webpage_hover_provider } from "./webpage_hover_provider";
+import { OrphanedVisitsManager } from "./orphaned_visits";
 
 let server: http.Server | undefined;
 let duck_db: DuckDB;
@@ -189,6 +190,29 @@ async function start_webpage_categoriser_service(
     PageActivitySessionWithoutTreeOrContent & { raw_content: string }
   > = [];
   let is_processing = false;
+  
+  // Initialize orphaned visits manager
+  const orphan_manager = new OrphanedVisitsManager();
+  
+  // Periodically retry orphaned visits
+  const orphan_retry_interval = setInterval(() => {
+    const orphans = orphan_manager.get_orphans_for_retry();
+    if (orphans.length > 0) {
+      console.log(`🔄 Retrying ${orphans.length} orphaned visits...`);
+      for (const orphan of orphans) {
+        orphan_manager.increment_retry_count(orphan);
+        request_queue.push(orphan.visit);
+      }
+      process_queue();
+    }
+  }, 5000); // Check every 5 seconds
+  
+  // Clean up interval on extension deactivation
+  context.subscriptions.push({
+    dispose: () => {
+      clearInterval(orphan_retry_interval);
+    }
+  });
   async function process_queue() {
     if (is_processing || request_queue.length === 0) return;
 
@@ -197,13 +221,28 @@ async function start_webpage_categoriser_service(
       const page_visit = request_queue.shift();
 
       if (page_visit) {
-        // Add the webpage to its
+        // Check if this visit has an opener_tab_id that might not exist yet
+        const opener_tab_id = (page_visit as any).opener_tab_id;
+        const tab_id = (page_visit as any).tab_id;
+        
+        // Try to process the visit
         const inserted =
           await insert_page_activity_session_with_tree_management(
             duck_db,
             page_visit
           );
-        if (inserted.tree_id && inserted.was_tree_changed) {
+        
+        // Check if this visit created a new tree when it shouldn't have (orphan detection)
+        const should_be_orphan = opener_tab_id && 
+                                 inserted.tree_id && 
+                                 !page_visit.referrer_page_session_id;
+        
+        if (should_be_orphan) {
+          console.log(`🚸 Detected potential orphan visit from tab ${tab_id} with opener ${opener_tab_id}`);
+          // Add to orphan manager for later retry
+          orphan_manager.add_orphan(page_visit, opener_tab_id);
+        } else if (inserted.tree_id && inserted.was_tree_changed) {
+          // Normal processing for successful inserts
           const tree_members = await get_page_sessions_with_tree_id(
             duck_db,
             inserted.tree_id
@@ -221,6 +260,27 @@ async function start_webpage_categoriser_service(
             webpage_categoriser_app,
             duck_db
           );
+          
+          // After successfully processing a parent, check for orphaned children
+          if (tab_id) {
+            const orphans = orphan_manager.get_orphans_for_tab(tab_id);
+            if (orphans.length > 0) {
+              console.log(`👨‍👧‍👦 Found ${orphans.length} orphaned children for tab ${tab_id}, re-queuing...`);
+              
+              // Re-queue orphaned children for processing
+              for (const orphan of orphans) {
+                // Update the orphan's referrer info with the parent's session ID
+                const updated_visit = {
+                  ...orphan.visit,
+                  referrer_page_session_id: page_visit.id
+                };
+                request_queue.unshift(updated_visit); // Add to front of queue for immediate processing
+              }
+              
+              // Remove processed orphans
+              orphan_manager.remove_orphans_for_tab(tab_id);
+            }
+          }
         }
       }
     } catch (error) {
