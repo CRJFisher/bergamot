@@ -287,15 +287,3 @@ export class BackgroundStateTests {
 }
 
 // Run the tests
-if (require.main === module) {
-  const tests = new BackgroundStateTests();
-  tests.run_all_tests()
-    .then(() => {
-      console.log('\n✅ Background state tests completed');
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error('\n❌ Background state tests failed:', error);
-      process.exit(1);
-    });
-}

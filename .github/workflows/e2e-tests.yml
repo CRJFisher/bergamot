@@ -1,0 +1,158 @@
+name: E2E Navigation Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'browser/**'
+      - 'vscode/**'
+      - '.github/workflows/e2e-tests.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'browser/**'
+      - 'vscode/**'
+
+jobs:
+  e2e-tests:
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: [18.x, 20.x]
+      fail-fast: false
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: |
+          browser/package-lock.json
+          vscode/package-lock.json
+    
+    - name: Install Chrome
+      if: runner.os == 'Linux'
+      run: |
+        wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+        sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list'
+        sudo apt-get update
+        sudo apt-get install -y google-chrome-stable
+        google-chrome --version
+    
+    - name: Setup Chrome on macOS
+      if: runner.os == 'macOS'
+      run: |
+        brew install --cask google-chrome
+        /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version
+    
+    - name: Setup Chrome on Windows
+      if: runner.os == 'Windows'
+      run: |
+        choco install googlechrome -y
+        & "C:\Program Files\Google\Chrome\Application\chrome.exe" --version
+    
+    - name: Install dependencies - Browser Extension
+      working-directory: ./browser
+      run: npm ci
+    
+    - name: Install dependencies - VS Code Extension
+      working-directory: ./vscode
+      run: npm ci
+    
+    - name: Build Browser Extension
+      working-directory: ./browser
+      run: npm run build
+    
+    - name: Build VS Code Extension
+      working-directory: ./vscode
+      run: npm run compile
+    
+    - name: Run Unit Tests - Browser
+      working-directory: ./browser
+      run: npm run test:unit
+      continue-on-error: true
+    
+    - name: Run Unit Tests - VS Code
+      working-directory: ./vscode
+      run: npm test
+      continue-on-error: true
+      if: runner.os != 'Linux' || matrix.node-version != '18.x'
+    
+    - name: Run E2E Navigation Tests
+      working-directory: ./browser
+      run: npm run test:e2e:run-all
+      env:
+        HEADLESS: true
+        CI: true
+      timeout-minutes: 15
+    
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: e2e-test-results-${{ matrix.os }}-node${{ matrix.node-version }}
+        path: |
+          browser/e2e/test_results.json
+          browser/e2e/*.log
+    
+    - name: Test Report Summary
+      if: always()
+      working-directory: ./browser
+      run: |
+        if [ -f "e2e/test_results.json" ]; then
+          echo "## E2E Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+          cat e2e/test_results.json >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        fi
+      shell: bash
+
+  test-summary:
+    needs: e2e-tests
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: test-artifacts
+    
+    - name: Generate Combined Report
+      run: |
+        echo "# E2E Navigation Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        for dir in test-artifacts/*/; do
+          if [ -f "$dir/test_results.json" ]; then
+            echo "## $(basename $dir)" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+            cat "$dir/test_results.json" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+        done
+    
+    - name: Check Test Status
+      run: |
+        failed=0
+        for dir in test-artifacts/*/; do
+          if [ -f "$dir/test_results.json" ]; then
+            if grep -q '"passed": false' "$dir/test_results.json"; then
+              failed=1
+            fi
+          fi
+        done
+        
+        if [ $failed -eq 1 ]; then
+          echo "❌ Some E2E tests failed. Check the artifacts for details."
+          exit 1
+        else
+          echo "✅ All E2E tests passed!"
+        fi

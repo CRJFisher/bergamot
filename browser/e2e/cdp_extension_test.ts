@@ -3,6 +3,11 @@ import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 interface ConsoleMessage {
   timestamp: string;
@@ -24,8 +29,10 @@ export class ExtensionTestRunner {
   private user_data_dir: string | null = null;
   private debugging_port: number = 9222;
   private console_logs: ConsoleMessage[] = [];
+  private headless: boolean = false;
 
-  async setup(): Promise<void> {
+  async setup(options: { headless?: boolean } = {}): Promise<void> {
+    this.headless = options.headless || false;
     // Create isolated user data directory
     this.user_data_dir = path.join(os.tmpdir(), `chrome-ext-test-${Date.now()}`);
     await fs.mkdir(this.user_data_dir, { recursive: true });
@@ -49,6 +56,12 @@ export class ExtensionTestRunner {
       '--window-size=1280,800',
       '--window-position=100,100'
     ];
+    
+    // Add headless flags if requested
+    if (this.headless) {
+      chrome_args.push('--headless=new'); // Use new headless mode
+      chrome_args.push('--disable-gpu');
+    }
 
     console.log('🚀 Starting isolated Chrome instance...');
     console.log(`📁 User data dir: ${this.user_data_dir}`);
@@ -158,7 +171,17 @@ export class ExtensionTestRunner {
     const { Page } = this.client;
     
     await Page.navigate({ url });
-    await Page.loadEventFired();
+    
+    // Wait for load event with timeout (especially important for headless mode)
+    try {
+      await Promise.race([
+        Page.loadEventFired(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Load timeout')), 3000))
+      ]);
+    } catch (error) {
+      // In headless mode, load event might not always fire, continue anyway
+      console.log(`  ⚠️ Load event timeout for ${url}, continuing...`);
+    }
     
     // Wait a bit for extension to process
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -201,6 +224,53 @@ export class ExtensionTestRunner {
     });
     
     await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+
+  async get_extension_id(): Promise<string | null> {
+    if (!this.extension_path) return null;
+    
+    // Wait a bit for extension to be loaded
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Get the extension ID from Chrome's management API
+    // Since we're loading unpacked, we need to get it from the loaded extensions
+    try {
+      const targets = await CDP.List({ port: this.debugging_port });
+      console.log(`Found ${targets.length} targets:`);
+      targets.forEach(t => {
+        console.log(`  - ${t.type}: ${t.url || t.title}`);
+      });
+      
+      // Look for any chrome-extension URL
+      for (const target of targets) {
+        if (target.url?.startsWith('chrome-extension://')) {
+          const match = target.url.match(/chrome-extension:\/\/([a-z0-9]+)/);
+          if (match && match[1]) {
+            console.log(`Found extension ID from URL: ${match[1]}`);
+            return match[1];
+          }
+        }
+      }
+      
+      // Try looking for service worker or background page
+      const bg_target = targets.find(t => 
+        t.type === 'service_worker' || 
+        t.type === 'background_page' ||
+        t.title?.includes('PKM') ||
+        t.title?.includes('Extension')
+      );
+      
+      if (bg_target && bg_target.url) {
+        const match = bg_target.url.match(/chrome-extension:\/\/([a-z0-9]+)/);
+        if (match && match[1]) {
+          return match[1];
+        }
+      }
+    } catch (e) {
+      console.log('Could not get extension ID:', e);
+    }
+    
+    return null;
   }
 
   async get_extension_state(): Promise<any> {
@@ -380,9 +450,8 @@ export async function test_extension_state_persistence(): Promise<void> {
   }
 }
 
-// Run if called directly
-if (require.main === module) {
-  test_extension_state_persistence()
-    .then(() => process.exit(0))
-    .catch(() => process.exit(1));
-}
+// Only run if this file is executed directly, not imported
+// Commented out to prevent auto-execution on import
+// test_extension_state_persistence()
+//   .then(() => process.exit(0))
+//   .catch(() => process.exit(1));

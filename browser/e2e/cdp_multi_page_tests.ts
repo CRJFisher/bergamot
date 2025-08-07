@@ -229,12 +229,3 @@ export class MultiPageTestSuite {
 }
 
 // Run the test suite
-if (require.main === module) {
-  const suite = new MultiPageTestSuite();
-  suite.run_all_tests()
-    .then(() => process.exit(0))
-    .catch((error) => {
-      console.error('Test suite failed:', error);
-      process.exit(1);
-    });
-}
