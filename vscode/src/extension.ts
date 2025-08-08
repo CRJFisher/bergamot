@@ -73,12 +73,13 @@ function write_port_file(port: number): void {
  * // "pkm-assistant.openaiApiKey": "your-openai-key"
  * ```
  */
-export async function activate(
-  context: vscode.ExtensionContext
-): Promise<void> {
-  console.log("Starting PKM Assistant extension activation...");
-
-  // Get OpenAI API key from configuration
+/**
+ * Validates and retrieves the OpenAI API key from VS Code configuration.
+ * Shows an error message if the key is not configured.
+ * 
+ * @returns The API key if configured, undefined otherwise
+ */
+function get_openai_api_key(): string | undefined {
   const config = vscode.workspace.getConfiguration("pkm-assistant");
   const openai_api_key = config.get<string>("openaiApiKey");
 
@@ -87,25 +88,140 @@ export async function activate(
     vscode.window.showErrorMessage(
       "OpenAI API key is not configured. Please set it in settings."
     );
-    return;
+    return undefined;
   }
+  
   console.log("OpenAI API key found in configuration");
+  return openai_api_key;
+}
 
+/**
+ * Initializes the database connections required by the extension.
+ * Sets up both DuckDB and MarkdownDatabase instances.
+ * 
+ * @param context - VS Code extension context for storage paths
+ * @returns Object containing initialized database instances
+ */
+async function initialize_databases(
+  context: vscode.ExtensionContext
+): Promise<{ duck_db: DuckDB; markdown_db: MarkdownDatabase }> {
+  console.log("Initializing databases...");
+  
   // TODO: make these path configurable
   const front_page_path = "/Users/chuck/workspace/pkm/webpages_db.md";
-  console.log("Initializing databases...");
   const markdown_db = new MarkdownDatabase(front_page_path);
+  
   // TODO: make these path use extension storage
-  duck_db = new DuckDB({
+  const duck_db = new DuckDB({
     database_path: path.join(
       context.globalStorageUri.fsPath,
       "webpage_categorizations.db"
     ),
   });
   await duck_db.init();
+  
   console.log("Databases initialized successfully");
+  return { duck_db, markdown_db };
+}
 
-  // Start express server to handle requests from the extension
+/**
+ * Registers all VS Code commands provided by the extension.
+ * 
+ * @param context - VS Code extension context
+ * @param duck_db - Initialized DuckDB instance
+ * @param memory_db - Initialized LanceDB memory store
+ */
+function register_extension_commands(
+  context: vscode.ExtensionContext,
+  duck_db: DuckDB,
+  memory_db: LanceDBMemoryStore
+): void {
+  register_webpage_search_commands(context, memory_db);
+  register_webpage_hover_provider(context, duck_db, memory_db);
+}
+
+/**
+ * Starts the MCP server process in the background.
+ * This is deferred to avoid blocking the extension activation.
+ * 
+ * @param context - VS Code extension context
+ * @param openai_api_key - OpenAI API key for the MCP server
+ * @param duck_db - Initialized DuckDB instance
+ */
+async function start_mcp_server_deferred(
+  context: vscode.ExtensionContext,
+  openai_api_key: string,
+  duck_db: DuckDB
+): Promise<void> {
+  console.log("Starting MCP server (deferred)...");
+  
+  try {
+    mcp_server = await create_and_start_mcp_server(
+      context,
+      openai_api_key,
+      duck_db
+    );
+    console.log("MCP server created successfully");
+
+    // Start MCP server as a separate process
+    const mcp_script_path = path.join(
+      context.extensionPath,
+      "out",
+      "mcp_server_standalone.js"
+    );
+    
+    mcp_process = child_process.spawn("node", [mcp_script_path], {
+      env: {
+        ...process.env,
+        OPENAI_API_KEY: openai_api_key,
+        STORAGE_PATH: context.globalStorageUri.fsPath,
+        DUCK_DB_PATH: path.join(
+          context.globalStorageUri.fsPath,
+          "webpage_categorizations.db"
+        ),
+      },
+      stdio: ["pipe", "pipe", "pipe", "ipc"],
+    });
+
+    mcp_process.on("error", (error) => {
+      console.error("MCP server process error:", error);
+      vscode.window.showErrorMessage(
+        `MCP server failed to start: ${error.message}`
+      );
+    });
+
+    mcp_process.on("exit", (code) => {
+      console.log(`MCP server process exited with code ${code}`);
+    });
+
+    console.log("MCP server process started (deferred)");
+  } catch (error) {
+    console.error("Failed to start MCP server (deferred):", error);
+    // Don't show error message for deferred initialization to avoid disrupting user
+    console.log("MCP server will be unavailable for this session");
+  }
+}
+
+/**
+ * Main activation function for the PKM Assistant VS Code extension.
+ * Orchestrates initialization of all extension components.
+ */
+export async function activate(
+  context: vscode.ExtensionContext
+): Promise<void> {
+  console.log("Starting PKM Assistant extension activation...");
+
+  // Step 1: Validate configuration
+  const openai_api_key = get_openai_api_key();
+  if (!openai_api_key) {
+    return;
+  }
+
+  // Step 2: Initialize databases
+  const { duck_db: initialized_duck_db, markdown_db } = await initialize_databases(context);
+  duck_db = initialized_duck_db;
+
+  // Step 3: Start main services
   console.log("Starting webpage categorizer service...");
   const memory_db = await start_webpage_categoriser_service(
     context,
@@ -114,57 +230,12 @@ export async function activate(
     markdown_db
   );
 
-  // Register webpage search and hover commands
-  register_webpage_search_commands(context, memory_db);
-  register_webpage_hover_provider(context, duck_db, memory_db);
+  // Step 4: Register commands
+  register_extension_commands(context, duck_db, memory_db);
 
-  // Performance optimization: Defer MCP server startup to background
-  setTimeout(async () => {
-    console.log("Starting MCP server (deferred)...");
-    try {
-      mcp_server = await create_and_start_mcp_server(
-        context,
-        openai_api_key,
-        duck_db
-      );
-      console.log("MCP server created successfully");
-
-      // Start MCP server as a separate process
-      const mcp_script_path = path.join(
-        context.extensionPath,
-        "out",
-        "mcp_server_standalone.js"
-      );
-      mcp_process = child_process.spawn("node", [mcp_script_path], {
-        env: {
-          ...process.env,
-          OPENAI_API_KEY: openai_api_key,
-          STORAGE_PATH: context.globalStorageUri.fsPath,
-          DUCK_DB_PATH: path.join(
-            context.globalStorageUri.fsPath,
-            "webpage_categorizations.db"
-          ),
-        },
-        stdio: ["pipe", "pipe", "pipe", "ipc"],
-      });
-
-      mcp_process.on("error", (error) => {
-        console.error("MCP server process error:", error);
-        vscode.window.showErrorMessage(
-          `MCP server failed to start: ${error.message}`
-        );
-      });
-
-      mcp_process.on("exit", (code) => {
-        console.log(`MCP server process exited with code ${code}`);
-      });
-
-      console.log("MCP server process started (deferred)");
-    } catch (error) {
-      console.error("Failed to start MCP server (deferred):", error);
-      // Don't show error message for deferred initialization to avoid disrupting user
-      console.log("MCP server will be unavailable for this session");
-    }
+  // Step 5: Start MCP server in background (deferred)
+  setTimeout(() => {
+    start_mcp_server_deferred(context, openai_api_key, duck_db);
   }, 2000); // Defer by 2 seconds
 
   console.log("PKM Assistant extension activated! (MCP server starting in background)");
