@@ -1,20 +1,13 @@
-import { ProceduralMemoryStore, ProceduralRule, RuleCondition, RuleAction } from '../procedural_memory_store';
+import { ProceduralMemoryStore } from '../procedural_memory_store';
 import { DuckDB } from '../../duck_db';
-import * as path from 'path';
-import * as fs from 'fs';
 
 describe('ProceduralMemoryStore', () => {
   let procedural_store: ProceduralMemoryStore;
   let duck_db: DuckDB;
-  const test_db_path = path.join(__dirname, 'test_procedural.db');
 
   beforeEach(async () => {
-    // Clean up any existing test database
-    if (fs.existsSync(test_db_path)) {
-      fs.unlinkSync(test_db_path);
-    }
-
-    duck_db = new DuckDB({ database_path: test_db_path });
+    // Use in-memory database for better test isolation
+    duck_db = new DuckDB({ database_path: ':memory:' });
     await duck_db.init();
     
     procedural_store = new ProceduralMemoryStore(duck_db);
@@ -23,9 +16,6 @@ describe('ProceduralMemoryStore', () => {
 
   afterEach(async () => {
     await duck_db.close();
-    if (fs.existsSync(test_db_path)) {
-      fs.unlinkSync(test_db_path);
-    }
   });
 
   describe('Rule Management', () => {
@@ -406,11 +396,10 @@ describe('ProceduralMemoryStore', () => {
         name: 'Starts With Test',
         type: 'domain' as const,
         condition: {
-          operator: 'and' as const,
           field: 'url',
           comparator: 'starts_with' as const,
           value: 'https://docs'
-        },
+        } as any,  // Remove the operator field for simple conditions
         action: { type: 'tag' as const, value: 'documentation' },
         priority: 50,
         enabled: true
@@ -526,11 +515,10 @@ describe('ProceduralMemoryStore', () => {
           operator: 'not' as const,
           conditions: [
             {
-              operator: 'and' as const,
               field: 'url',
               comparator: 'contains' as const,
               value: 'blocked.com'
-            }
+            } as any
           ]
         },
         action: { type: 'accept' as const },

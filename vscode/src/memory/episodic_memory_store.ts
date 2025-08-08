@@ -1,10 +1,15 @@
-import { DuckDB } from '../duck_db';
-import { LanceDBMemoryStore } from '../agent_memory';
-import { EpisodicMemory, UserCorrection, ContentFeatures, MemorySearchOptions } from './types';
-import { v4 as uuidv4 } from 'uuid';
+import { DuckDB } from "../duck_db";
+import { LanceDBMemoryStore } from "../lance_db";
+import {
+  EpisodicMemory,
+  UserCorrection,
+  ContentFeatures,
+  MemorySearchOptions,
+} from "./types";
+import { v4 as uuidv4 } from "uuid";
 
-const EPISODIC_MEMORY_NAMESPACE = 'episodic_memory';
-const EPISODIC_MEMORY_TABLE = 'webpage_episodic_memory';
+const EPISODIC_MEMORY_NAMESPACE = "episodic_memory";
+const EPISODIC_MEMORY_TABLE = "webpage_episodic_memory";
 
 export class EpisodicMemoryStore {
   private duck_db: DuckDB;
@@ -80,25 +85,21 @@ export class EpisodicMemoryStore {
         content_features.word_count,
         content_features.has_code_blocks,
         content_features.link_density,
-        content_features.meta_description || null
+        content_features.meta_description || null,
       ]
     );
 
     // Store in vector store for similarity search
     if (this.vector_store.embeddings) {
-      await this.vector_store.put(
-        [EPISODIC_MEMORY_NAMESPACE],
-        id,
-        {
-          url,
-          page_type,
-          confidence,
-          original_decision,
-          title: content_features.title,
-          content: content_for_embedding,
-          timestamp: timestamp.toISOString()
-        }
-      );
+      await this.vector_store.put([EPISODIC_MEMORY_NAMESPACE], id, {
+        url,
+        page_type,
+        confidence,
+        original_decision,
+        title: content_features.title,
+        content: content_for_embedding,
+        timestamp: timestamp.toISOString(),
+      });
     }
 
     return id;
@@ -120,7 +121,7 @@ export class EpisodicMemoryStore {
         correction.corrected_type || null,
         correction.explanation || null,
         correction.feedback_timestamp.toISOString(),
-        episode_id
+        episode_id,
       ]
     );
   }
@@ -136,16 +137,16 @@ export class EpisodicMemoryStore {
       SELECT * FROM ${EPISODIC_MEMORY_TABLE}
       WHERE timestamp >= ?
     `;
-    
+
     if (include_corrections_only) {
-      query += ' AND correction_timestamp IS NOT NULL';
+      query += " AND correction_timestamp IS NOT NULL";
     }
-    
-    query += ' ORDER BY timestamp DESC';
+
+    query += " ORDER BY timestamp DESC";
 
     const rows = await this.duck_db.all(query, [since.toISOString()]);
-    
-    return rows.map(row => this.row_to_episodic_memory(row));
+
+    return rows.map((row) => this.row_to_episodic_memory(row));
   }
 
   async get_episodes_by_domain(domain: string): Promise<EpisodicMemory[]> {
@@ -156,8 +157,8 @@ export class EpisodicMemoryStore {
        LIMIT 50`,
       [domain]
     );
-    
-    return rows.map(row => this.row_to_episodic_memory(row));
+
+    return rows.map((row) => this.row_to_episodic_memory(row));
   }
 
   async find_similar_episodes(
@@ -176,7 +177,7 @@ export class EpisodicMemoryStore {
       [EPISODIC_MEMORY_NAMESPACE],
       {
         query: `${url} ${content}`.substring(0, 1000),
-        limit: options.limit || 5
+        limit: options.limit || 5,
       }
     );
 
@@ -221,16 +222,28 @@ export class EpisodicMemoryStore {
 
     const corrections_by_type: Record<string, number> = {};
     for (const row of type_corrections) {
-      corrections_by_type[row.correction_type] = Number(row.count);
+      const typedRow = row as { correction_type: string; count: number };
+      corrections_by_type[typedRow.correction_type] = Number(typedRow.count);
     }
 
+    const typedStats = stats as {
+      total_episodes: number;
+      total_corrections: number;
+      false_positives: number;
+      false_negatives: number;
+    };
+
     return {
-      total_episodes: Number(stats.total_episodes || 0),
-      total_corrections: Number(stats.total_corrections || 0),
-      correction_rate: stats.total_episodes > 0 ? Number(stats.total_corrections) / Number(stats.total_episodes) : 0,
+      total_episodes: Number(typedStats.total_episodes || 0),
+      total_corrections: Number(typedStats.total_corrections || 0),
+      correction_rate:
+        typedStats.total_episodes > 0
+          ? Number(typedStats.total_corrections) /
+            Number(typedStats.total_episodes)
+          : 0,
       corrections_by_type,
-      false_positives: Number(stats.false_positives || 0),
-      false_negatives: Number(stats.false_negatives || 0)
+      false_positives: Number(typedStats.false_positives || 0),
+      false_negatives: Number(typedStats.false_negatives || 0),
     };
   }
 
@@ -240,17 +253,20 @@ export class EpisodicMemoryStore {
     accepted: boolean
   ): Promise<EpisodicMemory[]> {
     const domain = new URL(url).hostname;
-    
-    const rows = await this.duck_db.all(`
+
+    const rows = await this.duck_db.all(
+      `
       SELECT * FROM ${EPISODIC_MEMORY_TABLE}
       WHERE domain = ? 
         AND page_type = ?
         AND original_decision = ?
       ORDER BY timestamp DESC
       LIMIT 10
-    `, [domain, page_type, accepted]);
-    
-    return rows.map(row => this.row_to_episodic_memory(row));
+    `,
+      [domain, page_type, accepted]
+    );
+
+    return rows.map((row) => this.row_to_episodic_memory(row));
   }
 
   async update_decision_feedback(
@@ -268,30 +284,37 @@ export class EpisodicMemoryStore {
         corrected_decision: !memory.original_decision,
         corrected_type: correct_type || memory.page_type,
         explanation: feedback,
-        feedback_timestamp: new Date()
+        feedback_timestamp: new Date(),
       });
     }
   }
 
   async get_domain_error_count(domain: string): Promise<number> {
-    const result = await this.duck_db.get(`
+    const result = await this.duck_db.get(
+      `
       SELECT COUNT(*) as error_count
       FROM ${EPISODIC_MEMORY_TABLE}
       WHERE domain = ?
         AND correction_timestamp IS NOT NULL
-    `, [domain]);
-    
-    return Number(result?.error_count || 0);
+    `,
+      [domain]
+    );
+
+    const typedResult = result as { error_count: number } | null;
+    return Number(typedResult?.error_count || 0);
   }
 
   private async get_by_url(url: string): Promise<EpisodicMemory | null> {
-    const row = await this.duck_db.get(`
+    const row = await this.duck_db.get(
+      `
       SELECT * FROM ${EPISODIC_MEMORY_TABLE}
       WHERE url = ?
       ORDER BY timestamp DESC
       LIMIT 1
-    `, [url]);
-    
+    `,
+      [url]
+    );
+
     return row ? this.row_to_episodic_memory(row) : null;
   }
 
@@ -303,8 +326,10 @@ export class EpisodicMemoryStore {
     metadata?: any
   ): Promise<string> {
     const domain = new URL(url).hostname;
-    const episode_id = `ep_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+    const episode_id = `ep_${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+
     await this.duck_db.run(
       `INSERT INTO ${EPISODIC_MEMORY_TABLE} (
         id, timestamp, url, domain, page_type, confidence,
@@ -318,13 +343,13 @@ export class EpisodicMemoryStore {
         page_type,
         confidence,
         decision,
-        metadata?.reasoning || ''
+        metadata?.reasoning || "",
       ]
     );
-    
+
     return episode_id;
   }
-  
+
   async get_filtering_statistics(): Promise<any> {
     const stats = await this.get_correction_statistics();
     return {
@@ -332,10 +357,10 @@ export class EpisodicMemoryStore {
       corrections: stats.total_corrections,
       correction_rate: stats.correction_rate,
       false_positives: stats.false_positives,
-      false_negatives: stats.false_negatives
+      false_negatives: stats.false_negatives,
     };
   }
-  
+
   private row_to_episodic_memory(row: any): EpisodicMemory {
     const memory: EpisodicMemory = {
       id: row.id,
@@ -352,8 +377,8 @@ export class EpisodicMemoryStore {
         word_count: row.word_count,
         has_code_blocks: row.has_code_blocks,
         link_density: row.link_density,
-        meta_description: row.meta_description
-      }
+        meta_description: row.meta_description,
+      },
     };
 
     if (row.correction_timestamp) {
@@ -361,7 +386,7 @@ export class EpisodicMemoryStore {
         corrected_decision: row.correction_decision,
         corrected_type: row.correction_type,
         explanation: row.correction_explanation,
-        feedback_timestamp: new Date(row.correction_timestamp)
+        feedback_timestamp: new Date(row.correction_timestamp),
       };
     }
 

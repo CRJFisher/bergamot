@@ -8,7 +8,7 @@ import {
   run_workflow,
   build_workflow,
 } from "./reconcile_webpage_trees_workflow_vanilla";
-import { LanceDBMemoryStore } from "./agent_memory";
+import { LanceDBMemoryStore } from "./lance_db";
 import { OpenAIEmbeddings } from "./workflow/embeddings";
 import { MarkdownDatabase } from "./markdown_db";
 import { get_filter_config } from "./config/filter_config";
@@ -25,31 +25,57 @@ import { PageActivitySessionWithoutTreeOrContentSchema } from "./duck_db_models"
 import { insert_page_activity_session_with_tree_management } from "./webpage_tree";
 import { md5_hash } from "./hash_utils";
 import { decompress } from "@mongodb-js/zstd";
-import { createAndStartMCPServer, WebpageRAGMCPServer } from "./mcp_server";
+import { create_and_start_mcp_server, WebpageRAGMCPServer } from "./mcp_server";
 import * as child_process from "child_process";
 import { register_webpage_search_commands } from "./webpage_search_commands";
 import { register_webpage_hover_provider } from "./webpage_hover_provider";
 import { OrphanedVisitsManager } from "./orphaned_visits";
+import { VisitQueueProcessor, ExtendedPageVisit } from "./visit_queue_processor";
 
 let server: http.Server | undefined;
 let duck_db: DuckDB;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let mcp_server: WebpageRAGMCPServer | undefined;
 let mcp_process: child_process.ChildProcess | undefined;
+let queue_processor: VisitQueueProcessor | undefined;
 
 function write_port_file(port: number): void {
-  const port_dir = path.join(os.homedir(), '.pkm-assistant');
-  const port_file = path.join(port_dir, 'port.json');
-  
+  const port_dir = path.join(os.homedir(), ".pkm-assistant");
+  const port_file = path.join(port_dir, "port.json");
+
   // Create directory if it doesn't exist
   if (!fs.existsSync(port_dir)) {
     fs.mkdirSync(port_dir, { recursive: true });
   }
-  
+
   // Write port to file
   fs.writeFileSync(port_file, JSON.stringify({ port, pid: process.pid }));
   console.log(`Port file written to ${port_file}`);
 }
 
+/**
+ * Activates the PKM Assistant VSCode extension.
+ *
+ * Initializes all core components:
+ * - Configures OpenAI API integration for AI-powered analysis
+ * - Sets up DuckDB for structured webpage data storage
+ * - Starts Express server for browser extension communication
+ * - Initializes LanceDB memory store for content and embeddings
+ * - Configures episodic and procedural memory systems
+ * - Starts MCP (Model Context Protocol) server for external tool access
+ * - Registers VSCode commands and providers for search and hover functionality
+ *
+ * @param context - VSCode extension context providing access to extension resources
+ * @returns Promise that resolves when activation is complete
+ * @throws {Error} If required configuration is missing or initialization fails
+ *
+ * @example
+ * ```typescript
+ * // This function is automatically called by VSCode when the extension activates
+ * // Users need to configure the OpenAI API key in VSCode settings:
+ * // "pkm-assistant.openaiApiKey": "your-openai-key"
+ * ```
+ */
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<void> {
@@ -90,45 +116,61 @@ export async function activate(
     duck_db,
     markdown_db
   );
-  
+
   // Register webpage search and hover commands
   register_webpage_search_commands(context, memory_db, duck_db);
   register_webpage_hover_provider(context, duck_db, memory_db);
 
-  // Start MCP server
-  console.log("Starting MCP server...");
-  try {
-    mcp_server = await createAndStartMCPServer(context, openai_api_key, duck_db);
-    console.log("MCP server created successfully");
-    
-    // Start MCP server as a separate process
-    const mcp_script_path = path.join(context.extensionPath, "out", "mcp_server_standalone.js");
-    mcp_process = child_process.spawn("node", [mcp_script_path], {
-      env: {
-        ...process.env,
-        OPENAI_API_KEY: openai_api_key,
-        STORAGE_PATH: context.globalStorageUri.fsPath,
-        DUCK_DB_PATH: path.join(context.globalStorageUri.fsPath, "webpage_categorizations.db"),
-      },
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-    });
+  // Performance optimization: Defer MCP server startup to background
+  setTimeout(async () => {
+    console.log("Starting MCP server (deferred)...");
+    try {
+      mcp_server = await create_and_start_mcp_server(
+        context,
+        openai_api_key,
+        duck_db
+      );
+      console.log("MCP server created successfully");
 
-    mcp_process.on('error', (error) => {
-      console.error('MCP server process error:', error);
-      vscode.window.showErrorMessage(`MCP server failed to start: ${error.message}`);
-    });
+      // Start MCP server as a separate process
+      const mcp_script_path = path.join(
+        context.extensionPath,
+        "out",
+        "mcp_server_standalone.js"
+      );
+      mcp_process = child_process.spawn("node", [mcp_script_path], {
+        env: {
+          ...process.env,
+          OPENAI_API_KEY: openai_api_key,
+          STORAGE_PATH: context.globalStorageUri.fsPath,
+          DUCK_DB_PATH: path.join(
+            context.globalStorageUri.fsPath,
+            "webpage_categorizations.db"
+          ),
+        },
+        stdio: ["pipe", "pipe", "pipe", "ipc"],
+      });
 
-    mcp_process.on('exit', (code) => {
-      console.log(`MCP server process exited with code ${code}`);
-    });
+      mcp_process.on("error", (error) => {
+        console.error("MCP server process error:", error);
+        vscode.window.showErrorMessage(
+          `MCP server failed to start: ${error.message}`
+        );
+      });
 
-    console.log("MCP server process started");
-  } catch (error) {
-    console.error("Failed to start MCP server:", error);
-    vscode.window.showErrorMessage(`Failed to start MCP server: ${error.message}`);
-  }
+      mcp_process.on("exit", (code) => {
+        console.log(`MCP server process exited with code ${code}`);
+      });
 
-  console.log("PKM Assistant extension activated!");
+      console.log("MCP server process started (deferred)");
+    } catch (error) {
+      console.error("Failed to start MCP server (deferred):", error);
+      // Don't show error message for deferred initialization to avoid disrupting user
+      console.log("MCP server will be unavailable for this session");
+    }
+  }, 2000); // Defer by 2 seconds
+
+  console.log("PKM Assistant extension activated! (MCP server starting in background)");
 }
 
 async function start_webpage_categoriser_service(
@@ -152,19 +194,21 @@ async function start_webpage_categoriser_service(
   // Initialize episodic memory if enabled
   let episodic_store: EpisodicMemoryStore | undefined;
   let procedural_store: ProceduralMemoryStore | undefined;
-  const memory_config = vscode.workspace.getConfiguration('pkm-assistant.agentMemory');
-  
-  if (memory_config.get<boolean>('enabled', true)) {
+  const memory_config = vscode.workspace.getConfiguration(
+    "pkm-assistant.agentMemory"
+  );
+
+  if (memory_config.get<boolean>("enabled", true)) {
     episodic_store = new EpisodicMemoryStore(duck_db, memory_db);
     await episodic_store.initialize();
-    
+
     console.log("Initializing procedural memory store...");
     procedural_store = new ProceduralMemoryStore(duck_db);
     await procedural_store.initialize();
-    
+
     // Register procedural rule commands
     register_procedural_rule_commands(context, procedural_store);
-    
+
     // Register feedback commands
     const feedback_generator = new FeedbackDocumentGenerator(
       episodic_store,
@@ -172,7 +216,7 @@ async function start_webpage_categoriser_service(
     );
     register_feedback_commands(context, episodic_store, feedback_generator);
   }
-  
+
   const filter_config = get_filter_config();
   const webpage_categoriser_app = build_workflow(
     openai_api_key,
@@ -185,120 +229,36 @@ async function start_webpage_categoriser_service(
     procedural_store
   );
 
-  // Create a queue that will persist between requests
-  const request_queue: Array<
-    PageActivitySessionWithoutTreeOrContent & { raw_content: string }
-  > = [];
-  let is_processing = false;
-  
-  // Initialize orphaned visits manager
+  // Initialize orphaned visits manager and queue processor
   const orphan_manager = new OrphanedVisitsManager();
-  
-  // Periodically retry orphaned visits
-  const orphan_retry_interval = setInterval(() => {
-    const orphans = orphan_manager.get_orphans_for_retry();
-    if (orphans.length > 0) {
-      console.log(`🔄 Retrying ${orphans.length} orphaned visits...`);
-      for (const orphan of orphans) {
-        orphan_manager.increment_retry_count(orphan);
-        request_queue.push(orphan.visit);
-      }
-      process_queue();
+  queue_processor = new VisitQueueProcessor(
+    duck_db,
+    memory_db,
+    webpage_categoriser_app,
+    orphan_manager,
+    {
+      batch_size: 3,
+      batch_timeout: 1000,
+      orphan_retry_interval: 5000
     }
-  }, 5000); // Check every 5 seconds
-  
-  // Clean up interval on extension deactivation
+  );
+
+  // Start the queue processor
+  queue_processor.start();
+
+  // Clean up on extension deactivation
   context.subscriptions.push({
     dispose: () => {
-      clearInterval(orphan_retry_interval);
-    }
+      queue_processor.stop();
+    },
   });
-  async function process_queue() {
-    if (is_processing || request_queue.length === 0) return;
-
-    is_processing = true;
-    try {
-      const page_visit = request_queue.shift();
-
-      if (page_visit) {
-        // Check if this visit has an opener_tab_id that might not exist yet
-        const opener_tab_id = (page_visit as any).opener_tab_id;
-        const tab_id = (page_visit as any).tab_id;
-        
-        // Try to process the visit
-        const inserted =
-          await insert_page_activity_session_with_tree_management(
-            duck_db,
-            page_visit
-          );
-        
-        // Check if this visit created a new tree when it shouldn't have (orphan detection)
-        const should_be_orphan = opener_tab_id && 
-                                 inserted.tree_id && 
-                                 !page_visit.referrer_page_session_id;
-        
-        if (should_be_orphan) {
-          console.log(`🚸 Detected potential orphan visit from tab ${tab_id} with opener ${opener_tab_id}`);
-          // Add to orphan manager for later retry
-          orphan_manager.add_orphan(page_visit, opener_tab_id);
-        } else if (inserted.tree_id && inserted.was_tree_changed) {
-          // Normal processing for successful inserts
-          const tree_members = await get_page_sessions_with_tree_id(
-            duck_db,
-            memory_db,
-            inserted.tree_id
-          );
-          const page_with_tree_id = {
-            ...page_visit,
-            tree_id: inserted.tree_id,
-          };
-          await run_workflow(
-            {
-              members: tree_members,
-              new_page: page_with_tree_id,
-              raw_content: page_visit.raw_content,
-            },
-            webpage_categoriser_app,
-            duck_db
-          );
-          
-          // After successfully processing a parent, check for orphaned children
-          if (tab_id) {
-            const orphans = orphan_manager.get_orphans_for_tab(tab_id);
-            if (orphans.length > 0) {
-              console.log(`👨‍👧‍👦 Found ${orphans.length} orphaned children for tab ${tab_id}, re-queuing...`);
-              
-              // Re-queue orphaned children for processing
-              for (const orphan of orphans) {
-                // Update the orphan's referrer info with the parent's session ID
-                const updated_visit = {
-                  ...orphan.visit,
-                  referrer_page_session_id: page_visit.id
-                };
-                request_queue.unshift(updated_visit); // Add to front of queue for immediate processing
-              }
-              
-              // Remove processed orphans
-              orphan_manager.remove_orphans_for_tab(tab_id);
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error processing queue item:", error);
-    } finally {
-      is_processing = false;
-      // Process next item if any
-      process_queue();
-    }
-  }
 
   // Add status endpoint for native host health checks
   app.get("/status", (req, res) => {
-    res.json({ 
-      status: "running", 
+    res.json({
+      status: "running",
       version: "1.0.0",
-      uptime: process.uptime()
+      uptime: process.uptime(),
     });
   });
 
@@ -318,6 +278,7 @@ async function start_webpage_categoriser_service(
       }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { content: _, ...req_body_without_content } = req.body;
     const parse_result =
       PageActivitySessionWithoutTreeOrContentSchema.safeParse({
@@ -334,46 +295,63 @@ async function start_webpage_categoriser_service(
     console.log("Received payload:", payload.url);
 
     // Add to queue instead of processing immediately
-    request_queue.push({ ...payload, raw_content: content });
+    const extended_visit: ExtendedPageVisit = { ...payload, raw_content: content };
+    const position = queue_processor?.enqueue(extended_visit) ?? 0;
 
-    // Start processing if not already processing
-    process_queue();
-
-    res.json({ status: "queued", position: request_queue.length });
+    res.json({ status: "queued", position });
   });
 
   // Start the server on a dynamic port
   server = app.listen(0, () => {
     const address = server.address();
-    const port = typeof address === 'object' && address ? address.port : 5000;
+    const port = typeof address === "object" && address ? address.port : 5000;
     console.log(`PKM Assistant server running at http://localhost:${port}`);
-    
+
     // Write port to file for native messaging host
     write_port_file(port);
   });
 
   // Register commands
   const show_metrics_command = vscode.commands.registerCommand(
-    'pkm-assistant.showFilterMetrics',
+    "pkm-assistant.showFilterMetrics",
     () => {
       const metrics = global_filter_metrics.get_metrics();
-      const output = vscode.window.createOutputChannel('PKM Assistant Filter Metrics');
+      const output = vscode.window.createOutputChannel(
+        "PKM Assistant Filter Metrics"
+      );
       output.clear();
-      output.appendLine('=== Webpage Filter Metrics ===');
+      output.appendLine("=== Webpage Filter Metrics ===");
       output.appendLine(`Total pages analyzed: ${metrics.total_pages}`);
-      output.appendLine(`Pages processed: ${metrics.processed_pages} (${get_percentage(metrics.processed_pages, metrics.total_pages)}%)`);
-      output.appendLine(`Pages filtered: ${metrics.filtered_pages} (${get_percentage(metrics.filtered_pages, metrics.total_pages)}%)`);
-      output.appendLine(`Average confidence: ${metrics.average_confidence.toFixed(2)}`);
-      output.appendLine('');
-      output.appendLine('Page types:');
+      output.appendLine(
+        `Pages processed: ${metrics.processed_pages} (${get_percentage(
+          metrics.processed_pages,
+          metrics.total_pages
+        )}%)`
+      );
+      output.appendLine(
+        `Pages filtered: ${metrics.filtered_pages} (${get_percentage(
+          metrics.filtered_pages,
+          metrics.total_pages
+        )}%)`
+      );
+      output.appendLine(
+        `Average confidence: ${metrics.average_confidence.toFixed(2)}`
+      );
+      output.appendLine("");
+      output.appendLine("Page types:");
       Object.entries(metrics.page_types)
         .sort(([, a], [, b]) => b - a)
         .forEach(([type, count]) => {
-          output.appendLine(`  ${type}: ${count} (${get_percentage(count, metrics.total_pages)}%)`);
+          output.appendLine(
+            `  ${type}: ${count} (${get_percentage(
+              count,
+              metrics.total_pages
+            )}%)`
+          );
         });
       if (Object.keys(metrics.filter_reasons).length > 0) {
-        output.appendLine('');
-        output.appendLine('Filter reasons:');
+        output.appendLine("");
+        output.appendLine("Filter reasons:");
         Object.entries(metrics.filter_reasons)
           .sort(([, a], [, b]) => b - a)
           .forEach(([reason, count]) => {
@@ -381,14 +359,14 @@ async function start_webpage_categoriser_service(
           });
       }
       output.show();
-      
+
       // Also log to console
       global_filter_metrics.log_summary();
     }
   );
-  
+
   context.subscriptions.push(show_metrics_command);
-  
+
   // Add server cleanup to extension subscriptions
   context.subscriptions.push({
     dispose: () => {
@@ -398,15 +376,32 @@ async function start_webpage_categoriser_service(
       }
     },
   });
-  
+
   return memory_db;
 }
 
 function get_percentage(count: number, total: number): string {
-  if (total === 0) return '0';
+  if (total === 0) return "0";
   return ((count / total) * 100).toFixed(1);
 }
 
+/**
+ * Deactivates the PKM Assistant VSCode extension and cleans up resources.
+ *
+ * Performs cleanup tasks:
+ * - Closes DuckDB database connections
+ * - Shuts down Express server
+ * - Removes port configuration file
+ * - Terminates MCP server process
+ *
+ * @returns Promise that resolves when deactivation and cleanup is complete
+ *
+ * @example
+ * ```typescript
+ * // This function is automatically called by VSCode when the extension deactivates
+ * // It ensures all database connections and processes are properly closed
+ * ```
+ */
 export async function deactivate(): Promise<void> {
   if (duck_db) {
     await duck_db.close();
@@ -414,9 +409,9 @@ export async function deactivate(): Promise<void> {
   if (server) {
     server.close();
   }
-  
+
   // Remove port file
-  const port_file = path.join(os.homedir(), '.pkm-assistant', 'port.json');
+  const port_file = path.join(os.homedir(), ".pkm-assistant", "port.json");
   if (fs.existsSync(port_file)) {
     fs.unlinkSync(port_file);
   }

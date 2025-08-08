@@ -32,7 +32,7 @@ Keep for testing:
 - `src/reconcile_webpage_trees_workflow.ts` - Core processing workflow
 - `src/webpage_tree.ts` - Webpage grouping logic
 - `src/duck_db.ts` - Database operations
-- `src/agent_memory.ts` - Vector database operations
+- `src/lance_db.ts` - Vector database operations
 - `src/mcp_server.ts` - MCP server implementation
 - `src/mcp_server_standalone.ts` - Standalone MCP server
 
@@ -48,7 +48,7 @@ Keep for testing:
 - `src/hash_utils.ts` - Hashing utilities
 - `src/vscode_openai_model.ts` - OpenAI model integration
 - `src/markdown_db.ts` - Markdown database operations
-- `src/note_tools.ts` - Note scanning (used by agent_memory)
+- `src/note_tools.ts` - Note scanning (used by lance_db)
 
 ## Code to Clean Up
 

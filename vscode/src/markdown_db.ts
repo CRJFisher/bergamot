@@ -6,33 +6,45 @@ import { NoteSchema } from "./model_schema";
 import { WebpageTreeNode, WebpageTreeNodeSchema } from "./webpage_tree_models";
 
 /**
- * Result of extracting a section from markdown content
- *
+ * Result of extracting a section from markdown content.
  * Each section span includes its own trailing blank lines.
+ * 
+ * @interface SectionExtraction
  */
 export interface SectionExtraction {
   /** Line number where the section starts (-1 if not found) */
   start: number;
-  /** Line number after the end of the section */
+  /** Line number after the end of the section (exclusive) */
   end_exclusive: number;
-  /** Content blocks within the section */
+  /** Content blocks within the section, each block is an array of lines */
   blocks: string[][];
 }
 
-/** Any typed section you want to expose */
+/**
+ * Specification for a typed collection within a markdown database.
+ * Defines how to serialize, deserialize, and manipulate typed data in markdown sections.
+ * 
+ * @template T - The TypeScript type of items stored in this collection
+ * @interface CollectionSpec
+ */
 export interface CollectionSpec<T> {
-  /** Whether to insert a blank line between blocks */
+  /** Whether to insert a blank line between content blocks */
   addEmptyLineBetweenBlocks: boolean;
+  /** Whether to add an empty line at the end of all blocks */
   addAnEmptyLineAtEndOfBlocks: boolean;
-  /** Zod schema for runtime validation */
+  /** Zod schema for runtime validation and type safety */
   schema: z.ZodSchema<T>;
-  /** Serialize one record back to markdown lines */
+  /** Serializes one typed record back to an array of markdown lines */
   toMarkdown(t: T): string[];
-  /** Extract section content and split into blocks */
+  /** Extracts section content from markdown and splits into logical blocks */
   extractSection(content: string, heading: string): SectionExtraction;
   /**
-   * Optional: Check if an object matches an existing block based on partial comparison
-   * If not provided, falls back to exact string matching
+   * Optional: Determines if a typed object matches an existing markdown block.
+   * If not provided, falls back to exact string matching between serialized forms.
+   * 
+   * @param obj - The typed object to check for a match
+   * @param existingBlock - Array of markdown lines representing an existing block
+   * @returns True if the object matches the existing block
    */
   matchesExistingBlock?(obj: T, existingBlock: string[]): boolean;
 }
@@ -148,12 +160,45 @@ export const WebpageTreeNodeCollectionSpec: CollectionSpec<WebpageTreeNode> = {
   },
 };
 
-/** A very small NoSQL database whose storage engine is a markdown file. */
+/**
+ * A lightweight NoSQL database that uses markdown files as the storage engine.
+ * Provides typed CRUD operations on structured data stored in markdown sections.
+ * Supports both VSCode TextDocument integration and direct file system access.
+ * 
+ * @example
+ * ```typescript
+ * // Create database instance
+ * const db = new MarkdownDatabase('/path/to/notes.md');
+ * 
+ * // Insert a note
+ * await db.insert(notesSpec, {
+ *   name: 'My Note',
+ *   sections: ['personal', 'ideas'],
+ *   description: 'Ideas about the project'
+ * }, '## Notes');
+ * 
+ * // Save changes
+ * await db.save();
+ * ```
+ */
 export class MarkdownDatabase {
   private textDoc: vscode.TextDocument | null = null;
   private content = "";
   constructor(private readonly path: string) {}
 
+  /**
+   * Returns the absolute path to a file in the same directory as the database.
+   * Useful for creating related files alongside the main markdown database file.
+   * 
+   * @param filename - Name of the file to get the path for
+   * @returns Absolute path to the file in the database directory
+   * 
+   * @example
+   * ```typescript
+   * const db = new MarkdownDatabase('/notes/main.md');
+   * const configPath = db.get_file_path('config.json'); // '/notes/config.json'
+   * ```
+   */
   get_file_path(filename: string): string {
     // Return the path to a file in the same directory as the database
     const dir = dirname(this.path);
@@ -168,6 +213,19 @@ export class MarkdownDatabase {
     }
   }
 
+  /**
+   * Saves the current database content to disk.
+   * Uses VSCode workspace edit if operating on an open document, otherwise writes directly to file.
+   * 
+   * @returns Promise that resolves when save is complete
+   * @throws {Error} If file write or workspace edit fails
+   * 
+   * @example
+   * ```typescript
+   * await db.insert(notesSpec, newNote, '## Notes');
+   * await db.save(); // Persist changes to disk
+   * ```
+   */
   async save(): Promise<void> {
     if (this.textDoc) {
       const edit = new vscode.WorkspaceEdit();
@@ -184,8 +242,27 @@ export class MarkdownDatabase {
   }
 
   // ────────────────────────────────────────────────────────── public API ──
+  
   /**
-   * Insert one record. Returns the validated record.
+   * Inserts a single typed record into the specified markdown section.
+   * The record is validated against the collection spec's schema before insertion.
+   * 
+   * @template T - Type of the record to insert
+   * @param spec - Collection specification defining how to handle this type
+   * @param data - The typed data to insert
+   * @param heading - Markdown heading that defines the target section (e.g., '## Notes')
+   * @param add_at_start - Whether to add the record at the start or end of the section (default: true)
+   * @returns Promise that resolves to this database instance for method chaining
+   * @throws {Error} If validation fails or section doesn't exist
+   * 
+   * @example
+   * ```typescript
+   * await db.insert(notesSpec, {
+   *   name: 'Project Ideas',
+   *   description: 'Collection of project concepts',
+   *   sections: ['tech', 'personal']
+   * }, '## Active Notes', false); // Add at end
+   * ```
    */
   async insert<T>(
     spec: CollectionSpec<T>,
@@ -199,6 +276,26 @@ export class MarkdownDatabase {
     return this;
   }
 
+  /**
+   * Inserts multiple records into the specified markdown section.
+   * All records are validated against the collection spec's schema before insertion.
+   * 
+   * @template T - Type of the records to insert
+   * @param spec - Collection specification defining how to handle this type
+   * @param data - Array of untyped data that will be validated and inserted
+   * @param heading - Markdown heading that defines the target section
+   * @returns Promise that resolves to array of validated and inserted records
+   * @throws {Error} If any validation fails or section doesn't exist
+   * 
+   * @example
+   * ```typescript
+   * const insertedNotes = await db.insert_all(notesSpec, [
+   *   { name: 'Note 1', description: 'First note' },
+   *   { name: 'Note 2', description: 'Second note' }
+   * ], '## Bulk Notes');
+   * console.log(`Inserted ${insertedNotes.length} notes`);
+   * ```
+   */
   async insert_all<T>(
     spec: CollectionSpec<T>,
     data: unknown[],
@@ -234,7 +331,20 @@ export class MarkdownDatabase {
   }
 
   /**
-   * Insert or replace raw content at a file path
+   * Creates or updates a file with raw content in the same directory as the database.
+   * Returns a new MarkdownDatabase instance pointing to the created file.
+   * 
+   * @param filename - Name of the file to create or update
+   * @param content - Raw content to write to the file
+   * @returns Promise that resolves to new MarkdownDatabase instance for the created file
+   * @throws {Error} If file creation fails
+   * 
+   * @example
+   * ```typescript
+   * // Create a config file alongside the main database
+   * const configDb = await db.upsert_raw('config.md', '# Configuration\n\nSettings here');
+   * await configDb.save();
+   * ```
    */
   async upsert_raw(
     filename: string,
@@ -248,8 +358,77 @@ export class MarkdownDatabase {
     return new MarkdownDatabase(file_path);
   }
 
+  private validate_section_exists(section: SectionExtraction, heading: string): void {
+    if (section.start === -1) {
+      throw new Error(`Section '${heading}' not found in document`);
+    }
+  }
+
+  private does_block_match<T>(
+    spec: CollectionSpec<T>,
+    replacement: T,
+    block: string[]
+  ): boolean {
+    return spec.matchesExistingBlock
+      ? spec.matchesExistingBlock(replacement, block)
+      : block.join("\n") === spec.toMarkdown(replacement).join("\n");
+  }
+
+  private update_or_replace_blocks<T>(
+    spec: CollectionSpec<T>,
+    replacement: T,
+    blocks: string[][]
+  ): { blocks: string[][]; found: boolean } {
+    let found = false;
+    const updated_blocks = blocks.map((block) => {
+      if (this.does_block_match(spec, replacement, block)) {
+        found = true;
+        return spec.toMarkdown(replacement);
+      }
+      return block;
+    });
+    return { blocks: updated_blocks, found };
+  }
+
+  private add_new_block_if_not_found<T>(
+    spec: CollectionSpec<T>,
+    replacement: T,
+    blocks: string[][],
+    found: boolean,
+    add_at_start: boolean
+  ): string[][] {
+    if (!found) {
+      const new_markdown = spec.toMarkdown(replacement);
+      if (add_at_start) {
+        blocks.unshift(new_markdown);
+      } else {
+        blocks.push(new_markdown);
+      }
+    }
+    return blocks;
+  }
+
   /**
-   * Replace the record identified by `match` with `replacement`.
+   * Inserts a record if it doesn't exist, or updates it if a matching record is found.
+   * Matching is determined by the collection spec's `matchesExistingBlock` method,
+   * or by exact string comparison if no custom matcher is provided.
+   * 
+   * @template T - Type of the record to upsert
+   * @param spec - Collection specification defining how to handle this type
+   * @param replacement - The typed record to insert or use for replacement
+   * @param heading - Markdown heading that defines the target section
+   * @param add_at_start - Whether to add new records at start or end of section (default: true)
+   * @returns Promise that resolves to this database instance for method chaining
+   * @throws {Error} If validation fails or section doesn't exist
+   * 
+   * @example
+   * ```typescript
+   * // Update existing note or create new one
+   * await db.upsert(notesSpec, {
+   *   name: 'Updated Note',
+   *   description: 'This will replace existing note with same name'
+   * }, '## Notes');
+   * ```
    */
   async upsert<T>(
     spec: CollectionSpec<T>,
@@ -260,33 +439,23 @@ export class MarkdownDatabase {
     await this.load();
     const section = spec.extractSection(this.content, heading);
 
-    // Check if section was found
-    if (section.start === -1) {
-      throw new Error(`Section '${heading}' not found in document`);
-    }
+    this.validate_section_exists(section, heading);
 
-    let found = false;
-    const blocks = section.blocks.map((block) => {
-      // Use the custom matching logic if available, otherwise fall back to exact string comparison
-      const matches = spec.matchesExistingBlock
-        ? spec.matchesExistingBlock(replacement, block)
-        : block.join("\n") === spec.toMarkdown(replacement).join("\n");
+    const { blocks: updated_blocks, found } = this.update_or_replace_blocks(
+      spec,
+      replacement,
+      section.blocks
+    );
 
-      if (matches) {
-        found = true;
-        return spec.toMarkdown(replacement);
-      }
-      return block;
-    });
+    const final_blocks = this.add_new_block_if_not_found(
+      spec,
+      replacement,
+      updated_blocks,
+      found,
+      add_at_start
+    );
 
-    if (!found) {
-      if (add_at_start) {
-        blocks.unshift(spec.toMarkdown(replacement));
-      } else {
-        blocks.push(spec.toMarkdown(replacement));
-      }
-    }
-    section.blocks = blocks;
+    section.blocks = final_blocks;
     this.rewriteSection(
       section,
       spec.addEmptyLineBetweenBlocks,
@@ -295,6 +464,25 @@ export class MarkdownDatabase {
     return this;
   }
 
+  /**
+   * Removes a record from the specified markdown section.
+   * The record to delete is matched by exact string comparison of its serialized form.
+   * 
+   * @template T - Type of the record to delete
+   * @param spec - Collection specification defining how to handle this type
+   * @param record - The typed record to remove (must match exactly)
+   * @param heading - Markdown heading that defines the target section
+   * @returns Promise that resolves when deletion is complete
+   * @throws {Error} If section doesn't exist
+   * 
+   * @example
+   * ```typescript
+   * await db.delete(notesSpec, {
+   *   name: 'Obsolete Note',
+   *   description: 'This note is no longer needed'
+   * }, '## Notes');
+   * ```
+   */
   async delete<T>(
     spec: CollectionSpec<T>,
     record: T,

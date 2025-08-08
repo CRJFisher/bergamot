@@ -3,8 +3,8 @@ id: task-19
 title: Simplify browser integration setup with automated installer from VSCode
 status: To Do
 assignee: []
-created_date: '2025-08-07 21:36'
-updated_date: '2025-08-07 23:30'
+created_date: "2025-08-07 21:36"
+updated_date: "2025-08-07 23:30"
 labels: []
 dependencies: []
 ---
@@ -52,9 +52,20 @@ Currently users must manually run shell scripts and edit configuration files to 
    - Creates native messaging manifest
    - Installs Python dependencies
    - Opens browser to extension install page
+     - Dectects if Chrome, Firefox or Edge are present, display selection list with default browser first
 5. User installs browser extension (one click)
 6. Done! Everything connected and working
 ```
+
+### Gemini Approach (for comparison)
+
+1. Initial Check: VS Code extension checks if the native host is already installed.
+2. NMH Install Prompt: If missing, it asks the user for permission to install.
+3. Run Installer Script: With consent, it runs a bundled script to install the native host.
+4. Browser Extension Prompt: After success, it asks to install the companion browser extension.
+5. Redirect to Store: It opens the official browser marketplace page for the user.
+6. Background Verification: The extension silently polls to verify the final connection.
+7. Final Confirmation: A success message appears, and all features are enabled.
 
 ### Implementation Details
 
@@ -64,63 +75,73 @@ async function activate(context: vscode.ExtensionContext) {
   // Check if first run or not set up
   if (!isNativeHostInstalled()) {
     const result = await vscode.window.showInformationMessage(
-      'PKM Assistant: Set up browser integration for webpage tracking?',
-      'Setup Now', 'Later'
+      "PKM Assistant: Set up browser integration for webpage tracking?",
+      "Setup Now",
+      "Later"
     );
-    
-    if (result === 'Setup Now') {
-      await vscode.commands.executeCommand('pkm-assistant.setupBrowserIntegration');
+
+    if (result === "Setup Now") {
+      await vscode.commands.executeCommand(
+        "pkm-assistant.setupBrowserIntegration"
+      );
     }
   }
 }
 
 // Setup command implementation
 async function setupBrowserIntegration(context: vscode.ExtensionContext) {
-  await vscode.window.withProgress({
-    location: vscode.ProgressLocation.Notification,
-    title: "Setting up browser integration",
-    cancellable: false
-  }, async (progress) => {
-    // Step 1: Create directories
-    progress.report({ message: 'Creating directories...' });
-    const installDir = path.join(os.homedir(), '.pkm-assistant');
-    await fs.promises.mkdir(installDir, { recursive: true });
-    
-    // Step 2: Copy native host
-    progress.report({ message: 'Installing native messaging host...' });
-    const pythonScript = path.join(context.extensionPath, 'resources', 'native_host.py');
-    const targetPath = path.join(installDir, 'native_host.py');
-    await fs.promises.copyFile(pythonScript, targetPath);
-    await fs.promises.chmod(targetPath, 0o755);
-    
-    // Step 3: Create manifest
-    progress.report({ message: 'Configuring manifest...' });
-    const manifest = {
-      name: "com.pkm_assistant.native",
-      description: "PKM Assistant Native Host",
-      path: targetPath,
-      type: "stdio",
-      allowed_origins: [
-        "chrome-extension://PENDING/"  // Updated when extension installed
-      ]
-    };
-    
-    // Step 4: Write manifest to browser-specific location
-    const manifestPath = await writeManifestForBrowser(manifest);
-    
-    // Step 5: Install Python dependencies
-    progress.report({ message: 'Installing Python dependencies...' });
-    await exec('pip3 install --user requests');
-    
-    // Step 6: Open browser extension page
-    progress.report({ message: 'Opening browser extension page...' });
-    const browserUrl = await getBrowserExtensionUrl();
-    await vscode.env.openExternal(vscode.Uri.parse(browserUrl));
-    
-    vscode.window.showInformationMessage(
-      'Setup complete! Please install the browser extension to finish.'
-    );
-  });
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: "Setting up browser integration",
+      cancellable: false,
+    },
+    async (progress) => {
+      // Step 1: Create directories
+      progress.report({ message: "Creating directories..." });
+      const installDir = path.join(os.homedir(), ".pkm-assistant");
+      await fs.promises.mkdir(installDir, { recursive: true });
+
+      // Step 2: Copy native host
+      progress.report({ message: "Installing native messaging host..." });
+      const pythonScript = path.join(
+        context.extensionPath,
+        "resources",
+        "native_host.py"
+      );
+      const targetPath = path.join(installDir, "native_host.py");
+      await fs.promises.copyFile(pythonScript, targetPath);
+      await fs.promises.chmod(targetPath, 0o755);
+
+      // Step 3: Create manifest
+      progress.report({ message: "Configuring manifest..." });
+      const manifest = {
+        name: "com.pkm_assistant.native",
+        description: "PKM Assistant Native Host",
+        path: targetPath,
+        type: "stdio",
+        allowed_origins: [
+          "chrome-extension://PENDING/", // Updated when extension installed
+        ],
+      };
+
+      // Step 4: Write manifest to browser-specific location
+      const manifestPath = await writeManifestForBrowser(manifest);
+
+      // Step 5: Install Python dependencies
+      progress.report({ message: "Installing Python dependencies..." });
+      await exec("pip3 install --user requests");
+
+      // Step 6: Open browser extension page
+      progress.report({ message: "Opening browser extension page..." });
+      const browserUrl = await getBrowserExtensionUrl();
+      await vscode.env.openExternal(vscode.Uri.parse(browserUrl));
+
+      vscode.window.showInformationMessage(
+        "Setup complete! Please install the browser extension to finish."
+      );
+    }
+  );
 }
 ```
 

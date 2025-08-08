@@ -5,9 +5,9 @@ title: >-
   and DuckDB
 status: Done
 assignee:
-  - '@claude'
-created_date: '2025-08-07 09:20'
-updated_date: '2025-08-07 15:40'
+  - "@claude"
+created_date: "2025-08-07 09:20"
+updated_date: "2025-08-07 15:40"
 labels: []
 dependencies: []
 ---
@@ -41,13 +41,14 @@ Currently we may be storing parsed webpage content in both the vector database a
 The investigation revealed that webpage content IS being duplicated across two storage systems:
 
 1. **DuckDB Storage** (`vscode/src/duck_db.ts`):
+
    - Table: `webpage_content`
    - Stores compressed webpage content using zstd compression (level 6)
    - Content is base64 encoded after compression
    - Linked to `webpage_activity_sessions` table via foreign key
    - Storage location: `insert_webpage_content()` function at line 232
 
-2. **LanceDB Vector Store** (`vscode/src/agent_memory.ts` and `reconcile_webpage_trees_workflow.ts:301`):
+2. **LanceDB Vector Store** (`vscode/src/lance_db.ts` and `reconcile_webpage_trees_workflow.ts:301`):
    - Namespace: `WEBPAGE_CONTENT_NAMESPACE`
    - Stores the same processed webpage content along with embeddings
    - Includes metadata: pageContent, url, title
@@ -65,7 +66,7 @@ Yes, content is duplicated. In `reconcile_webpage_trees_workflow.ts`:
 
 The LanceDB implementation (`LanceDBMemoryStore`) already supports key-based lookups:
 
-- `get(namespace, key)` method exists (line 100 in agent_memory.ts)
+- `get(namespace, key)` method exists (line 100 in lance_db.ts)
 - Uses SQL-like queries: `table.query().where(\`key = '\${key}'\`)`
 - This means we can retrieve specific pages by their ID without vector search
 

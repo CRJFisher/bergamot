@@ -117,7 +117,7 @@ export class EnhancedWebpageFilter {
         applied_rules.push('accept_rule');
         break;
       } else if (action.type === 'tag') {
-        tags.push(action.value || 'tagged');
+        tags.push(String(action.value) || 'tagged');
         applied_rules.push('tag_rule');
       } else if (action.type === 'priority_boost') {
         // Boost confidence for priority rules

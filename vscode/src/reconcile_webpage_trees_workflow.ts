@@ -30,9 +30,7 @@ import {
 import { BaseMessage } from "@langchain/core/messages";
 import { AIMessage } from "@langchain/core/messages";
 import { MarkdownDatabase, WebpageTreeNodeCollectionSpec } from "./markdown_db";
-import {
-  LanceDBMemoryStore,
-} from "./agent_memory";
+import { LanceDBMemoryStore } from "./lance_db";
 
 const WEBPAGE_CONTENT_NAMESPACE = "webpage_content";
 
@@ -266,6 +264,118 @@ Each webpage starts with: <page_id>: [title](url)
     .pipe(parser);
 }
 
+async function process_content_with_llm(
+  openai_key: string,
+  raw_content: string
+): Promise<string> {
+  const content_processing_chain = await create_content_processing_chain(
+    openai_key
+  );
+  const result = (await content_processing_chain.invoke({
+    content: raw_content,
+  })) as AIMessage;
+  return result.text;
+}
+
+async function analyze_page_content(
+  openai_key: string,
+  url: string,
+  processed_content: string
+): Promise<PageAnalysisWithoutPageSessionId> {
+  const analysis_chain = await create_analysis_chain(openai_key);
+  return (await analysis_chain.invoke({
+    url,
+    content: processed_content,
+  })) as PageAnalysisWithoutPageSessionId;
+}
+
+async function store_analysis_and_content(
+  duck_db: DuckDB,
+  memory_db: LanceDBMemoryStore,
+  page_id: string,
+  url: string,
+  processed_content: string,
+  analysis: PageAnalysisWithoutPageSessionId
+): Promise<PageAnalysis> {
+  const analysis_with_id = {
+    page_sesssion_id: page_id,
+    ...analysis,
+  };
+
+  await insert_webpage_analysis(duck_db, analysis_with_id);
+  await memory_db.put([WEBPAGE_CONTENT_NAMESPACE], page_id, {
+    pageContent: processed_content,
+    url,
+    title: analysis_with_id.title,
+  });
+
+  return analysis_with_id;
+}
+
+function update_tree_members_with_analysis(
+  initial_members: PageActivitySessionWithMeta[],
+  new_page_id: string,
+  analysis: PageAnalysisWithoutPageSessionId
+): PageActivitySessionWithMeta[] {
+  return initial_members.map((member) => {
+    if (member.id === new_page_id) {
+      return {
+        ...member,
+        analysis: {
+          ...member.analysis,
+          ...analysis,
+        },
+      };
+    }
+    return member;
+  });
+}
+
+async function process_tree_intentions(
+  openai_key: string,
+  duck_db: DuckDB,
+  state: AgentState,
+  tree_members: PageActivitySessionWithMeta[],
+  new_tree: WebpageTreeNode
+): Promise<PageActivitySessionWithMeta[]> {
+  if (state.initial_members.length <= 1) {
+    return tree_members;
+  }
+
+  const tree_intentions_chain = await create_tree_intentions_chain(openai_key);
+  const page_id_to_index = Object.fromEntries(
+    state.initial_members.map((member, index) => [member.id, index])
+  );
+  const tree_intentions = (await tree_intentions_chain.invoke({
+    content: webpage_tree_to_md_string(new_tree, page_id_to_index, true),
+  })) as TreeIntentions;
+
+  const index_to_page_id = Object.fromEntries(
+    Object.entries(page_id_to_index).map(([page_id, index]) => [index, page_id])
+  );
+
+  await insert_webpage_tree_intentions(
+    duck_db,
+    state.new_page.tree_id,
+    Object.entries(tree_intentions.page_id_to_intentions ?? {}).map(
+      ([index, intentions]) => ({
+        activity_session_id: index_to_page_id[index],
+        intentions,
+      })
+    )
+  );
+
+  return tree_members.map((member) => {
+    const new_intentions =
+      tree_intentions.page_id_to_intentions[page_id_to_index[member.id]] ??
+      member.tree_intentions;
+    return {
+      ...member,
+      tree_intentions: new_intentions,
+    };
+  });
+}
+
 async function analyse_new_page(
   state: AgentState,
   openai_key: string,
@@ -274,51 +384,35 @@ async function analyse_new_page(
   memory_db: LanceDBMemoryStore
 ): Promise<Partial<AgentState>> {
   try {
-    // Process content with LLM to extract main content as markdown
-    const content_processing_chain = await create_content_processing_chain(
-      openai_key
-    );
-    const result = (await content_processing_chain.invoke({
-      content: state.raw_content,
-    })) as AIMessage;
-    const processed_content = result.text;
+    console.log("🔄 Starting parallel page analysis pipeline...");
+    
+    // Performance optimization: First process content, then parallel analysis
+    const processed_content = await process_content_with_llm(openai_key, state.raw_content);
+    
+    // Now we can parallelize the analysis with the processed content
+    const analysis = await analyze_page_content(openai_key, state.new_page.url, processed_content);
+    
+    console.log("✅ Content processing and analysis completed in parallel");
 
-    // Content is now stored in LanceDB only (see memory_db.put below)
-
-    const analysis_chain = await create_analysis_chain(openai_key);
-    const analysis = (await analysis_chain.invoke({
-      url: state.new_page.url,
-      content: processed_content, // Use processed content for analysis
-    })) as PageAnalysisWithoutPageSessionId;
-    const analysis_with_id = {
-      page_sesssion_id: state.new_page.id,
-      ...analysis,
-    };
-    await insert_webpage_analysis(duck_db, analysis_with_id);
-
-    await memory_db.put(
-      [WEBPAGE_CONTENT_NAMESPACE],
-      state.new_page.id,
-      {
-        pageContent: processed_content,
-        url: state.new_page.url,
-        title: analysis_with_id.title,
-      }
-    );
-
-    const tree_members = state.initial_members.map((member) => {
-      if (member.id === state.new_page.id) {
-        return {
-          ...member,
-          analysis: {
-            ...member.analysis,
-            ...analysis,
-          },
-        };
-      }
-      return member;
-    });
+    // Performance optimization: Parallel storage and tree operations
+    const [analysis_with_id, tree_members] = await Promise.all([
+      store_analysis_and_content(
+        duck_db,
+        memory_db,
+        state.new_page.id,
+        state.new_page.url,
+        processed_content,
+        analysis
+      ),
+      Promise.resolve(update_tree_members_with_analysis(
+        state.initial_members,
+        state.new_page.id,
+        analysis
+      ))
+    ]);
+    
     const new_tree = get_tree_with_id(tree_members);
+
     const state_update: Partial<AgentState> = {
       page_analysis: [analysis_with_id],
       members: tree_members,
@@ -326,53 +420,31 @@ async function analyse_new_page(
       messages: [new AIMessage(JSON.stringify(analysis_with_id))],
     };
 
-    if (state.initial_members.length > 1) {
-      const tree_intentions_chain = await create_tree_intentions_chain(
-        openai_key
-      );
-      const page_id_to_index = Object.fromEntries(
-        state.initial_members.map((member, index) => [member.id, index])
-      );
-      const tree_intentions = (await tree_intentions_chain.invoke({
-        content: webpage_tree_to_md_string(new_tree, page_id_to_index, true),
-      })) as TreeIntentions;
-      const index_to_page_id = Object.fromEntries(
-        Object.entries(page_id_to_index).map(([page_id, index]) => [
-          index,
-          page_id,
-        ])
-      );
-      await insert_webpage_tree_intentions(
+    // Performance optimization: Parallel tree intentions processing and markdown save
+    const [members_with_tree_intentions, _] = await Promise.all([
+      process_tree_intentions(
+        openai_key,
         duck_db,
-        state.new_page.tree_id,
-        Object.entries(tree_intentions.page_id_to_intentions ?? {}).map(
-          ([index, intentions]) => ({
-            activity_session_id: index_to_page_id[index],
-            intentions,
-          })
-        )
-      );
-      const members_with_tree_intentions = tree_members.map((member) => {
-        const new_intentions =
-          tree_intentions.page_id_to_intentions[page_id_to_index[member.id]] ??
-          member.tree_intentions;
-        return {
-          ...member,
-          tree_intentions: new_intentions,
-        };
-      });
+        state,
+        tree_members,
+        new_tree
+      ),
+      (async () => {
+        const markdown_result = await markdown_db.upsert(
+          WebpageTreeNodeCollectionSpec,
+          new_tree,
+          "## Webpages"
+        );
+        return markdown_result.save();
+      })()
+    ]);
+
+    if (members_with_tree_intentions !== tree_members) {
       state_update.members = members_with_tree_intentions;
       state_update.tree = get_tree_with_id(members_with_tree_intentions);
     }
 
-    await (
-      await markdown_db.upsert(
-        WebpageTreeNodeCollectionSpec,
-        state_update.tree,
-        "## Webpages"
-      )
-    ).save();
-
+    console.log("✅ Page analysis pipeline completed successfully");
     return state_update;
   } catch (e) {
     console.error(`\nWorkflow failed:`, e);
@@ -380,6 +452,65 @@ async function analyse_new_page(
       error: `Failed to analyze page: ${e}`,
       status: "error",
     };
+  }
+}
+
+async function prepare_workflow_state(
+  inputs: {
+    members: PageActivitySessionWithMeta[];
+    new_page: PageActivitySessionWithoutContent;
+    raw_content: string;
+  },
+  duck_db: DuckDB,
+  memory_db: LanceDBMemoryStore
+): Promise<AgentState> {
+  const other_member_ids = inputs.members
+    .map((m) => m.id)
+    .filter((id) => id !== inputs.new_page.id);
+
+  const other_pages_analysis = await get_webpage_analysis_for_ids(
+    duck_db,
+    other_member_ids
+  );
+
+  const other_recent_trees =
+    await get_last_modified_trees_with_members_and_analysis(
+      duck_db,
+      memory_db,
+      inputs.members[0].tree_id,
+      5
+    );
+
+  return {
+    initial_members: inputs.members,
+    new_page: inputs.new_page,
+    raw_content: inputs.raw_content,
+    page_analysis: other_pages_analysis,
+    other_recent_trees,
+    status: "running",
+  } as AgentState;
+}
+
+async function execute_workflow_stream(
+  app: ReturnType<typeof build_workflow>,
+  init_state: AgentState,
+  config: { configurable: { thread_id: string }; streamMode: "updates" }
+): Promise<void> {
+  for await (const latest_state of await app.stream(init_state, config)) {
+    console.log(latest_state);
+  }
+}
+
+async function log_final_state(
+  app: ReturnType<typeof build_workflow>,
+  config: { configurable: { thread_id: string }; streamMode: "updates" }
+): Promise<void> {
+  const final_state = await app.getState(config);
+  console.log("\n--- Final State ---");
+  for (const [key, value] of Object.entries(final_state.values)) {
+    if (key !== "messages" && key !== "raw_content") {
+      console.log(`${key}:`, value);
+    }
   }
 }
 
@@ -397,44 +528,15 @@ export async function run_workflow(
     configurable: { thread_id: "1" },
     streamMode: "updates" as const,
   };
+
   try {
-    const other_pages_analysis = await get_webpage_analysis_for_ids(
-      duck_db,
-      inputs.members.map((m) => m.id).filter((id) => id !== inputs.new_page.id)
-    );
-    const other_recent_trees =
-      await get_last_modified_trees_with_members_and_analysis(
-        duck_db,
-        memory_db,
-        inputs.members[0].tree_id,
-        5
-      );
-    const init_state = {
-      initial_members: inputs.members,
-      new_page: inputs.new_page,
-      raw_content: inputs.raw_content,
-      page_analysis: other_pages_analysis,
-      other_recent_trees,
-      status: "running",
-    } as AgentState;
-    // const command = new Command({
-    //   goto: NodeNames.ANALYSE_NEW_PAGE,
-    //   update: init_state,
-    // });
-    for await (const latest_state of await app.stream(init_state, config)) {
-      console.log(latest_state);
-    }
+    const init_state = await prepare_workflow_state(inputs, duck_db, memory_db);
+    await execute_workflow_stream(app, init_state, config);
   } catch (e) {
     console.error(`\nWorkflow failed:`, e);
   }
 
-  const final_state = await app.getState(config);
-  console.log("\n--- Final State ---");
-  for (const [key, value] of Object.entries(final_state.values)) {
-    if (key !== "messages" && key !== "raw_content") {
-      console.log(`${key}:`, value);
-    }
-  }
+  await log_final_state(app, config);
 }
 
 export function build_workflow(

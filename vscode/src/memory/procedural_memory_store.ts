@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 import { DuckDB } from '../duck_db';
 
 export interface ProceduralRule {
@@ -21,19 +20,19 @@ export interface RuleCondition {
   conditions?: RuleCondition[];
   field?: string;
   comparator?: 'equals' | 'contains' | 'matches' | 'starts_with' | 'ends_with' | 'greater_than' | 'less_than';
-  value?: any;
+  value?: unknown;
 }
 
 export interface RuleAction {
   type: 'accept' | 'reject' | 'tag' | 'priority_boost' | 'custom';
-  value?: any;
+  value?: unknown;
   reason?: string;
 }
 
 export class ProceduralMemoryStore {
   private db: DuckDB;
   private rules_cache: Map<string, ProceduralRule> = new Map();
-  private compiled_rules: Map<string, (context: any) => boolean> = new Map();
+  private compiled_rules: Map<string, (context: unknown) => boolean> = new Map();
 
   constructor(db: DuckDB) {
     this.db = db;
@@ -45,7 +44,7 @@ export class ProceduralMemoryStore {
   }
 
   private async create_tables(): Promise<void> {
-    await this.db.run(`
+    await this.db.execute(`
       CREATE TABLE IF NOT EXISTS procedural_rules (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -54,41 +53,54 @@ export class ProceduralMemoryStore {
         condition TEXT NOT NULL,
         action TEXT NOT NULL,
         priority INTEGER DEFAULT 0,
-        enabled BOOLEAN DEFAULT true,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        enabled INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
         usage_count INTEGER DEFAULT 0,
-        last_used TIMESTAMP
+        last_used TEXT
       )
     `);
 
-    await this.db.run(`
+    await this.db.execute(`
       CREATE TABLE IF NOT EXISTS rule_execution_history (
         id TEXT PRIMARY KEY,
         rule_id TEXT REFERENCES procedural_rules(id),
         webpage_url TEXT,
-        matched BOOLEAN,
+        matched INTEGER,
         action_taken TEXT,
         execution_time_ms INTEGER,
-        executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        executed_at TEXT DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    await this.db.run(`
+    await this.db.execute(`
       CREATE INDEX IF NOT EXISTS idx_rules_priority 
       ON procedural_rules(priority DESC, enabled)
     `);
 
-    await this.db.run(`
+    await this.db.execute(`
       CREATE INDEX IF NOT EXISTS idx_rule_history_rule_id 
       ON rule_execution_history(rule_id, executed_at DESC)
     `);
   }
 
   async load_rules(): Promise<void> {
-    const result = await this.db.all<any>(`
+    const result = await this.db.all<{
+      id: string;
+      name: string;
+      description: string;
+      type: string;
+      condition: string;
+      action: string;
+      priority: number;
+      enabled: number;
+      created_at: string;
+      updated_at: string;
+      usage_count: number;
+      last_used: string;
+    }>(`
       SELECT * FROM procedural_rules 
-      WHERE enabled = true 
+      WHERE enabled = 1 
       ORDER BY priority DESC, created_at ASC
     `);
 
@@ -100,11 +112,11 @@ export class ProceduralMemoryStore {
         id: row.id,
         name: row.name,
         description: row.description,
-        type: row.type,
+        type: row.type as ProceduralRule['type'],
         condition: JSON.parse(row.condition),
         action: JSON.parse(row.action),
         priority: row.priority,
-        enabled: row.enabled,
+        enabled: row.enabled === 1,
         created_at: row.created_at,
         updated_at: row.updated_at,
         usage_count: row.usage_count,
@@ -125,8 +137,8 @@ export class ProceduralMemoryStore {
     }
   }
 
-  private create_condition_evaluator(condition: RuleCondition): (context: any) => boolean {
-    return (context: any): boolean => {
+  private create_condition_evaluator(condition: RuleCondition): (context: unknown) => boolean {
+    return (context: unknown): boolean => {
       if (condition.operator === 'and') {
         return condition.conditions?.every(c => this.create_condition_evaluator(c)(context)) ?? true;
       } else if (condition.operator === 'or') {
@@ -142,18 +154,23 @@ export class ProceduralMemoryStore {
     };
   }
 
-  private get_nested_value(obj: any, path: string): any {
-    return path.split('.').reduce((current, key) => current?.[key], obj);
+  private get_nested_value(obj: unknown, path: string): unknown {
+    return path.split('.').reduce((current, key) => {
+      if (current && typeof current === 'object' && key in current) {
+        return (current as Record<string, unknown>)[key];
+      }
+      return undefined;
+    }, obj);
   }
 
-  private compare_values(field_value: any, comparator: string, expected_value: any): boolean {
+  private compare_values(field_value: unknown, comparator: string, expected_value: unknown): boolean {
     switch (comparator) {
       case 'equals':
         return field_value === expected_value;
       case 'contains':
         return String(field_value).toLowerCase().includes(String(expected_value).toLowerCase());
       case 'matches':
-        return new RegExp(expected_value, 'i').test(String(field_value));
+        return new RegExp(String(expected_value), 'i').test(String(field_value));
       case 'starts_with':
         return String(field_value).toLowerCase().startsWith(String(expected_value).toLowerCase());
       case 'ends_with':
@@ -167,7 +184,7 @@ export class ProceduralMemoryStore {
     }
   }
 
-  async evaluate_rules(context: any): Promise<RuleAction[]> {
+  async evaluate_rules(context: { url?: string; [key: string]: unknown }): Promise<RuleAction[]> {
     const matched_actions: RuleAction[] = [];
     const sorted_rules = Array.from(this.rules_cache.values())
       .filter(r => r.enabled)
@@ -201,24 +218,30 @@ export class ProceduralMemoryStore {
       usage_count: 0
     };
 
-    await this.db.run(`
+    // Use direct SQL to avoid type conversion issues
+    const escaped_condition = JSON.stringify(new_rule.condition).replace(/'/g, "''");
+    const escaped_action = JSON.stringify(new_rule.action).replace(/'/g, "''");
+    const escaped_name = new_rule.name.replace(/'/g, "''");
+    const escaped_desc = (new_rule.description || '').replace(/'/g, "''");
+    
+    await this.db.exec(`
       INSERT INTO procedural_rules (
         id, name, description, type, condition, action, 
         priority, enabled, created_at, updated_at, usage_count
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      new_rule.id,
-      new_rule.name,
-      new_rule.description,
-      new_rule.type,
-      JSON.stringify(new_rule.condition),
-      JSON.stringify(new_rule.action),
-      new_rule.priority,
-      new_rule.enabled,
-      new_rule.created_at,
-      new_rule.updated_at,
-      new_rule.usage_count
-    ]);
+      ) VALUES (
+        '${new_rule.id}',
+        '${escaped_name}',
+        '${escaped_desc}',
+        '${new_rule.type}',
+        '${escaped_condition}',
+        '${escaped_action}',
+        ${new_rule.priority},
+        ${new_rule.enabled ? 1 : 0},
+        '${new_rule.created_at}',
+        '${new_rule.updated_at}',
+        ${new_rule.usage_count}
+      )
+    `);
 
     this.rules_cache.set(new_rule.id, new_rule);
     this.compile_rule(new_rule);
@@ -240,29 +263,31 @@ export class ProceduralMemoryStore {
       updated_at: new Date().toISOString()
     };
 
-    await this.db.run(`
+    // Use direct SQL to avoid type conversion issues
+    const escaped_condition = JSON.stringify(updated_rule.condition).replace(/'/g, "''");
+    const escaped_action = JSON.stringify(updated_rule.action).replace(/'/g, "''");
+    const escaped_name = updated_rule.name.replace(/'/g, "''");
+    const escaped_desc = (updated_rule.description || '').replace(/'/g, "''");
+    
+    await this.db.exec(`
       UPDATE procedural_rules
-      SET name = ?, description = ?, type = ?, condition = ?, 
-          action = ?, priority = ?, enabled = ?, updated_at = ?
-      WHERE id = ?
-    `, [
-      updated_rule.name,
-      updated_rule.description,
-      updated_rule.type,
-      JSON.stringify(updated_rule.condition),
-      JSON.stringify(updated_rule.action),
-      updated_rule.priority,
-      updated_rule.enabled,
-      updated_rule.updated_at,
-      id
-    ]);
+      SET name = '${escaped_name}', 
+          description = '${escaped_desc}', 
+          type = '${updated_rule.type}', 
+          condition = '${escaped_condition}', 
+          action = '${escaped_action}', 
+          priority = ${updated_rule.priority}, 
+          enabled = ${updated_rule.enabled ? 1 : 0}, 
+          updated_at = '${updated_rule.updated_at}'
+      WHERE id = '${id}'
+    `);
 
     this.rules_cache.set(id, updated_rule);
     this.compile_rule(updated_rule);
   }
 
   async delete_rule(id: string): Promise<void> {
-    await this.db.run('DELETE FROM procedural_rules WHERE id = ?', [id]);
+    await this.db.exec(`DELETE FROM procedural_rules WHERE id = '${id}'`);
     this.rules_cache.delete(id);
     this.compiled_rules.delete(id);
   }
@@ -283,25 +308,28 @@ export class ProceduralMemoryStore {
   ): Promise<void> {
     const exec_id = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    await this.db.run(`
+    const escaped_url = webpage_url.replace(/'/g, "''");
+    const escaped_action = JSON.stringify(action).replace(/'/g, "''");
+    
+    await this.db.exec(`
       INSERT INTO rule_execution_history (
         id, rule_id, webpage_url, matched, action_taken, execution_time_ms
-      ) VALUES (?, ?, ?, ?, ?, ?)
-    `, [
-      exec_id,
-      rule_id,
-      webpage_url,
-      matched,
-      JSON.stringify(action),
-      0 // Could track actual execution time if needed
-    ]);
+      ) VALUES (
+        '${exec_id}',
+        '${rule_id}',
+        '${escaped_url}',
+        ${matched ? 1 : 0},
+        '${escaped_action}',
+        0
+      )
+    `);
 
-    await this.db.run(`
+    await this.db.exec(`
       UPDATE procedural_rules 
       SET usage_count = usage_count + 1, 
           last_used = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `, [rule_id]);
+      WHERE id = '${rule_id}'
+    `);
 
     // Update cache
     const rule = this.rules_cache.get(rule_id);
@@ -311,8 +339,24 @@ export class ProceduralMemoryStore {
     }
   }
 
-  async get_rule_statistics(): Promise<any> {
-    const stats = await this.db.all<any>(`
+  async get_rule_statistics(): Promise<{
+    id: string;
+    name: string;
+    type: string;
+    usage_count: number;
+    total_executions: number;
+    matches: number;
+    avg_execution_time: number;
+  }[]> {
+    const stats = await this.db.all<{
+      id: string;
+      name: string;
+      type: string;
+      usage_count: number;
+      total_executions: number | bigint;
+      matches: number | bigint;
+      avg_execution_time: number | bigint;
+    }>(`
       SELECT 
         r.id,
         r.name,
@@ -327,7 +371,13 @@ export class ProceduralMemoryStore {
       ORDER BY r.usage_count DESC
     `);
     
-    return stats;
+    // Convert BigInt values to regular numbers
+    return stats.map(stat => ({
+      ...stat,
+      total_executions: Number(stat.total_executions),
+      matches: Number(stat.matches),
+      avg_execution_time: Number(stat.avg_execution_time)
+    }));
   }
 
   async export_rules(): Promise<string> {
@@ -340,7 +390,7 @@ export class ProceduralMemoryStore {
     
     for (const rule of imported_rules) {
       // Generate new IDs to avoid conflicts
-      const { id, created_at, updated_at, usage_count, last_used, ...rule_data } = rule;
+      const { ...rule_data } = rule;
       await this.add_rule(rule_data);
     }
     

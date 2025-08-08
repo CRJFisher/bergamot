@@ -3,8 +3,8 @@ id: task-6
 title: Replace LangChain with lightweight alternative
 status: Done
 assignee: []
-created_date: '2025-08-05 06:22'
-updated_date: '2025-08-05 08:44'
+created_date: "2025-08-05 06:22"
+updated_date: "2025-08-05 08:44"
 labels: []
 dependencies: []
 ---
@@ -57,20 +57,23 @@ Benefits:
 Migration plan documented with code examples for each phase.
 
 Successfully replaced LangChain with a vanilla TypeScript implementation using:
+
 - Direct OpenAI SDK for LLM calls
 - Simple workflow class instead of LangGraph StateGraph
 - Custom embeddings interface replacing LangChain embeddings
 - Removed dependencies: @langchain/core, @langchain/langgraph, @langchain/openai
 
 Key changes:
+
 - Created src/workflow/openai_client.ts for LLM interactions
 - Created src/workflow/embeddings.ts for OpenAI embeddings
 - Created src/workflow/prompts.ts for all LLM prompts
 - Created src/workflow/simple_workflow.ts as main workflow implementation
-- Updated agent_memory.ts to remove LangGraph BaseStore dependency
+- Updated lance_db.ts to remove LangGraph BaseStore dependency
 - Created reconcile_webpage_trees_workflow_vanilla.ts as drop-in replacement
 
 Benefits achieved:
+
 - Significantly reduced bundle size (removed ~70% of LangChain dependencies)
 - Simpler, more maintainable code
 - Direct control over LLM interactions

@@ -8,7 +8,7 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
-import { LanceDBMemoryStore } from "./agent_memory";
+import { LanceDBMemoryStore } from "./lance_db";
 import { OpenAIEmbeddings } from "./workflow/embeddings";
 import { DuckDB } from "./duck_db";
 import { get_webpage_content } from "./duck_db";
@@ -67,7 +67,8 @@ async function main() {
     tools: [
       {
         name: "semantic_search",
-        description: "Search through the user's browsing history using semantic similarity",
+        description:
+          "Search through the user's browsing history using semantic similarity",
         inputSchema: {
           type: "object",
           properties: {
@@ -147,7 +148,7 @@ async function handleSemanticSearch(
 ) {
   try {
     const { query, limit = 10 } = args;
-    
+
     // Search in the memory store
     const searchResults = await memoryStore.search(
       [WEBPAGE_CONTENT_NAMESPACE],
@@ -155,13 +156,21 @@ async function handleSemanticSearch(
     );
 
     // Format results
-    const formattedResults = searchResults.map((result) => ({
-      id: result.key,
-      url: result.value.url,
-      title: result.value.title,
-      score: result.score,
-      preview: result.value.pageContent.substring(0, 200) + "...",
-    }));
+    const formattedResults = searchResults.map((result) => {
+      const value = result as unknown as {
+        url: string;
+        title: string;
+        pageContent: string;
+        score?: number;
+      };
+      return {
+        id: result.key,
+        url: value.url,
+        title: value.title,
+        score: value.score || result._distance || 0,
+        preview: value.pageContent.substring(0, 200) + "...",
+      };
+    });
 
     return {
       content: [
@@ -194,6 +203,11 @@ async function handleGetWebpageContent(
     );
 
     if (item) {
+      const value = item as unknown as {
+        url: string;
+        title: string;
+        pageContent: string;
+      };
       return {
         content: [
           {
@@ -201,9 +215,9 @@ async function handleGetWebpageContent(
             text: JSON.stringify(
               {
                 id: page_session_id,
-                url: item.value.url,
-                title: item.value.title,
-                content: item.value.pageContent,
+                url: value.url,
+                title: value.title,
+                content: value.pageContent,
               },
               null,
               2
@@ -215,7 +229,7 @@ async function handleGetWebpageContent(
 
     // Fallback to fetch from memory store directly
     const content = await get_webpage_content(memoryStore, page_session_id);
-    
+
     if (!content) {
       throw new McpError(
         ErrorCode.InvalidRequest,
@@ -228,13 +242,13 @@ async function handleGetWebpageContent(
         {
           type: "text",
           text: JSON.stringify(
-              {
-                id: page_session_id,
-                content: content.content_compressed,
-              },
-              null,
-              2
-            ),
+            {
+              id: page_session_id,
+              content: content.content_compressed,
+            },
+            null,
+            2
+          ),
         },
       ],
     };
