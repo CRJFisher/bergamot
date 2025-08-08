@@ -1,5 +1,7 @@
 // Agent memory type definitions
 
+import { PageClassification } from '../workflow/webpage_filter';
+
 export interface EpisodicMemory {
   id: string;
   timestamp: Date;
@@ -68,7 +70,7 @@ export interface MemorySearchOptions {
 
 export interface ClassificationWithMemory {
   base_classification: {
-    page_type: string;
+    page_type: PageClassification['page_type'];
     confidence: number;
     should_process: boolean;
   };
@@ -80,11 +82,7 @@ export interface ClassificationWithMemory {
     decision_override?: boolean;
     influenced_by: string[];
   };
-  final_classification: {
-    page_type: string;
-    confidence: number;
-    should_process: boolean;
-    reasoning: string;
+  final_classification: PageClassification & {
     influenced_by: string[]; // IDs of memories/rules that influenced decision
   };
 }

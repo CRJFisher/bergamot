@@ -1,5 +1,15 @@
+interface MockTextDocument {
+    uri: Uri;
+    fileName: string;
+    languageId: string;
+    version: number;
+    isDirty: boolean;
+    isClosed: boolean;
+    getText(): string;
+}
+
 export const workspace = {
-    textDocuments: [],
+    textDocuments: [] as MockTextDocument[],
     applyEdit: jest.fn(),
     onDidChangeTextDocument: jest.fn(),
     onDidOpenTextDocument: jest.fn(),

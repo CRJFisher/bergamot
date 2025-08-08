@@ -22,6 +22,7 @@ Identify and refactor functions with high cyclomatic complexity (>10) to improve
 - [ ] Function responsibilities clearly defined (single responsibility)
 - [ ] All refactored code maintains existing functionality
 - [ ] Code comments added where complexity cannot be avoided
+- [ ] Update and add comprehensive tests as required for the updated (new and existing) functions
 
 ## Implementation Notes
 

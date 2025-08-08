@@ -147,13 +147,7 @@ export class MemoryEnhancedClassifier {
       influenced_by: string[];
     },
     filter_config: FilterConfig
-  ): {
-    page_type: string;
-    confidence: number;
-    should_process: boolean;
-    reasoning: string;
-    influenced_by: string[];
-  } {
+  ): PageClassification & { influenced_by: string[] } {
     // Apply adjustments
     const adjusted_confidence = Math.max(0, Math.min(1, 
       base_classification.confidence + adjustments.confidence_adjustment
