@@ -222,11 +222,11 @@ export class EpisodicMemoryStore {
 
     const corrections_by_type: Record<string, number> = {};
     for (const row of type_corrections) {
-      const typedRow = row as { correction_type: string; count: number };
-      corrections_by_type[typedRow.correction_type] = Number(typedRow.count);
+      const typed_row = row as { correction_type: string; count: number };
+      corrections_by_type[typed_row.correction_type] = Number(typed_row.count);
     }
 
-    const typedStats = stats as {
+    const typed_stats = stats as {
       total_episodes: number;
       total_corrections: number;
       false_positives: number;
@@ -234,16 +234,16 @@ export class EpisodicMemoryStore {
     };
 
     return {
-      total_episodes: Number(typedStats.total_episodes || 0),
-      total_corrections: Number(typedStats.total_corrections || 0),
+      total_episodes: Number(typed_stats.total_episodes || 0),
+      total_corrections: Number(typed_stats.total_corrections || 0),
       correction_rate:
-        typedStats.total_episodes > 0
-          ? Number(typedStats.total_corrections) /
-            Number(typedStats.total_episodes)
+        typed_stats.total_episodes > 0
+          ? Number(typed_stats.total_corrections) /
+            Number(typed_stats.total_episodes)
           : 0,
       corrections_by_type,
-      false_positives: Number(typedStats.false_positives || 0),
-      false_negatives: Number(typedStats.false_negatives || 0),
+      false_positives: Number(typed_stats.false_positives || 0),
+      false_negatives: Number(typed_stats.false_negatives || 0),
     };
   }
 
@@ -300,8 +300,8 @@ export class EpisodicMemoryStore {
       [domain]
     );
 
-    const typedResult = result as { error_count: number } | null;
-    return Number(typedResult?.error_count || 0);
+    const typed_result = result as { error_count: number } | null;
+    return Number(typed_result?.error_count || 0);
   }
 
   private async get_by_url(url: string): Promise<EpisodicMemory | null> {

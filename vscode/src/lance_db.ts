@@ -261,7 +261,7 @@ export class LanceDBMemoryStore {
     }
 
     // Handle sections consistently with our retrieval approach
-    const flattenedRecord: Record<string, unknown> = {
+    const flattened_record: Record<string, unknown> = {
       key,
       vector,
       created_at: now,
@@ -272,14 +272,14 @@ export class LanceDBMemoryStore {
     for (const [k, v] of Object.entries(value)) {
       if (k === "sections" && Array.isArray(v)) {
         // Convert sections array to delimited string
-        flattenedRecord.sections_string = v.join("|||");
+        flattened_record.sections_string = v.join("|||");
       } else {
-        flattenedRecord[k] = v;
+        flattened_record[k] = v;
       }
     }
 
     // Write to database
-    await table.add([flattenedRecord]);
+    await table.add([flattened_record]);
   }
 
   /**
@@ -329,10 +329,10 @@ export class LanceDBMemoryStore {
     
     if (options?.query && this.embeddings) {
       // Performance optimization: Use cached embeddings for query vector
-      let queryVector = this.embedding_cache.get(options.query);
-      if (!queryVector) {
-        queryVector = await this.embeddings.embedQuery(options.query);
-        this.embedding_cache.set(options.query, queryVector);
+      let query_vector = this.embedding_cache.get(options.query);
+      if (!query_vector) {
+        query_vector = await this.embeddings.embedQuery(options.query);
+        this.embedding_cache.set(options.query, query_vector);
         
         // Periodic cleanup
         if (this.embedding_cache.size % 50 === 0) {
@@ -340,7 +340,7 @@ export class LanceDBMemoryStore {
         }
       }
       
-      let search = table.search(queryVector);
+      let search = table.search(query_vector);
 
       if (options.filter) {
         const where_conditions = Object.entries(options.filter)
@@ -396,8 +396,8 @@ export class LanceDBMemoryStore {
   }
 
   private async execute_single_operation(operation: Operation): Promise<SearchItem | SearchItem[] | undefined> {
-    const operationType = operation.type;
-    switch (operationType) {
+    const operation_type = operation.type;
+    switch (operation_type) {
       case "get":
         return await this.execute_get_operation(operation);
       case "put":
@@ -407,7 +407,7 @@ export class LanceDBMemoryStore {
       case "search":
         return await this.execute_search_operation(operation);
       default:
-        throw new Error(`Unknown operation type: ${operationType}`);
+        throw new Error(`Unknown operation type: ${operation_type}`);
     }
   }
 
@@ -499,8 +499,8 @@ export class LanceDBMemoryStore {
     // Get all tables from LanceDB
     const tables = await this.db.tableNames();
 
-    for (const tableName of tables) {
-      const parts = tableName.split("/");
+    for (const table_name of tables) {
+      const parts = table_name.split("/");
       if (
         options?.prefix &&
         !parts.join("/").startsWith(options.prefix.join("/"))
@@ -589,14 +589,14 @@ async function create_note_descriptions_table(
   );
   const values = all_notes.map((note, index) => {
     // Convert sections array to a delimited string
-    const sectionsString = Array.isArray(note.sections)
+    const sections_string = Array.isArray(note.sections)
       ? note.sections.join("|||")
       : String(note.sections || "");
 
     return {
       key: note.path,
       name: note.name,
-      sections_string: sectionsString, // Store as string with delimiter
+      sections_string: sections_string, // Store as string with delimiter
       description: note.description,
       path: note.path,
       body: note.body,

@@ -91,8 +91,8 @@ export const WebpageTreeNodeCollectionSpec: CollectionSpec<WebpageTreeNode> = {
     // Recursively add children
     if (node.children) {
       for (const child of node.children) {
-        const childLines = WebpageTreeNodeCollectionSpec.toMarkdown(child);
-        lines.push(...childLines);
+        const child_lines = WebpageTreeNodeCollectionSpec.toMarkdown(child);
+        lines.push(...child_lines);
       }
     }
 
@@ -104,24 +104,24 @@ export const WebpageTreeNodeCollectionSpec: CollectionSpec<WebpageTreeNode> = {
     existingBlock: string[]
   ): boolean => {
     // Get the markdown representation of the new node
-    const nodeMarkdown = WebpageTreeNodeCollectionSpec.toMarkdown(node);
+    const node_markdown = WebpageTreeNodeCollectionSpec.toMarkdown(node);
 
     // Simply compare the entire first line (title, URL, and timestamp)
-    if (existingBlock.length === 0 || nodeMarkdown.length === 0) {
+    if (existingBlock.length === 0 || node_markdown.length === 0) {
       return false;
     }
 
-    const nodeFirstLine = nodeMarkdown[0];
-    const existingFirstLine = existingBlock[0];
+    const node_first_line = node_markdown[0];
+    const existing_first_line = existingBlock[0];
 
-    return nodeFirstLine === existingFirstLine;
+    return node_first_line === existing_first_line;
   },
 
   extractSection: (content: string, heading: string): SectionExtraction => {
     const lines = content.split("\n");
     let start = -1;
     let end = lines.length;
-    let currentBlock: string[] = [];
+    let current_block: string[] = [];
     const blocks: string[][] = [];
 
     for (let i = 0; i < lines.length; i++) {
@@ -132,28 +132,28 @@ export const WebpageTreeNodeCollectionSpec: CollectionSpec<WebpageTreeNode> = {
           start = i + 1; // Start AFTER the heading line, not at it
         } else {
           // We found the next heading, end the current section
-          if (currentBlock.length > 0) {
-            blocks.push(currentBlock);
-            currentBlock = [];
+          if (current_block.length > 0) {
+            blocks.push(current_block);
+            current_block = [];
           }
           end = i;
           break;
         }
       } else if (start !== -1) {
         if (line.trim() === "") {
-          if (currentBlock.length > 0) {
-            blocks.push(currentBlock);
-            currentBlock = [];
+          if (current_block.length > 0) {
+            blocks.push(current_block);
+            current_block = [];
           }
         } else {
-          currentBlock.push(line);
+          current_block.push(line);
         }
       }
     }
 
     // Don't forget the last block
-    if (currentBlock.length > 0) {
-      blocks.push(currentBlock);
+    if (current_block.length > 0) {
+      blocks.push(current_block);
     }
 
     return { start, end_exclusive: end, blocks };
@@ -316,12 +316,12 @@ export class MarkdownDatabase {
     add_at_start: boolean
   ) {
     const section = spec.extractSection(this.content, heading);
-    const newLines = spec.toMarkdown(value);
+    const new_lines = spec.toMarkdown(value);
 
     if (add_at_start) {
-      section.blocks.unshift(newLines);
+      section.blocks.unshift(new_lines);
     } else {
-      section.blocks.push(newLines);
+      section.blocks.push(new_lines);
     }
     this.rewriteSection(
       section,
@@ -492,11 +492,11 @@ export class MarkdownDatabase {
     const section = spec.extractSection(this.content, heading);
 
     // Convert the record to markdown for comparison
-    const recordMarkdown = spec.toMarkdown(record).join("\n");
+    const record_markdown = spec.toMarkdown(record).join("\n");
 
     const blocks = section.blocks.filter((block) => {
-      const blockMarkdown = block.join("\n");
-      return blockMarkdown !== recordMarkdown;
+      const block_markdown = block.join("\n");
+      return block_markdown !== record_markdown;
     });
 
     section.blocks = blocks;
@@ -516,20 +516,20 @@ export class MarkdownDatabase {
     add_line_break_after_all_blocks: boolean
   ): void {
     const lines = this.content.split("\n");
-    const beforeSection = lines.slice(0, section.start);
-    const afterSection = lines.slice(section.end_exclusive);
+    const before_section = lines.slice(0, section.start);
+    const after_section = lines.slice(section.end_exclusive);
 
     // Add a blank line after the heading if there are blocks to insert
-    const contentLines = section.blocks.length > 0 ? [""] : [];
+    const content_lines = section.blocks.length > 0 ? [""] : [];
 
     const new_content = [
-      ...beforeSection,
-      ...contentLines,
+      ...before_section,
+      ...content_lines,
       ...section.blocks.flatMap((b) =>
         add_line_break_after_each_block ? [...b, ""] : b
       ),
       ...(add_line_break_after_all_blocks ? [""] : []),
-      ...afterSection,
+      ...after_section,
     ].join("\n");
     this.content = new_content;
   }

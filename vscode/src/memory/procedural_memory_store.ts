@@ -144,8 +144,8 @@ export class ProceduralMemoryStore {
       } else if (condition.operator === 'or') {
         return condition.conditions?.some(c => this.create_condition_evaluator(c)(context)) ?? false;
       } else if (condition.operator === 'not') {
-        const subCondition = condition.conditions?.[0];
-        return subCondition ? !this.create_condition_evaluator(subCondition)(context) : true;
+        const sub_condition = condition.conditions?.[0];
+        return sub_condition ? !this.create_condition_evaluator(sub_condition)(context) : true;
       } else if (condition.field && condition.comparator) {
         const field_value = this.get_nested_value(context, condition.field);
         return this.compare_values(field_value, condition.comparator, condition.value);

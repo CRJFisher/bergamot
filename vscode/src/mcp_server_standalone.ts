@@ -27,25 +27,25 @@ interface GetWebpageContentArgs {
 
 async function main() {
   // Get configuration from environment variables
-  const openaiApiKey = process.env.OPENAI_API_KEY;
-  const storagePath = process.env.STORAGE_PATH;
-  const duckDbPath = process.env.DUCK_DB_PATH;
+  const openai_api_key = process.env.OPENAI_API_KEY;
+  const storage_path = process.env.STORAGE_PATH;
+  const duck_db_path = process.env.DUCK_DB_PATH;
 
-  if (!openaiApiKey || !storagePath || !duckDbPath) {
+  if (!openai_api_key || !storage_path || !duck_db_path) {
     console.error("Missing required environment variables");
     process.exit(1);
   }
 
   // Initialize databases
-  const duckDb = new DuckDB({ database_path: duckDbPath });
-  await duckDb.init();
+  const duck_db = new DuckDB({ database_path: duck_db_path });
+  await duck_db.init();
 
   const embeddings = new OpenAIEmbeddings({
-    apiKey: openaiApiKey,
+    apiKey: openai_api_key,
   });
 
-  const memoryDbPath = path.join(storagePath, "webpage_memory.db");
-  const memoryStore = await LanceDBMemoryStore.create(memoryDbPath, {
+  const memory_db_path = path.join(storage_path, "webpage_memory.db");
+  const memory_store = await LanceDBMemoryStore.create(memory_db_path, {
     embeddings,
   });
 
@@ -105,15 +105,15 @@ async function main() {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (request.params.name) {
       case "semantic_search":
-        return handleSemanticSearch(
+        return handle_semantic_search(
           request.params.arguments as unknown as SemanticSearchArgs,
-          memoryStore
+          memory_store
         );
       case "get_webpage_content":
-        return handleGetWebpageContent(
+        return handle_get_webpage_content(
           request.params.arguments as unknown as GetWebpageContentArgs,
-          memoryStore,
-          duckDb
+          memory_store,
+          duck_db
         );
       default:
         throw new McpError(
@@ -131,32 +131,32 @@ async function main() {
   // Handle graceful shutdown
   process.on("SIGINT", async () => {
     console.error("Shutting down MCP server...");
-    await duckDb.close();
+    await duck_db.close();
     process.exit(0);
   });
 
   process.on("SIGTERM", async () => {
     console.error("Shutting down MCP server...");
-    await duckDb.close();
+    await duck_db.close();
     process.exit(0);
   });
 }
 
-async function handleSemanticSearch(
+async function handle_semantic_search(
   args: SemanticSearchArgs,
-  memoryStore: LanceDBMemoryStore
+  memory_store: LanceDBMemoryStore
 ) {
   try {
     const { query, limit = 10 } = args;
 
     // Search in the memory store
-    const searchResults = await memoryStore.search(
+    const search_results = await memory_store.search(
       [WEBPAGE_CONTENT_NAMESPACE],
       { query, limit }
     );
 
     // Format results
-    const formattedResults = searchResults.map((result) => {
+    const formatted_results = search_results.map((result) => {
       const value = result as unknown as {
         url: string;
         title: string;
@@ -176,7 +176,7 @@ async function handleSemanticSearch(
       content: [
         {
           type: "text",
-          text: JSON.stringify(formattedResults, null, 2),
+          text: JSON.stringify(formatted_results, null, 2),
         },
       ],
     };
@@ -188,16 +188,16 @@ async function handleSemanticSearch(
   }
 }
 
-async function handleGetWebpageContent(
+async function handle_get_webpage_content(
   args: GetWebpageContentArgs,
-  memoryStore: LanceDBMemoryStore,
-  duckDb: DuckDB
+  memory_store: LanceDBMemoryStore,
+  duck_db: DuckDB
 ) {
   try {
     const { page_session_id } = args;
 
     // First try to get from memory store
-    const item = await memoryStore.get(
+    const item = await memory_store.get(
       [WEBPAGE_CONTENT_NAMESPACE],
       page_session_id
     );
@@ -228,7 +228,7 @@ async function handleGetWebpageContent(
     }
 
     // Fallback to fetch from memory store directly
-    const content = await get_webpage_content(memoryStore, page_session_id);
+    const content = await get_webpage_content(memory_store, page_session_id);
 
     if (!content) {
       throw new McpError(

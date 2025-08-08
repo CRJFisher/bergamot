@@ -20,7 +20,9 @@
     "release:prepare": "npm run clean && npm install && npm run build && npm run package:all"
   },
   "devDependencies": {
+    "@types/glob": "^8.1.0",
     "@types/node": "^20.0.0",
+    "glob": "^11.0.3",
     "typescript": "^5.9.2"
   },
   "engines": {
