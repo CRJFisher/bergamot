@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import { LanceDBMemoryStore } from "./lance_db";
-import { DuckDB } from "./duck_db";
 
 const WEBPAGE_CONTENT_NAMESPACE = "webpage_content";
 
@@ -14,8 +13,7 @@ interface WebpageSearchResult {
 
 export function register_webpage_search_commands(
   context: vscode.ExtensionContext,
-  memory_store: LanceDBMemoryStore,
-  _duck_db?: DuckDB
+  memory_store: LanceDBMemoryStore
 ): void {
   // Command to search webpages
   const search_webpages_command = vscode.commands.registerCommand(

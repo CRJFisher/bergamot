@@ -5,7 +5,6 @@ import cors from "cors";
 import * as fs from "fs";
 import * as os from "os";
 import {
-  run_workflow,
   build_workflow,
 } from "./reconcile_webpage_trees_workflow_vanilla";
 import { LanceDBMemoryStore } from "./lance_db";
@@ -18,11 +17,9 @@ import { ProceduralMemoryStore } from "./memory/procedural_memory_store";
 import { register_procedural_rule_commands } from "./memory/procedural_rule_commands";
 import { FeedbackDocumentGenerator } from "./memory/feedback_document_generator";
 import { register_feedback_commands } from "./memory/feedback_commands";
-import { DuckDB, get_page_sessions_with_tree_id } from "./duck_db";
+import { DuckDB } from "./duck_db";
 import path from "path";
-import { PageActivitySessionWithoutTreeOrContent } from "./duck_db_models";
 import { PageActivitySessionWithoutTreeOrContentSchema } from "./duck_db_models";
-import { insert_page_activity_session_with_tree_management } from "./webpage_tree";
 import { md5_hash } from "./hash_utils";
 import { decompress } from "@mongodb-js/zstd";
 import { create_and_start_mcp_server, WebpageRAGMCPServer } from "./mcp_server";
@@ -118,7 +115,7 @@ export async function activate(
   );
 
   // Register webpage search and hover commands
-  register_webpage_search_commands(context, memory_db, duck_db);
+  register_webpage_search_commands(context, memory_db);
   register_webpage_hover_provider(context, duck_db, memory_db);
 
   // Performance optimization: Defer MCP server startup to background

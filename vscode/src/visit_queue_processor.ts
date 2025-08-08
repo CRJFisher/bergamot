@@ -11,7 +11,7 @@ import {
   PageActivitySessionWithoutTreeOrContent,
   PageActivitySession
 } from "./duck_db_models";
-import { OrphanedVisitsManager, OrphanedVisit } from "./orphaned_visits";
+import { OrphanedVisitsManager } from "./orphaned_visits";
 import { insert_page_activity_session_with_tree_management } from "./webpage_tree";
 import { run_workflow } from "./reconcile_webpage_trees_workflow_vanilla";
 

@@ -1,7 +1,6 @@
 import { NoteTools } from './note_tools';
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { Note } from './model_schema';
 
 // Mock fs module
 jest.mock('fs', () => ({

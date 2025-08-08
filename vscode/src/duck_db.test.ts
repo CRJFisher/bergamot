@@ -17,8 +17,7 @@ import {
 } from "./duck_db";
 import { LanceDBMemoryStore } from "./lance_db";
 import { 
-  PageAnalysis,
-  PageActivitySessionWithMeta
+  PageAnalysis
 } from "./reconcile_webpage_trees_workflow_models";
 import {
   PageActivitySession,
@@ -26,7 +25,6 @@ import {
 } from "./duck_db_models";
 import * as fs from "fs";
 import * as path from "path";
-import { DuckDBInstance, DuckDBConnection } from "@duckdb/node-api";
 
 // Mock dependencies
 jest.mock("fs");
@@ -109,7 +107,7 @@ describe("DuckDB", () => {
       ];
       
       for (const table of tables) {
-        const result = await db.query(
+        await db.query(
           `SELECT name FROM sqlite_master WHERE type='table' AND name='${table}'`
         );
         // Since we're using DuckDB, this query won't work exactly

@@ -112,8 +112,7 @@ async function main() {
       case "get_webpage_content":
         return handle_get_webpage_content(
           request.params.arguments as unknown as GetWebpageContentArgs,
-          memory_store,
-          duck_db
+          memory_store
         );
       default:
         throw new McpError(
@@ -190,8 +189,7 @@ async function handle_semantic_search(
 
 async function handle_get_webpage_content(
   args: GetWebpageContentArgs,
-  memory_store: LanceDBMemoryStore,
-  duck_db: DuckDB
+  memory_store: LanceDBMemoryStore
 ) {
   try {
     const { page_session_id } = args;

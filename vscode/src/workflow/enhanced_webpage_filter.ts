@@ -1,4 +1,4 @@
-import { PageClassification, FilterConfig, classify_webpage, should_process_page } from './webpage_filter';
+import { PageClassification, FilterConfig, classify_webpage } from './webpage_filter';
 import { ProceduralMemoryStore, RuleAction } from '../memory/procedural_memory_store';
 import { EpisodicMemoryStore } from '../memory/episodic_memory_store';
 
@@ -213,7 +213,7 @@ export class EnhancedWebpageFilter {
   private async suggest_new_rule(
     url: string,
     correct_type: string,
-    feedback: string
+    _feedback: string
   ): Promise<void> {
     // Extract domain from URL
     const domain = new URL(url).hostname;

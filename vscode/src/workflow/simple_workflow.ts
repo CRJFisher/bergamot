@@ -19,8 +19,6 @@ import { EnhancedWebpageFilter } from "./enhanced_webpage_filter";
 import { extract_content_features } from "./content_analyzer";
 import {
   DuckDB,
-  get_last_modified_trees_with_members_and_analysis,
-  get_webpage_analysis_for_ids,
   insert_webpage_analysis,
   insert_webpage_tree_intentions,
 } from "../duck_db";
@@ -142,20 +140,21 @@ export class WebpageWorkflow {
     try {
       console.log("State: analyzing_page, Status: running");
 
-      const other_pages_analysis = await get_webpage_analysis_for_ids(
-        this.duck_db,
-        inputs.members
-          .map((m) => m.id)
-          .filter((id) => id !== inputs.new_page.id)
-      );
+      // Commented out - may be needed for future context-aware analysis
+      // const other_pages_analysis = await get_webpage_analysis_for_ids(
+      //   this.duck_db,
+      //   inputs.members
+      //     .map((m) => m.id)
+      //     .filter((id) => id !== inputs.new_page.id)
+      // );
 
-      const other_recent_trees =
-        await get_last_modified_trees_with_members_and_analysis(
-          this.duck_db,
-          this.memory_db,
-          inputs.members[0].tree_id,
-          5
-        );
+      // const other_recent_trees =
+      //   await get_last_modified_trees_with_members_and_analysis(
+      //     this.duck_db,
+      //     this.memory_db,
+      //     inputs.members[0].tree_id,
+      //     5
+      //   );
 
       const llm_client = await get_llm_client(this.openai_key);
 
@@ -167,7 +166,7 @@ export class WebpageWorkflow {
 
       // Classify with memory enhancement if available
       let classification;
-      let episode_id: string | undefined;
+      // let episode_id: string | undefined;
 
       if (this.memory_classifier && this.episodic_store) {
         const memory_classification =
@@ -181,7 +180,7 @@ export class WebpageWorkflow {
         classification = memory_classification.final_classification;
 
         // Store the episode for future learning
-        episode_id = await this.memory_classifier.store_classification_episode(
+        await this.memory_classifier.store_classification_episode(
           inputs.new_page.url,
           memory_classification,
           content_features,

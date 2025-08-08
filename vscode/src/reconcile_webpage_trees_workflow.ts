@@ -421,7 +421,7 @@ async function analyse_new_page(
     };
 
     // Performance optimization: Parallel tree intentions processing and markdown save
-    const [members_with_tree_intentions, _] = await Promise.all([
+    const [members_with_tree_intentions] = await Promise.all([
       process_tree_intentions(
         openai_key,
         duck_db,
