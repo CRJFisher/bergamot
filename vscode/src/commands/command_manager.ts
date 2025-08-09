@@ -13,6 +13,15 @@ import { global_filter_metrics } from '../workflow/filter_metrics';
 
 /**
  * Configuration for command registration.
+ * Contains all dependencies required to register VS Code commands.
+ * 
+ * @interface CommandConfig
+ * @property {vscode.ExtensionContext} context - VS Code extension context for registrations
+ * @property {DuckDB} duck_db - Database for structured data queries
+ * @property {MarkdownDatabase} markdown_db - Database for markdown content
+ * @property {LanceDBMemoryStore} memory_db - Vector database for semantic search
+ * @property {EpisodicMemoryStore} [episodic_store] - Optional episodic memory for feedback
+ * @property {ProceduralMemoryStore} [procedural_store] - Optional procedural memory for rules
  */
 export interface CommandConfig {
   context: vscode.ExtensionContext;
@@ -25,6 +34,25 @@ export interface CommandConfig {
 
 /**
  * Manages registration of all VS Code extension commands.
+ * Centralizes command registration and lifecycle management for the PKM Assistant.
+ * 
+ * @example
+ * ```typescript
+ * const commandManager = new CommandManager({
+ *   context: extensionContext,
+ *   duck_db: duckDb,
+ *   markdown_db: markdownDb,
+ *   memory_db: memoryDb,
+ *   episodic_store: episodicStore,
+ *   procedural_store: proceduralStore
+ * });
+ * 
+ * // Register all commands
+ * commandManager.register_all();
+ * 
+ * // Later, during cleanup
+ * commandManager.dispose();
+ * ```
  */
 export class CommandManager {
   private disposables: vscode.Disposable[] = [];
@@ -33,6 +61,13 @@ export class CommandManager {
 
   /**
    * Registers all extension commands.
+   * This is the main entry point that registers all command categories.
+   * 
+   * @example
+   * ```typescript
+   * commandManager.register_all();
+   * // All commands are now available in VS Code
+   * ```
    */
   register_all(): void {
     this.register_core_commands();
@@ -43,6 +78,8 @@ export class CommandManager {
 
   /**
    * Registers core extension commands.
+   * Includes webpage search and hover provider functionality.
+   * @private
    */
   private register_core_commands(): void {
     // Register webpage search and hover provider
@@ -56,6 +93,8 @@ export class CommandManager {
 
   /**
    * Registers search-related commands.
+   * Currently handled by core commands registration.
+   * @private
    */
   private register_search_commands(): void {
     // Already handled by register_webpage_search_commands in core commands
@@ -63,6 +102,8 @@ export class CommandManager {
 
   /**
    * Registers memory-related commands if memory features are enabled.
+   * Conditionally registers procedural rules and feedback commands based on available stores.
+   * @private
    */
   private register_memory_commands(): void {
     // Register procedural rule commands if available
@@ -89,6 +130,8 @@ export class CommandManager {
 
   /**
    * Registers filter metrics command.
+   * Provides command to display webpage filtering statistics.
+   * @private
    */
   private register_filter_commands(): void {
     const show_metrics_command = vscode.commands.registerCommand(
@@ -102,6 +145,8 @@ export class CommandManager {
 
   /**
    * Shows filter metrics in output channel.
+   * Displays comprehensive statistics about webpage filtering performance.
+   * @private
    */
   private show_filter_metrics(): void {
     const metrics = global_filter_metrics.get_metrics();
@@ -159,9 +204,10 @@ export class CommandManager {
   /**
    * Helper to calculate percentage.
    * 
-   * @param value - The value
-   * @param total - The total
-   * @returns Percentage as string
+   * @param value - The value to calculate percentage for
+   * @param total - The total value (denominator)
+   * @returns Percentage as string with one decimal place
+   * @private
    */
   private get_percentage(value: number, total: number): string {
     if (total === 0) return '0';
@@ -170,6 +216,13 @@ export class CommandManager {
 
   /**
    * Disposes all registered commands.
+   * Should be called during extension deactivation for proper cleanup.
+   * 
+   * @example
+   * ```typescript
+   * // In deactivate function
+   * commandManager.dispose();
+   * ```
    */
   dispose(): void {
     this.disposables.forEach(d => d.dispose());

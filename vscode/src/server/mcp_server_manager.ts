@@ -5,6 +5,12 @@ import { DuckDB } from '../duck_db';
 
 /**
  * Configuration for MCP server.
+ * Contains dependencies required to run the Model Context Protocol server.
+ * 
+ * @interface MCPServerConfig
+ * @property {vscode.ExtensionContext} context - VS Code extension context for paths and storage
+ * @property {string} openai_api_key - OpenAI API key for AI capabilities
+ * @property {DuckDB} duck_db - Database instance for data access
  */
 export interface MCPServerConfig {
   context: vscode.ExtensionContext;
@@ -14,6 +20,31 @@ export interface MCPServerConfig {
 
 /**
  * Manages the MCP (Model Context Protocol) server process.
+ * The MCP server provides external tool access for AI assistants to query
+ * and analyze the stored webpage data.
+ * 
+ * @example
+ * ```typescript
+ * const mcpManager = new MCPServerManager({
+ *   context: extensionContext,
+ *   openai_api_key: 'sk-...',
+ *   duck_db: duckDb
+ * });
+ * 
+ * // Start immediately
+ * await mcpManager.start();
+ * 
+ * // Or start with delay (non-blocking)
+ * mcpManager.start_deferred(2000);
+ * 
+ * // Check status
+ * if (mcpManager.is_running()) {
+ *   console.log('MCP server is running');
+ * }
+ * 
+ * // Clean up
+ * await mcpManager.stop();
+ * ```
  */
 export class MCPServerManager {
   private mcp_process?: child_process.ChildProcess;
@@ -22,8 +53,19 @@ export class MCPServerManager {
 
   /**
    * Starts the MCP server process.
+   * Spawns a Node.js child process running the MCP server script.
    * 
    * @returns Promise that resolves when the server is started
+   * @throws {Error} If the server process fails to start
+   * @example
+   * ```typescript
+   * try {
+   *   await mcpManager.start();
+   *   console.log('MCP server started successfully');
+   * } catch (error) {
+   *   console.error('Failed to start MCP server:', error);
+   * }
+   * ```
    */
   async start(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -79,6 +121,15 @@ export class MCPServerManager {
   /**
    * Starts the MCP server in a deferred manner (non-blocking).
    * Used during extension activation to avoid blocking the main thread.
+   * Errors are logged but not thrown to avoid disrupting the user experience.
+   * 
+   * @param delay_ms - Delay in milliseconds before starting (default: 2000ms)
+   * @example
+   * ```typescript
+   * // Start MCP server 2 seconds after extension activation
+   * mcpManager.start_deferred(2000);
+   * // Extension continues initializing without waiting
+   * ```
    */
   start_deferred(delay_ms: number = 2000): void {
     setTimeout(async () => {
@@ -94,6 +145,14 @@ export class MCPServerManager {
 
   /**
    * Stops the MCP server process.
+   * Attempts graceful shutdown with SIGTERM, then forces with SIGKILL if needed.
+   * 
+   * @returns Promise that resolves when the server is stopped
+   * @example
+   * ```typescript
+   * await mcpManager.stop();
+   * console.log('MCP server stopped');
+   * ```
    */
   async stop(): Promise<void> {
     if (this.mcp_process) {
@@ -124,7 +183,15 @@ export class MCPServerManager {
   /**
    * Checks if the MCP server is running.
    * 
-   * @returns True if the server process is active
+   * @returns True if the server process is active, false otherwise
+   * @example
+   * ```typescript
+   * if (mcpManager.is_running()) {
+   *   console.log('MCP server is active');
+   * } else {
+   *   console.log('MCP server is not running');
+   * }
+   * ```
    */
   is_running(): boolean {
     return this.mcp_process !== undefined && !this.mcp_process.killed;
@@ -132,8 +199,16 @@ export class MCPServerManager {
 
   /**
    * Gets the MCP server process.
+   * Provides direct access to the child process for advanced monitoring.
    * 
    * @returns The child process or undefined if not running
+   * @example
+   * ```typescript
+   * const process = mcpManager.get_process();
+   * if (process) {
+   *   console.log(`MCP server PID: ${process.pid}`);
+   * }
+   * ```
    */
   get_process(): child_process.ChildProcess | undefined {
     return this.mcp_process;

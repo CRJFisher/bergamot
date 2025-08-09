@@ -19,6 +19,15 @@ import { get_filter_config } from '../config/filter_config';
 
 /**
  * Configuration for the server manager.
+ * Contains all dependencies required to run the webpage categorization server.
+ * 
+ * @interface ServerConfig
+ * @property {string} openai_api_key - OpenAI API key for AI-powered analysis
+ * @property {DuckDB} duck_db - Database for structured webpage data
+ * @property {MarkdownDatabase} markdown_db - Database for markdown content
+ * @property {LanceDBMemoryStore} memory_db - Vector database for embeddings
+ * @property {EpisodicMemoryStore} [episodic_store] - Optional episodic memory for learning
+ * @property {ProceduralMemoryStore} [procedural_store] - Optional procedural memory for rules
  */
 export interface ServerConfig {
   openai_api_key: string;
@@ -31,6 +40,24 @@ export interface ServerConfig {
 
 /**
  * Manages the Express server for handling webpage categorization requests.
+ * Provides HTTP endpoints for the browser extension to submit webpage visits
+ * for AI-powered categorization and analysis.
+ * 
+ * @example
+ * ```typescript
+ * const serverManager = new ServerManager({
+ *   openai_api_key: 'sk-...',
+ *   duck_db: duckDb,
+ *   markdown_db: markdownDb,
+ *   memory_db: memoryDb
+ * });
+ * 
+ * const port = await serverManager.start();
+ * console.log(`Server running on port ${port}`);
+ * 
+ * // Later, during cleanup
+ * await serverManager.stop();
+ * ```
  */
 export class ServerManager {
   private server?: Server;
@@ -46,6 +73,8 @@ export class ServerManager {
 
   /**
    * Sets up Express middleware.
+   * Configures JSON parsing and CORS for browser extension communication.
+   * @private
    */
   private setup_middleware(): void {
     this.app.use(express.json());
@@ -54,6 +83,8 @@ export class ServerManager {
 
   /**
    * Sets up the workflow for webpage categorization.
+   * Initializes the AI workflow pipeline with configured databases and memory stores.
+   * @private
    */
   private setup_workflow(): void {
     const filter_config = get_filter_config();
@@ -71,6 +102,8 @@ export class ServerManager {
 
   /**
    * Sets up the queue processor for handling visits.
+   * Initializes batch processing for efficient handling of multiple webpage visits.
+   * @private
    */
   private setup_queue_processor(): void {
     const orphan_manager = new OrphanedVisitsManager();
@@ -90,6 +123,8 @@ export class ServerManager {
 
   /**
    * Sets up API routes.
+   * Defines HTTP endpoints for health checks and webpage visit processing.
+   * @private
    */
   private setup_routes(): void {
     // Health check endpoint
@@ -149,8 +184,10 @@ export class ServerManager {
 
   /**
    * Writes the server port to a file for the native messaging host.
+   * This allows the browser extension to discover the server's dynamic port.
    * 
    * @param port - The port number to write
+   * @private
    */
   private write_port_file(port: number): void {
     const port_file_path = path.join(os.tmpdir(), 'pkm_assistant_port.txt');
@@ -160,8 +197,15 @@ export class ServerManager {
 
   /**
    * Starts the Express server.
+   * Binds to a dynamic port and sets up all routes and processors.
    * 
    * @returns Promise that resolves with the port number
+   * @throws {Error} If the server fails to start
+   * @example
+   * ```typescript
+   * const port = await serverManager.start();
+   * console.log(`Server listening on port ${port}`);
+   * ```
    */
   async start(): Promise<number> {
     return new Promise((resolve, reject) => {
@@ -190,6 +234,14 @@ export class ServerManager {
 
   /**
    * Stops the Express server and queue processor.
+   * Ensures graceful shutdown of all server resources.
+   * 
+   * @returns Promise that resolves when the server is stopped
+   * @example
+   * ```typescript
+   * await serverManager.stop();
+   * console.log('Server stopped successfully');
+   * ```
    */
   async stop(): Promise<void> {
     if (this.queue_processor) {
@@ -208,8 +260,17 @@ export class ServerManager {
 
   /**
    * Gets the queue processor instance.
+   * Provides access to the queue processor for monitoring or direct interaction.
    * 
    * @returns The queue processor or undefined if not started
+   * @example
+   * ```typescript
+   * const processor = serverManager.get_queue_processor();
+   * if (processor) {
+   *   const queueSize = processor.getQueueSize();
+   *   console.log(`Queue has ${queueSize} items`);
+   * }
+   * ```
    */
   get_queue_processor(): VisitQueueProcessor | undefined {
     return this.queue_processor;
