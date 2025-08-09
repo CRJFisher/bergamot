@@ -1,57 +1,17 @@
-import * as vscode from "vscode";
-import express from "express";
-import * as http from "http";
-import cors from "cors";
-import * as fs from "fs";
-import * as os from "os";
-import {
-  build_workflow,
-} from "./reconcile_webpage_trees_workflow_vanilla";
-import { LanceDBMemoryStore } from "./lance_db";
-import { OpenAIEmbeddings } from "./workflow/embeddings";
-import { MarkdownDatabase } from "./markdown_db";
-import { get_filter_config } from "./config/filter_config";
-import { global_filter_metrics } from "./workflow/filter_metrics";
-import { EpisodicMemoryStore } from "./memory/episodic_memory_store";
-import { ProceduralMemoryStore } from "./memory/procedural_memory_store";
-import { register_procedural_rule_commands } from "./memory/procedural_rule_commands";
-import { FeedbackDocumentGenerator } from "./memory/feedback_document_generator";
-import { register_feedback_commands } from "./memory/feedback_commands";
-import { DuckDB } from "./duck_db";
-import path from "path";
-import { PageActivitySessionWithoutTreeOrContentSchema } from "./duck_db_models";
-import { md5_hash } from "./hash_utils";
-import { decompress } from "@mongodb-js/zstd";
-import { create_and_start_mcp_server, WebpageRAGMCPServer } from "./mcp_server";
-import * as child_process from "child_process";
-import { register_webpage_search_commands } from "./webpage_search_commands";
-import { register_webpage_hover_provider } from "./webpage_hover_provider";
-import { OrphanedVisitsManager } from "./orphaned_visits";
-import { VisitQueueProcessor, ExtendedPageVisit } from "./visit_queue_processor";
+import * as vscode from 'vscode';
+import { ConfigManager } from './config/config_manager';
+import { DatabaseManager } from './database/database_manager';
+import { ServerManager } from './server/server_manager';
+import { MCPServerManager } from './server/mcp_server_manager';
+import { CommandManager } from './commands/command_manager';
 
-let server: http.Server | undefined;
-let duck_db: DuckDB;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-let mcp_server: WebpageRAGMCPServer | undefined;
-let mcp_process: child_process.ChildProcess | undefined;
-let queue_processor: VisitQueueProcessor | undefined;
-
-function write_port_file(port: number): void {
-  const port_dir = path.join(os.homedir(), ".pkm-assistant");
-  const port_file = path.join(port_dir, "port.json");
-
-  // Create directory if it doesn't exist
-  if (!fs.existsSync(port_dir)) {
-    fs.mkdirSync(port_dir, { recursive: true });
-  }
-
-  // Write port to file
-  fs.writeFileSync(port_file, JSON.stringify({ port, pid: process.pid }));
-  console.log(`Port file written to ${port_file}`);
-}
+let database_manager: DatabaseManager;
+let server_manager: ServerManager;
+let mcp_server_manager: MCPServerManager;
+let command_manager: CommandManager;
 
 /**
- * Activates the PKM Assistant VSCode extension.
+ * Activates the PKM Assistant VS Code extension.
  *
  * Initializes all core components:
  * - Configures OpenAI API integration for AI-powered analysis
@@ -60,431 +20,138 @@ function write_port_file(port: number): void {
  * - Initializes LanceDB memory store for content and embeddings
  * - Configures episodic and procedural memory systems
  * - Starts MCP (Model Context Protocol) server for external tool access
- * - Registers VSCode commands and providers for search and hover functionality
+ * - Registers VS Code commands and providers for search and hover functionality
  *
- * @param context - VSCode extension context providing access to extension resources
+ * @param context - VS Code extension context providing access to extension resources
  * @returns Promise that resolves when activation is complete
  * @throws {Error} If required configuration is missing or initialization fails
  *
  * @example
  * ```typescript
- * // This function is automatically called by VSCode when the extension activates
- * // Users need to configure the OpenAI API key in VSCode settings:
+ * // This function is automatically called by VS Code when the extension activates
+ * // Users need to configure the OpenAI API key in VS Code settings:
  * // "pkm-assistant.openaiApiKey": "your-openai-key"
  * ```
  */
-/**
- * Validates and retrieves the OpenAI API key from VS Code configuration.
- * Shows an error message if the key is not configured.
- * 
- * @returns The API key if configured, undefined otherwise
- */
-function get_openai_api_key(): string | undefined {
-  const config = vscode.workspace.getConfiguration("pkm-assistant");
-  const openai_api_key = config.get<string>("openaiApiKey");
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  console.log('Starting PKM Assistant extension activation...');
 
-  if (!openai_api_key) {
-    console.error("OpenAI API key is not configured");
-    vscode.window.showErrorMessage(
-      "OpenAI API key is not configured. Please set it in settings."
-    );
-    return undefined;
-  }
-  
-  console.log("OpenAI API key found in configuration");
-  return openai_api_key;
-}
-
-/**
- * Initializes the database connections required by the extension.
- * Sets up both DuckDB and MarkdownDatabase instances.
- * 
- * @param context - VS Code extension context for storage paths
- * @returns Object containing initialized database instances
- */
-async function initialize_databases(
-  context: vscode.ExtensionContext
-): Promise<{ duck_db: DuckDB; markdown_db: MarkdownDatabase }> {
-  console.log("Initializing databases...");
-  
-  // TODO: make these path configurable
-  const front_page_path = "/Users/chuck/workspace/pkm/webpages_db.md";
-  const markdown_db = new MarkdownDatabase(front_page_path);
-  
-  // TODO: make these path use extension storage
-  const duck_db = new DuckDB({
-    database_path: path.join(
-      context.globalStorageUri.fsPath,
-      "webpage_categorizations.db"
-    ),
-  });
-  await duck_db.init();
-  
-  console.log("Databases initialized successfully");
-  return { duck_db, markdown_db };
-}
-
-/**
- * Registers all VS Code commands provided by the extension.
- * 
- * @param context - VS Code extension context
- * @param duck_db - Initialized DuckDB instance
- * @param memory_db - Initialized LanceDB memory store
- */
-function register_extension_commands(
-  context: vscode.ExtensionContext,
-  duck_db: DuckDB,
-  memory_db: LanceDBMemoryStore
-): void {
-  register_webpage_search_commands(context, memory_db);
-  register_webpage_hover_provider(context, duck_db, memory_db);
-}
-
-/**
- * Starts the MCP server process in the background.
- * This is deferred to avoid blocking the extension activation.
- * 
- * @param context - VS Code extension context
- * @param openai_api_key - OpenAI API key for the MCP server
- * @param duck_db - Initialized DuckDB instance
- */
-async function start_mcp_server_deferred(
-  context: vscode.ExtensionContext,
-  openai_api_key: string,
-  duck_db: DuckDB
-): Promise<void> {
-  console.log("Starting MCP server (deferred)...");
-  
   try {
-    mcp_server = await create_and_start_mcp_server(
-      context,
-      openai_api_key,
-      duck_db
-    );
-    console.log("MCP server created successfully");
-
-    // Start MCP server as a separate process
-    const mcp_script_path = path.join(
-      context.extensionPath,
-      "out",
-      "mcp_server_standalone.js"
-    );
-    
-    mcp_process = child_process.spawn("node", [mcp_script_path], {
-      env: {
-        ...process.env,
-        OPENAI_API_KEY: openai_api_key,
-        STORAGE_PATH: context.globalStorageUri.fsPath,
-        DUCK_DB_PATH: path.join(
-          context.globalStorageUri.fsPath,
-          "webpage_categorizations.db"
-        ),
-      },
-      stdio: ["pipe", "pipe", "pipe", "ipc"],
-    });
-
-    mcp_process.on("error", (error) => {
-      console.error("MCP server process error:", error);
-      vscode.window.showErrorMessage(
-        `MCP server failed to start: ${error.message}`
-      );
-    });
-
-    mcp_process.on("exit", (code) => {
-      console.log(`MCP server process exited with code ${code}`);
-    });
-
-    console.log("MCP server process started (deferred)");
-  } catch (error) {
-    console.error("Failed to start MCP server (deferred):", error);
-    // Don't show error message for deferred initialization to avoid disrupting user
-    console.log("MCP server will be unavailable for this session");
-  }
-}
-
-/**
- * Main activation function for the PKM Assistant VS Code extension.
- * Orchestrates initialization of all extension components.
- */
-export async function activate(
-  context: vscode.ExtensionContext
-): Promise<void> {
-  console.log("Starting PKM Assistant extension activation...");
-
-  // Step 1: Validate configuration
-  const openai_api_key = get_openai_api_key();
-  if (!openai_api_key) {
-    return;
-  }
-
-  // Step 2: Initialize databases
-  const { duck_db: initialized_duck_db, markdown_db } = await initialize_databases(context);
-  duck_db = initialized_duck_db;
-
-  // Step 3: Start main services
-  console.log("Starting webpage categorizer service...");
-  const memory_db = await start_webpage_categoriser_service(
-    context,
-    openai_api_key,
-    duck_db,
-    markdown_db
-  );
-
-  // Step 4: Register commands
-  register_extension_commands(context, duck_db, memory_db);
-
-  // Step 5: Start MCP server in background (deferred)
-  setTimeout(() => {
-    start_mcp_server_deferred(context, openai_api_key, duck_db);
-  }, 2000); // Defer by 2 seconds
-
-  console.log("PKM Assistant extension activated! (MCP server starting in background)");
-}
-
-async function start_webpage_categoriser_service(
-  context: vscode.ExtensionContext,
-  openai_api_key: string,
-  duck_db: DuckDB,
-  markdown_db: MarkdownDatabase
-): Promise<LanceDBMemoryStore> {
-  const app = express();
-  app.use(express.json());
-  app.use(cors());
-
-  const db_path = context.globalStorageUri.fsPath;
-  const memory_db = await LanceDBMemoryStore.create(db_path, {
-    embeddings: new OpenAIEmbeddings({
-      model: "text-embedding-3-small",
-      apiKey: openai_api_key,
-    }),
-  });
-
-  // Initialize episodic memory if enabled
-  let episodic_store: EpisodicMemoryStore | undefined;
-  let procedural_store: ProceduralMemoryStore | undefined;
-  const memory_config = vscode.workspace.getConfiguration(
-    "pkm-assistant.agentMemory"
-  );
-
-  if (memory_config.get<boolean>("enabled", true)) {
-    episodic_store = new EpisodicMemoryStore(duck_db, memory_db);
-    await episodic_store.initialize();
-
-    console.log("Initializing procedural memory store...");
-    procedural_store = new ProceduralMemoryStore(duck_db);
-    await procedural_store.initialize();
-
-    // Register procedural rule commands
-    register_procedural_rule_commands(context, procedural_store);
-
-    // Register feedback commands
-    const feedback_generator = new FeedbackDocumentGenerator(
-      episodic_store,
-      markdown_db
-    );
-    register_feedback_commands(context, episodic_store, feedback_generator);
-  }
-
-  const filter_config = get_filter_config();
-  const webpage_categoriser_app = build_workflow(
-    openai_api_key,
-    null, // checkpointer no longer used
-    duck_db,
-    markdown_db,
-    memory_db,
-    filter_config,
-    episodic_store,
-    procedural_store
-  );
-
-  // Initialize orphaned visits manager and queue processor
-  const orphan_manager = new OrphanedVisitsManager();
-  queue_processor = new VisitQueueProcessor(
-    duck_db,
-    memory_db,
-    webpage_categoriser_app,
-    orphan_manager,
-    {
-      batch_size: 3,
-      batch_timeout: 1000,
-      orphan_retry_interval: 5000
-    }
-  );
-
-  // Start the queue processor
-  queue_processor.start();
-
-  // Clean up on extension deactivation
-  context.subscriptions.push({
-    dispose: () => {
-      queue_processor.stop();
-    },
-  });
-
-  // Add status endpoint for native host health checks
-  app.get("/status", (req, res) => {
-    res.json({
-      status: "running",
-      version: "1.0.0",
-      uptime: process.uptime(),
-    });
-  });
-
-  app.post("/visit", async (req, res) => {
-    console.log("Received request from:", req.body.url);
-    const id = md5_hash(`${req.body.url}:${req.body.page_loaded_at}`);
-
-    // Decompress content if it's base64 encoded zstd compressed data
-    let content = req.body.content;
-    if (typeof content === "string" && content.length > 0) {
-      try {
-        const compressed_data = Buffer.from(content, "base64");
-        const decompressed_data = await decompress(compressed_data);
-        content = decompressed_data.toString("utf-8");
-      } catch (error) {
-        console.warn("Failed to decompress content, using as-is:", error);
-      }
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { content: _, ...req_body_without_content } = req.body;
-    const parse_result =
-      PageActivitySessionWithoutTreeOrContentSchema.safeParse({
-        ...req_body_without_content,
-        id,
-      });
-    if (!parse_result.success) {
-      res
-        .status(400)
-        .json({ error: "Invalid payload", issues: parse_result.error.issues });
+    // Step 1: Validate configuration
+    const openai_api_key = ConfigManager.get_openai_api_key();
+    if (!openai_api_key) {
+      console.error('Activation aborted: Missing OpenAI API key');
       return;
     }
-    const payload = parse_result.data;
-    console.log("Received payload:", payload.url);
 
-    // Add to queue instead of processing immediately
-    const extended_visit: ExtendedPageVisit = { ...payload, raw_content: content };
-    const position = queue_processor?.enqueue(extended_visit) ?? 0;
+    // Step 2: Initialize databases
+    console.log('Initializing databases...');
+    database_manager = new DatabaseManager();
+    const memory_config = ConfigManager.get_memory_config();
+    const markdown_path = ConfigManager.get_markdown_db_path();
+    
+    const databases = await database_manager.initialize_all(
+      context,
+      openai_api_key,
+      markdown_path,
+      memory_config.enabled
+    );
 
-    res.json({ status: "queued", position });
-  });
+    // Step 3: Start Express server for webpage categorization
+    console.log('Starting webpage categorizer service...');
+    server_manager = new ServerManager({
+      openai_api_key,
+      duck_db: databases.duck_db,
+      markdown_db: databases.markdown_db,
+      memory_db: databases.memory_db,
+      episodic_store: databases.episodic_store,
+      procedural_store: databases.procedural_store
+    });
+    
+    const port = await server_manager.start();
+    console.log(`Server started on port ${port}`);
 
-  // Start the server on a dynamic port
-  server = app.listen(0, () => {
-    const address = server.address();
-    const port = typeof address === "object" && address ? address.port : 5000;
-    console.log(`PKM Assistant server running at http://localhost:${port}`);
+    // Step 4: Register all extension commands
+    console.log('Registering extension commands...');
+    command_manager = new CommandManager({
+      context,
+      duck_db: databases.duck_db,
+      markdown_db: databases.markdown_db,
+      memory_db: databases.memory_db,
+      episodic_store: databases.episodic_store,
+      procedural_store: databases.procedural_store
+    });
+    command_manager.register_all();
 
-    // Write port to file for native messaging host
-    write_port_file(port);
-  });
+    // Step 5: Start MCP server in background (deferred)
+    console.log('Scheduling MCP server startup...');
+    mcp_server_manager = new MCPServerManager({
+      context,
+      openai_api_key,
+      duck_db: databases.duck_db
+    });
+    mcp_server_manager.start_deferred(2000);
 
-  // Register commands
-  const show_metrics_command = vscode.commands.registerCommand(
-    "pkm-assistant.showFilterMetrics",
-    () => {
-      const metrics = global_filter_metrics.get_metrics();
-      const output = vscode.window.createOutputChannel(
-        "PKM Assistant Filter Metrics"
-      );
-      output.clear();
-      output.appendLine("=== Webpage Filter Metrics ===");
-      output.appendLine(`Total pages analyzed: ${metrics.total_pages}`);
-      output.appendLine(
-        `Pages processed: ${metrics.processed_pages} (${get_percentage(
-          metrics.processed_pages,
-          metrics.total_pages
-        )}%)`
-      );
-      output.appendLine(
-        `Pages filtered: ${metrics.filtered_pages} (${get_percentage(
-          metrics.filtered_pages,
-          metrics.total_pages
-        )}%)`
-      );
-      output.appendLine(
-        `Average confidence: ${metrics.average_confidence.toFixed(2)}`
-      );
-      output.appendLine("");
-      output.appendLine("Page types:");
-      Object.entries(metrics.page_types)
-        .sort(([, a], [, b]) => b - a)
-        .forEach(([type, count]) => {
-          output.appendLine(
-            `  ${type}: ${count} (${get_percentage(
-              count,
-              metrics.total_pages
-            )}%)`
-          );
-        });
-      if (Object.keys(metrics.filter_reasons).length > 0) {
-        output.appendLine("");
-        output.appendLine("Filter reasons:");
-        Object.entries(metrics.filter_reasons)
-          .sort(([, a], [, b]) => b - a)
-          .forEach(([reason, count]) => {
-            output.appendLine(`  ${reason}: ${count}`);
-          });
+    // Register cleanup handlers
+    context.subscriptions.push({
+      dispose: async () => {
+        await deactivate();
       }
-      output.show();
+    });
 
-      // Also log to console
-      global_filter_metrics.log_summary();
-    }
-  );
-
-  context.subscriptions.push(show_metrics_command);
-
-  // Add server cleanup to extension subscriptions
-  context.subscriptions.push({
-    dispose: () => {
-      if (server) {
-        server.close();
-        server = undefined;
-      }
-    },
-  });
-
-  return memory_db;
-}
-
-function get_percentage(count: number, total: number): string {
-  if (total === 0) return "0";
-  return ((count / total) * 100).toFixed(1);
+    console.log('PKM Assistant extension activated successfully!');
+    console.log('MCP server will start in background after 2 seconds');
+    
+  } catch (error) {
+    console.error('Failed to activate PKM Assistant extension:', error);
+    vscode.window.showErrorMessage(
+      `PKM Assistant activation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+    throw error;
+  }
 }
 
 /**
- * Deactivates the PKM Assistant VSCode extension and cleans up resources.
+ * Deactivates the PKM Assistant extension.
+ * Performs cleanup of all resources including:
+ * - Stopping the Express server
+ * - Closing database connections
+ * - Terminating the MCP server process
+ * - Disposing of registered commands
  *
- * Performs cleanup tasks:
- * - Closes DuckDB database connections
- * - Shuts down Express server
- * - Removes port configuration file
- * - Terminates MCP server process
- *
- * @returns Promise that resolves when deactivation and cleanup is complete
- *
- * @example
- * ```typescript
- * // This function is automatically called by VSCode when the extension deactivates
- * // It ensures all database connections and processes are properly closed
- * ```
+ * @returns Promise that resolves when deactivation is complete
  */
 export async function deactivate(): Promise<void> {
-  if (duck_db) {
-    await duck_db.close();
-  }
-  if (server) {
-    server.close();
-  }
+  console.log('Deactivating PKM Assistant extension...');
 
-  // Remove port file
-  const port_file = path.join(os.homedir(), ".pkm-assistant", "port.json");
-  if (fs.existsSync(port_file)) {
-    fs.unlinkSync(port_file);
-  }
-  if (mcp_process) {
-    console.log("Stopping MCP server process...");
-    mcp_process.kill();
+  try {
+    // Stop servers
+    if (server_manager) {
+      await server_manager.stop();
+      console.log('Express server stopped');
+    }
+
+    if (mcp_server_manager) {
+      await mcp_server_manager.stop();
+      console.log('MCP server stopped');
+    }
+
+    // Close databases
+    if (database_manager) {
+      await database_manager.close_all();
+      console.log('Databases closed');
+    }
+
+    // Dispose commands
+    if (command_manager) {
+      command_manager.dispose();
+      console.log('Commands disposed');
+    }
+
+    console.log('PKM Assistant extension deactivated successfully');
+    
+  } catch (error) {
+    console.error('Error during deactivation:', error);
+    // Don't throw during deactivation to avoid blocking VS Code shutdown
   }
 }
