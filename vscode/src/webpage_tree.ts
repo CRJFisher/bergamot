@@ -180,36 +180,9 @@ async function create_new_tree_as_root(
   db: DuckDB,
   session: PageActivitySession
 ): Promise<{ tree_id: string | null; was_tree_changed: boolean }> {
-  // Skip if the url is an aggregator
-  // TODO: store in DB and allow users to manage / get an LLM to decide this
-  const aggregator_urls = [
-    "https://news.ycombinator.com",
-    "https://www.google.com",
-    "https://www.bing.com",
-    "https://www.yahoo.com",
-    "https://www.duckduckgo.com",
-    "https://www.reddit.com",
-    "https://www.reddit.com/r/all",
-    "https://www.facebook.com",
-    "https://www.twitter.com",
-    "https://www.linkedin.com",
-    "https://www.instagram.com",
-    "https://www.pinterest.com",
-    "https://www.quora.com",
-    "https://www.medium.com",
-    "https://www.wikipedia.org",
-    "https://www.youtube.com",
-  ];
-  const aggregator_urls_with_trailing_slash = aggregator_urls.map((url) =>
-    url.endsWith("/") ? url : `${url}/`
-  );
-  if (
-    aggregator_urls.includes(session.url) ||
-    aggregator_urls_with_trailing_slash.includes(session.url)
-  ) {
-    console.warn(`Skipping aggregator URL: ${session.url}`);
-    return { tree_id: null, was_tree_changed: false };
-  }
+  // Note: Aggregator filtering has been moved to the workflow phase
+  // where we have access to page content for LLM-based classification.
+  // This allows for more intelligent and flexible aggregator detection.
 
   const tree_id = md5_hash(`${session.url}:${session.page_loaded_at}`);
   const session_with_tree_id = {

@@ -210,6 +210,9 @@ export class WebpageWorkflow {
         );
       }
 
+      // Note: Aggregator filtering now happens here via LLM classification
+      // Pages classified as 'aggregator' type will be filtered based on config
+      // This replaces the previous hardcoded aggregator URL list in webpage_tree.ts
       const should_process = should_process_page(
         classification,
         this.filter_config

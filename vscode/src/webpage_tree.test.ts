@@ -74,7 +74,9 @@ describe("Webpage Tree Management", () => {
         expect(tree).toBeDefined();
       });
 
-      it("should skip aggregator URLs", async () => {
+      // Note: Aggregator filtering has been moved to the workflow phase
+      // These tests are kept but updated to reflect the new behavior
+      it("should create trees for aggregator URLs (filtering happens in workflow)", async () => {
         const aggregator_urls = [
           "https://news.ycombinator.com",
           "https://www.google.com",
@@ -84,22 +86,25 @@ describe("Webpage Tree Management", () => {
           "https://www.youtube.com"
         ];
 
-        for (const url of aggregator_urls) {
+        for (let i = 0; i < aggregator_urls.length; i++) {
+          const url = aggregator_urls[i];
           const aggregator_session = {
             ...base_session,
+            id: `aggregator-session-${i}`, // Unique ID for each session
             url,
             referrer: null,
           };
+
+          mock_md5_hash.mockReturnValue(`tree-${i}`);
 
           const result = await insert_page_activity_session_with_tree_management(
             db,
             aggregator_session
           );
 
-          expect(result).toEqual({
-            tree_id: null,
-            was_tree_changed: false,
-          });
+          // Now aggregators DO get trees (filtering happens later)
+          expect(result.tree_id).toBeTruthy();
+          expect(result.was_tree_changed).toBe(true);
         }
       });
 
@@ -110,15 +115,16 @@ describe("Webpage Tree Management", () => {
           referrer: null,
         };
 
+        mock_md5_hash.mockReturnValue("tree-hn");
+
         const result = await insert_page_activity_session_with_tree_management(
           db,
           session
         );
 
-        expect(result).toEqual({
-          tree_id: null,
-          was_tree_changed: false,
-        });
+        // Now aggregators DO get trees (filtering happens later)
+        expect(result.tree_id).toBe("tree-hn");
+        expect(result.was_tree_changed).toBe(true);
       });
     });
 
