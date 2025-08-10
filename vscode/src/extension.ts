@@ -4,6 +4,7 @@ import { DatabaseManager } from './database/database_manager';
 import { ServerManager } from './server/server_manager';
 import { MCPServerManager } from './server/mcp_server_manager';
 import { CommandManager } from './commands/command_manager';
+import { BrowserIntegrationSetup, register_browser_integration_commands } from './browser_integration/setup_orchestrator';
 
 let database_manager: DatabaseManager;
 let server_manager: ServerManager;
@@ -83,7 +84,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     });
     command_manager.register_all();
 
-    // Step 5: Start MCP server in background (deferred)
+    // Step 5: Register browser integration commands
+    console.log('Registering browser integration commands...');
+    register_browser_integration_commands(context);
+
+    // Step 6: Start MCP server in background (deferred)
     console.log('Scheduling MCP server startup...');
     mcp_server_manager = new MCPServerManager({
       context,
@@ -101,6 +106,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     console.log('PKM Assistant extension activated successfully!');
     console.log('MCP server will start in background after 2 seconds');
+    
+    // Step 7: Check for browser integration setup (after successful activation)
+    const browser_setup = new BrowserIntegrationSetup(context);
+    if (await browser_setup.should_prompt_setup()) {
+      console.log('Prompting for browser integration setup...');
+      await browser_setup.record_prompt();
+      
+      // Delay the prompt slightly to avoid overwhelming the user
+      setTimeout(async () => {
+        await browser_setup.run_setup();
+      }, 3000);
+    }
     
   } catch (error) {
     console.error('Failed to activate PKM Assistant extension:', error);
