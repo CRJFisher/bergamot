@@ -63,7 +63,7 @@ export class BrowserIntegrationSetup {
                          status.hasBrowserExtension && 
                          status.isConnected;
 
-    } catch (error: any) {
+    } catch (error) {
       status.errors.push(error.message);
     }
 
