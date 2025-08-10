@@ -3,7 +3,7 @@ id: task-22
 title: Create evaluation system for webpage categorization LLM
 status: To Do
 assignee: []
-created_date: '2025-08-10 19:33'
+created_date: "2025-08-10 19:33"
 labels:
   - evaluation
   - llm
@@ -35,6 +35,7 @@ Design and implement a comprehensive evaluation system for the LLM-based webpage
 ### Phase 1: Research and Planning (Completed)
 
 Key findings from LLM evaluation research:
+
 - Use F1 score and confusion matrices for multi-class classification
 - Minimum 50-100 examples per category for reliable metrics
 - Implement confidence scores for uncertain classifications
@@ -44,6 +45,7 @@ Key findings from LLM evaluation research:
 ### Phase 2: Dataset Collection
 
 #### Categories to Cover (6 primary + edge cases):
+
 1. **Knowledge** - Educational content, documentation, tutorials
 2. **Interactive_app** - Web applications, tools, dashboards
 3. **Aggregator** - Search results, link collections, news feeds
@@ -52,6 +54,7 @@ Key findings from LLM evaluation research:
 6. **Other** - Miscellaneous content
 
 #### Sources for Test Data:
+
 - **Aggregators**: Reddit, HackerNews, Google Search, Twitter/X feeds
 - **Emails**: Gmail, Outlook web (privacy-safe examples)
 - **Blogs**: Medium, Substack, personal blogs, tech blogs
@@ -67,6 +70,7 @@ Key findings from LLM evaluation research:
   - Product pages (navigation vs knowledge)
 
 #### Dataset Structure:
+
 ```json
 {
   "url": "https://example.com/page",
@@ -82,11 +86,13 @@ Key findings from LLM evaluation research:
 ### Phase 3: Labeling Strategy
 
 1. **Create Labeling Guidelines**:
+
    - Clear criteria for each category
    - Decision tree for ambiguous cases
    - Examples of each category
 
 2. **Labeling Process**:
+
    - Start with clear examples (high confidence)
    - Add edge cases progressively
    - Document reasoning for difficult cases
@@ -109,7 +115,7 @@ class WebpageCategorizationEvaluator:
             'per_class_metrics': classification_report(ground_truth, predictions),
             'confusion_matrix': confusion_matrix(ground_truth, predictions)
         }
-    
+
     def analyze_errors(self, confusion_matrix):
         # Identify most common misclassifications
         # Suggest prompt improvements
@@ -128,13 +134,16 @@ class WebpageCategorizationEvaluator:
 ### Phase 6: Prompt Optimization
 
 Based on error analysis:
+
 1. **Common Improvements**:
+
    - Add more specific examples in prompt
    - Clarify category boundaries
    - Add chain-of-thought reasoning
    - Include confidence scoring
 
 2. **Iterative Testing**:
+
    - Test on validation set (not test set)
    - A/B test prompt variations
    - Focus on worst-performing categories
@@ -147,11 +156,13 @@ Based on error analysis:
 ### Phase 7: Continuous Monitoring
 
 1. **Production Metrics**:
+
    - Track classification distribution over time
    - Monitor confidence scores
    - Detect drift in webpage types
 
 2. **Feedback Loop**:
+
    - Collect user corrections
    - Periodic re-evaluation
    - Prompt version control

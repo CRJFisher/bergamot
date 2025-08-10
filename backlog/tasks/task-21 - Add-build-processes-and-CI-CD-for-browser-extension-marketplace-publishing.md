@@ -13,7 +13,7 @@ dependencies: []
 
 ## Description
 
-Implement automated build and publishing pipeline for browser extensions to Chrome Web Store, Firefox Add-ons, Edge Add-ons, and other marketplaces. This includes setting up CI/CD workflows, build scripts, and marketplace configurations to enable automatic or semi-automatic publishing of the browser extension to all major browser stores.
+Implement automated build and publishing pipeline for browser extensions to Chrome Web Store, Firefox Add-ons, Edge Add-ons, Brave and other browsers which we can support (given the extension APIs that we rely on). This includes setting up CI/CD workflows, build scripts, and marketplace configurations to enable automatic or semi-automatic publishing of the browser extension to all major browser stores.
 
 ## Acceptance Criteria
 
