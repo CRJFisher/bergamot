@@ -1,0 +1,277 @@
+name: Browser Extension Build & Publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      publish_chrome:
+        description: 'Publish to Chrome Web Store'
+        required: false
+        type: boolean
+        default: false
+      publish_firefox:
+        description: 'Publish to Firefox Add-ons'
+        required: false
+        type: boolean
+        default: false
+      publish_edge:
+        description: 'Publish to Edge Add-ons'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: |
+          browser/package-lock.json
+          vscode/package-lock.json
+    
+    - name: Install Chrome
+      run: |
+        wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+        sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list'
+        sudo apt-get update
+        sudo apt-get install -y google-chrome-stable
+    
+    - name: Install dependencies - Browser
+      working-directory: ./browser
+      run: npm ci
+    
+    - name: Install dependencies - VS Code
+      working-directory: ./vscode
+      run: npm ci
+    
+    - name: Run Browser Unit Tests
+      working-directory: ./browser
+      run: npm run test:unit
+    
+    - name: Build Browser Extension for Testing
+      working-directory: ./browser
+      run: npm run build
+    
+    - name: Run E2E Tests
+      working-directory: ./browser
+      run: npm run test:e2e:run-all
+      env:
+        HEADLESS: true
+        CI: true
+      timeout-minutes: 15
+    
+    - name: Upload Test Results
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: |
+          browser/e2e/test_results.json
+          browser/e2e/*.log
+
+  build:
+    name: Build Extensions
+    needs: test
+    runs-on: ubuntu-latest
+    
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: browser/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./browser
+      run: npm ci
+    
+    - name: Get version
+      id: version
+      working-directory: ./browser
+      run: |
+        VERSION=$(node -p "require('./package.json').version")
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "Extension version: ${VERSION}"
+    
+    - name: Update manifest versions
+      working-directory: ./browser
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        # Update Chrome manifest
+        jq ".version = \"${VERSION}\"" chrome/manifest.json > chrome/manifest.tmp && mv chrome/manifest.tmp chrome/manifest.json
+        # Update Firefox manifest
+        jq ".version = \"${VERSION}\"" firefox/manifest.json > firefox/manifest.tmp && mv firefox/manifest.tmp firefox/manifest.json
+    
+    - name: Build production extensions
+      working-directory: ./browser
+      run: npm run build:production
+    
+    - name: Upload Chrome extension
+      uses: actions/upload-artifact@v4
+      with:
+        name: chrome-extension
+        path: browser/builds/v${{ steps.version.outputs.version }}/chrome-extension.zip
+    
+    - name: Upload Firefox extension
+      uses: actions/upload-artifact@v4
+      with:
+        name: firefox-extension
+        path: browser/builds/v${{ steps.version.outputs.version }}/firefox-extension.zip
+    
+    - name: Upload Edge extension
+      uses: actions/upload-artifact@v4
+      with:
+        name: edge-extension
+        path: browser/builds/v${{ steps.version.outputs.version }}/edge-extension.zip
+
+  publish-chrome:
+    name: Publish to Chrome Web Store
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.inputs.publish_chrome == 'true'
+    
+    steps:
+    - name: Download Chrome extension
+      uses: actions/download-artifact@v4
+      with:
+        name: chrome-extension
+    
+    - name: Publish to Chrome Web Store
+      uses: mobilefirstllc/cws-publish@v1
+      with:
+        refresh_token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+        client_id: ${{ secrets.CHROME_CLIENT_ID }}
+        client_secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+        extension_id: ${{ secrets.CHROME_EXTENSION_ID }}
+        zip_file: chrome-extension.zip
+
+  publish-firefox:
+    name: Publish to Firefox Add-ons
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.inputs.publish_firefox == 'true'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+    
+    - name: Download Firefox extension
+      uses: actions/download-artifact@v4
+      with:
+        name: firefox-extension
+    
+    - name: Install web-ext
+      run: npm install -g web-ext
+    
+    - name: Publish to Firefox Add-ons
+      run: |
+        web-ext sign \
+          --api-key=${{ secrets.FIREFOX_API_KEY }} \
+          --api-secret=${{ secrets.FIREFOX_API_SECRET }} \
+          --channel=listed \
+          --upload-source-code=firefox-extension.zip
+
+  publish-edge:
+    name: Publish to Edge Add-ons
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.inputs.publish_edge == 'true'
+    
+    steps:
+    - name: Download Edge extension
+      uses: actions/download-artifact@v4
+      with:
+        name: edge-extension
+    
+    - name: Publish to Edge Add-ons
+      uses: wdzeng/edge-addon@v1
+      with:
+        client-id: ${{ secrets.EDGE_CLIENT_ID }}
+        client-secret: ${{ secrets.EDGE_CLIENT_SECRET }}
+        product-id: ${{ secrets.EDGE_PRODUCT_ID }}
+        access-token-url: ${{ secrets.EDGE_ACCESS_TOKEN_URL }}
+        zip-path: edge-extension.zip
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build, publish-chrome, publish-firefox, publish-edge]
+    runs-on: ubuntu-latest
+    if: always() && needs.build.result == 'success'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+    
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Get the previous tag
+        PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        
+        if [ -z "$PREV_TAG" ]; then
+          echo "No previous tag found, including all commits"
+          COMMITS=$(git log --pretty=format:"- %s (%an)" --no-merges)
+        else
+          echo "Previous tag: $PREV_TAG"
+          COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%an)" --no-merges)
+        fi
+        
+        # Create changelog
+        cat > CHANGELOG.md << EOF
+        ## What's Changed
+        
+        ${COMMITS}
+        
+        ## Extension Downloads
+        
+        - **Chrome Web Store**: [Install from Chrome Web Store](https://chrome.google.com/webstore/detail/${{ secrets.CHROME_EXTENSION_ID }})
+        - **Firefox Add-ons**: [Install from Firefox Add-ons](https://addons.mozilla.org/addon/pkm-navigation-tracker/)
+        - **Edge Add-ons**: [Install from Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/${{ secrets.EDGE_PRODUCT_ID }})
+        
+        Or download the extension packages directly from the assets below.
+        EOF
+        
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        cat CHANGELOG.md >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: PKM Assistant Browser Extension v${{ needs.build.outputs.version }}
+        body: ${{ steps.changelog.outputs.changelog }}
+        files: |
+          artifacts/chrome-extension/chrome-extension.zip
+          artifacts/firefox-extension/firefox-extension.zip
+          artifacts/edge-extension/edge-extension.zip
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
