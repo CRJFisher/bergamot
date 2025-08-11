@@ -207,11 +207,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/mindsteep.git"
+    "url": "https://github.com/CRJFisher/mindsteep.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/mindsteep/issues"
+    "url": "https://github.com/CRJFisher/mindsteep/issues"
   },
-  "homepage": "https://github.com/your-username/mindsteep#readme",
+  "homepage": "https://github.com/CRJFisher/mindsteep#readme",
   "license": "MIT"
 }
