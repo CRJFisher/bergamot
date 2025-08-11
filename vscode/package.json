@@ -160,7 +160,15 @@
     "lint": "eslint src --ext ts",
     "test": "jest",
     "clean": "rm -rf out",
-    "package": "vsce package"
+    "package": "vsce package",
+    "build:production": "node scripts/build-production.js",
+    "version:patch": "node scripts/version-bump.js patch",
+    "version:minor": "node scripts/version-bump.js minor",
+    "version:major": "node scripts/version-bump.js major",
+    "version:prerelease": "node scripts/version-bump.js prerelease",
+    "publish:vscode": "node scripts/publish-vscode.js",
+    "publish:openvsx": "node scripts/publish-openvsx.js",
+    "publish:all": "npm run publish:vscode && npm run publish:openvsx"
   },
   "dependencies": {
     "@duckdb/node-api": "^1.2.2-alpha.18",
@@ -189,6 +197,7 @@
     "@vscode/vsce": "^2.32.0",
     "eslint": "^8.56.0",
     "jest": "^29.7.0",
+    "ovsx": "^0.9.6",
     "supertest": "^7.1.4",
     "ts-jest": "^29.1.1",
     "typescript": "^5.9.2"

@@ -1,0 +1,333 @@
+name: VS Code Extension Build & Publish
+
+on:
+  push:
+    tags:
+      - 'vscode-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      publish_vscode:
+        description: 'Publish to VS Code Marketplace'
+        required: false
+        type: boolean
+        default: false
+      publish_openvsx:
+        description: 'Publish to Open VSX Registry'
+        required: false
+        type: boolean
+        default: false
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: ./vscode
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: vscode/package-lock.json
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run linter
+      run: npm run lint
+      continue-on-error: true
+    
+    - name: Run tests
+      run: npm test
+      env:
+        CI: true
+    
+    - name: Compile TypeScript
+      run: npm run compile
+    
+    - name: Upload test results
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: |
+          vscode/coverage/
+          vscode/**/*.log
+
+  build:
+    name: Build Extension
+    needs: test
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: ./vscode
+    
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      vsix_name: ${{ steps.version.outputs.vsix_name }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for changelog
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: vscode/package-lock.json
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Get version info
+      id: version
+      run: |
+        VERSION=$(node -p "require('./package.json').version")
+        NAME=$(node -p "require('./package.json').name")
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "vsix_name=${NAME}-${VERSION}.vsix" >> $GITHUB_OUTPUT
+        echo "Extension: ${NAME} v${VERSION}"
+    
+    - name: Build production package
+      run: npm run build:production || npx vsce package
+    
+    - name: Validate VSIX package
+      run: |
+        if [ -f "builds/v${{ steps.version.outputs.version }}/${{ steps.version.outputs.vsix_name }}" ]; then
+          echo "✅ VSIX package found in builds directory"
+          cp "builds/v${{ steps.version.outputs.version }}/${{ steps.version.outputs.vsix_name }}" .
+        elif [ -f "${{ steps.version.outputs.vsix_name }}" ]; then
+          echo "✅ VSIX package found in root directory"
+        else
+          echo "❌ VSIX package not found"
+          exit 1
+        fi
+        
+        # Validate package size
+        SIZE=$(stat -f%z "${{ steps.version.outputs.vsix_name }}" 2>/dev/null || stat -c%s "${{ steps.version.outputs.vsix_name }}")
+        echo "Package size: $((SIZE / 1024 / 1024)) MB"
+        
+        if [ $SIZE -gt 104857600 ]; then
+          echo "⚠️ Package exceeds 100MB"
+        fi
+    
+    - name: Upload VSIX artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: vscode-extension
+        path: vscode/${{ steps.version.outputs.vsix_name }}
+
+  publish-vscode:
+    name: Publish to VS Code Marketplace
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.inputs.publish_vscode == 'true'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+    
+    - name: Download VSIX
+      uses: actions/download-artifact@v4
+      with:
+        name: vscode-extension
+    
+    - name: Install vsce
+      run: npm install -g @vscode/vsce
+    
+    - name: Publish to VS Code Marketplace
+      run: |
+        vsce publish --packagePath "${{ needs.build.outputs.vsix_name }}"
+      env:
+        VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      continue-on-error: true
+
+  publish-openvsx:
+    name: Publish to Open VSX Registry
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.inputs.publish_openvsx == 'true'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+    
+    - name: Download VSIX
+      uses: actions/download-artifact@v4
+      with:
+        name: vscode-extension
+    
+    - name: Install ovsx
+      run: npm install -g ovsx
+    
+    - name: Get publisher name
+      id: publisher
+      working-directory: ./vscode
+      run: |
+        PUBLISHER=$(node -p "require('./package.json').publisher")
+        echo "publisher=${PUBLISHER}" >> $GITHUB_OUTPUT
+    
+    - name: Create namespace if needed
+      run: |
+        ovsx create-namespace "${{ steps.publisher.outputs.publisher }}" || true
+      env:
+        OVSX_PAT: ${{ secrets.OVSX_PAT }}
+      continue-on-error: true
+    
+    - name: Publish to Open VSX
+      run: |
+        ovsx publish "${{ needs.build.outputs.vsix_name }}"
+      env:
+        OVSX_PAT: ${{ secrets.OVSX_PAT }}
+      continue-on-error: true
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build, publish-vscode, publish-openvsx]
+    runs-on: ubuntu-latest
+    if: always() && needs.build.result == 'success'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Download VSIX
+      uses: actions/download-artifact@v4
+      with:
+        name: vscode-extension
+    
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Get the previous vscode tag
+        PREV_TAG=$(git describe --tags --match "vscode-v*" --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        
+        if [ -z "$PREV_TAG" ]; then
+          echo "No previous VS Code extension tag found"
+          COMMITS=$(git log --pretty=format:"- %s (%an)" --no-merges -n 20)
+        else
+          echo "Previous tag: $PREV_TAG"
+          COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%an)" --no-merges)
+        fi
+        
+        # Create changelog
+        cat > RELEASE_NOTES.md << EOF
+        ## PKM Assistant VS Code Extension v${{ needs.build.outputs.version }}
+        
+        ### What's Changed
+        
+        ${COMMITS}
+        
+        ### Installation
+        
+        #### From Marketplace
+        - **VS Code Marketplace**: [Install from Marketplace](https://marketplace.visualstudio.com/items?itemName=pkm-assistant.pkm-assistant)
+        - **Open VSX Registry**: [Install from Open VSX](https://open-vsx.org/extension/pkm-assistant/pkm-assistant)
+        
+        #### Manual Installation
+        Download the \`.vsix\` file from the assets below and install using:
+        \`\`\`bash
+        code --install-extension ${{ needs.build.outputs.vsix_name }}
+        \`\`\`
+        
+        ### Features
+        - Personal Knowledge Management integration
+        - Browser history tracking and analysis  
+        - Semantic search across visited pages
+        - AI-powered content categorization
+        - Native messaging with browser extension
+        
+        ### Requirements
+        - VS Code 1.99.0 or higher
+        - Node.js 18.0.0 or higher
+        - PKM Browser Extension (for full functionality)
+        EOF
+        
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        cat RELEASE_NOTES.md >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        name: VS Code Extension v${{ needs.build.outputs.version }}
+        body: ${{ steps.changelog.outputs.changelog }}
+        files: ${{ needs.build.outputs.vsix_name }}
+        prerelease: ${{ github.event.inputs.prerelease == 'true' }}
+        generate_release_notes: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  summary:
+    name: Publishing Summary
+    needs: [build, publish-vscode, publish-openvsx, create-release]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Generate Summary
+      run: |
+        echo "# VS Code Extension Publishing Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Version: ${{ needs.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "### Publishing Status" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ needs.publish-vscode.result }}" == "success" ]; then
+          echo "✅ **VS Code Marketplace**: Published successfully" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.publish-vscode.result }}" == "skipped" ]; then
+          echo "⏭️ **VS Code Marketplace**: Skipped" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **VS Code Marketplace**: Failed or not completed" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ "${{ needs.publish-openvsx.result }}" == "success" ]; then
+          echo "✅ **Open VSX Registry**: Published successfully" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.publish-openvsx.result }}" == "skipped" ]; then
+          echo "⏭️ **Open VSX Registry**: Skipped" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **Open VSX Registry**: Failed or not completed" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ "${{ needs.create-release.result }}" == "success" ]; then
+          echo "✅ **GitHub Release**: Created successfully" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **GitHub Release**: Failed or not completed" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "1. Check the marketplaces for the published extension" >> $GITHUB_STEP_SUMMARY
+        echo "2. Test installation from both marketplaces" >> $GITHUB_STEP_SUMMARY
+        echo "3. Announce the release" >> $GITHUB_STEP_SUMMARY
