@@ -68,7 +68,7 @@ describe('ConfigManager', () => {
       const result = ConfigManager.get_memory_config();
       
       expect(result).toEqual({ enabled: true });
-      expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('pkm-assistant.agentMemory');
+      expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('mindsteep.agentMemory');
       expect(mock_config.get).toHaveBeenCalledWith('enabled', true);
     });
 

@@ -1,7 +1,7 @@
 {
-  "name": "@pkm-assistant/browser-extension",
+  "name": "@mindsteep/browser-extension",
   "version": "0.1.0",
-  "description": "PKM Assistant Browser Extension - Captures and tracks web browsing for knowledge management",
+  "description": "Mindsteep Browser Extension - Steeping knowledge from your web browsing patterns",
   "main": "index.js",
   "type": "module",
   "scripts": {

@@ -95,7 +95,7 @@ describe('CommandManager', () => {
       command_manager.register_all();
 
       expect(vscode.commands.registerCommand).toHaveBeenCalledWith(
-        'pkm-assistant.showFilterMetrics',
+        'mindsteep.showFilterMetrics',
         expect.any(Function)
       );
       expect(mock_context.subscriptions.push).toHaveBeenCalledWith(mock_command);
@@ -161,7 +161,7 @@ describe('CommandManager', () => {
       const mock_command_handler = jest.fn();
       (vscode.commands.registerCommand as jest.Mock).mockImplementation(
         (command, handler) => {
-          if (command === 'pkm-assistant.showFilterMetrics') {
+          if (command === 'mindsteep.showFilterMetrics') {
             mock_command_handler.mockImplementation(handler);
           }
           return { dispose: jest.fn() };
@@ -197,7 +197,7 @@ describe('CommandManager', () => {
       const mock_command_handler = jest.fn();
       (vscode.commands.registerCommand as jest.Mock).mockImplementation(
         (command, handler) => {
-          if (command === 'pkm-assistant.showFilterMetrics') {
+          if (command === 'mindsteep.showFilterMetrics') {
             mock_command_handler.mockImplementation(handler);
           }
           return { dispose: jest.fn() };
@@ -232,7 +232,7 @@ describe('CommandManager', () => {
       const mock_command_handler = jest.fn();
       (vscode.commands.registerCommand as jest.Mock).mockImplementation(
         (command, handler) => {
-          if (command === 'pkm-assistant.showFilterMetrics') {
+          if (command === 'mindsteep.showFilterMetrics') {
             mock_command_handler.mockImplementation(handler);
           }
           return { dispose: jest.fn() };
@@ -281,7 +281,7 @@ describe('CommandManager', () => {
       const mock_command_handler = jest.fn();
       (vscode.commands.registerCommand as jest.Mock).mockImplementation(
         (command, handler) => {
-          if (command === 'pkm-assistant.showFilterMetrics') {
+          if (command === 'mindsteep.showFilterMetrics') {
             mock_command_handler.mockImplementation(handler);
           }
           return { dispose: jest.fn() };

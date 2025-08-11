@@ -13,7 +13,7 @@ import { BrowserInfo, BrowserType, NativeHostManifest, PlatformPaths, EXTENSION_
  */
 export class NativeHostInstaller {
   private platform: NodeJS.Platform;
-  private nativeHostName = 'com.pkm_assistant.native';
+  private nativeHostName = 'com.mindsteep.native';
 
   constructor(private context: vscode.ExtensionContext) {
     this.platform = process.platform;

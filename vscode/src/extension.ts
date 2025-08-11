@@ -31,7 +31,7 @@ let command_manager: CommandManager;
  * ```typescript
  * // This function is automatically called by VS Code when the extension activates
  * // Users need to configure the OpenAI API key in VS Code settings:
- * // "pkm-assistant.openaiApiKey": "your-openai-key"
+ * // "mindsteep.openaiApiKey": "your-openai-key"
  * ```
  */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {

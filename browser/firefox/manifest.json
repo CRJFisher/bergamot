@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "PKM Navigation Tracker",
+  "name": "Mindsteep",
   "version": "1.0",
-  "description": "Tracks browsing navigation chains for personal knowledge management.",
+  "description": "Steep knowledge from your web browsing patterns.",
   "permissions": ["scripting", "webRequest", "tabs", "activeTab", "nativeMessaging"],
   "host_permissions": ["<all_urls>"],
   "background": {
@@ -17,11 +17,11 @@
     }
   ],
   "action": {
-    "default_title": "PKM Navigation Tracker"
+    "default_title": "Mindsteep"
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "pkm-assistant@example.com"
+      "id": "mindsteep@example.com"
     }
   }
 } 

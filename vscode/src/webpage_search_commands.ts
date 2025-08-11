@@ -17,7 +17,7 @@ export function register_webpage_search_commands(
 ): void {
   // Command to search webpages
   const search_webpages_command = vscode.commands.registerCommand(
-    "pkm-assistant.searchWebpages",
+    "mindsteep.searchWebpages",
     async () => {
       // Get search query from user
       const query = await vscode.window.showInputBox({

@@ -153,21 +153,21 @@ export class ConnectionVerifier {
         manifestPath = path.join(
           os.homedir(),
           'Library/Application Support/Google/Chrome/NativeMessagingHosts',
-          'com.pkm_assistant.native.json'
+          'com.mindsteep.native.json'
         );
         break;
       case 'win32':
         manifestPath = path.join(
           os.homedir(),
           'AppData/Roaming/Mozilla/NativeMessagingHosts',
-          'com.pkm_assistant.native.json'
+          'com.mindsteep.native.json'
         );
         break;
       case 'linux':
         manifestPath = path.join(
           os.homedir(),
           '.config/google-chrome/NativeMessagingHosts',
-          'com.pkm_assistant.native.json'
+          'com.mindsteep.native.json'
         );
         break;
       default:
@@ -177,9 +177,9 @@ export class ConnectionVerifier {
     if (!fs.existsSync(manifestPath)) {
       // Try Firefox path as fallback
       const firefoxPaths: Record<string, string> = {
-        darwin: path.join(os.homedir(), 'Library/Application Support/Mozilla/NativeMessagingHosts', 'com.pkm_assistant.native.json'),
-        win32: path.join(os.homedir(), 'AppData/Roaming/Mozilla/NativeMessagingHosts', 'com.pkm_assistant.native.json'),
-        linux: path.join(os.homedir(), '.mozilla/native-messaging-hosts', 'com.pkm_assistant.native.json')
+        darwin: path.join(os.homedir(), 'Library/Application Support/Mozilla/NativeMessagingHosts', 'com.mindsteep.native.json'),
+        win32: path.join(os.homedir(), 'AppData/Roaming/Mozilla/NativeMessagingHosts', 'com.mindsteep.native.json'),
+        linux: path.join(os.homedir(), '.mozilla/native-messaging-hosts', 'com.mindsteep.native.json')
       };
 
       manifestPath = firefoxPaths[platform];

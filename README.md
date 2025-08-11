@@ -1,13 +1,13 @@
-# PKM Assistant
+# Mindsteep
 
-> Personal Knowledge Management tools for developers - Capture, organize, and retrieve knowledge from your web browsing
+> Steep knowledge from your web browsing patterns - A mindful approach to personal knowledge management
 
 ## Overview
 
-PKM Assistant is a comprehensive personal knowledge management system that helps developers capture and organize information from their web browsing. It consists of:
+Mindsteep is a comprehensive personal knowledge management system that helps you steep and extract knowledge from your web browsing patterns. Like brewing the perfect cup of tea, Mindsteep lets your web experiences steep into rich, accessible knowledge. It consists of:
 
-- **VS Code Extension** (`@pkm-assistant/vscode`) - Manage your knowledge base, search captured content, and get AI-powered insights
-- **Browser Extension** (`@pkm-assistant/browser-extension`) - Automatically capture and categorize webpages you visit
+- **VS Code Extension** (`@mindsteep/vscode`) - Manage your knowledge base, search captured content, and get AI-powered insights
+- **Browser Extension** (`@mindsteep/browser-extension`) - Automatically capture and categorize webpages you visit
 
 ## Features
 
@@ -47,7 +47,7 @@ PKM Assistant is a comprehensive personal knowledge management system that helps
 1. **Install the VS Code Extension**
    ```bash
    # From VS Code
-   ext install pkm-assistant.pkm-assistant
+   ext install mindsteep.mindsteep
    ```
 
 2. **Install the Browser Extension**

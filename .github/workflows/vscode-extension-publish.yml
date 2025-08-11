@@ -240,7 +240,7 @@ jobs:
         
         # Create changelog
         cat > RELEASE_NOTES.md << EOF
-        ## PKM Assistant VS Code Extension v${{ needs.build.outputs.version }}
+        ## Mindsteep VS Code Extension v${{ needs.build.outputs.version }}
         
         ### What's Changed
         
@@ -249,8 +249,8 @@ jobs:
         ### Installation
         
         #### From Marketplace
-        - **VS Code Marketplace**: [Install from Marketplace](https://marketplace.visualstudio.com/items?itemName=pkm-assistant.pkm-assistant)
-        - **Open VSX Registry**: [Install from Open VSX](https://open-vsx.org/extension/pkm-assistant/pkm-assistant)
+        - **VS Code Marketplace**: [Install from Marketplace](https://marketplace.visualstudio.com/items?itemName=mindsteep.mindsteep)
+        - **Open VSX Registry**: [Install from Open VSX](https://open-vsx.org/extension/mindsteep/mindsteep)
         
         #### Manual Installation
         Download the \`.vsix\` file from the assets below and install using:

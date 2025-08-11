@@ -2,7 +2,7 @@ import { FilterConfig } from '../workflow/webpage_filter';
 import * as vscode from 'vscode';
 
 export function get_filter_config(): FilterConfig {
-  const config = vscode.workspace.getConfiguration('pkm-assistant.webpageFilter');
+  const config = vscode.workspace.getConfiguration('mindsteep.webpageFilter');
   
   return {
     enabled: config.get<boolean>('enabled', true),

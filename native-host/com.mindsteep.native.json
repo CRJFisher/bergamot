@@ -1,0 +1,10 @@
+{
+  "name": "com.mindsteep.native",
+  "description": "Native messaging host for Mindsteep",
+  "path": "NATIVE_HOST_PATH",
+  "type": "stdio",
+  "allowed_extensions": ["mindsteep@example.com"],
+  "allowed_origins": [
+    "chrome-extension://CHROME_EXTENSION_ID/"
+  ]
+}

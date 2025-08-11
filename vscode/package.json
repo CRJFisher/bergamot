@@ -1,9 +1,9 @@
 {
-  "name": "pkm-assistant",
-  "displayName": "PKM Assistant",
-  "description": "Personal Knowledge Management Assistant for VS Code",
+  "name": "mindsteep",
+  "displayName": "Mindsteep",
+  "description": "Steep knowledge from your browsing patterns in VS Code",
   "version": "0.1.0",
-  "publisher": "pkm-assistant",
+  "publisher": "mindsteep",
   "engines": {
     "vscode": "^1.99.0",
     "node": ">=18.0.0"
@@ -13,8 +13,11 @@
     "Productivity"
   ],
   "keywords": [
-    "pkm",
+    "mindsteep",
     "knowledge-management",
+    "pkm",
+    "web-memory",
+    "browser-history",
     "note-taking",
     "webpage-capture"
   ],
@@ -26,81 +29,81 @@
   "contributes": {
     "commands": [
       {
-        "command": "pkm-assistant.addHighlight",
+        "command": "mindsteep.addHighlight",
         "title": "Add Highlight to Bullet Point"
       },
       {
-        "command": "pkm-assistant.showFilterMetrics",
-        "title": "PKM Assistant: Show Filter Metrics"
+        "command": "mindsteep.showFilterMetrics",
+        "title": "Mindsteep: Show Filter Metrics"
       },
       {
-        "command": "pkm-assistant.generateFilteringReview",
-        "title": "PKM Assistant: Generate Filtering Review"
+        "command": "mindsteep.generateFilteringReview",
+        "title": "Mindsteep: Generate Filtering Review"
       },
       {
-        "command": "pkm-assistant.showMemoryStats",
-        "title": "PKM Assistant: Show Memory Statistics"
+        "command": "mindsteep.showMemoryStats",
+        "title": "Mindsteep: Show Memory Statistics"
       },
       {
-        "command": "pkm-assistant.correctDecision",
-        "title": "PKM Assistant: Correct Filtering Decision"
+        "command": "mindsteep.correctDecision",
+        "title": "Mindsteep: Correct Filtering Decision"
       },
       {
-        "command": "pkm-assistant.correctType",
-        "title": "PKM Assistant: Correct Page Type"
+        "command": "mindsteep.correctType",
+        "title": "Mindsteep: Correct Page Type"
       },
       {
-        "command": "pkm-assistant.addExplanation",
-        "title": "PKM Assistant: Add Feedback Explanation"
+        "command": "mindsteep.addExplanation",
+        "title": "Mindsteep: Add Feedback Explanation"
       },
       {
-        "command": "pkm-assistant.searchWebpages",
-        "title": "PKM Assistant: Search Webpages"
+        "command": "mindsteep.searchWebpages",
+        "title": "Mindsteep: Search Webpages"
       },
       {
-        "command": "pkm-assistant.createFilterRule",
-        "title": "PKM Assistant: Create Filter Rule"
+        "command": "mindsteep.createFilterRule",
+        "title": "Mindsteep: Create Filter Rule"
       },
       {
-        "command": "pkm-assistant.manageFilterRules",
-        "title": "PKM Assistant: Manage Filter Rules"
+        "command": "mindsteep.manageFilterRules",
+        "title": "Mindsteep: Manage Filter Rules"
       },
       {
-        "command": "pkm-assistant.createDomainRule",
-        "title": "PKM Assistant: Create Domain Rule"
+        "command": "mindsteep.createDomainRule",
+        "title": "Mindsteep: Create Domain Rule"
       },
       {
-        "command": "pkm-assistant.createContentPatternRule",
-        "title": "PKM Assistant: Create Content Pattern Rule"
+        "command": "mindsteep.createContentPatternRule",
+        "title": "Mindsteep: Create Content Pattern Rule"
       },
       {
-        "command": "pkm-assistant.showRuleStatistics",
-        "title": "PKM Assistant: Show Rule Statistics"
+        "command": "mindsteep.showRuleStatistics",
+        "title": "Mindsteep: Show Rule Statistics"
       },
       {
-        "command": "pkm-assistant.exportFilterRules",
-        "title": "PKM Assistant: Export Filter Rules"
+        "command": "mindsteep.exportFilterRules",
+        "title": "Mindsteep: Export Filter Rules"
       },
       {
-        "command": "pkm-assistant.importFilterRules",
-        "title": "PKM Assistant: Import Filter Rules"
+        "command": "mindsteep.importFilterRules",
+        "title": "Mindsteep: Import Filter Rules"
       }
     ],
     "configuration": {
       "title": "PKM Assistant",
       "properties": {
-        "pkm-assistant.openaiApiKey": {
+        "mindsteep.openaiApiKey": {
           "type": "string",
           "default": "",
           "description": "Your OpenAI API key for the PKM Assistant",
           "scope": "application"
         },
-        "pkm-assistant.webpageFilter.enabled": {
+        "mindsteep.webpageFilter.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Enable webpage filtering based on content type"
         },
-        "pkm-assistant.webpageFilter.allowedTypes": {
+        "mindsteep.webpageFilter.allowedTypes": {
           "type": "array",
           "default": [
             "knowledge"
@@ -118,31 +121,31 @@
             ]
           }
         },
-        "pkm-assistant.webpageFilter.minConfidence": {
+        "mindsteep.webpageFilter.minConfidence": {
           "type": "number",
           "default": 0.7,
           "minimum": 0,
           "maximum": 1,
           "description": "Minimum confidence threshold for page classification"
         },
-        "pkm-assistant.webpageFilter.logDecisions": {
+        "mindsteep.webpageFilter.logDecisions": {
           "type": "boolean",
           "default": true,
           "description": "Log filtering decisions to console"
         },
-        "pkm-assistant.agentMemory.enabled": {
+        "mindsteep.agentMemory.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Enable agent memory for learning from feedback"
         },
-        "pkm-assistant.agentMemory.recentPagesDays": {
+        "mindsteep.agentMemory.recentPagesDays": {
           "type": "number",
           "default": 7,
           "minimum": 1,
           "maximum": 30,
           "description": "Days to show accepted pages in feedback document"
         },
-        "pkm-assistant.agentMemory.filteredPagesHours": {
+        "mindsteep.agentMemory.filteredPagesHours": {
           "type": "number",
           "default": 48,
           "minimum": 1,
@@ -204,11 +207,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/pkm-assistant.git"
+    "url": "https://github.com/your-username/mindsteep.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/pkm-assistant/issues"
+    "url": "https://github.com/your-username/mindsteep/issues"
   },
-  "homepage": "https://github.com/your-username/pkm-assistant#readme",
+  "homepage": "https://github.com/your-username/mindsteep#readme",
   "license": "MIT"
 }
