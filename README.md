@@ -12,24 +12,28 @@ Mindsteep is a comprehensive personal knowledge management system that helps you
 ## Features
 
 ### 🌐 Smart Web Capture
+
 - Automatically captures webpages you visit
 - AI-powered content filtering (focuses on knowledge-rich content)
 - Preserves navigation context and referrer chains
 - Compressed storage for efficiency
 
 ### 🔍 Powerful Search & Retrieval
+
 - Semantic search across all captured content
 - Quick access via VS Code command palette
 - Hover tooltips showing webpage metadata
 - MCP (Model Context Protocol) integration for AI agents
 
 ### 🧠 Intelligent Filtering
+
 - Machine learning-based page classification
 - Customizable filtering rules
 - Agent memory that learns from your feedback
 - Review and correct filtering decisions
 
 ### 📊 Analytics & Insights
+
 - Filter metrics and statistics
 - Memory usage tracking
 - Webpage relationship visualization
@@ -45,12 +49,14 @@ Mindsteep is a comprehensive personal knowledge management system that helps you
 ### Quick Start
 
 1. **Install the VS Code Extension**
+
    ```bash
    # From VS Code
    ext install mindsteep.mindsteep
    ```
 
 2. **Install the Browser Extension**
+
    - Chrome: [Chrome Web Store](#) (coming soon)
    - Firefox: [Firefox Add-ons](#) (coming soon)
    - Or build from source (see Development section)
@@ -135,11 +141,13 @@ npm run release
 ### Testing the Extensions
 
 **VS Code Extension:**
+
 1. Open the project in VS Code
 2. Press F5 to launch Extension Development Host
 3. Test commands in the new VS Code window
 
 **Browser Extension:**
+
 ```bash
 cd packages/browser
 npm run chrome:debug  # Launches Chrome with extension loaded
@@ -149,13 +157,13 @@ npm run chrome:debug  # Launches Chrome with extension loaded
 
 ### VS Code Settings
 
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `pkm-assistant.openaiApiKey` | Your OpenAI API key | - |
-| `pkm-assistant.webpageFilter.enabled` | Enable AI filtering | `true` |
-| `pkm-assistant.webpageFilter.allowedTypes` | Page types to capture | `["knowledge"]` |
-| `pkm-assistant.webpageFilter.minConfidence` | Min confidence for classification | `0.7` |
-| `pkm-assistant.agentMemory.enabled` | Enable learning from feedback | `true` |
+| Setting                                     | Description                       | Default         |
+| ------------------------------------------- | --------------------------------- | --------------- |
+| `pkm-assistant.openaiApiKey`                | Your OpenAI API key               | -               |
+| `pkm-assistant.webpageFilter.enabled`       | Enable AI filtering               | `true`          |
+| `pkm-assistant.webpageFilter.allowedTypes`  | Page types to capture             | `["knowledge"]` |
+| `pkm-assistant.webpageFilter.minConfidence` | Min confidence for classification | `0.7`           |
+| `pkm-assistant.agentMemory.enabled`         | Enable learning from feedback     | `true`          |
 
 ## Architecture
 
