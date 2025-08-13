@@ -1,42 +1,59 @@
 # Bergamot
 
-> Steep knowledge from your web browsing patterns - A mindful approach to personal knowledge management
+> Transform your web browsing into a queryable knowledge base accessible via MCP for AI-powered PKM workflows
+
+## Why Bergamot?
+
+Every day, you browse dozens of valuable webpages - documentation, tutorials, articles, and research. But this knowledge gets lost in browser history. Bergamot solves this by:
+
+1. **Automatic Capture**: Silently captures knowledge-rich pages as you browse
+2. **Intelligent Storage**: Stores content in both structured and vector databases
+3. **MCP Access**: Exposes your knowledge to AI agents for powerful PKM workflows
+4. **Semantic Search**: Find information using natural language, not just keywords
+
+The result? Your browsing becomes a permanent, searchable knowledge base that AI assistants can query to help with research, writing, learning, and problem-solving.
 
 ## Overview
 
-Bergamot is a comprehensive personal knowledge management system that helps you steep and extract knowledge from your web browsing patterns. Like brewing the perfect cup of tea, Bergamot lets your web experiences steep into rich, accessible knowledge. It consists of:
+Bergamot automatically captures knowledge-rich webpages as you browse, stores them in a searchable database, and exposes them through an MCP server for AI-powered knowledge management tasks. It transforms your browsing history into a queryable knowledge base that you can access programmatically or through intuitive interfaces.
 
-- **VS Code Extension** (`@bergamot/vscode`) - Manage your knowledge base, search captured content, and get AI-powered insights
-- **Browser Extension** (`@bergamot/browser-extension`) - Automatically capture and categorize webpages you visit
+### Core Components
 
-## Features
+- **Browser Extension** (`@bergamot/browser-extension`) - Captures and filters webpages you visit, focusing on knowledge-rich content
+- **VS Code Extension** (`@bergamot/vscode`) - Provides search, management, and MCP server for accessing your knowledge base
+- **MCP Server** - Exposes your browsing knowledge to AI agents for RAG queries and PKM workflows
 
-### 🌐 Smart Web Capture
+## Key Features
 
-- Automatically captures webpages you visit
-- AI-powered content filtering (focuses on knowledge-rich content)
-- Preserves navigation context and referrer chains
-- Compressed storage for efficiency
+### 🌐 Intelligent Knowledge Capture
 
-### 🔍 Powerful Search & Retrieval
+- Automatically captures webpages as you browse
+- AI-powered filtering to focus on knowledge-rich content (tutorials, documentation, articles)
+- Preserves full navigation context and referrer chains
+- Stores content in both structured (DuckDB) and vector (LanceDB) databases
 
-- Semantic search across all captured content
-- Quick access via VS Code command palette
-- Hover tooltips showing webpage metadata
-- MCP (Model Context Protocol) integration for AI agents
+### 🔍 MCP-Powered Knowledge Access
 
-### 🧠 Intelligent Filtering
+- **MCP Server** with two primary tools:
+  - `semantic_search`: Query your knowledge base using natural language
+  - `get_webpage_content`: Retrieve full content of specific pages
+- Semantic vector search across all captured content
+- Direct integration with AI agents (Claude, ChatGPT, etc.) for RAG workflows
+- VS Code command palette for quick searches
 
-- Machine learning-based page classification
-- Customizable filtering rules
-- Agent memory that learns from your feedback
-- Review and correct filtering decisions
+### 🧠 Smart Content Classification
 
-### 📊 Analytics & Insights
+- ML-based classification to identify knowledge vs. transient content
+- Learns from your feedback to improve filtering accuracy
+- Customizable rules for domains and content patterns
+- Review interface to correct misclassifications
 
-- Filter metrics and statistics
-- Memory usage tracking
-- Webpage relationship visualization
+### 📊 Knowledge Base Management
+
+- Storage metrics and statistics
+- Browse captured pages by domain, date, or topic
+- Visualize relationships between related pages
+- Export capabilities for backup and migration
 
 ## Installation
 
@@ -44,7 +61,7 @@ Bergamot is a comprehensive personal knowledge management system that helps you 
 
 - Node.js >= 18.0.0
 - VS Code >= 1.60.0
-- Chrome or Firefox browser
+- Chrome, Firefox or Edge browser
 
 ### Quick Start
 
@@ -57,8 +74,8 @@ Bergamot is a comprehensive personal knowledge management system that helps you 
 
 2. **Install the Browser Extension**
 
-   - Chrome: [Chrome Web Store](#) (coming soon)
-   - Firefox: [Firefox Add-ons](#) (coming soon)
+   - Chrome: Chrome Web Store (coming soon)
+   - Firefox: Firefox Add-ons (coming soon)
    - Or build from source (see Development section)
 
 3. **Configure OpenAI API Key**
@@ -68,23 +85,73 @@ Bergamot is a comprehensive personal knowledge management system that helps you 
 
 ## Usage
 
-### Capturing Webpages
+### Building Your Knowledge Base
 
-1. Install and activate the browser extension
-2. Browse normally - pages are automatically captured
-3. Knowledge-rich pages are processed and stored
+1. Install the browser extension
+2. Browse normally - Bergamot automatically captures knowledge-rich pages
+3. Pages are processed, embedded, and stored for future retrieval
 
-### Searching Your Knowledge Base
+### Accessing Your Knowledge via MCP
 
-- **Command Palette**: `Bergamot: Search Webpages`
-- **Hover over links**: See metadata for captured pages
-- **MCP Integration**: Use with AI agents for RAG queries
+The MCP server enables AI agents to query your browsing knowledge:
+
+```javascript
+// Example: Using with Claude or other MCP-compatible agents
+await use_mcp_tool("semantic_search", {
+  query: "React hooks best practices"
+});
+
+await use_mcp_tool("get_webpage_content", {
+  session_id: "abc123"
+});
+```
+
+### Direct Search in VS Code
+
+- **Command Palette**: `Bergamot: Search Webpages` - Semantic search
+- **Hover over links**: View metadata for captured pages
+- **Quick access**: Recent and frequently accessed pages
 
 ### Managing Filters
 
 - **Review filtered pages**: `Bergamot: Generate Filtering Review`
 - **Correct decisions**: Click correction links in the review document
 - **View metrics**: `Bergamot: Show Filter Metrics`
+
+## MCP Server Integration
+
+Bergamot includes a built-in MCP (Model Context Protocol) server that exposes your browsing knowledge to AI agents. This enables powerful PKM workflows where AI assistants can access your captured web knowledge.
+
+### Available MCP Tools
+
+#### `semantic_search`
+
+Search through your browsing history using natural language queries. Returns relevant webpages based on semantic similarity.
+
+**Parameters:**
+
+- `query` (string): Your search query in natural language
+- `limit` (number, optional): Maximum results to return (default: 10)
+
+**Returns:** List of relevant webpages with titles, URLs, summaries, and relevance scores
+
+#### `get_webpage_content`
+
+Retrieve the full markdown content of a specific webpage from your knowledge base.
+
+**Parameters:**
+
+- `session_id` (string): The unique ID of the webpage session
+
+**Returns:** Full markdown content of the webpage
+
+### Use Cases
+
+- **Research Assistant**: AI agents can search your browsing history to find relevant information
+- **Knowledge Synthesis**: Combine information from multiple captured pages
+- **Citation Generation**: Automatically generate references from your browsing
+- **Content Creation**: Use captured knowledge as context for writing
+- **Learning Review**: Query past learning materials and documentation
 
 ## Development
 
@@ -106,7 +173,7 @@ npm run build
 
 ### Project Structure
 
-```
+```text
 bergamot/
 ├── packages/
 │   ├── vscode/        # VS Code extension
