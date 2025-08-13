@@ -1,10 +1,10 @@
-# @pkm-assistant/browser-extension
+# @bergamot/browser-extension
 
-> Browser extension for PKM Assistant - Captures and tracks web browsing for knowledge management
+> Browser extension for Bergamot - Captures and tracks web browsing for knowledge management
 
 ## Overview
 
-This browser extension works with the PKM Assistant VS Code extension to automatically capture and categorize webpages you visit. It tracks navigation patterns, preserves context, and sends page content for AI-powered analysis.
+This browser extension works with the Bergamot VS Code extension to automatically capture and categorize webpages you visit. It tracks navigation patterns, preserves context, and sends page content for AI-powered analysis.
 
 ## Features
 
@@ -20,8 +20,8 @@ This browser extension works with the PKM Assistant VS Code extension to automat
 
 ```bash
 # Clone and build
-git clone https://github.com/your-username/pkm-assistant.git
-cd pkm-assistant/packages/browser
+git clone https://github.com/bergamot/bergamot.git
+cd bergamot/packages/browser
 npm install
 npm run build
 ```

@@ -1,0 +1,10 @@
+{
+  "name": "com.bergamot.native",
+  "description": "Native messaging host for Bergamot",
+  "path": "NATIVE_HOST_PATH",
+  "type": "stdio",
+  "allowed_extensions": ["bergamot@example.com"],
+  "allowed_origins": [
+    "chrome-extension://CHROME_EXTENSION_ID/"
+  ]
+}

@@ -1,6 +1,6 @@
 # Browser Extension Publishing Guide
 
-This guide covers the complete process of publishing the PKM Navigation Tracker browser extension to various browser stores.
+This guide covers the complete process of publishing the Bergamot Navigation Tracker browser extension to various browser stores.
 
 ## Table of Contents
 - [Prerequisites](#prerequisites)
@@ -337,7 +337,7 @@ EDGE_ACCESS_TOKEN_URL: 'your-token-url'  # Optional
 
 ## Support
 
-- GitHub Issues: [Report problems](https://github.com/[your-username]/pkm-assistant/issues)
+- GitHub Issues: [Report problems](https://github.com/bergamot/bergamot/issues)
 - Documentation: [Full docs](../README.md)
 - Store Dashboards:
   - [Chrome](https://chrome.google.com/webstore/devconsole)

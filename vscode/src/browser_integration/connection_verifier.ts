@@ -91,7 +91,7 @@ export class ConnectionVerifier {
    * Checks if the native host is installed
    */
   private async check_native_host(): Promise<boolean> {
-    const hostPath = path.join(os.homedir(), '.pkm-assistant', 'native_host.js');
+    const hostPath = path.join(os.homedir(), '.bergamot', 'native_host.js');
     return fs.existsSync(hostPath);
   }
 
@@ -99,7 +99,7 @@ export class ConnectionVerifier {
    * Checks if the VS Code server is running
    */
   private async check_vscode_server(): Promise<boolean> {
-    const portFile = path.join(os.homedir(), '.pkm-assistant', 'port.json');
+    const portFile = path.join(os.homedir(), '.bergamot', 'port.json');
     
     if (!fs.existsSync(portFile)) {
       return false;
@@ -153,21 +153,21 @@ export class ConnectionVerifier {
         manifestPath = path.join(
           os.homedir(),
           'Library/Application Support/Google/Chrome/NativeMessagingHosts',
-          'com.mindsteep.native.json'
+          'com.bergamot.native.json'
         );
         break;
       case 'win32':
         manifestPath = path.join(
           os.homedir(),
           'AppData/Roaming/Mozilla/NativeMessagingHosts',
-          'com.mindsteep.native.json'
+          'com.bergamot.native.json'
         );
         break;
       case 'linux':
         manifestPath = path.join(
           os.homedir(),
           '.config/google-chrome/NativeMessagingHosts',
-          'com.mindsteep.native.json'
+          'com.bergamot.native.json'
         );
         break;
       default:
@@ -177,9 +177,9 @@ export class ConnectionVerifier {
     if (!fs.existsSync(manifestPath)) {
       // Try Firefox path as fallback
       const firefoxPaths: Record<string, string> = {
-        darwin: path.join(os.homedir(), 'Library/Application Support/Mozilla/NativeMessagingHosts', 'com.mindsteep.native.json'),
-        win32: path.join(os.homedir(), 'AppData/Roaming/Mozilla/NativeMessagingHosts', 'com.mindsteep.native.json'),
-        linux: path.join(os.homedir(), '.mozilla/native-messaging-hosts', 'com.mindsteep.native.json')
+        darwin: path.join(os.homedir(), 'Library/Application Support/Mozilla/NativeMessagingHosts', 'com.bergamot.native.json'),
+        win32: path.join(os.homedir(), 'AppData/Roaming/Mozilla/NativeMessagingHosts', 'com.bergamot.native.json'),
+        linux: path.join(os.homedir(), '.mozilla/native-messaging-hosts', 'com.bergamot.native.json')
       };
 
       manifestPath = firefoxPaths[platform];

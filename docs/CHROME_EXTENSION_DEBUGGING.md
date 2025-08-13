@@ -1,15 +1,15 @@
 # Chrome Extension Debugging Guide
 
-This guide covers how to build, load, and debug the PKM Navigation Tracker Chrome extension.
+This guide covers how to build, load, and debug the Bergamot Navigation Tracker Chrome extension.
 
 ## Prerequisites
 
 1. **Node.js** installed for building the extension
 2. **Google Chrome** browser installed
 3. **VS Code extension running** (if testing with the backend):
-   - Open the PKM Assistant project in VS Code
+   - Open the Bergamot project in VS Code
    - Press F5 to run the extension
-   - Wait for "PKM Assistant server running at http://localhost:5000"
+   - Wait for "Bergamot server running at http://localhost:5000"
 
 ## Quick Start
 
@@ -48,14 +48,14 @@ npm run chrome   # Just launch Chrome
 3. Enable "Developer mode" (toggle in top right)
 
 4. Click "Load unpacked" and select:
-   `/Users/chuck/workspace/pkm-assistant/referrer_tracker_extension/chrome`
+   `/Users/chuck/workspace/bergamot/referrer_tracker_extension/chrome`
 
 ## Debugging the Extension
 
 ### Background Script (Service Worker)
 
 1. In Chrome, go to `chrome://extensions/`
-2. Find "PKM Navigation Tracker"
+2. Find "Bergamot Navigation Tracker"
 3. Click "service worker" link
 4. This opens dedicated DevTools for the background script
 5. Check:

@@ -26,7 +26,7 @@ describe('ConfigManager', () => {
       const result = ConfigManager.get_openai_api_key();
       
       expect(result).toBe('test-api-key-123');
-      expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('pkm-assistant');
+      expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('bergamot');
       expect(mock_config.get).toHaveBeenCalledWith('openaiApiKey');
       expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
     });
@@ -68,7 +68,7 @@ describe('ConfigManager', () => {
       const result = ConfigManager.get_memory_config();
       
       expect(result).toEqual({ enabled: true });
-      expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('mindsteep.agentMemory');
+      expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('bergamot.agentMemory');
       expect(mock_config.get).toHaveBeenCalledWith('enabled', true);
     });
 

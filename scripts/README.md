@@ -1,6 +1,6 @@
-# PKM Assistant - Build & Packaging Scripts
+# Bergamot - Build & Packaging Scripts
 
-This directory contains scripts for building, packaging, and releasing the PKM Assistant extensions.
+This directory contains scripts for building, packaging, and releasing the Bergamot extensions.
 
 ## Packaging Scripts
 
@@ -38,7 +38,7 @@ npm run release:prepare
 
 After running the packaging scripts, you'll find:
 
-- **VS Code Extension**: `vscode/pkm-assistant-*.vsix`
+- **VS Code Extension**: `vscode/bergamot-*.vsix`
 - **Chrome Extension**: `browser/chrome-extension.zip`
 - **Firefox Extension**: `browser/firefox-extension.zip`
 
@@ -66,7 +66,7 @@ After running the packaging scripts, you'll find:
 ### VS Code Extension
 ```bash
 # Install locally
-code --install-extension vscode/pkm-assistant-*.vsix
+code --install-extension vscode/bergamot-*.vsix
 ```
 
 ### Chrome Extension

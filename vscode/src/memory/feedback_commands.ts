@@ -10,11 +10,11 @@ export function register_feedback_commands(
 ): void {
   // Command to generate feedback document
   const generate_feedback_command = vscode.commands.registerCommand(
-    'mindsteep.generateFilteringReview',
+    'bergamot.generateFilteringReview',
     async () => {
       try {
         // Get configuration or use defaults
-        const config = vscode.workspace.getConfiguration('mindsteep.agentMemory');
+        const config = vscode.workspace.getConfiguration('bergamot.agentMemory');
         const recent_days = config.get<number>('recentPagesDays', 7);
         const filtered_hours = config.get<number>('filteredPagesHours', 48);
         
@@ -33,7 +33,7 @@ export function register_feedback_commands(
   
   // Command to correct a decision
   const correct_decision_command = vscode.commands.registerCommand(
-    'mindsteep.correctDecision',
+    'bergamot.correctDecision',
     async (episode_id: string) => {
       try {
         const episodes = await memory_store.get_recent_episodes(720); // Last 30 days
@@ -62,7 +62,7 @@ export function register_feedback_commands(
   
   // Command to correct page type
   const correct_type_command = vscode.commands.registerCommand(
-    'mindsteep.correctType',
+    'bergamot.correctType',
     async (episode_id: string) => {
       try {
         const type_options = [
@@ -107,7 +107,7 @@ export function register_feedback_commands(
   
   // Command to add explanation
   const add_explanation_command = vscode.commands.registerCommand(
-    'mindsteep.addExplanation',
+    'bergamot.addExplanation',
     async (episode_id: string) => {
       try {
         const explanation = await vscode.window.showInputBox({
@@ -147,7 +147,7 @@ export function register_feedback_commands(
   
   // Command to show memory statistics
   const show_stats_command = vscode.commands.registerCommand(
-    'mindsteep.showMemoryStats',
+    'bergamot.showMemoryStats',
     async () => {
       try {
         const stats = await memory_store.get_correction_statistics();

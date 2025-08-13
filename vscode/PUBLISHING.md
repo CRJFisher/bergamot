@@ -1,6 +1,6 @@
 # VS Code Extension Publishing Guide
 
-This guide covers the complete process of publishing the PKM Assistant VS Code extension to various marketplaces.
+This guide covers the complete process of publishing the Bergamot VS Code extension to various marketplaces.
 
 ## Table of Contents
 
@@ -107,13 +107,13 @@ Ensure these fields are properly set:
 
 ```json
 {
-  "name": "pkm-assistant",
-  "displayName": "PKM Assistant",
+  "name": "bergamot",
+  "displayName": "Bergamot",
   "publisher": "your-publisher-id",
   "version": "0.1.0",
   "description": "Your description",
   "categories": ["Other"],
-  "keywords": ["pkm", "knowledge"],
+  "keywords": ["knowledge", "management", "browsing"],
   "engines": {
     "vscode": "^1.99.0"
   },
@@ -219,7 +219,7 @@ cd vscode
 vsce publish
 
 # Method 2: Publish existing VSIX
-vsce publish --packagePath pkm-assistant-0.1.0.vsix
+vsce publish --packagePath bergamot-0.1.0.vsix
 
 # Method 3: With explicit token
 VSCE_PAT=your-token npm run publish:vscode
@@ -259,7 +259,7 @@ Users can install VSIX directly:
 
 ```bash
 # Download from GitHub releases
-curl -L https://github.com/user/repo/releases/download/vscode-v0.1.0/pkm-assistant-0.1.0.vsix -o extension.vsix
+curl -L https://github.com/user/repo/releases/download/vscode-v0.1.0/bergamot-0.1.0.vsix -o extension.vsix
 
 # Install
 code --install-extension extension.vsix
@@ -274,7 +274,7 @@ For corporate environments:
 npm publish --registry https://your-registry.com
 
 # Install from private registry
-code --install-extension your-registry.com/pkm-assistant
+code --install-extension your-registry.com/bergamot
 ```
 
 ## Validation Checklist

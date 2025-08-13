@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Mindsteep Native Host Installation Script
+# Bergamot Native Host Installation Script
 # This script installs the native messaging host for Chrome and Firefox
 
 set -e
@@ -15,7 +15,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 echo "================================================"
-echo "Mindsteep - Native Host Installation"
+echo "Bergamot - Native Host Installation"
 echo "================================================"
 
 # Make native host executable
@@ -27,7 +27,7 @@ OS="$(uname -s)"
 # Function to install manifest for Chrome
 install_chrome() {
     local manifest_dir
-    local manifest_file="com.mindsteep.native.json"
+    local manifest_file="com.bergamot.native.json"
     
     case "$OS" in
         Darwin)
@@ -63,7 +63,7 @@ install_chrome() {
 # Function to install manifest for Firefox
 install_firefox() {
     local manifest_dir
-    local manifest_file="com.mindsteep.native.json"
+    local manifest_file="com.bergamot.native.json"
     
     case "$OS" in
         Darwin)
@@ -110,8 +110,8 @@ fi
 echo -e "${YELLOW}Installing Python dependencies...${NC}"
 pip3 install --user requests
 
-# Create Mindsteep directory
-mkdir -p "$HOME/.mindsteep"
+# Create Bergamot directory
+mkdir -p "$HOME/.bergamot"
 
 # Install for both browsers
 install_chrome
@@ -130,5 +130,5 @@ echo ""
 echo "2. Restart your browsers for changes to take effect"
 echo ""
 echo "3. The native host logs can be found at:"
-echo "   ~/.mindsteep/native-host.log"
+echo "   ~/.bergamot/native-host.log"
 echo ""

@@ -7,7 +7,7 @@ export function register_procedural_rule_commands(
 ): void {
   // Command to create a new rule
   context.subscriptions.push(
-    vscode.commands.registerCommand('mindsteep.createFilterRule', async () => {
+    vscode.commands.registerCommand('bergamot.createFilterRule', async () => {
       const rule = await create_rule_wizard();
       if (rule) {
         try {
@@ -22,14 +22,14 @@ export function register_procedural_rule_commands(
 
   // Command to manage existing rules
   context.subscriptions.push(
-    vscode.commands.registerCommand('mindsteep.manageFilterRules', async () => {
+    vscode.commands.registerCommand('bergamot.manageFilterRules', async () => {
       await show_rule_manager(procedural_store);
     })
   );
 
   // Command to create domain-specific rule
   context.subscriptions.push(
-    vscode.commands.registerCommand('mindsteep.createDomainRule', async () => {
+    vscode.commands.registerCommand('bergamot.createDomainRule', async () => {
       const domain = await vscode.window.showInputBox({
         prompt: 'Enter domain (e.g., example.com)',
         placeHolder: 'example.com'
@@ -83,7 +83,7 @@ export function register_procedural_rule_commands(
 
   // Command to create content pattern rule
   context.subscriptions.push(
-    vscode.commands.registerCommand('mindsteep.createContentPatternRule', async () => {
+    vscode.commands.registerCommand('bergamot.createContentPatternRule', async () => {
       const pattern = await vscode.window.showInputBox({
         prompt: 'Enter keyword or pattern to match in content',
         placeHolder: 'e.g., "important", "TODO:", "/regex pattern/"'
@@ -152,7 +152,7 @@ export function register_procedural_rule_commands(
 
   // Command to show rule statistics
   context.subscriptions.push(
-    vscode.commands.registerCommand('mindsteep.showRuleStatistics', async () => {
+    vscode.commands.registerCommand('bergamot.showRuleStatistics', async () => {
       const stats = await procedural_store.get_rule_statistics();
       
       const panel = vscode.window.createWebviewPanel(
@@ -168,7 +168,7 @@ export function register_procedural_rule_commands(
 
   // Command to export rules
   context.subscriptions.push(
-    vscode.commands.registerCommand('mindsteep.exportFilterRules', async () => {
+    vscode.commands.registerCommand('bergamot.exportFilterRules', async () => {
       const rules_json = await procedural_store.export_rules();
       
       const uri = await vscode.window.showSaveDialog({
@@ -190,7 +190,7 @@ export function register_procedural_rule_commands(
 
   // Command to import rules
   context.subscriptions.push(
-    vscode.commands.registerCommand('mindsteep.importFilterRules', async () => {
+    vscode.commands.registerCommand('bergamot.importFilterRules', async () => {
       const uri = await vscode.window.showOpenDialog({
         canSelectFiles: true,
         canSelectFolders: false,

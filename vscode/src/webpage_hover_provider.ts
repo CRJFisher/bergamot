@@ -187,7 +187,7 @@ export function register_webpage_hover_provider(
 
   // Clear cache when configuration changes
   const config_change = vscode.workspace.onDidChangeConfiguration((e) => {
-    if (e.affectsConfiguration("pkm-assistant")) {
+    if (e.affectsConfiguration("bergamot")) {
       hover_provider.clear_cache();
     }
   });

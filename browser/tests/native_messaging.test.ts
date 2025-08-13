@@ -58,7 +58,7 @@ describe('NativeMessagingService', () => {
       const connected = await service.connect();
       
       expect(connected).toBe(true);
-      expect(mock_runtime.connectNative).toHaveBeenCalledWith('com.mindsteep.native');
+      expect(mock_runtime.connectNative).toHaveBeenCalledWith('com.bergamot.native');
       expect(mock_port.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ type: 'ping' })
       );

@@ -135,7 +135,7 @@ export class CommandManager {
    */
   private register_filter_commands(): void {
     const show_metrics_command = vscode.commands.registerCommand(
-      'mindsteep.showFilterMetrics',
+      'bergamot.showFilterMetrics',
       () => this.show_filter_metrics()
     );
     

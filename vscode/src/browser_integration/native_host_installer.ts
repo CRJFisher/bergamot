@@ -13,7 +13,7 @@ import { BrowserInfo, BrowserType, NativeHostManifest, PlatformPaths, EXTENSION_
  */
 export class NativeHostInstaller {
   private platform: NodeJS.Platform;
-  private nativeHostName = 'com.mindsteep.native';
+  private nativeHostName = 'com.bergamot.native';
 
   constructor(private context: vscode.ExtensionContext) {
     this.platform = process.platform;
@@ -111,7 +111,7 @@ export class NativeHostInstaller {
     switch (this.platform) {
       case 'darwin':
         return {
-          nativeHostDir: path.join(homeDir, '.pkm-assistant'),
+          nativeHostDir: path.join(homeDir, '.bergamot'),
           chromeManifestDir: path.join(homeDir, 'Library/Application Support/Google/Chrome/NativeMessagingHosts'),
           firefoxManifestDir: path.join(homeDir, 'Library/Application Support/Mozilla/NativeMessagingHosts'),
           edgeManifestDir: path.join(homeDir, 'Library/Application Support/Microsoft Edge/NativeMessagingHosts')
@@ -119,14 +119,14 @@ export class NativeHostInstaller {
 
       case 'win32':
         return {
-          nativeHostDir: path.join(homeDir, '.pkm-assistant'),
+          nativeHostDir: path.join(homeDir, '.bergamot'),
           // On Windows, we'll use registry for Chrome/Edge, but still need file paths for Firefox
           firefoxManifestDir: path.join(homeDir, 'AppData/Roaming/Mozilla/NativeMessagingHosts')
         };
 
       case 'linux':
         return {
-          nativeHostDir: path.join(homeDir, '.pkm-assistant'),
+          nativeHostDir: path.join(homeDir, '.bergamot'),
           chromeManifestDir: path.join(homeDir, '.config/google-chrome/NativeMessagingHosts'),
           firefoxManifestDir: path.join(homeDir, '.mozilla/native-messaging-hosts'),
           edgeManifestDir: path.join(homeDir, '.config/microsoft-edge/NativeMessagingHosts')

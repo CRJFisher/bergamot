@@ -97,11 +97,11 @@ export interface PlatformPaths {
  * Extension store URLs
  */
 export const EXTENSION_STORES = {
-  [BrowserType.CHROME]: 'https://chrome.google.com/webstore/detail/pkm-assistant/YOUR_EXTENSION_ID',
-  [BrowserType.FIREFOX]: 'https://addons.mozilla.org/firefox/addon/pkm-assistant/',
-  [BrowserType.EDGE]: 'https://microsoftedge.microsoft.com/addons/detail/pkm-assistant/YOUR_EXTENSION_ID',
-  [BrowserType.BRAVE]: 'https://chrome.google.com/webstore/detail/pkm-assistant/YOUR_EXTENSION_ID',
-  [BrowserType.OPERA]: 'https://addons.opera.com/extensions/details/pkm-assistant/'
+  [BrowserType.CHROME]: 'https://chrome.google.com/webstore/detail/bergamot/YOUR_EXTENSION_ID',
+  [BrowserType.FIREFOX]: 'https://addons.mozilla.org/firefox/addon/bergamot/',
+  [BrowserType.EDGE]: 'https://microsoftedge.microsoft.com/addons/detail/bergamot/YOUR_EXTENSION_ID',
+  [BrowserType.BRAVE]: 'https://chrome.google.com/webstore/detail/bergamot/YOUR_EXTENSION_ID',
+  [BrowserType.OPERA]: 'https://addons.opera.com/extensions/details/bergamot/'
 };
 
 /**
@@ -109,7 +109,7 @@ export const EXTENSION_STORES = {
  */
 export const EXTENSION_IDS = {
   [BrowserType.CHROME]: 'YOUR_CHROME_EXTENSION_ID',
-  [BrowserType.FIREFOX]: 'pkm-assistant@example.com',
+  [BrowserType.FIREFOX]: 'bergamot@example.com',
   [BrowserType.EDGE]: 'YOUR_EDGE_EXTENSION_ID',
   [BrowserType.BRAVE]: 'YOUR_CHROME_EXTENSION_ID', // Same as Chrome
   [BrowserType.OPERA]: 'YOUR_OPERA_EXTENSION_ID'

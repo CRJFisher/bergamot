@@ -12,7 +12,7 @@ let mcp_server_manager: MCPServerManager;
 let command_manager: CommandManager;
 
 /**
- * Activates the PKM Assistant VS Code extension.
+ * Activates the Bergamot VS Code extension.
  *
  * Initializes all core components:
  * - Configures OpenAI API integration for AI-powered analysis
@@ -31,11 +31,11 @@ let command_manager: CommandManager;
  * ```typescript
  * // This function is automatically called by VS Code when the extension activates
  * // Users need to configure the OpenAI API key in VS Code settings:
- * // "mindsteep.openaiApiKey": "your-openai-key"
+ * // "bergamot.openaiApiKey": "your-openai-key"
  * ```
  */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  console.log('Starting PKM Assistant extension activation...');
+  console.log('Starting Bergamot extension activation...');
 
   try {
     // Step 1: Validate configuration

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The PKM Navigation Tracker is a browser extension that tracks browsing navigation chains for personal knowledge management. It supports both Chrome and Firefox browsers using Manifest V3.
+The Bergamot Navigation Tracker is a browser extension that tracks browsing navigation chains for personal knowledge management. It supports both Chrome and Firefox browsers using Manifest V3.
 
 ## Project Directory Structure
 
@@ -19,7 +19,7 @@ referrer_tracker_extension/
 │   ├── comprehensive-extension.spec.ts
 │   ├── fixtures.ts
 │   └── fixtures/
-│       └── mock-server.ts  # Mock PKM server for testing
+│       └── mock-server.ts  # Mock Bergamot server for testing
 ├── src/                    # Source code
 │   ├── background.ts       # Background service worker
 │   ├── content.ts          # Content script
@@ -159,4 +159,4 @@ The project uses ESBuild for bundling TypeScript code:
 
 - **API Endpoint**: Configurable via `window.PKM_CONFIG`
 - **Browser Compatibility**: Manifest V3 for Chrome/Firefox
-- **Extension ID**: `pkm-assistant@example.com` (Firefox)
+- **Extension ID**: `bergamot@example.com` (Firefox)

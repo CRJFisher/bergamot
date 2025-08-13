@@ -1,7 +1,7 @@
 # Firefox Add-ons Listing
 
 ## Add-on Name
-PKM Navigation Tracker
+Bergamot Navigation Tracker
 
 ## Summary (250 characters max)
 Track and analyze your web browsing patterns for personal knowledge management. Build a searchable knowledge base from your browsing history with VS Code integration.
@@ -9,26 +9,26 @@ Track and analyze your web browsing patterns for personal knowledge management. 
 ## Description
 
 ### About This Add-on
-PKM Navigation Tracker transforms your browsing history into a powerful personal knowledge base. Designed for researchers, students, developers, and knowledge workers who want to capture and leverage the valuable information they encounter online.
+Bergamot Navigation Tracker transforms your browsing history into a powerful personal knowledge base. Designed for researchers, students, developers, and knowledge workers who want to capture and leverage the valuable information they encounter online.
 
 ### Features
 - **Intelligent Navigation Tracking**: Captures complete browsing context including referrer chains and navigation patterns
 - **Tab Relationship Mapping**: Understands how tabs are related and tracks parent-child relationships
 - **Group-Based Organization**: Automatically groups related browsing sessions
-- **Native VS Code Integration**: Connect with PKM Assistant extension for advanced features
+- **Native VS Code Integration**: Connect with Bergamot extension for advanced features
 - **Local-First Architecture**: Your data stays on your device
 - **Smart Content Filtering**: Focus on valuable content, ignore the noise
 
 ### How to Use
 1. Install the add-on
 2. Browse normally - the extension works in the background
-3. For advanced features, install VS Code PKM Assistant:
+3. For advanced features, install VS Code Bergamot extension:
    - Semantic search across all visited pages
    - AI-powered content categorization
    - Knowledge graph visualization
    - Vector database storage
 
-### Why PKM Navigation Tracker?
+### Why Bergamot Navigation Tracker?
 Traditional bookmarks and history are limited. This extension captures the full context of your browsing:
 - How you got to a page (referrer chain)
 - What tabs were open together
@@ -55,7 +55,7 @@ Traditional bookmarks and history are limited. This extension captures the full 
 - Regular updates and active development
 
 ### Support & Community
-- Source Code: https://github.com/[your-username]/pkm-assistant
+- Source Code: https://github.com/bergamot/bergamot
 - Documentation: [Link to docs]
 - Report Issues: [Link to issues]
 - Community: [Link to discussions]

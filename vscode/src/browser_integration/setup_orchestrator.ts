@@ -277,7 +277,7 @@ export class BrowserIntegrationSetup {
 export function register_browser_integration_commands(context: vscode.ExtensionContext): void {
   // Setup command
   context.subscriptions.push(
-    vscode.commands.registerCommand('mindsteep.setupBrowserIntegration', async () => {
+    vscode.commands.registerCommand('bergamot.setupBrowserIntegration', async () => {
       const setup = new BrowserIntegrationSetup(context);
       await setup.run_setup();
     })
@@ -285,7 +285,7 @@ export function register_browser_integration_commands(context: vscode.ExtensionC
 
   // Repair command
   context.subscriptions.push(
-    vscode.commands.registerCommand('mindsteep.repairBrowserIntegration', async () => {
+    vscode.commands.registerCommand('bergamot.repairBrowserIntegration', async () => {
       const setup = new BrowserIntegrationSetup(context);
       await setup.repair();
     })
@@ -293,7 +293,7 @@ export function register_browser_integration_commands(context: vscode.ExtensionC
 
   // Uninstall command
   context.subscriptions.push(
-    vscode.commands.registerCommand('mindsteep.uninstallBrowserIntegration', async () => {
+    vscode.commands.registerCommand('bergamot.uninstallBrowserIntegration', async () => {
       const setup = new BrowserIntegrationSetup(context);
       await setup.uninstall();
     })
@@ -301,7 +301,7 @@ export function register_browser_integration_commands(context: vscode.ExtensionC
 
   // Check status command
   context.subscriptions.push(
-    vscode.commands.registerCommand('mindsteep.checkBrowserIntegration', async () => {
+    vscode.commands.registerCommand('bergamot.checkBrowserIntegration', async () => {
       const setup = new BrowserIntegrationSetup(context);
       const status = await setup.check_installation();
       

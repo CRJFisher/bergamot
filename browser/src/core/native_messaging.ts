@@ -46,7 +46,7 @@ export class NativeMessagingService {
       
       // Use browser API if available (Firefox), otherwise Chrome API
       const runtime = typeof browser !== 'undefined' ? browser.runtime : chrome.runtime;
-      this.port = runtime.connectNative('com.mindsteep.native');
+      this.port = runtime.connectNative('com.bergamot.native');
       
       if (!this.port) {
         throw new Error('Failed to create native port');

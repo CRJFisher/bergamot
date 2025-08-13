@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Native Messaging Host for PKM Assistant
+ * Native Messaging Host for Bergamot
  * 
  * This script acts as a bridge between the browser extension and VS Code extension.
  * It uses the Chrome Native Messaging protocol (stdin/stdout with length-prefixed JSON).
@@ -17,7 +17,7 @@ const path = require('path');
 const os = require('os');
 
 // Configuration
-const PORT_FILE = path.join(os.homedir(), '.pkm-assistant', 'port.json');
+const PORT_FILE = path.join(os.homedir(), '.bergamot', 'port.json');
 const MAX_MESSAGE_SIZE = 1024 * 1024 * 10; // 10MB max message size
 
 /**

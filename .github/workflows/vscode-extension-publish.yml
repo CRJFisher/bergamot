@@ -240,7 +240,7 @@ jobs:
         
         # Create changelog
         cat > RELEASE_NOTES.md << EOF
-        ## Mindsteep VS Code Extension v${{ needs.build.outputs.version }}
+        ## Bergamot VS Code Extension v${{ needs.build.outputs.version }}
         
         ### What's Changed
         
@@ -249,8 +249,8 @@ jobs:
         ### Installation
         
         #### From Marketplace
-        - **VS Code Marketplace**: [Install from Marketplace](https://marketplace.visualstudio.com/items?itemName=mindsteep.mindsteep)
-        - **Open VSX Registry**: [Install from Open VSX](https://open-vsx.org/extension/mindsteep/mindsteep)
+        - **VS Code Marketplace**: [Install from Marketplace](https://marketplace.visualstudio.com/items?itemName=bergamot.bergamot)
+        - **Open VSX Registry**: [Install from Open VSX](https://open-vsx.org/extension/bergamot/bergamot)
         
         #### Manual Installation
         Download the \`.vsix\` file from the assets below and install using:
@@ -268,7 +268,7 @@ jobs:
         ### Requirements
         - VS Code 1.99.0 or higher
         - Node.js 18.0.0 or higher
-        - PKM Browser Extension (for full functionality)
+        - Bergamot Browser Extension (for full functionality)
         EOF
         
         echo "changelog<<EOF" >> $GITHUB_OUTPUT

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mindsteep Native Messaging Host
+Bergamot Native Messaging Host
 Bridges communication between browser extension and VS Code extension
 """
 
@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 
 # Configure logging
-log_dir = Path.home() / '.mindsteep'
+log_dir = Path.home() / '.bergamot'
 log_dir.mkdir(exist_ok=True)
 logging.basicConfig(
     filename=str(log_dir / 'native-host.log'),
@@ -60,7 +60,7 @@ def send_message(message):
 
 def get_vscode_port():
     """Read the VS Code extension port from the port file"""
-    port_file = Path.home() / '.mindsteep' / 'port.json'
+    port_file = Path.home() / '.bergamot' / 'port.json'
     
     try:
         if port_file.exists():

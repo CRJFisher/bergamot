@@ -1,13 +1,13 @@
-# Mindsteep
+# Bergamot
 
 > Steep knowledge from your web browsing patterns - A mindful approach to personal knowledge management
 
 ## Overview
 
-Mindsteep is a comprehensive personal knowledge management system that helps you steep and extract knowledge from your web browsing patterns. Like brewing the perfect cup of tea, Mindsteep lets your web experiences steep into rich, accessible knowledge. It consists of:
+Bergamot is a comprehensive personal knowledge management system that helps you steep and extract knowledge from your web browsing patterns. Like brewing the perfect cup of tea, Bergamot lets your web experiences steep into rich, accessible knowledge. It consists of:
 
-- **VS Code Extension** (`@mindsteep/vscode`) - Manage your knowledge base, search captured content, and get AI-powered insights
-- **Browser Extension** (`@mindsteep/browser-extension`) - Automatically capture and categorize webpages you visit
+- **VS Code Extension** (`@bergamot/vscode`) - Manage your knowledge base, search captured content, and get AI-powered insights
+- **Browser Extension** (`@bergamot/browser-extension`) - Automatically capture and categorize webpages you visit
 
 ## Features
 
@@ -52,7 +52,7 @@ Mindsteep is a comprehensive personal knowledge management system that helps you
 
    ```bash
    # From VS Code
-   ext install mindsteep.mindsteep
+   ext install bergamot.bergamot
    ```
 
 2. **Install the Browser Extension**
@@ -63,7 +63,7 @@ Mindsteep is a comprehensive personal knowledge management system that helps you
 
 3. **Configure OpenAI API Key**
    - Open VS Code settings
-   - Search for "PKM Assistant"
+   - Search for "Bergamot"
    - Enter your OpenAI API key
 
 ## Usage
@@ -76,15 +76,15 @@ Mindsteep is a comprehensive personal knowledge management system that helps you
 
 ### Searching Your Knowledge Base
 
-- **Command Palette**: `PKM Assistant: Search Webpages`
+- **Command Palette**: `Bergamot: Search Webpages`
 - **Hover over links**: See metadata for captured pages
 - **MCP Integration**: Use with AI agents for RAG queries
 
 ### Managing Filters
 
-- **Review filtered pages**: `PKM Assistant: Generate Filtering Review`
+- **Review filtered pages**: `Bergamot: Generate Filtering Review`
 - **Correct decisions**: Click correction links in the review document
-- **View metrics**: `PKM Assistant: Show Filter Metrics`
+- **View metrics**: `Bergamot: Show Filter Metrics`
 
 ## Development
 
@@ -94,8 +94,8 @@ This is a monorepo managed with npm workspaces and changesets.
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/pkm-assistant.git
-cd pkm-assistant
+git clone https://github.com/bergamot/bergamot.git
+cd bergamot
 
 # Install dependencies
 npm install
@@ -107,7 +107,7 @@ npm run build
 ### Project Structure
 
 ```
-pkm-assistant/
+bergamot/
 ├── packages/
 │   ├── vscode/        # VS Code extension
 │   └── browser/       # Browser extension
@@ -126,7 +126,7 @@ npm test
 npm run lint
 
 # Build specific package
-npm run build -w @pkm-assistant/vscode
+npm run build -w @bergamot/vscode
 
 # Create a changeset
 npm run changeset
@@ -159,11 +159,11 @@ npm run chrome:debug  # Launches Chrome with extension loaded
 
 | Setting                                     | Description                       | Default         |
 | ------------------------------------------- | --------------------------------- | --------------- |
-| `pkm-assistant.openaiApiKey`                | Your OpenAI API key               | -               |
-| `pkm-assistant.webpageFilter.enabled`       | Enable AI filtering               | `true`          |
-| `pkm-assistant.webpageFilter.allowedTypes`  | Page types to capture             | `["knowledge"]` |
-| `pkm-assistant.webpageFilter.minConfidence` | Min confidence for classification | `0.7`           |
-| `pkm-assistant.agentMemory.enabled`         | Enable learning from feedback     | `true`          |
+| `bergamot.openaiApiKey`                | Your OpenAI API key               | -               |
+| `bergamot.webpageFilter.enabled`       | Enable AI filtering               | `true`          |
+| `bergamot.webpageFilter.allowedTypes`  | Page types to capture             | `["knowledge"]` |
+| `bergamot.webpageFilter.minConfidence` | Min confidence for classification | `0.7`           |
+| `bergamot.agentMemory.enabled`         | Enable learning from feedback     | `true`          |
 
 ## Architecture
 
@@ -178,13 +178,13 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ### Reporting Issues
 
-- Use the [issue tracker](https://github.com/your-username/pkm-assistant/issues)
-- Include logs from Output > PKM Assistant
+- Use the [issue tracker](https://github.com/bergamot/bergamot/issues)
+- Include logs from Output > Bergamot
 - Specify versions of VS Code and browser
 
 ## License
 
-MIT © PKM Assistant Team
+MIT © Bergamot Team
 
 ## Acknowledgments
 

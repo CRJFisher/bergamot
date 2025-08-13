@@ -1,8 +1,8 @@
 {
-  "name": "@mindsteep/monorepo",
+  "name": "@bergamot/monorepo",
   "version": "0.0.0",
   "private": true,
-  "description": "Mindsteep - Browser-based knowledge management through mindful web steeping",
+  "description": "Bergamot - Browser-based knowledge management through mindful web steeping",
   "workspaces": [
     "vscode",
     "browser"
@@ -31,10 +31,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/CRJFisher/mindsteep.git"
+    "url": "https://github.com/bergamot/bergamot.git"
   },
   "keywords": [
-    "mindsteep",
+    "bergamot",
     "knowledge-management",
     "pkm",
     "web-memory",

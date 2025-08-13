@@ -1,6 +1,6 @@
-# Contributing to PKM Assistant
+# Contributing to Bergamot
 
-Thank you for your interest in contributing to PKM Assistant! This guide will help you get started.
+Thank you for your interest in contributing to Bergamot! This guide will help you get started.
 
 ## Code of Conduct
 
@@ -10,8 +10,8 @@ Please be respectful and constructive in all interactions. We're building a welc
 
 1. **Fork and Clone**
    ```bash
-   git clone https://github.com/your-username/pkm-assistant.git
-   cd pkm-assistant
+   git clone https://github.com/bergamot/bergamot.git
+   cd bergamot
    npm install
    ```
 
@@ -102,7 +102,7 @@ Follow the prompts to describe your changes.
 npm test
 
 # Run tests for specific package
-npm test -w @pkm-assistant/vscode
+npm test -w @bergamot/vscode
 ```
 
 ### E2E Tests (Browser Extension)

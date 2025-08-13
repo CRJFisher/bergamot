@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document outlines the comprehensive plan for implementing automated browser integration setup for the PKM Assistant VS Code extension, eliminating the current manual, error-prone installation process.
+This document outlines the comprehensive plan for implementing automated browser integration setup for the Bergamot VS Code extension, eliminating the current manual, error-prone installation process.
 
 ## Problem Statement
 
@@ -176,7 +176,7 @@ async function handleMacOSGatekeeper() {
     macOS blocked the native host because it's not signed.
     
     To allow it:
-    1. Open Finder → Go to ~/.pkm-assistant/
+    1. Open Finder → Go to ~/.bergamot/
     2. Right-click on 'native_host.py'
     3. Select "Open" from the menu
     4. Click "Open" in the dialog

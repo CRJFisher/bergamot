@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Mindsteep",
+  "name": "Bergamot",
   "version": "1.0",
   "description": "Steep knowledge from your web browsing patterns.",
   "permissions": ["scripting", "webRequest", "tabs", "activeTab", "nativeMessaging"],
@@ -17,11 +17,11 @@
     }
   ],
   "action": {
-    "default_title": "Mindsteep"
+    "default_title": "Bergamot"
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "mindsteep@example.com"
+      "id": "bergamot@example.com"
     }
   }
 } 

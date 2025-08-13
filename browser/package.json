@@ -1,7 +1,7 @@
 {
-  "name": "@mindsteep/browser-extension",
+  "name": "@bergamot/browser-extension",
   "version": "0.1.0",
-  "description": "Mindsteep Browser Extension - Steeping knowledge from your web browsing patterns",
+  "description": "Bergamot Browser Extension - Steeping knowledge from your web browsing patterns",
   "main": "index.js",
   "type": "module",
   "scripts": {

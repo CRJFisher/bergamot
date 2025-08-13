@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 
 /**
- * Configuration manager for the PKM Assistant extension.
+ * Configuration manager for the Bergamot extension.
  * Handles retrieval and validation of extension settings from VS Code's workspace configuration.
  * 
  * @example
@@ -21,7 +21,7 @@ import * as vscode from 'vscode';
  * ```
  */
 export class ConfigManager {
-  private static readonly CONFIG_NAMESPACE = 'pkm-assistant';
+  private static readonly CONFIG_NAMESPACE = 'bergamot';
   
   /**
    * Retrieves and validates the OpenAI API key from VS Code settings.

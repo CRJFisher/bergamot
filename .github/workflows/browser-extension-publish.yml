@@ -253,7 +253,7 @@ jobs:
         ## Extension Downloads
         
         - **Chrome Web Store**: [Install from Chrome Web Store](https://chrome.google.com/webstore/detail/${{ secrets.CHROME_EXTENSION_ID }})
-        - **Firefox Add-ons**: [Install from Firefox Add-ons](https://addons.mozilla.org/addon/mindsteep/)
+        - **Firefox Add-ons**: [Install from Firefox Add-ons](https://addons.mozilla.org/addon/bergamot/)
         - **Edge Add-ons**: [Install from Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/${{ secrets.EDGE_PRODUCT_ID }})
         
         Or download the extension packages directly from the assets below.
@@ -266,7 +266,7 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        name: Mindsteep Browser Extension v${{ needs.build.outputs.version }}
+        name: Bergamot Browser Extension v${{ needs.build.outputs.version }}
         body: ${{ steps.changelog.outputs.changelog }}
         files: |
           artifacts/chrome-extension/chrome-extension.zip

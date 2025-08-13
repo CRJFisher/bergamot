@@ -1,9 +1,9 @@
 {
-  "name": "mindsteep",
-  "displayName": "Mindsteep",
+  "name": "bergamot",
+  "displayName": "Bergamot",
   "description": "Steep knowledge from your browsing patterns in VS Code",
   "version": "0.1.0",
-  "publisher": "mindsteep",
+  "publisher": "bergamot",
   "engines": {
     "vscode": "^1.99.0",
     "node": ">=18.0.0"
@@ -13,7 +13,7 @@
     "Productivity"
   ],
   "keywords": [
-    "mindsteep",
+    "bergamot",
     "knowledge-management",
     "pkm",
     "web-memory",
@@ -29,81 +29,81 @@
   "contributes": {
     "commands": [
       {
-        "command": "mindsteep.addHighlight",
+        "command": "bergamot.addHighlight",
         "title": "Add Highlight to Bullet Point"
       },
       {
-        "command": "mindsteep.showFilterMetrics",
-        "title": "Mindsteep: Show Filter Metrics"
+        "command": "bergamot.showFilterMetrics",
+        "title": "Bergamot: Show Filter Metrics"
       },
       {
-        "command": "mindsteep.generateFilteringReview",
-        "title": "Mindsteep: Generate Filtering Review"
+        "command": "bergamot.generateFilteringReview",
+        "title": "Bergamot: Generate Filtering Review"
       },
       {
-        "command": "mindsteep.showMemoryStats",
-        "title": "Mindsteep: Show Memory Statistics"
+        "command": "bergamot.showMemoryStats",
+        "title": "Bergamot: Show Memory Statistics"
       },
       {
-        "command": "mindsteep.correctDecision",
-        "title": "Mindsteep: Correct Filtering Decision"
+        "command": "bergamot.correctDecision",
+        "title": "Bergamot: Correct Filtering Decision"
       },
       {
-        "command": "mindsteep.correctType",
-        "title": "Mindsteep: Correct Page Type"
+        "command": "bergamot.correctType",
+        "title": "Bergamot: Correct Page Type"
       },
       {
-        "command": "mindsteep.addExplanation",
-        "title": "Mindsteep: Add Feedback Explanation"
+        "command": "bergamot.addExplanation",
+        "title": "Bergamot: Add Feedback Explanation"
       },
       {
-        "command": "mindsteep.searchWebpages",
-        "title": "Mindsteep: Search Webpages"
+        "command": "bergamot.searchWebpages",
+        "title": "Bergamot: Search Webpages"
       },
       {
-        "command": "mindsteep.createFilterRule",
-        "title": "Mindsteep: Create Filter Rule"
+        "command": "bergamot.createFilterRule",
+        "title": "Bergamot: Create Filter Rule"
       },
       {
-        "command": "mindsteep.manageFilterRules",
-        "title": "Mindsteep: Manage Filter Rules"
+        "command": "bergamot.manageFilterRules",
+        "title": "Bergamot: Manage Filter Rules"
       },
       {
-        "command": "mindsteep.createDomainRule",
-        "title": "Mindsteep: Create Domain Rule"
+        "command": "bergamot.createDomainRule",
+        "title": "Bergamot: Create Domain Rule"
       },
       {
-        "command": "mindsteep.createContentPatternRule",
-        "title": "Mindsteep: Create Content Pattern Rule"
+        "command": "bergamot.createContentPatternRule",
+        "title": "Bergamot: Create Content Pattern Rule"
       },
       {
-        "command": "mindsteep.showRuleStatistics",
-        "title": "Mindsteep: Show Rule Statistics"
+        "command": "bergamot.showRuleStatistics",
+        "title": "Bergamot: Show Rule Statistics"
       },
       {
-        "command": "mindsteep.exportFilterRules",
-        "title": "Mindsteep: Export Filter Rules"
+        "command": "bergamot.exportFilterRules",
+        "title": "Bergamot: Export Filter Rules"
       },
       {
-        "command": "mindsteep.importFilterRules",
-        "title": "Mindsteep: Import Filter Rules"
+        "command": "bergamot.importFilterRules",
+        "title": "Bergamot: Import Filter Rules"
       }
     ],
     "configuration": {
-      "title": "PKM Assistant",
+      "title": "Bergamot",
       "properties": {
-        "mindsteep.openaiApiKey": {
+        "bergamot.openaiApiKey": {
           "type": "string",
           "default": "",
-          "description": "Your OpenAI API key for the PKM Assistant",
+          "description": "Your OpenAI API key for Bergamot",
           "scope": "application"
         },
-        "mindsteep.webpageFilter.enabled": {
+        "bergamot.webpageFilter.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Enable webpage filtering based on content type"
         },
-        "mindsteep.webpageFilter.allowedTypes": {
+        "bergamot.webpageFilter.allowedTypes": {
           "type": "array",
           "default": [
             "knowledge"
@@ -121,31 +121,31 @@
             ]
           }
         },
-        "mindsteep.webpageFilter.minConfidence": {
+        "bergamot.webpageFilter.minConfidence": {
           "type": "number",
           "default": 0.7,
           "minimum": 0,
           "maximum": 1,
           "description": "Minimum confidence threshold for page classification"
         },
-        "mindsteep.webpageFilter.logDecisions": {
+        "bergamot.webpageFilter.logDecisions": {
           "type": "boolean",
           "default": true,
           "description": "Log filtering decisions to console"
         },
-        "mindsteep.agentMemory.enabled": {
+        "bergamot.agentMemory.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Enable agent memory for learning from feedback"
         },
-        "mindsteep.agentMemory.recentPagesDays": {
+        "bergamot.agentMemory.recentPagesDays": {
           "type": "number",
           "default": 7,
           "minimum": 1,
           "maximum": 30,
           "description": "Days to show accepted pages in feedback document"
         },
-        "mindsteep.agentMemory.filteredPagesHours": {
+        "bergamot.agentMemory.filteredPagesHours": {
           "type": "number",
           "default": 48,
           "minimum": 1,
@@ -200,18 +200,18 @@
     "@vscode/vsce": "^2.32.0",
     "eslint": "^8.56.0",
     "jest": "^29.7.0",
-    "ovsx": "^0.9.6",
+    "ovsx": "^0.10.5",
     "supertest": "^7.1.4",
     "ts-jest": "^29.1.1",
     "typescript": "^5.9.2"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/CRJFisher/mindsteep.git"
+    "url": "https://github.com/bergamot/bergamot.git"
   },
   "bugs": {
-    "url": "https://github.com/CRJFisher/mindsteep/issues"
+    "url": "https://github.com/bergamot/bergamot/issues"
   },
-  "homepage": "https://github.com/CRJFisher/mindsteep#readme",
+  "homepage": "https://github.com/bergamot/bergamot#readme",
   "license": "MIT"
 }
