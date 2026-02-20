@@ -176,10 +176,10 @@
   "dependencies": {
     "@duckdb/node-api": "^1.2.2-alpha.18",
     "@lancedb/lancedb": "^0.19.0",
-    "@langchain/core": "^0.3.48",
+    "@langchain/core": "^0.3.80",
     "@langchain/langgraph": "^0.2.67",
     "@langchain/openai": "^0.5.7",
-    "@modelcontextprotocol/sdk": "^1.15.1",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@mongodb-js/zstd": "^2.0.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",
