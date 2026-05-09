@@ -22,7 +22,7 @@
   "devDependencies": {
     "@types/glob": "^8.1.0",
     "@types/node": "^20.0.0",
-    "glob": "^11.0.3",
+    "glob": "^11.1.0",
     "typescript": "^5.9.2"
   },
   "engines": {
