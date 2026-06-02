@@ -229,8 +229,7 @@ class VersionManager {
     
     // Update manifest files
     this.update_manifest('chrome', new_version);
-    this.update_manifest('firefox', new_version);
-    
+
     // Update changelog
     this.update_changelog(new_version);
     
@@ -287,7 +286,7 @@ Examples:
 
 This tool will:
 - Update package.json version
-- Update manifest.json versions for Chrome and Firefox
+- Update manifest.json version for Chrome
 - Generate/update CHANGELOG.md with recent commits
 - Suggest git commands for committing and tagging
   `);

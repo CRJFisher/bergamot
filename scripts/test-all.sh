@@ -187,7 +187,6 @@ run_test "VS Code extension packaging" "cd vscode && npm run package"
 
 # Test browser extension packaging
 run_test "Chrome extension packaging" "cd browser && npm run build && cd chrome && zip -qr ../test-chrome.zip . && rm ../test-chrome.zip"
-run_test "Firefox extension packaging" "cd browser && npm run build && cd firefox && zip -qr ../test-firefox.zip . && rm ../test-firefox.zip"
 
 # Validate manifest files
 print_section "Validating Manifest Files"
@@ -205,14 +204,6 @@ if [ -f "browser/chrome/manifest.json" ]; then
     run_test "Chrome manifest validation" "node -e \"require('./browser/chrome/manifest.json')\""
 else
     print_error "Chrome manifest.json not found"
-    FAILED_TESTS=$((FAILED_TESTS + 1))
-fi
-
-# Check Firefox manifest
-if [ -f "browser/firefox/manifest.json" ]; then
-    run_test "Firefox manifest validation" "node -e \"require('./browser/firefox/manifest.json')\""
-else
-    print_error "Firefox manifest.json not found"
     FAILED_TESTS=$((FAILED_TESTS + 1))
 fi
 

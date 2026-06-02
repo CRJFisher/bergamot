@@ -1,7 +1,6 @@
 import { TabHistoryStore, get_tab_history, get_referrer_from_history, update_tab_history, add_tab_history } from './tab_history_manager';
 import { send_to_server } from './api_client';
-import { create_api_client, ApiClientV2 } from './api_client_v2';
-import { ReferrerInfo } from '../types/navigation';
+import { discover_server_url } from './server_discovery';
 
 export type MessageAction = 
   | 'getReferrer'
@@ -85,37 +84,40 @@ export const handle_spa_navigation = (
   };
 };
 
-// Create API client with native messaging support
-let api_client: ApiClientV2 | null = null;
-
-const get_api_client = (api_base_url: string): ApiClientV2 => {
-  if (!api_client) {
-    api_client = create_api_client(api_base_url);
-  }
-  return api_client;
-};
+// Cache of the last server URL that successfully accepted a visit. A browser
+// extension cannot read the server's port file, so it probes the candidate
+// range over HTTP and remembers the winner. The cache is module state in the
+// background service worker; it is simply re-discovered after SW eviction.
+let cached_server_url: string | null = null;
 
 export const handle_server_request = async (
   endpoint: string,
   data: any,
   api_base_url: string
 ): Promise<MessageResponse> => {
-  console.log(`🌐 Forwarding to PKM server:`, endpoint, data);
-  
+  console.log(`🌐 Forwarding to Bergamot server:`, endpoint, data);
+
+  const target = cached_server_url ?? api_base_url;
   try {
-    // Try native messaging first
-    const client = get_api_client(api_base_url);
-    await client.send_to_server(endpoint, data);
+    await send_to_server(target, endpoint, data);
+    cached_server_url = target;
     return { success: true };
   } catch (error: any) {
-    console.warn('Native messaging failed, trying HTTP:', error);
-    // Fallback to direct HTTP
-    try {
-      await send_to_server(api_base_url, endpoint, data);
-      return { success: true };
-    } catch (http_error: any) {
-      return { success: false, error: http_error.message };
+    // The cached/default port may be stale, or the server bound a different
+    // port in the candidate range. Re-discover once and retry.
+    const discovered = await discover_server_url();
+    if (discovered && discovered !== target) {
+      try {
+        await send_to_server(discovered, endpoint, data);
+        cached_server_url = discovered;
+        return { success: true };
+      } catch (retry_error: any) {
+        cached_server_url = null;
+        return { success: false, error: retry_error.message };
+      }
     }
+    cached_server_url = null;
+    return { success: false, error: error.message };
   }
 };
 

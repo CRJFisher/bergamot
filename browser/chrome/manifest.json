@@ -3,7 +3,7 @@
   "name": "Bergamot",
   "version": "1.0",
   "description": "Steep knowledge from your web browsing patterns.",
-  "permissions": ["scripting", "webRequest", "tabs", "activeTab", "nativeMessaging"],
+  "permissions": ["tabs", "activeTab"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "dist/background.bundle.js",
@@ -18,10 +18,5 @@
   ],
   "action": {
     "default_title": "Bergamot"
-  },
-  "browser_specific_settings": {
-    "gecko": {
-      "id": "bergamot@example.com"
-    }
   }
-} 
+}

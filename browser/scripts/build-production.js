@@ -45,8 +45,8 @@ function build_extension() {
 function copy_to_browser_folders() {
   console.log('📁 Copying dist to browser folders...');
   
-  const browsers = ['chrome', 'firefox'];
-  
+  const browsers = ['chrome'];
+
   for (const browser of browsers) {
     const browser_dist = path.join(root_dir, browser, 'dist');
     ensure_directory(browser_dist);
@@ -105,10 +105,9 @@ async function package_extensions() {
   const version_dir = path.join(builds_dir, `v${version}`);
   ensure_directory(version_dir);
   
-  // Create zips for each browser
+  // Create zips for each browser (Chromium-only)
   await create_zip('chrome', version_dir);
-  await create_zip('firefox', version_dir);
-  
+
   // Create a copy for Edge (uses Chrome package)
   const chrome_zip = path.join(version_dir, 'chrome-extension.zip');
   const edge_zip = path.join(version_dir, 'edge-extension.zip');

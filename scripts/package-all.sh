@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # PKM Assistant - Package All Extensions Script
-# This script packages all extensions (VS Code, Chrome, Firefox) for release
+# This script packages all extensions (VS Code, Chrome) for release
 
 set -e  # Exit on error
 
@@ -77,13 +77,6 @@ zip -r ../chrome-extension.zip . -x "*.DS_Store" "node_modules/*" > /dev/null 2>
 cd ..
 print_status "Chrome extension packaged: browser/chrome-extension.zip"
 
-# Package Firefox Extension
-print_info "Packaging Firefox extension..."
-cd firefox
-zip -r ../firefox-extension.zip . -x "*.DS_Store" "node_modules/*" > /dev/null 2>&1
-cd ..
-print_status "Firefox extension packaged: browser/firefox-extension.zip"
-
 # Summary
 echo ""
 echo "================================================"
@@ -100,10 +93,6 @@ echo "✅ Chrome Extension:"
 echo "   → $ROOT_DIR/browser/chrome-extension.zip"
 echo "   → Size: $(du -h "$ROOT_DIR/browser/chrome-extension.zip" | cut -f1)"
 echo ""
-echo "✅ Firefox Extension:"
-echo "   → $ROOT_DIR/browser/firefox-extension.zip"
-echo "   → Size: $(du -h "$ROOT_DIR/browser/firefox-extension.zip" | cut -f1)"
-echo ""
 echo "================================================"
 echo "🚀 All extensions packaged successfully!"
 echo "================================================"
@@ -112,4 +101,3 @@ echo "Next steps:"
 echo "  1. Test the packaged extensions"
 echo "  2. VS Code: Upload to VS Code Marketplace"
 echo "  3. Chrome: Upload to Chrome Web Store"
-echo "  4. Firefox: Upload to Firefox Add-ons"

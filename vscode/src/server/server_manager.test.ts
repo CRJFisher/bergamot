@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import request from 'supertest';
-import { ServerManager, ServerConfig } from './server_manager';
+import { ServerManager, ServerConfig, SERVER_PORT_RANGE } from './server_manager';
 import { DuckDB } from '../duck_db';
 import { MarkdownDatabase } from '../markdown_db';
 import { LanceDBMemoryStore } from '../lance_db';
@@ -69,23 +69,22 @@ describe('ServerManager', () => {
   });
 
   describe('start()', () => {
-    it('should start server on dynamic port', async () => {
+    it('should bind a port within the candidate range', async () => {
       const port = await server_manager.start();
 
-      expect(port).toBeGreaterThan(0);
-      expect(port).toBeLessThan(65536);
+      expect(SERVER_PORT_RANGE).toContain(port);
     });
 
-    it('should write port to file', async () => {
+    it('should write the bound port to the canonical port file', async () => {
       const mock_write_file_sync = fs.writeFileSync as jest.Mock;
       mock_write_file_sync.mockImplementation(() => {});
 
       const port = await server_manager.start();
 
-      const expected_path = path.join(os.tmpdir(), 'pkm_assistant_port.txt');
+      const expected_path = path.join(os.homedir(), '.bergamot', 'port.json');
       expect(mock_write_file_sync).toHaveBeenCalledWith(
         expected_path,
-        port.toString()
+        JSON.stringify({ port, pid: process.pid }, null, 2)
       );
     });
 

@@ -42,7 +42,7 @@ async function packageAll() {
     vsixFiles.forEach(f => fs.unlinkSync(path.join(vscodePath, f)));
     
     // Remove old ZIP files
-    ['chrome-extension.zip', 'firefox-extension.zip'].forEach(f => {
+    ['chrome-extension.zip'].forEach(f => {
       const zipPath = path.join(browserPath, f);
       if (fs.existsSync(zipPath)) {
         fs.unlinkSync(zipPath);
@@ -97,23 +97,6 @@ async function packageAll() {
       archive.finalize();
     });
     printStatus('Chrome extension packaged: browser/chrome-extension.zip');
-    
-    // Package Firefox Extension
-    printInfo('Packaging Firefox extension...');
-    const firefoxPath = path.join(browserPath, 'firefox');
-    const firefoxZipPath = path.join(browserPath, 'firefox-extension.zip');
-    
-    const firefoxOutput = fs.createWriteStream(firefoxZipPath);
-    const firefoxArchive = archiver('zip', { zlib: { level: 9 } });
-    
-    await new Promise((resolve, reject) => {
-      firefoxOutput.on('close', resolve);
-      firefoxArchive.on('error', reject);
-      firefoxArchive.pipe(firefoxOutput);
-      firefoxArchive.directory(firefoxPath, false);
-      firefoxArchive.finalize();
-    });
-    printStatus('Firefox extension packaged: browser/firefox-extension.zip');
 
     // Summary
     console.log('\n================================================');
@@ -132,12 +115,7 @@ async function packageAll() {
     console.log('✅ Chrome Extension:');
     console.log(`   → ${chromeZipPath}`);
     console.log(`   → Size: ${chromeSize} KB\n`);
-    
-    const firefoxSize = (fs.statSync(firefoxZipPath).size / 1024).toFixed(1);
-    console.log('✅ Firefox Extension:');
-    console.log(`   → ${firefoxZipPath}`);
-    console.log(`   → Size: ${firefoxSize} KB\n`);
-    
+
     console.log('================================================');
     console.log('🚀 All extensions packaged successfully!');
     console.log('================================================\n');
@@ -145,8 +123,7 @@ async function packageAll() {
     console.log('  1. Test the packaged extensions');
     console.log('  2. VS Code: Upload to VS Code Marketplace');
     console.log('  3. Chrome: Upload to Chrome Web Store');
-    console.log('  4. Firefox: Upload to Firefox Add-ons');
-    
+
   } catch (error) {
     printError(`Packaging failed: ${error.message}`);
     process.exit(1);
@@ -178,11 +155,9 @@ try {
       if (process.platform === 'win32') {
         // Windows PowerShell compress
         execSync('powershell Compress-Archive -Path chrome/* -DestinationPath chrome-extension.zip -Force');
-        execSync('powershell Compress-Archive -Path firefox/* -DestinationPath firefox-extension.zip -Force');
       } else {
         // Unix-like zip command
         execSync('cd chrome && zip -r ../chrome-extension.zip . -x "*.DS_Store"');
-        execSync('cd firefox && zip -r ../firefox-extension.zip . -x "*.DS_Store"');
       }
       
       console.log('\n✅ All extensions packaged successfully!');

@@ -18,6 +18,15 @@ import { build_workflow } from '../reconcile_webpage_trees_workflow_vanilla';
 import { get_filter_config } from '../config/filter_config';
 
 /**
+ * Candidate ports the server tries to bind, in order. The browser extension
+ * probes this same range to discover the running server (see the extension's
+ * `server_discovery` module — the range must stay in sync across both sides).
+ */
+export const SERVER_PORT_RANGE: readonly number[] = [
+  5000, 5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009,
+];
+
+/**
  * Configuration for the server manager.
  * Contains all dependencies required to run the webpage categorization server.
  * 
@@ -77,8 +86,20 @@ export class ServerManager {
    * @private
    */
   private setup_middleware(): void {
-    this.app.use(express.json());
-    this.app.use(cors());
+    // Visits carry the page's zstd-compressed HTML (base64), which exceeds the
+    // default 100kb body limit on content-heavy pages.
+    this.app.use(express.json({ limit: '50mb' }));
+    // Only browser extensions (and origin-less local callers such as scripts or
+    // tests) may reach the server. This blocks arbitrary web pages from POSTing
+    // visits via fetch — the realistic threat for a loopback-bound server.
+    this.app.use(
+      cors({
+        origin: (origin, callback) => {
+          const allowed = !origin || origin.startsWith('chrome-extension://');
+          callback(null, allowed);
+        },
+      })
+    );
   }
 
   /**
@@ -127,9 +148,12 @@ export class ServerManager {
    * @private
    */
   private setup_routes(): void {
-    // Health check endpoint
+    // Health check + service-identity endpoint. The `service` marker lets the
+    // browser extension probe the candidate port range and confirm it found
+    // Bergamot rather than some other process bound to the same port.
     this.app.get('/status', (req, res) => {
       res.json({
+        service: 'bergamot',
         status: 'running',
         version: '1.0.0',
         uptime: process.uptime(),
@@ -183,24 +207,49 @@ export class ServerManager {
   }
 
   /**
-   * Writes the server port to a file for the native messaging host.
-   * This allows the browser extension to discover the server's dynamic port.
-   * 
-   * @param port - The port number to write
+   * Writes the live port to a canonical file (`~/.bergamot/port.json`) so other
+   * local processes and scripts can discover the running server. The browser
+   * extension does NOT rely on this file (it has no filesystem access); it
+   * probes {@link SERVER_PORT_RANGE} over HTTP instead.
+   *
+   * @param port - The port number the server bound to
    * @private
    */
   private write_port_file(port: number): void {
-    const port_file_path = path.join(os.tmpdir(), 'pkm_assistant_port.txt');
-    fs.writeFileSync(port_file_path, port.toString());
+    const dir = path.join(os.homedir(), '.bergamot');
+    fs.mkdirSync(dir, { recursive: true });
+    const port_file_path = path.join(dir, 'port.json');
+    fs.writeFileSync(
+      port_file_path,
+      JSON.stringify({ port, pid: process.pid }, null, 2)
+    );
     console.log(`Port written to ${port_file_path}`);
   }
 
   /**
-   * Starts the Express server.
-   * Binds to a dynamic port and sets up all routes and processors.
-   * 
-   * @returns Promise that resolves with the port number
-   * @throws {Error} If the server fails to start
+   * Attempts to bind the Express app to a single port.
+   * Resolves with the {@link Server} on success; rejects on any listen error
+   * (e.g. `EADDRINUSE`) so the caller can try the next candidate port.
+   * @private
+   */
+  private listen_on(port: number): Promise<Server> {
+    return new Promise((resolve, reject) => {
+      const server = this.app.listen(port);
+      server.once('listening', () => {
+        server.removeListener('error', reject);
+        resolve(server);
+      });
+      server.once('error', reject);
+    });
+  }
+
+  /**
+   * Starts the Express server, binding the first free port in
+   * {@link SERVER_PORT_RANGE}. The browser extension discovers the chosen port
+   * by probing that same range and matching the `/status` service marker.
+   *
+   * @returns Promise that resolves with the bound port number
+   * @throws {Error} If every candidate port is in use
    * @example
    * ```typescript
    * const port = await serverManager.start();
@@ -208,28 +257,27 @@ export class ServerManager {
    * ```
    */
   async start(): Promise<number> {
-    return new Promise((resolve, reject) => {
+    this.setup_routes();
+    this.setup_queue_processor();
+
+    let last_error: unknown;
+    for (const port of SERVER_PORT_RANGE) {
       try {
-        this.setup_routes();
-        this.setup_queue_processor();
-
-        // Start the server on a dynamic port
-        this.server = this.app.listen(0, () => {
-          const address = this.server!.address();
-          const port = typeof address === 'object' && address ? address.port : 5000;
-          console.log(`PKM Assistant server running at http://localhost:${port}`);
-
-          // Write port to file for native messaging host
-          this.write_port_file(port);
-
-          resolve(port);
-        });
-
-        this.server.on('error', reject);
+        this.server = await this.listen_on(port);
+        console.log(`Bergamot server running at http://localhost:${port}`);
+        this.write_port_file(port);
+        return port;
       } catch (error) {
-        reject(error);
+        last_error = error;
       }
-    });
+    }
+
+    throw new Error(
+      `Could not bind any port in range ${SERVER_PORT_RANGE[0]}-` +
+        `${SERVER_PORT_RANGE[SERVER_PORT_RANGE.length - 1]}: ${
+          last_error instanceof Error ? last_error.message : String(last_error)
+        }`
+    );
   }
 
   /**
