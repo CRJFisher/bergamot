@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Storage · Bergamot Architecture</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="brand"><span class="dot"></span> Bergamot Architecture</span>
+    <nav class="crumbs">
+      <a href="index.html">Overview</a>
+      <a href="browser-extension.html">Browser Extension</a>
+      <a href="vscode-extension.html">VS Code Extension</a>
+      <a href="storage.html" class="active">Storage</a>
+      <a href="mcp-and-query.html">MCP &amp; Query</a>
+      <a href="rag-pipeline.html">RAG Pipeline</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="hero">
+    <h1>💾 Storage Layer</h1>
+    <p class="tagline">Two complementary stores, deliberately kept separate: DuckDB for relational records, and LanceDB for vector search.</p>
+    <span class="pill">duck_db.ts · lance_db.ts</span>
+  </section>
+
+  <h2><span class="num">1</span>Why two stores</h2>
+  <div class="cards">
+    <div class="card">
+      <h3>DuckDB — relational</h3>
+      <p>The authoritative record of what was visited and how visits relate. Fast analytical queries over visits, trees, and analysis. Single-writer.</p>
+      <span class="tag">webpage_categorizations.db</span>
+    </div>
+    <div class="card">
+      <h3>LanceDB — vectors</h3>
+      <p>Semantic search. Stores page content and its embeddings; supports vector + keyword (BM25/FTS) search with pluggable rerankers.</p>
+      <span class="tag">webpage_memory.db</span>
+    </div>
+  </div>
+
+  <h2><span class="num">2</span>What writes where</h2>
+  <div class="diagram">
+    <p class="cap">WebpageWorkflow fan-out to the two stores</p>
+    <pre class="mermaid">
+flowchart TB
+    wf["WebpageWorkflow.run()"]
+
+    subgraph DUCK["DuckDB — webpage_categorizations.db"]
+      t1["webpage_trees"]
+      t2["webpage_activity_sessions"]
+      t3["webpage_analysis"]
+      t4["webpage_tree_intentions"]
+    end
+
+    subgraph LANCE["LanceDB — webpage_memory.db"]
+      n1["webpage_content<br/>content + embeddings"]
+    end
+
+    wf -- "visit + analysis" --> t2
+    wf --> t3
+    wf -- "tree structure" --> t1
+    wf --> t4
+    wf -- "page content (auto-embed)" --> n1
+
+    classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
+    classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
+    class t1,t2,t3,t4,n1 st;
+    class wf vs;
+    </pre>
+  </div>
+
+  <h2><span class="num">3</span>Relational schema (DuckDB)</h2>
+  <div class="diagram">
+    <p class="cap">Entity relationships</p>
+    <pre class="mermaid">
+erDiagram
+    webpage_trees ||--o{ webpage_activity_sessions : contains
+    webpage_activity_sessions ||--|| webpage_analysis : "analyzed as"
+    webpage_trees ||--o{ webpage_tree_intentions : "derives"
+    webpage_activity_sessions ||--o{ webpage_tree_intentions : "per-page"
+    webpage_activity_sessions ||--o| webpage_activity_sessions : "referrer chain"
+
+    webpage_trees {
+        text id PK
+        text first_load_time
+        text latest_activity_time
+    }
+    webpage_activity_sessions {
+        text id PK
+        text url
+        text referrer
+        text referrer_page_session_id FK
+        text page_loaded_at
+        text tree_id FK
+    }
+    webpage_analysis {
+        text page_session_id PK
+        text title
+        text summary
+        text intentions "JSON array"
+    }
+    webpage_tree_intentions {
+        text tree_id FK
+        text activity_session_id FK
+        text intentions
+    }
+    </pre>
+  </div>
+
+  <table>
+    <tr><th>Table</th><th>Grain</th><th>Holds</th></tr>
+    <tr><td><code>webpage_trees</code></td><td>1 row / browsing session</td><td>Tree id + first/last activity timestamps.</td></tr>
+    <tr><td><code>webpage_activity_sessions</code></td><td>1 row / page visit</td><td>URL, referrer + referrer session id, load time, owning tree.</td></tr>
+    <tr><td><code>webpage_analysis</code></td><td>1 row / visit</td><td>LLM-derived title, summary, intentions.</td></tr>
+    <tr><td><code>webpage_tree_intentions</code></td><td>1 row / (tree, visit)</td><td>Intentions recomputed with full tree context.</td></tr>
+  </table>
+
+  <h2><span class="num">4</span>Vector store (LanceDB)</h2>
+  <table>
+    <tr><th>Aspect</th><th>Detail</th></tr>
+    <tr><td>Class</td><td><code>LanceDBMemoryStore</code> in <code>lance_db.ts</code></td></tr>
+    <tr><td>Namespace</td><td><code>webpage_content</code> (page content + embeddings)</td></tr>
+    <tr><td>Operations</td><td><code>put</code> (auto-embed), <code>get</code>, <code>search({query, limit, filter})</code>, <code>batch()</code></td></tr>
+    <tr><td>Embeddings</td><td>OpenAI <code>text-embedding-3-small</code>, cached in memory</td></tr>
+    <tr><td>Caching</td><td>Embedding cache (≤1000 entries, 5-min expiry), search-result cache, table cache (bounds memory)</td></tr>
+  </table>
+
+  <div class="note green">
+    <strong>Locked decision:</strong> the two stores stay separate — they are not collapsed into one.
+    DuckDB answers "what and how related", LanceDB answers "what's similar". Each is the right tool
+    for its question. (Markdown was removed as a store in the lean-core purge.)
+  </div>
+
+  <footer class="foot"><a href="vscode-extension.html">← VS Code Extension</a> · Next: <a href="mcp-and-query.html">MCP &amp; Query →</a></footer>
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'dark',
+    themeVariables: { background:'#161b22', primaryColor:'#1c2330', primaryBorderColor:'#2b3442', primaryTextColor:'#d7dde5', lineColor:'#6b7888', fontFamily:'ui-sans-serif, system-ui, sans-serif' },
+    flowchart: { curve:'basis', padding:12 }, securityLevel:'loose' });
+</script>
+</body>
+</html>

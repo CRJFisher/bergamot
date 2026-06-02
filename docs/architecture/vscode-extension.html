@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VS Code Extension · Bergamot Architecture</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="brand"><span class="dot"></span> Bergamot Architecture</span>
+    <nav class="crumbs">
+      <a href="index.html">Overview</a>
+      <a href="browser-extension.html">Browser Extension</a>
+      <a href="vscode-extension.html" class="active">VS Code Extension</a>
+      <a href="storage.html">Storage</a>
+      <a href="mcp-and-query.html">MCP &amp; Query</a>
+      <a href="rag-pipeline.html">RAG Pipeline</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="hero">
+    <h1>🧩 VS Code Extension</h1>
+    <p class="tagline">The backend host. It activates the ingest server, durable queue, and LLM processing workflow; owns both storage backends (DuckDB + LanceDB); and spawns the MCP server. This is where capture becomes knowledge.</p>
+    <span class="pill">vscode/src · extension.ts activate() · ~60 TypeScript modules</span>
+  </section>
+
+  <h2><span class="num">1</span>Activation</h2>
+  <p>On activation, <code>extension.ts</code> wires the whole system together in order:</p>
+  <ul class="clean">
+    <li><strong>Config</strong> — validate the OpenAI API key from VS Code settings (<code>bergamot.openaiApiKey</code>).</li>
+    <li><strong>Databases</strong> — <code>DatabaseManager.initialize_all()</code> opens DuckDB and LanceDB (with OpenAI <code>text-embedding-3-small</code> embeddings).</li>
+    <li><strong>Ingest server</strong> — <code>ServerManager.start()</code> binds the first free port in 5000–5009 and writes it to <code>~/.bergamot/port.json</code>.</li>
+    <li><strong>Commands</strong> — <code>CommandManager.register_all()</code> registers webpage search, the hover provider, and the filter-metrics command.</li>
+    <li><strong>MCP server</strong> — <code>MCPServerManager.start_deferred(2000)</code> spawns the standalone MCP subprocess after 2 s (non-blocking).</li>
+  </ul>
+
+  <h2><span class="num">2</span>Subsystem map</h2>
+  <div class="diagram">
+    <p class="cap">Layered view — reception, processing, storage, serving</p>
+    <pre class="mermaid">
+flowchart TB
+    ext["extension.ts · activate()"]
+
+    subgraph RECV["Reception"]
+      direction TB
+      srv["ServerManager (Express)<br/>POST /visit · GET /query/*"]
+      inbox["visit_inbox.ts<br/>durable JSON queue"]
+      qp["VisitQueueProcessor<br/>batch=3 · timeout 1 s · retry"]
+      srv --> inbox --> qp
+    end
+
+    subgraph PROC["Processing — WebpageWorkflow"]
+      direction TB
+      extract["LLM content extraction<br/>HTML → clean Markdown"]
+      classify["classify + analyze<br/>LLM classification"]
+      filter["filter decision<br/>config: allowedTypes + minConfidence"]
+      tree["tree assignment + reanalysis<br/>webpage_tree.ts"]
+      extract --> classify --> filter --> tree
+    end
+
+    subgraph STORE["Storage (DatabaseManager)"]
+      direction LR
+      duck[("DuckDB<br/>duck_db.ts")]
+      lance[("LanceDB<br/>lance_db.ts")]
+    end
+
+    subgraph SERVE["Serving"]
+      direction TB
+      mcpm["MCPServerManager<br/>spawns subprocess"]
+      qapi["/query/* read API"]
+      cmds["VS Code commands<br/>search · hover · metrics"]
+    end
+
+    ext --> srv
+    ext --> mcpm
+    ext --> cmds
+    qp --> extract
+    tree --> duck
+    tree --> lance
+    qapi --> duck
+    mcpm --> lance
+
+    classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
+    classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
+    classDef sv fill:#2a1f3a,stroke:#bc8cff,color:#e6d9ff;
+    class srv,inbox,qp,extract,classify,filter,tree vs;
+    class duck,lance st;
+    class mcpm,qapi,cmds sv;
+    </pre>
+  </div>
+
+  <h2><span class="num">3</span>Reception: durable ingestion</h2>
+  <p>The server acknowledges the browser immediately, then processes asynchronously — no visit is
+  lost on restart.</p>
+  <table>
+    <tr><th>Stage</th><th>What happens</th></tr>
+    <tr><td><code>POST /visit</code></td><td>Hash <code>url:page_loaded_at</code> → session ID; decompress zstd; validate against a Zod schema.</td></tr>
+    <tr><td>Inbox</td><td>Write the visit to <code>{globalStorage}/visit_inbox/{id}.json</code> (durable) before returning 200.</td></tr>
+    <tr><td>Queue</td><td><code>VisitQueueProcessor</code> drains the inbox in batches (size 3 or 1 s timeout) with retry.</td></tr>
+    <tr><td>Cleanup</td><td>Once the visit is persisted to DuckDB, its inbox JSON file is removed. Orphans are reloaded on startup.</td></tr>
+  </table>
+
+  <h2><span class="num">4</span>Processing: the WebpageWorkflow</h2>
+  <p>The core pipeline in <code>workflow/simple_workflow.ts</code> turns a raw captured page into
+  classified, stored, tree-organized knowledge.</p>
+  <div class="diagram">
+    <p class="cap">WebpageWorkflow.run() — per visit</p>
+    <pre class="mermaid">
+flowchart LR
+    A["raw_content<br/>(zstd-decompressed HTML)"] --> B["1 · extract features<br/>word count, links, code blocks"]
+    B --> C["2 · LLM extract<br/>CONTENT_PROCESSING_PROMPT<br/>→ clean Markdown"]
+    C --> D["3 · classify<br/>ANALYSIS_PROMPT → {title, summary, intentions}"]
+    D --> E{"4 · keep page?<br/>should_process_page()"}
+    E -- "filtered" --> X["drop · log to filter_metrics"]
+    E -- "keep" --> F["5 · tree assignment<br/>referrer → child / else new root"]
+    F --> G["6 · tree reanalysis<br/>TREE_INTENTIONS_PROMPT"]
+    G --> H["7 · persist<br/>DuckDB + LanceDB"]
+
+    classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
+    classDef warn fill:#3a2a1a,stroke:#f0883e,color:#f5d9c0;
+    class A,B,C,D,F,G,H vs;
+    class E,X warn;
+    </pre>
+  </div>
+  <p>The three LLM prompts that drive it:</p>
+  <ul class="clean">
+    <li><code>CONTENT_PROCESSING_PROMPT</code> — strip ads/nav/footers, return clean Markdown.</li>
+    <li><code>ANALYSIS_PROMPT</code> — produce <code>{ title, summary, intentions[] }</code> for a single page.</li>
+    <li><code>TREE_INTENTIONS_PROMPT</code> — re-derive per-page intentions using full navigation-tree context.</li>
+  </ul>
+
+  <h2><span class="num">5</span>Navigation trees</h2>
+  <p>Visits are organized into <em>trees</em> — one per browsing session — using the referrer chain
+  captured by the browser extension. A page with a known referrer is attached as a child of the
+  tree containing that referrer; a page without one starts a new tree. Whenever a tree changes, its
+  intentions are recomputed with the whole tree as context, so each page's purpose is understood
+  relative to the session it belongs to.</p>
+
+  <div class="note blue">
+    <strong>Single-writer discipline.</strong> Only the extension writes to DuckDB. Every other
+    consumer (MCP server, external scripts) reads through the <a href="mcp-and-query.html">HTTP
+    query API</a>, which keeps the embedded database safe from concurrent access.
+  </div>
+
+  <h2><span class="num">6</span>Key dependencies</h2>
+  <table>
+    <tr><th>Package</th><th>Used for</th></tr>
+    <tr><td><code>openai</code></td><td>LLM extraction/analysis + <code>text-embedding-3-small</code> embeddings</td></tr>
+    <tr><td><code>@duckdb/node-api</code></td><td>Relational storage</td></tr>
+    <tr><td><code>@lancedb/lancedb</code></td><td>Vector store + semantic search</td></tr>
+    <tr><td><code>@modelcontextprotocol/sdk</code></td><td>MCP server + tools</td></tr>
+    <tr><td><code>express</code> · <code>cors</code></td><td>HTTP ingest + query server</td></tr>
+    <tr><td><code>@mongodb-js/zstd</code></td><td>Decompress captured content</td></tr>
+    <tr><td><code>zod</code></td><td>Schema validation of payloads</td></tr>
+  </table>
+
+  <footer class="foot"><a href="browser-extension.html">← Browser Extension</a> · Next: <a href="storage.html">Storage →</a></footer>
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'dark',
+    themeVariables: { background:'#161b22', primaryColor:'#1c2330', primaryBorderColor:'#2b3442', primaryTextColor:'#d7dde5', lineColor:'#6b7888', fontFamily:'ui-sans-serif, system-ui, sans-serif' },
+    flowchart: { curve:'basis', padding:12 }, securityLevel:'loose' });
+</script>
+</body>
+</html>

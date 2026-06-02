@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAG Pipeline · Bergamot Architecture</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="brand"><span class="dot"></span> Bergamot Architecture</span>
+    <nav class="crumbs">
+      <a href="index.html">Overview</a>
+      <a href="browser-extension.html">Browser Extension</a>
+      <a href="vscode-extension.html">VS Code Extension</a>
+      <a href="storage.html">Storage</a>
+      <a href="mcp-and-query.html">MCP &amp; Query</a>
+      <a href="rag-pipeline.html" class="active">RAG Pipeline</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="hero">
+    <h1>🔎 RAG Pipeline</h1>
+    <p class="tagline">How captured pages become retrievable answers — the current baseline and the phased upgrade toward hybrid search, contextual chunking, and reranking, all measured against an evaluation harness.</p>
+    <span class="pill">capture → chunk → embed → retrieve → rerank → generate</span>
+  </section>
+
+  <h2><span class="num">1</span>Current baseline</h2>
+  <p>Today the pipeline is intentionally simple — a good place to measure from.</p>
+  <div class="diagram">
+    <p class="cap">Baseline ingestion &amp; retrieval</p>
+    <pre class="mermaid">
+flowchart LR
+    subgraph ING["Ingestion"]
+      a["captured HTML"] --> b["LLM extract<br/>→ Markdown"]
+      b --> c["whole page = 1 record<br/>(no chunking)"]
+      c --> d["embed<br/>text-embedding-3-small"]
+      d --> e[("LanceDB")]
+    end
+    subgraph RET["Retrieval"]
+      q["query"] --> f["dense similarity only<br/>(no BM25, no fusion)"]
+      f --> e
+      f --> g["top-k previews<br/>or full page"]
+    end
+
+    classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
+    classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
+    class a,b,c,d,f,g,q vs;
+    class e st;
+    </pre>
+  </div>
+  <ul class="clean">
+    <li><strong>Chunking:</strong> none — one LanceDB record per page.</li>
+    <li><strong>Embedding:</strong> single dense vector (<code>text-embedding-3-small</code>).</li>
+    <li><strong>Retrieval:</strong> pure dense similarity; no keyword search or fusion.</li>
+    <li><strong>Reranking:</strong> none. <strong>Generation:</strong> previews or full page.</li>
+  </ul>
+
+  <h2><span class="num">2</span>Target pipeline</h2>
+  <p>The upgrade adds structure-aware chunking with contextual situating text, hybrid (dense + BM25)
+  retrieval fused by Reciprocal Rank Fusion, cross-encoder reranking, and parent-document expansion —
+  with every stage gated behind an evaluation harness.</p>
+
+  <div class="diagram">
+    <p class="cap">Target ingestion &amp; query — phases in brackets</p>
+    <pre class="mermaid">
+flowchart TB
+    subgraph INGEST["Ingestion"]
+      direction TB
+      i1["captured page"]
+      i2["main-content extraction<br/>prune nav/footer/ads &nbsp;[B]"]
+      i3["structure-aware chunking +<br/>contextual situating text &nbsp;[C]"]
+      i4["embed → LanceDB &nbsp;[G]"]
+      i5["DuckDB: chunk ↔ page linkage + metadata"]
+      i1 --> i2 --> i3 --> i4
+      i3 --> i5
+    end
+
+    subgraph QUERY["Query"]
+      direction TB
+      q1["query transformation<br/>HyDE / multi-query / route &nbsp;[F]"]
+      q2["hybrid retrieval<br/>dense + BM25, fused via RRF &nbsp;[D]"]
+      q3["rerank top-N<br/>cross-encoder &nbsp;[E]"]
+      q4["parent-document expansion<br/>chunk → full page &nbsp;[H]"]
+      q5["MCP result with citations &nbsp;[H]"]
+      q1 --> q2 --> q3 --> q4 --> q5
+    end
+
+    eval["📏 Evaluation harness &nbsp;[A]<br/>Recall@k · MRR · nDCG · context precision/recall"]
+
+    i4 -.-> q2
+    i5 -.-> q4
+    eval -. "measures every stage" .-> INGEST
+    eval -. "measures every stage" .-> QUERY
+
+    classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
+    classDef ev fill:#3a2a1a,stroke:#f0883e,color:#f5d9c0;
+    class i1,i2,i3,i4,i5,q1,q2,q3,q4,q5 vs;
+    class eval ev;
+    </pre>
+  </div>
+
+  <h2><span class="num">3</span>Build order (by ROI)</h2>
+  <table>
+    <tr><th>#</th><th>Phase</th><th>What &amp; why</th></tr>
+    <tr><td>A</td><td>Evaluation harness</td><td>Golden dataset + metrics (Recall@k, MRR, nDCG, context precision/recall). Build first so every later change is measurable.</td></tr>
+    <tr><td>D</td><td>Hybrid search</td><td>LanceDB-native dense + BM25/FTS fused via Reciprocal Rank Fusion. High impact, low cost.</td></tr>
+    <tr><td>C</td><td>Chunking + Contextual Retrieval</td><td>Structure-aware chunks with 50–100 tokens of LLM-generated situating context, plus parent-document retrieval. ~35% fewer retrieval failures (49% with BM25).</td></tr>
+    <tr><td>E</td><td>Reranking</td><td>Cross-encoder / hosted reranker over top-N. ~67% fewer failures when stacked on contextual + hybrid.</td></tr>
+    <tr><td>B</td><td>Clean ingestion</td><td>Heuristic main-content extraction (Trafilatura-style) to cut boilerplate before chunking.</td></tr>
+    <tr><td>G</td><td>Embedding model selection</td><td>Choose by measured Retrieval@k on the real corpus — not headline MTEB scores.</td></tr>
+    <tr><td>F</td><td>Query transformation</td><td>HyDE, multi-query, routing — optional, behind config.</td></tr>
+    <tr><td>H</td><td>Generation-time surface</td><td>Citations, context ordering, and a small-corpus short-circuit (&lt;200K tokens → whole corpus in prompt).</td></tr>
+  </table>
+
+  <h2><span class="num">4</span>Key techniques</h2>
+  <div class="cards">
+    <div class="card"><h3>Contextual Retrieval</h3><p>An LLM writes 50–100 tokens of chunk-specific context, prepended before both embedding and BM25 indexing — so a chunk knows which page and topic it belongs to.</p></div>
+    <div class="card"><h3>RRF fusion</h3><p>Reciprocal Rank Fusion merges dense and BM25 result lists into one ranking. LanceDB-native, no tuning weights.</p></div>
+    <div class="card"><h3>Parent-document retrieval</h3><p>DuckDB links each chunk to its page; a chunk hit returns the full page for richer context.</p></div>
+    <div class="card"><h3>Small-corpus short-circuit</h3><p>Under ~200K tokens, skip retrieval entirely and put the whole corpus in the prompt.</p></div>
+  </div>
+
+  <h2><span class="num">5</span>Explicitly deferred (YAGNI)</h2>
+  <ul class="clean">
+    <li><strong>GraphRAG</strong> — entity graphs &amp; community summaries, for corpus-wide sensemaking later.</li>
+    <li><strong>Agentic RAG</strong> — multi-hop reasoning, only if it becomes core.</li>
+    <li><strong>Self-RAG</strong> — reflection tokens require custom model training, out of scope.</li>
+    <li><strong>CRAG</strong> — corrective RAG with web-search fallback, revisit only if quality lags.</li>
+  </ul>
+
+  <div class="note">
+    <strong>Principle:</strong> measure first (Phase A), then add the cheapest high-impact retrieval
+    improvements before touching generation. Each phase is justified by a measured reduction in
+    retrieval failures, not by novelty.
+  </div>
+
+  <footer class="foot"><a href="mcp-and-query.html">← MCP &amp; Query</a> · <a href="index.html">Back to overview</a></footer>
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'dark',
+    themeVariables: { background:'#161b22', primaryColor:'#1c2330', primaryBorderColor:'#2b3442', primaryTextColor:'#d7dde5', lineColor:'#6b7888', fontFamily:'ui-sans-serif, system-ui, sans-serif' },
+    flowchart: { curve:'basis', padding:12 }, securityLevel:'loose' });
+</script>
+</body>
+</html>

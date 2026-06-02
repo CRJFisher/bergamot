@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bergamot · Architecture</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="brand"><span class="dot"></span> Bergamot Architecture</span>
+    <nav class="crumbs">
+      <a href="index.html" class="active">Overview</a>
+      <a href="browser-extension.html">Browser Extension</a>
+      <a href="vscode-extension.html">VS Code Extension</a>
+      <a href="storage.html">Storage</a>
+      <a href="mcp-and-query.html">MCP &amp; Query</a>
+      <a href="rag-pipeline.html">RAG Pipeline</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="hero">
+    <h1>Bergamot</h1>
+    <p class="tagline">Transform your web browsing into a queryable knowledge base, accessible via MCP for AI-powered PKM workflows.</p>
+    <span class="pill">Browser extension → VS Code backend → DuckDB + LanceDB → MCP / HTTP query</span>
+  </section>
+
+  <p class="lead">
+    Bergamot silently captures knowledge-rich pages as you browse, processes them with an LLM,
+    stores them in structured and vector backends, and exposes them to AI agents
+    through an MCP server. The system has two deployable artifacts — a <strong>Chromium browser
+    extension</strong> (capture) and a <strong>VS Code extension</strong> (process, store, serve) —
+    that communicate over a single local HTTP transport.
+  </p>
+
+  <h2><span class="num">1</span>High-level architecture</h2>
+  <div class="diagram">
+    <p class="cap">System overview — capture to retrieval</p>
+    <pre class="mermaid">
+flowchart TB
+    user([User browsing the web])
+
+    subgraph BROWSER["🌐 Browser Extension &nbsp;(Chromium, MV3)"]
+      direction TB
+      content["content.ts<br/>capture page HTML · detect SPA nav"]
+      background["background.ts<br/>session graph · referrer chains · group_id"]
+      content -- "visit + zstd content" --> background
+    end
+
+    subgraph VSCODE["🧩 VS Code Extension &nbsp;(backend host)"]
+      direction TB
+      server["Express server<br/>POST /visit · GET /query/*<br/>port 5000–5009"]
+      inbox["Durable visit inbox<br/>(one JSON file per visit)"]
+      queue["Visit queue processor<br/>(batched, retrying)"]
+      workflow["WebpageWorkflow<br/>extract · classify · filter · tree"]
+      server --> inbox --> queue --> workflow
+    end
+
+    subgraph STORES["💾 Storage"]
+      direction LR
+      duck[("DuckDB<br/>relational")]
+      lance[("LanceDB<br/>vectors")]
+    end
+
+    subgraph SERVE["🔌 Access layer"]
+      direction TB
+      mcp["MCP server<br/>(standalone subprocess)"]
+      query["HTTP /query/* API"]
+    end
+
+    agents([AI agents · Claude · scripts])
+
+    user --> content
+    background -- "HTTP POST /visit" --> server
+    workflow --> duck
+    workflow --> lance
+    mcp -- "vector search" --> lance
+    mcp -- "relational (proxy)" --> query
+    query --> duck
+    query --> lance
+    mcp --> agents
+    query --> agents
+
+    classDef br fill:#3a2a1a,stroke:#f0883e,color:#f5d9c0;
+    classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
+    classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
+    classDef sv fill:#2a1f3a,stroke:#bc8cff,color:#e6d9ff;
+    class content,background br;
+    class server,inbox,queue,workflow vs;
+    class duck,lance st;
+    class mcp,query sv;
+    </pre>
+  </div>
+
+  <h2><span class="num">2</span>The four subsystems</h2>
+  <div class="cards">
+    <div class="card">
+      <h3><a href="browser-extension.html">🌐 Browser Extension →</a></h3>
+      <p>Chromium MV3 extension. Captures page HTML, compresses it, and maintains the cross-tab navigation session graph before posting visits to the backend over HTTP.</p>
+      <span class="tag">content.ts · background.ts</span>
+    </div>
+    <div class="card">
+      <h3><a href="vscode-extension.html">🧩 VS Code Extension →</a></h3>
+      <p>The backend host. Runs the Express ingest server, durable inbox, batch processor, and the LLM-driven processing workflow that classifies pages and builds navigation trees.</p>
+      <span class="tag">extension.ts · WebpageWorkflow</span>
+    </div>
+    <div class="card">
+      <h3><a href="storage.html">💾 Storage Layer →</a></h3>
+      <p>Two complementary stores: DuckDB for relational visit records, and LanceDB for page content + vector search.</p>
+      <span class="tag">DuckDB · LanceDB</span>
+    </div>
+    <div class="card">
+      <h3><a href="mcp-and-query.html">🔌 MCP &amp; Query →</a></h3>
+      <p>The access layer. A standalone MCP server plus a read-only HTTP query API expose the knowledge base to AI agents and external scripts.</p>
+      <span class="tag">6 MCP tools · /query/*</span>
+    </div>
+    <div class="card">
+      <h3><a href="rag-pipeline.html">🔎 RAG Pipeline →</a></h3>
+      <p>Current baseline and the phased upgrade plan: hybrid search, contextual chunking, reranking, and an evaluation harness to measure each step.</p>
+      <span class="tag">capture → chunk → embed → retrieve → rerank</span>
+    </div>
+  </div>
+
+  <h2><span class="num">3</span>End-to-end request flow</h2>
+  <div class="diagram">
+    <p class="cap">Sequence — a single page visit, from browse to stored</p>
+    <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant C as content.ts
+    participant B as background.ts
+    participant S as Express server
+    participant Q as Inbox + queue
+    participant W as WebpageWorkflow
+    participant DB as DuckDB / LanceDB
+
+    U->>C: navigates to page
+    C->>C: extract HTML, compress (zstd)
+    C->>B: sendMessage(visit)
+    B->>B: enrich with referrer, group_id, opener
+    B->>S: HTTP POST /visit (discover port 5000–5009)
+    S->>Q: persist to inbox, enqueue, return 200
+    Note over B,S: browser is acknowledged immediately
+    Q->>W: run(members, new_page, raw_content)
+    W->>W: LLM extract → Markdown
+    W->>W: classify + filter
+    W->>W: assign to navigation tree
+    W->>DB: write relational + vectors
+    W-->>Q: remove inbox file (durably ingested)
+    </pre>
+  </div>
+
+  <h2><span class="num">4</span>Overhaul status</h2>
+  <p class="lead">The system is mid-overhaul toward a minimal, durable, queryable design. Phase status:</p>
+  <div class="status-grid">
+    <div class="status done"><div class="ph">Phase 0</div><div class="nm">Data-loss &amp; hygiene</div><span class="badge done">done</span></div>
+    <div class="status done"><div class="ph">Phase 1</div><div class="nm">e2e harness (Playwright)</div><span class="badge done">done</span></div>
+    <div class="status done"><div class="ph">Phase 2</div><div class="nm">Transport → single HTTP</div><span class="badge done">done</span></div>
+    <div class="status done"><div class="ph">Phase 3</div><div class="nm">Session-graph robustness</div><span class="badge done">done</span></div>
+    <div class="status done"><div class="ph">Phase 4</div><div class="nm">Query interface + MCP</div><span class="badge done">done</span></div>
+    <div class="status done"><div class="ph">Phase 5</div><div class="nm">LangChain removed</div><span class="badge done">done</span></div>
+    <div class="status done"><div class="ph">Phase 6</div><div class="nm">Lean-core purge</div><span class="badge done">done</span></div>
+    <div class="status wip"><div class="ph">Next</div><div class="nm">RAG pipeline upgrade</div><span class="badge wip">planned</span></div>
+  </div>
+  <div class="note">
+    <strong>Locked decisions:</strong> storage is two separate stores (DuckDB + LanceDB) — markdown is no longer a store;
+    transport is a single HTTP server on a dynamically-discovered port; the browser side is Chromium-only;
+    LLM calls are vanilla OpenAI (no LangChain); e2e tests run on Playwright against a mock PKM server.
+  </div>
+
+  <footer class="foot">
+    Generated architecture reference · diagrams render client-side with Mermaid · open any page directly in a browser.
+  </footer>
+
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#161b22',
+      primaryColor: '#1c2330',
+      primaryBorderColor: '#2b3442',
+      primaryTextColor: '#d7dde5',
+      lineColor: '#6b7888',
+      fontFamily: 'ui-sans-serif, system-ui, sans-serif'
+    },
+    flowchart: { curve: 'basis', padding: 12 },
+    securityLevel: 'loose'
+  });
+</script>
+
+</body>
+</html>

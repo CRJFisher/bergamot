@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP &amp; Query · Bergamot Architecture</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="brand"><span class="dot"></span> Bergamot Architecture</span>
+    <nav class="crumbs">
+      <a href="index.html">Overview</a>
+      <a href="browser-extension.html">Browser Extension</a>
+      <a href="vscode-extension.html">VS Code Extension</a>
+      <a href="storage.html">Storage</a>
+      <a href="mcp-and-query.html" class="active">MCP &amp; Query</a>
+      <a href="rag-pipeline.html">RAG Pipeline</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="hero">
+    <h1>🔌 MCP &amp; Query Layer</h1>
+    <p class="tagline">How AI agents and scripts reach the knowledge base. A standalone MCP server provides six tools; a read-only HTTP API backs the relational ones while the MCP server reads vectors directly.</p>
+    <span class="pill">mcp_server_standalone.ts · /query/* · stdio transport</span>
+  </section>
+
+  <h2><span class="num">1</span>Topology</h2>
+  <p>The MCP server runs as a <em>separate subprocess</em> spawned by the extension. Because DuckDB
+  is single-writer, the MCP server cannot open it directly — relational tools proxy over HTTP to the
+  extension's own server, while vector tools read LanceDB directly.</p>
+
+  <div class="diagram">
+    <p class="cap">Access paths from an AI agent to the stores</p>
+    <pre class="mermaid">
+flowchart TB
+    agent([AI agent · Claude · script])
+
+    subgraph MCP["MCP server (subprocess) — mcp_server_standalone.ts"]
+      direction TB
+      vt["Vector tools<br/>semantic_search · get_webpage_content"]
+      rt["Relational tools<br/>get_visit_by_url · search_by_title<br/>get_navigation_tree · list_recent_navigation_trees"]
+    end
+
+    subgraph EXT["VS Code extension"]
+      qapi["Express /query/* API"]
+      duck[("DuckDB")]
+      qapi --> duck
+    end
+
+    lance[("LanceDB<br/>webpage_memory.db")]
+    portfile["~/.bergamot/port.json<br/>{ port }"]
+
+    agent -- "stdio (MCP protocol)" --> MCP
+    vt -- "direct read" --> lance
+    rt -- "HTTP proxy" --> qapi
+    MCP -. "discover port" .-> portfile
+
+    classDef sv fill:#2a1f3a,stroke:#bc8cff,color:#e6d9ff;
+    classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
+    classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
+    class vt,rt sv;
+    class qapi vs;
+    class duck,lance st;
+    </pre>
+  </div>
+
+  <h2><span class="num">2</span>MCP tools</h2>
+  <table>
+    <tr><th>Tool</th><th>Input</th><th>Returns</th><th>Backed by</th></tr>
+    <tr><td><code>semantic_search</code></td><td>query, limit=10</td><td>[{ id, url, title, score, preview }]</td><td>LanceDB vector search</td></tr>
+    <tr><td><code>get_webpage_content</code></td><td>page_session_id</td><td>{ id, url, title, content }</td><td>LanceDB direct read</td></tr>
+    <tr><td><code>get_visit_by_url</code></td><td>url</td><td>latest visit for exact URL</td><td>HTTP <code>/query/visit_by_url</code></td></tr>
+    <tr><td><code>search_by_title</code></td><td>title</td><td>fuzzy title + content match</td><td>HTTP <code>/query/page_by_title</code></td></tr>
+    <tr><td><code>get_navigation_tree</code></td><td>tree_id</td><td>all visits + analysis in a tree</td><td>HTTP <code>/query/tree</code></td></tr>
+    <tr><td><code>list_recent_navigation_trees</code></td><td>limit=5</td><td>most recently active trees</td><td>HTTP <code>/query/recent_trees</code></td></tr>
+  </table>
+
+  <h2><span class="num">3</span>HTTP query API</h2>
+  <p>The same Express server that ingests visits also serves read-only queries. External scripts can
+  hit these directly — the extension acts as the gateway to DuckDB.</p>
+  <table>
+    <tr><th>Endpoint</th><th>Purpose</th></tr>
+    <tr><td><code>GET /status</code></td><td>Health check + <code>{ service: "bergamot" }</code> identity marker (used by browser discovery).</td></tr>
+    <tr><td><code>POST /visit</code></td><td>Ingest a captured visit (zstd content). Covered in <a href="vscode-extension.html">VS Code Extension</a>.</td></tr>
+    <tr><td><code>GET /query/visit_by_url?url=</code></td><td>Exact-URL lookup of the most recent visit.</td></tr>
+    <tr><td><code>GET /query/page_by_title?title=</code></td><td>Fuzzy title + content search.</td></tr>
+    <tr><td><code>GET /query/tree?tree_id=</code></td><td>All pages in a navigation tree, with analysis.</td></tr>
+    <tr><td><code>GET /query/recent_trees?limit=</code></td><td>Most recently modified trees.</td></tr>
+  </table>
+
+  <h2><span class="num">4</span>Discovery &amp; security</h2>
+  <ul class="clean">
+    <li>The extension writes its chosen port to <code>~/.bergamot/port.json</code>; the MCP subprocess reads it to find the relational API.</li>
+    <li>CORS is pinned to <code>chrome-extension://</code> origins (and origin-less callers like curl/scripts); ordinary web pages are blocked.</li>
+    <li>Request body limit is 50 MB to accommodate compressed page content.</li>
+    <li>The MCP subprocess receives <code>OPENAI_API_KEY</code>, <code>STORAGE_PATH</code>, and <code>DUCK_DB_PATH</code> via environment variables.</li>
+  </ul>
+
+  <div class="note purple">
+    <strong>Why proxy relational queries?</strong> DuckDB is embedded and single-writer. Rather than
+    risk a second process opening the database file, the MCP server asks the extension — which owns
+    the writer — over HTTP. Vector reads are safe to do directly, so those skip the hop.
+  </div>
+
+  <footer class="foot"><a href="storage.html">← Storage</a> · Next: <a href="rag-pipeline.html">RAG Pipeline →</a></footer>
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'dark',
+    themeVariables: { background:'#161b22', primaryColor:'#1c2330', primaryBorderColor:'#2b3442', primaryTextColor:'#d7dde5', lineColor:'#6b7888', fontFamily:'ui-sans-serif, system-ui, sans-serif' },
+    flowchart: { curve:'basis', padding:12 }, securityLevel:'loose' });
+</script>
+</body>
+</html>
