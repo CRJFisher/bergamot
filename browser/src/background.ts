@@ -5,6 +5,7 @@ import {
   remove_tab_history,
   get_tab_history,
   update_tab_history,
+  generate_group_id,
 } from './core/tab_history_manager';
 import { load_store, save_store } from './core/tab_history_persistence';
 import { handle_message } from './core/message_router';
@@ -40,6 +41,8 @@ const with_store = <T>(
     const { store: new_store, result } = await mutator(store);
     if (new_store !== store) {
       tab_history_store = new_store;
+      // Persist before the next operation so a service-worker restart re-hydrates
+      // the latest session graph (group_id inheritance must survive eviction).
       await save_store(new_store);
     }
     return result;
@@ -69,7 +72,9 @@ const apply_tab_opener = async (
           now,
           opener_history?.previous_url_timestamp,
           opener_history?.opener_tab_id,
-          opener_history?.group_id
+          // The opener is a real tab and must have a session id; mint one if we
+          // have not tracked it yet, so the child can inherit a defined group.
+          opener_history?.group_id ?? generate_group_id()
         );
         working = add_tab_history(working, opener_tab_id, new_opener_history);
         opener_history = new_opener_history;
@@ -87,7 +92,9 @@ const apply_tab_opener = async (
       now,
       opener_history.timestamp,
       opener_tab_id,
-      opener_history.group_id // inherit group_id from opener (single authority)
+      // Inherit the opener's group_id; never clobber the child's existing group
+      // with an undefined value if the opener somehow lacks one.
+      opener_history.group_id ?? current_history?.group_id
     );
     working = add_tab_history(working, tab_id, new_history);
   }
@@ -95,76 +102,131 @@ const apply_tab_opener = async (
   return working;
 };
 
+// Ensures a tab has a history entry, minting a group_id (via create_tab_history,
+// the single authority) only when the tab is genuinely new to us. Never
+// overwrites an existing entry, so whichever event sees the tab first assigns
+// the session id and later events preserve it.
+const ensure_history = (
+  store: TabHistoryStore,
+  tab_id: number,
+  url?: string
+): TabHistoryStore =>
+  get_tab_history(store, tab_id)
+    ? store
+    : add_tab_history(store, tab_id, create_tab_history(url));
+
 // Tab event handlers — each returns the next store for `with_store` to persist.
 const handle_tab_created = (tab: chrome.tabs.Tab) =>
   with_store(async (store) => {
     if (!tab.id) {
       return { store };
     }
-
-    const opener_group_id = tab.openerTabId
-      ? get_tab_history(store, tab.openerTabId)?.group_id
-      : undefined;
-
-    const history = create_tab_history(
-      tab.url || tab.pendingUrl,
-      tab.openerTabId,
-      undefined,
-      opener_group_id
-    );
-    let working = add_tab_history(store, tab.id, history);
-
+    // Mint a group_id on first sighting; if this tab was opened by another,
+    // inherit the opener's group + referrer instead.
+    let working = ensure_history(store, tab.id, tab.url || tab.pendingUrl);
     if (tab.openerTabId) {
       working = await apply_tab_opener(working, tab.id, tab.openerTabId);
     }
-
     return { store: working };
   });
 
-const handle_tab_updated = (
-  tab_id: number,
-  change_info: chrome.tabs.TabChangeInfo,
-  tab: chrome.tabs.Tab
-) =>
+// Handles delayed opener info that can arrive after tab creation. URL changes
+// are owned by the webNavigation listeners below (the authoritative source).
+const handle_tab_updated = (tab_id: number, _change_info: chrome.tabs.TabChangeInfo, tab: chrome.tabs.Tab) =>
   with_store(async (store) => {
-    let working = store;
-
-    // Handle delayed opener info that arrives after tab creation.
-    if (tab.openerTabId && !get_tab_history(working, tab_id)?.opener_tab_id) {
-      working = await apply_tab_opener(working, tab_id, tab.openerTabId);
+    if (tab.openerTabId && !get_tab_history(store, tab_id)?.opener_tab_id) {
+      return { store: await apply_tab_opener(store, tab_id, tab.openerTabId) };
     }
-
-    // Handle committed URL changes.
-    if (change_info.status === "loading" && change_info.url) {
-      const current_history = get_tab_history(working, tab_id);
-      const updated_history = update_tab_history(
-        current_history,
-        change_info.url,
-        tab.openerTabId
-      );
-      working = add_tab_history(working, tab_id, updated_history);
-    }
-
-    return { store: working };
+    return { store };
   });
 
 const handle_tab_removed = (tab_id: number) =>
   with_store((store) => ({ store: remove_tab_history(store, tab_id) }));
 
+// webNavigation is the authoritative source for navigation events: it sees both
+// full-document and same-document (SPA) navigations regardless of which world
+// triggered them, which the content script's isolated world cannot.
+
+// A committed navigation (new document). Update the session graph; the content
+// script captures the page content itself when it loads.
+const handle_nav_committed = (details: chrome.webNavigation.WebNavigationTransitionCallbackDetails) => {
+  if (details.frameId !== 0) return;
+  void with_store((store) => {
+    const ensured = ensure_history(store, details.tabId, details.url);
+    const updated = update_tab_history(get_tab_history(ensured, details.tabId), details.url);
+    return { store: add_tab_history(ensured, details.tabId, updated) };
+  });
+};
+
+// A same-document (history.pushState/replaceState) navigation. Update the graph,
+// then ask the content script to capture — it never reloads, so it would
+// otherwise miss this visit entirely.
+const handle_nav_history_state = (details: chrome.webNavigation.WebNavigationTransitionCallbackDetails) => {
+  if (details.frameId !== 0) return;
+  void with_store((store) => {
+    const ensured = ensure_history(store, details.tabId, details.url);
+    const updated = update_tab_history(get_tab_history(ensured, details.tabId), details.url);
+    return { store: add_tab_history(ensured, details.tabId, updated) };
+  }).then(() =>
+    chrome.tabs
+      .sendMessage(details.tabId, { action: "captureVisit", url: details.url })
+      .catch(() => undefined)
+  );
+};
+
+// A new tab/window opened from a link or window.open. This fires before the new
+// tab's content script runs, so it is the reliable point to inherit the
+// opener's group_id and set the referrer.
+const handle_created_nav_target = (
+  details: chrome.webNavigation.WebNavigationSourceCallbackDetails & { url: string }
+) => {
+  void with_store(async (store) => {
+    const opener_group_id = get_tab_history(store, details.sourceTabId)?.group_id;
+    let working = add_tab_history(
+      store,
+      details.tabId,
+      create_tab_history(details.url, details.sourceTabId, undefined, opener_group_id)
+    );
+    working = await apply_tab_opener(working, details.tabId, details.sourceTabId);
+    return { store: working };
+  });
+};
+
 // Set up event listeners (registered synchronously at top level, as MV3 requires).
 chrome.tabs.onCreated.addListener(handle_tab_created);
 chrome.tabs.onUpdated.addListener(handle_tab_updated);
 chrome.tabs.onRemoved.addListener(handle_tab_removed);
+chrome.webNavigation.onCommitted.addListener(handle_nav_committed);
+chrome.webNavigation.onHistoryStateUpdated.addListener(handle_nav_history_state);
+chrome.webNavigation.onCreatedNavigationTarget.addListener(handle_created_nav_target);
 
 // Message handling — routed through the same serialized store chain.
 chrome.runtime.onMessage.addListener((request, sender, send_response) => {
   with_store(async (store) => {
+    // A page message can arrive before the tab/navigation events that would
+    // create its history, so guarantee the tab has a group_id before we read or
+    // attach session metadata.
+    let base = store;
+    const sender_tab = sender.tab;
+    if (sender_tab?.id !== undefined) {
+      base = ensure_history(base, sender_tab.id, sender_tab.url);
+      // The sender tab object carries openerTabId directly, so we can inherit
+      // the opener's group_id here even if onCreatedNavigationTarget/onCreated
+      // have not been processed yet — removing the cross-event race.
+      const history = get_tab_history(base, sender_tab.id);
+      if (
+        sender_tab.openerTabId !== undefined &&
+        history?.opener_tab_id === undefined
+      ) {
+        base = await apply_tab_opener(base, sender_tab.id, sender_tab.openerTabId);
+      }
+    }
     const { response, new_store } = await handle_message(
       request,
-      sender.tab?.id,
-      store
+      sender_tab?.id,
+      base
     );
-    return { store: new_store ?? store, result: response };
+    return { store: new_store ?? base, result: response };
   })
     .then((response) => send_response(response))
     .catch((error) => {

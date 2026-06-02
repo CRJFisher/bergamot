@@ -1,21 +1,12 @@
-import { 
-  NavigationState,
-  create_navigation_state,
-  create_push_state_handler,
-  create_replace_state_handler,
-  create_popstate_handler,
-  create_mutation_observer
-} from './core/navigation_detector';
-import { 
+import {
   create_visit_data,
   create_zstd_instance
 } from './core/data_collector';
-import { 
+import {
   load_configuration,
   get_api_base_url,
   is_debug_mode
 } from './core/configuration_manager';
-import { ReferrerInfo } from './types/navigation';
 
 // Initialize configuration
 const config = load_configuration();
@@ -23,138 +14,56 @@ console.log(
   `PKM: Using API base URL: ${get_api_base_url(config)} (debug: ${is_debug_mode(config)})`
 );
 
-// Mutable state - the only non-functional parts
-let navigation_state: NavigationState = create_navigation_state(window.location.href);
+// Compression instance — the only mutable state in the content script.
 let zstd_instance: any = null;
 
-// Communication functions
-const get_true_referrer = async (): Promise<ReferrerInfo> => {
-  try {
-    console.log("PKM: Requesting referrer from background script...");
-    const response = await chrome.runtime.sendMessage({
-      action: "getReferrer",
-    });
-    console.log("PKM: Received referrer response:", {
-      referrer: response?.referrer,
-      referrer_timestamp: response?.referrer_timestamp,
-      tab_id: response?.tab_id,
-      group_id: response?.group_id,
-      opener_tab_id: response?.opener_tab_id,
-      current_url: window.location.href,
-      document_referrer: document.referrer,
-    });
-    return new ReferrerInfo(
-      response?.referrer || "",
-      response?.referrer_timestamp,
-      response?.tab_id,
-      response?.group_id,
-      response?.opener_tab_id
-    );
-  } catch (error) {
-    console.warn("PKM: Failed to get referrer from background script:", error);
-    console.log("PKM: Falling back to document.referrer:", {
-      document_referrer: document.referrer,
-      current_url: window.location.href,
-    });
-    return new ReferrerInfo(document.referrer || "");
-  }
-};
+const SEND_RETRY_ATTEMPTS = 20;
+const SEND_RETRY_DELAY_MS = 100;
 
+// Sends a captured visit to the background for enrichment + forwarding. On a
+// cold page load the background service worker may not be ready, so retry while
+// the message channel is unavailable. A reached-but-failed response (real
+// server error) is not retried.
 const send_to_server = async (endpoint: string, data: Record<string, unknown>) => {
-  try {
-    console.log(`PKM: Sending data to ${endpoint}...`);
-    const response = await chrome.runtime.sendMessage({
-      action: "sendToPKMServer",
-      endpoint: endpoint,
-      data: data,
-      api_base_url: get_api_base_url(config),
-    });
-    console.log(`PKM: Response from ${endpoint}:`, response);
-    if (!response?.success) {
+  for (let attempt = 0; attempt < SEND_RETRY_ATTEMPTS; attempt++) {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: "sendToPKMServer",
+        endpoint,
+        data,
+        api_base_url: get_api_base_url(config),
+      });
+      if (response?.success) {
+        return;
+      }
+      // Background was reachable but reported a failure — do not spin on it.
       console.warn(`PKM: Failed to send to ${endpoint}:`, response?.error);
+      return;
+    } catch (error) {
+      // Service worker not ready yet; wait and retry.
     }
-  } catch (error) {
-    console.warn(`PKM: Error sending to ${endpoint}:`, error);
+    await new Promise((resolve) => setTimeout(resolve, SEND_RETRY_DELAY_MS));
   }
+  console.warn(`PKM: Gave up sending to ${endpoint} after retries`);
 };
 
-// Main page visit handler
+// Main page visit handler. The content script only captures page content; the
+// background attaches the authoritative session metadata (referrer, group_id,
+// opener_tab_id) when it forwards the visit, which avoids a racy round-trip to
+// a possibly-cold service worker.
 const handle_page_visit = async (url: string) => {
-  const referrer_info = await get_true_referrer();
-  const visit_data = await create_visit_data(
-    url,
-    referrer_info.referrer,
-    referrer_info.referrer_timestamp,
-    zstd_instance,
-    referrer_info.tab_id,
-    referrer_info.group_id,
-    referrer_info.opener_tab_id
-  );
-
-  console.log("PKM: Sending visit data:", {
-    url: visit_data.url,
-    referrer: visit_data.referrer,
-    referrer_timestamp: visit_data.referrer_timestamp,
-    tab_id: visit_data.tab_id,
-    group_id: visit_data.group_id,
-    opener_tab_id: visit_data.opener_tab_id,
-  });
-
-  // Notify background script about SPA navigation (except initial load)
-  if (url !== window.location.href || navigation_state.visited_urls.size > 1) {
-    try {
-      await chrome.runtime.sendMessage({
-        action: "spaNavigation",
-        url: url,
-        page_loaded_at: visit_data.page_loaded_at,
-        referrer: referrer_info.referrer,
-        referrer_timestamp: referrer_info.referrer_timestamp,
-      });
-    } catch (error) {
-      console.warn("PKM: Failed to notify background script about SPA navigation:", error);
-    }
-  }
-
+  const visit_data = await create_visit_data(url, "", undefined, zstd_instance);
   send_to_server("/visit", visit_data);
 };
 
-// State update function
-const update_navigation_state = (new_state: NavigationState) => {
-  navigation_state = new_state;
-};
-
-// Initialize navigation tracking
-const initialize_navigation_tracking = () => {
-  // Override history methods
-  history.pushState = create_push_state_handler(
-    () => navigation_state,
-    update_navigation_state,
-    handle_page_visit
-  );
-
-  history.replaceState = create_replace_state_handler(
-    () => navigation_state,
-    update_navigation_state,
-    handle_page_visit
-  );
-
-  // Set up event listeners
-  window.addEventListener('popstate', create_popstate_handler(
-    () => navigation_state,
-    update_navigation_state,
-    handle_page_visit
-  ));
-
-  // Set up mutation observer
-  const observer = create_mutation_observer(
-    () => navigation_state,
-    update_navigation_state,
-    handle_page_visit
-  );
-
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
+// The background detects SPA navigations authoritatively via chrome.webNavigation
+// (history.pushState runs in the page's main world and is invisible to the
+// content script's isolated world), then asks us to capture the new document.
+const listen_for_capture_requests = () => {
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.action === "captureVisit" && typeof message.url === "string") {
+      handle_page_visit(message.url);
+    }
   });
 };
 
@@ -162,13 +71,13 @@ const initialize_navigation_tracking = () => {
 const initialize_pkm = async () => {
   // Initialize compression
   zstd_instance = await create_zstd_instance();
-  
-  // Send initial visit data
+
+  // Capture the initial page load.
   console.log("Sending initial visit data");
   await handle_page_visit(window.location.href);
 
-  // Set up navigation tracking
-  initialize_navigation_tracking();
+  // Capture subsequent same-document (SPA) navigations on the background's cue.
+  listen_for_capture_requests();
 };
 
 // Wait for DOM to be ready, then initialize

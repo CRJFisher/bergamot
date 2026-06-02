@@ -41,7 +41,10 @@ export const update_tab_history = (
     Date.now(),
     should_update_previous ? current_history?.timestamp : current_history?.previous_url_timestamp,
     current_history?.opener_tab_id || opener_tab_id,
-    current_history?.group_id || generate_group_id() // Preserve or generate group_id
+    // Preserve the existing group_id. group_id is minted in exactly one place —
+    // create_tab_history (called by the background on tab creation) — so a
+    // navigation never spawns a competing session id.
+    current_history?.group_id
   );
 };
 

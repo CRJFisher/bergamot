@@ -1,7 +1,6 @@
 import { describe, it, expect, jest, beforeEach } from "@jest/globals";
 import {
   handle_get_referrer,
-  handle_spa_navigation,
   handle_server_request,
   handle_message
 } from "../src/core/message_router";
@@ -70,32 +69,6 @@ describe("message_router", () => {
     });
   });
 
-  describe("handle_spa_navigation", () => {
-    it("should update tab history", () => {
-      let store = create_tab_history_store();
-      const initial_history = create_tab_history("https://initial.com");
-      store = add_tab_history(store, 123, initial_history);
-      
-      const result = handle_spa_navigation(123, "https://spa-page.com", store);
-      
-      expect(result.response.success).toBe(true);
-      
-      const updated_history = result.new_store.get(123);
-      expect(updated_history?.current_url).toBe("https://spa-page.com");
-      expect(updated_history?.previous_url).toBe("https://initial.com");
-    });
-
-    it("should handle new tab without history", () => {
-      const store = create_tab_history_store();
-      const result = handle_spa_navigation(456, "https://new.com", store);
-      
-      expect(result.response.success).toBe(true);
-      expect(result.new_store.size).toBe(1);
-      
-      const history = result.new_store.get(456);
-      expect(history?.current_url).toBe("https://new.com");
-    });
-  });
 
   describe("handle_server_request", () => {
     beforeEach(() => {
@@ -163,31 +136,6 @@ describe("message_router", () => {
       );
       
       expect(result.response.error).toBe("No tab ID");
-    });
-
-    it("should handle spaNavigation message", async () => {
-      const result = await handle_message(
-        { 
-          action: "spaNavigation",
-          url: "https://spa.com/page2"
-        },
-        123,
-        store
-      );
-      
-      expect(result.response.success).toBe(true);
-      expect(result.new_store).toBeDefined();
-      expect(result.new_store?.get(123)?.current_url).toBe("https://spa.com/page2");
-    });
-
-    it("should handle spaNavigation without required data", async () => {
-      const result = await handle_message(
-        { action: "spaNavigation" },
-        123,
-        store
-      );
-      
-      expect(result.response.error).toBe("No tab ID or URL");
     });
 
     it("should handle sendToPKMServer message", async () => {

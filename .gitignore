@@ -57,6 +57,11 @@ CLAUDE.local.md
 test-results/
 e2e-screenshots/
 e2e-videos/
+playwright-report/
+**/playwright-report/
+**/test-results/
+.eslintcache
+browser/test-port.txt
 
 # Package manager
 .pnpm-store/

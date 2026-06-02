@@ -1,10 +1,9 @@
-import { TabHistoryStore, get_tab_history, get_referrer_from_history, update_tab_history, add_tab_history } from './tab_history_manager';
+import { TabHistoryStore, get_tab_history, get_referrer_from_history } from './tab_history_manager';
 import { send_to_server } from './api_client';
 import { discover_server_url } from './server_discovery';
 
-export type MessageAction = 
+export type MessageAction =
   | 'getReferrer'
-  | 'spaNavigation'
   | 'sendToPKMServer';
 
 export interface Message {
@@ -63,24 +62,27 @@ export const handle_get_referrer = (
   };
 };
 
-export const handle_spa_navigation = (
+// Attaches authoritative session metadata (referrer, group_id, opener) from the
+// background's store to a captured visit. The content script no longer fetches
+// these — it would race a cold service worker — so the background, which owns
+// the session graph, fills them in at forward time.
+const enrich_visit_with_session = (
+  data: any,
   tab_id: number,
-  url: string,
   tab_history_store: TabHistoryStore
-): { response: MessageResponse; new_store: TabHistoryStore } => {
-  const current_history = get_tab_history(tab_history_store, tab_id);
-  const updated_history = update_tab_history(current_history, url);
-  const new_store = add_tab_history(tab_history_store, tab_id, updated_history);
-  
-  console.log(
-    `📍 SPA Navigation in tab ${tab_id} to: ${url} (previous: ${
-      current_history?.current_url || "none"
-    })`
-  );
-  
+): any => {
+  const history = get_tab_history(tab_history_store, tab_id);
+  const opener_history = history?.opener_tab_id
+    ? get_tab_history(tab_history_store, history.opener_tab_id)
+    : undefined;
+  const referrer_info = get_referrer_from_history(history, opener_history, tab_id);
   return {
-    response: { success: true },
-    new_store
+    ...data,
+    referrer: referrer_info.referrer,
+    referrer_timestamp: referrer_info.referrer_timestamp,
+    tab_id: referrer_info.tab_id,
+    group_id: referrer_info.group_id,
+    opener_tab_id: referrer_info.opener_tab_id,
   };
 };
 
@@ -134,18 +136,16 @@ export const handle_message = async (
       }
       return { response: handle_get_referrer(sender_tab_id, tab_history_store) };
 
-    case 'spaNavigation':
-      if (!sender_tab_id || !message.url) {
-        return { response: { error: 'No tab ID or URL' } };
-      }
-      return handle_spa_navigation(sender_tab_id, message.url, tab_history_store);
-
-    case 'sendToPKMServer':
+    case 'sendToPKMServer': {
       if (!message.endpoint || !message.data || !message.api_base_url) {
         return { response: { error: 'Missing endpoint, data, or API base URL' } };
       }
-      const response = await handle_server_request(message.endpoint, message.data, message.api_base_url);
+      const enriched = sender_tab_id !== undefined
+        ? enrich_visit_with_session(message.data, sender_tab_id, tab_history_store)
+        : message.data;
+      const response = await handle_server_request(message.endpoint, enriched, message.api_base_url);
       return { response };
+    }
 
     default:
       return { response: { error: 'Unknown action' } };

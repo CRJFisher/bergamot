@@ -125,6 +125,9 @@ export class MockPKMServer {
   async stop(): Promise<void> {
     return new Promise((resolve) => {
       if (this.server) {
+        // Force keep-alive connections shut so teardown does not block on the
+        // browser's idle connections.
+        this.server.closeAllConnections?.();
         this.server.close(() => {
           console.log('🛑 Mock PKM Server stopped');
           resolve();

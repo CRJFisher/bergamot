@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bergamot — E2E Test Workflows</title>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      :root {
+        --bg: #fbfaf7;
+        --ink: #2b2b2b;
+        --muted: #6b6b6b;
+        --accent: #c9772f; /* bergamot */
+        --green: #2e7d32;
+        --amber: #b8860b;
+        --card: #ffffff;
+        --line: #e6e1d8;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+      }
+      header {
+        background: linear-gradient(135deg, #c9772f, #e0a458);
+        color: #fff;
+        padding: 2.4rem 2rem 2rem;
+      }
+      header h1 { margin: 0 0 0.3rem; font-size: 1.9rem; }
+      header p { margin: 0; opacity: 0.95; max-width: 60rem; }
+      main { max-width: 60rem; margin: 0 auto; padding: 1.5rem 1.5rem 4rem; }
+      section {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 1.2rem 1.4rem;
+        margin: 1.5rem 0;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+      }
+      h2 { font-size: 1.25rem; margin: 0.2rem 0 0.4rem; display: flex; align-items: center; gap: 0.6rem; }
+      h2 .file { font-size: 0.8rem; color: var(--muted); font-weight: 400; font-family: ui-monospace, monospace; }
+      .status {
+        font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.55rem; border-radius: 999px;
+        text-transform: uppercase; letter-spacing: 0.03em;
+      }
+      .pass { background: #e6f4ea; color: var(--green); }
+      .wip { background: #fbf3da; color: var(--amber); }
+      .desc { color: var(--muted); margin: 0.2rem 0 0.8rem; }
+      .mermaid { background: #fcfbf9; border: 1px dashed var(--line); border-radius: 8px; padding: 0.8rem; overflow-x: auto; }
+      table { width: 100%; border-collapse: collapse; margin-top: 0.6rem; font-size: 0.9rem; }
+      th, td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+      th { color: var(--muted); font-weight: 600; }
+      code { font-family: ui-monospace, SFMono-Regular, monospace; background: #f3efe7; padding: 0.05rem 0.35rem; border-radius: 4px; font-size: 0.88em; }
+      .legend { display: flex; gap: 1.2rem; flex-wrap: wrap; font-size: 0.85rem; color: var(--muted); margin-top: 0.6rem; }
+      .legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+      footer { text-align: center; color: var(--muted); font-size: 0.8rem; padding: 1rem; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Bergamot — E2E Test Workflows</h1>
+      <p>
+        What the Playwright cross-tab suite (<code>browser/e2e</code>) drives and asserts. Each test loads the real
+        MV3 extension into a persistent Chromium context and verifies the captured visit records against a mock PKM
+        server that stands in for the VS&nbsp;Code backend.
+      </p>
+    </header>
+
+    <main>
+      <section>
+        <h2>Harness architecture</h2>
+        <p class="desc">
+          Every test shares this setup. The extension is built with a mock server port baked in
+          (<code>build:test</code>), loaded via <code>launchPersistentContext</code>, and driven headless. Visits flow
+          page&nbsp;→&nbsp;content&nbsp;script&nbsp;→&nbsp;background&nbsp;service&nbsp;worker&nbsp;→&nbsp;mock server, which is the assertion oracle.
+        </p>
+        <div class="mermaid">
+flowchart LR
+    subgraph Browser["Chromium (persistent context, extension loaded)"]
+        P["Web page<br/>(test_page_server)"]
+        CS["Content script<br/>(content.ts)"]
+        BG["Background SW<br/>(background.ts)<br/>session graph"]
+    end
+    M["Mock PKM Server<br/>(oracle: get_visits)"]
+    T["Playwright test"]
+    P -->|"DOM ready"| CS
+    CS -->|"getReferrer"| BG
+    BG -->|"referrer + group_id"| CS
+    CS -->|"POST /visit"| M
+    T -->|"drive tabs / click"| P
+    T -->|"wait_for_visit / assert"| M
+        </div>
+        <div class="legend">
+          <span>🟩 <b>group_id</b> — identifies one cross-page navigation session</span>
+          <span>↩︎ <b>referrer</b> — the page that led here</span>
+          <span>🔗 <b>opener_tab_id</b> — the tab that spawned this one</span>
+        </div>
+      </section>
+
+      <section>
+        <h2>1. Basic capture <span class="status pass">passing</span> <span class="file">basic_capture.spec.ts</span></h2>
+        <p class="desc">A single page load is captured as a visit with a session id.</p>
+        <div class="mermaid">
+sequenceDiagram
+    participant T as Test
+    participant P as Page A
+    participant CS as Content script
+    participant BG as Background
+    participant M as Mock server
+    T->>P: newPage + goto /page-a
+    P->>CS: DOMContentLoaded
+    CS->>BG: getReferrer
+    BG-->>CS: { group_id, referrer:"" }
+    CS->>M: POST /visit { url:/page-a, group_id }
+    T->>M: wait_for_visit(url ~ /page-a)
+    Note over T: assert visit.url, visit.group_id, page_loaded_at
+        </div>
+      </section>
+
+      <section>
+        <h2>2. New tab via <code>target="_blank"</code> <span class="status wip">driving via Phase 3.1</span> <span class="file">cross_tab.spec.ts</span></h2>
+        <p class="desc">Opening a link in a new tab must keep the new tab in the opener's session and record the opener as referrer.</p>
+        <div class="mermaid">
+sequenceDiagram
+    participant T as Test
+    participant A as Tab A (/page-a)
+    participant B as Tab B (/page-b)
+    participant BG as Background
+    participant M as Mock server
+    T->>A: goto /page-a
+    A->>M: POST /visit { /page-a, group_id:G }
+    T->>A: click a[target=_blank]
+    Note over BG: onCreatedNavigationTarget<br/>B inherits G from opener A
+    A-->>B: open /page-b (new tab)
+    B->>BG: getReferrer
+    BG-->>B: { group_id:G, referrer:/page-a }
+    B->>M: POST /visit { /page-b, group_id:G, referrer:/page-a }
+    Note over T: assert visit_b.group_id == G<br/>assert visit_b.referrer ~ /page-a
+        </div>
+      </section>
+
+      <section>
+        <h2>3. New tab via <code>window.open</code> <span class="status wip">driving via Phase 3.1</span> <span class="file">cross_tab.spec.ts</span></h2>
+        <p class="desc">A programmatically opened tab stays in the opener's session.</p>
+        <div class="mermaid">
+sequenceDiagram
+    participant T as Test
+    participant A as Tab A (/page-a)
+    participant D as Tab D (/page-d)
+    participant BG as Background
+    participant M as Mock server
+    T->>A: goto /page-a
+    A->>M: POST /visit { /page-a, group_id:G }
+    T->>A: click button → window.open('/page-d')
+    Note over BG: onCreatedNavigationTarget → D inherits G
+    A-->>D: open /page-d
+    D->>M: POST /visit { /page-d, group_id:G }
+    Note over T: assert visit_d.group_id == G
+        </div>
+      </section>
+
+      <section>
+        <h2>4. Same-tab navigation <span class="status wip">driving via Phase 3.1</span> <span class="file">cross_tab.spec.ts</span></h2>
+        <p class="desc">Following a link in place keeps the session and chains the referrer.</p>
+        <div class="mermaid">
+sequenceDiagram
+    participant T as Test
+    participant P as Tab (A → C)
+    participant BG as Background
+    participant M as Mock server
+    T->>P: goto /page-a
+    P->>M: POST /visit { /page-a, group_id:G }
+    T->>P: click a → /page-c (same tab)
+    Note over BG: webNavigation.onCommitted<br/>previous_url = /page-a, group_id stays G
+    P->>BG: getReferrer
+    BG-->>P: { group_id:G, referrer:/page-a }
+    P->>M: POST /visit { /page-c, group_id:G, referrer:/page-a }
+    Note over T: assert visit_c.group_id == G<br/>assert visit_c.referrer ~ /page-a
+        </div>
+      </section>
+
+      <section>
+        <h2>5. SPA history navigation <span class="status wip">driving via Phase 3.1</span> <span class="file">spa_navigation.spec.ts</span></h2>
+        <p class="desc">
+          <code>history.pushState</code> sub-navigations are captured in the same session. The page's
+          <code>pushState</code> runs in the main world, so detection moves to the background via
+          <code>webNavigation.onHistoryStateUpdated</code>, which then asks the content script to capture.
+        </p>
+        <div class="mermaid">
+sequenceDiagram
+    participant T as Test
+    participant P as Page /spa
+    participant BG as Background
+    participant M as Mock server
+    T->>P: goto /spa
+    P->>M: POST /visit { /spa, group_id:G }
+    T->>P: click → history.pushState('/spa/sub1')
+    Note over BG: webNavigation.onHistoryStateUpdated
+    BG->>P: captureVisit('/spa/sub1')
+    P->>M: POST /visit { /spa/sub1, group_id:G }
+    Note over T: assert sub1.group_id == G (and sub2)
+        </div>
+      </section>
+
+      <section>
+        <h2>Coverage &amp; assertions</h2>
+        <table>
+          <thead>
+            <tr><th>Workflow</th><th>Drives</th><th>Asserts</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Basic capture</td><td>single page load</td><td>visit url, group_id present, page_loaded_at</td><td>✅ passing</td></tr>
+            <tr><td>New tab (target=_blank)</td><td>click link, <code>waitForEvent('page')</code></td><td>same group_id, referrer = opener</td><td>🟡 Phase 3.1</td></tr>
+            <tr><td>New tab (window.open)</td><td>button → <code>window.open</code></td><td>same group_id as opener</td><td>🟡 Phase 3.1</td></tr>
+            <tr><td>Same-tab navigation</td><td>click in-place link</td><td>same group_id, referrer chained</td><td>🟡 Phase 3.1</td></tr>
+            <tr><td>SPA pushState</td><td>buttons → history.pushState</td><td>sub-routes share the group_id</td><td>🟡 Phase 3.1</td></tr>
+          </tbody>
+        </table>
+        <p class="desc" style="margin-top:0.9rem">
+          🟡 = the test (the spec for desired behavior) exists and runs; the extension behavior is being brought up to
+          meet it in roadmap Phase&nbsp;3.1 (move navigation detection to <code>chrome.webNavigation</code> in the
+          background; make <code>group_id</code> minting background-only).
+        </p>
+      </section>
+    </main>
+    <footer>Generated for the Bergamot overhaul · open this file in any browser</footer>
+  </body>
+</html>

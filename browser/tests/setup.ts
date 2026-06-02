@@ -22,6 +22,12 @@ global.chrome = {
     },
     get: jest.fn(),
     query: jest.fn(),
+    sendMessage: jest.fn(),
+  },
+  webNavigation: {
+    onCommitted: { addListener: jest.fn() },
+    onHistoryStateUpdated: { addListener: jest.fn() },
+    onCreatedNavigationTarget: { addListener: jest.fn() },
   },
   storage: {
     local: {
