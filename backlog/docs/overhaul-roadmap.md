@@ -30,8 +30,8 @@ Preserve the core product — a durable record of web-page tracking (cross-page/
 - **0.1 [DONE]** Remove `fs.unlinkSync` from DuckDB constructor; `init()` is open-or-create; `read_only` honored via `access_mode`. (`vscode/src/duck_db.ts`)
 - **0.2 [DONE]** Stop the standalone MCP server from constructing/initing DuckDB (it never queried it). (`vscode/src/mcp_server_standalone.ts`)
 - **0.3 [DONE]** Align LanceDB writer path with the MCP reader path (`webpage_memory.db` subdir). (`vscode/src/database/database_manager.ts`)
-- **0.4** Delete repo cruft: `README-original.md`, `README_old.md`, `RELEASE_SUMMARY.md`, `package.json.backup`, `knowledge-thoughts.png`, empty `data/`, `langmem course notebooks/`, `mcp_study_guide/`, stale `out/`, empty `vscode/src/suggestion_decorations.ts`, stale `docs/DEAD_CODE_ANALYSIS.md`. (confirm with owner first)
-- **0.5** Resolve `.gitignore` contradictions (keep committed lockfile; ignore `*.backup`, build output).
+- **0.4 [DONE]** Deleted repo cruft: stale READMEs, `RELEASE_SUMMARY.md`, `package.json.backup`, `knowledge-thoughts.png`, empty `data/`, `langmem course notebooks/`, `mcp_study_guide/`, stale `out/`, empty `vscode/src/suggestion_decorations.ts`, `docs/DEAD_CODE_ANALYSIS.md`, and a fossil `vscode/src/package.json`.
+- **0.5 [DONE]** Resolved `.gitignore` contradictions (keep committed root lockfile; ignore per-workspace lockfiles, `*.backup`, `.eslintcache`, Playwright artifacts).
 
 ### Phase 1 — e2e harness (top priority) [DONE except 1.4]
 - **1.1 [DONE]** Added `@playwright/test`; removed `chrome-remote-interface` + all CDP/tsx e2e scripts + status docs; added `playwright.config.ts`.
@@ -59,5 +59,5 @@ Discovery approach chosen: **HTTP port-range probing** (browser has no filesyste
 - **4.4 [DONE]** `backlog/docs/query-interface.md`: DuckDB schema + MCP tools + HTTP query API with dependency-free `curl` examples (and direct read-only DuckDB access when the extension is closed).
 - **4.5 [DONE]** Durable visit inbox (`visit_inbox.ts`): each visit is persisted before the POST is acknowledged, removed once written to DuckDB, and reloaded on startup — restarts no longer drop in-flight visits.
 
-### Phase 5 — LangChain removal
-- **5.1** Remove `@langchain/*`; reimplement the categorization workflow with direct OpenAI calls. Correct/replace `WORK_PRIORITY.md` and any docs claiming it was already removed.
+### Phase 5 — LangChain removal [DONE]
+- **5.1 [DONE]** Removed `@langchain/core`, `@langchain/langgraph`, `@langchain/openai`. No reimplementation was needed: the live categorization path (`_vanilla` → `workflow/simple_workflow` → `workflow/openai_client`) already used the `openai` package directly. The only LangChain imports were in dead code — the unreferenced LangGraph workflow (`reconcile_webpage_trees_workflow.ts`) and its `vscode_openai_model.ts`; both deleted. Added `openai` as a direct dependency (it had been transitive via `@langchain/openai`). `WORK_PRIORITY.md`'s "Replaced LangChain with vanilla TypeScript" is now accurate.
