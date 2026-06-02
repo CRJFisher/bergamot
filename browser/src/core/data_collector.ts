@@ -32,8 +32,13 @@ export const compress_content = async (content: string, zstd: any): Promise<stri
   }
 };
 
+// Cap captured markup so a pathologically large page cannot allocate/compress
+// an unbounded payload on the page's main thread.
+export const MAX_CONTENT_BYTES = 2_000_000;
+
 export const extract_page_content = (): string => {
-  return document.body.outerHTML;
+  const html = document.body?.outerHTML ?? "";
+  return html.length > MAX_CONTENT_BYTES ? html.slice(0, MAX_CONTENT_BYTES) : html;
 };
 
 export const create_visit_data = async (

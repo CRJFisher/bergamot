@@ -33,11 +33,11 @@ Preserve the core product — a durable record of web-page tracking (cross-page/
 - **0.4** Delete repo cruft: `README-original.md`, `README_old.md`, `RELEASE_SUMMARY.md`, `package.json.backup`, `knowledge-thoughts.png`, empty `data/`, `langmem course notebooks/`, `mcp_study_guide/`, stale `out/`, empty `vscode/src/suggestion_decorations.ts`, stale `docs/DEAD_CODE_ANALYSIS.md`. (confirm with owner first)
 - **0.5** Resolve `.gitignore` contradictions (keep committed lockfile; ignore `*.backup`, build output).
 
-### Phase 1 — e2e harness (top priority)
-- **1.1** Add `@playwright/test`; remove `chrome-remote-interface` + all `e2e/*cdp*.ts` / tsx scripts; add `playwright.config.ts`; `playwright install chromium`.
-- **1.2** Build the extension fixture (`test.extend`): persistent context + `service_worker` + `extension_id`, with CI-resilient SW-attach retry (CDP restart workaround).
-- **1.3** Cross-tab specs (new tab via `target=_blank` / ctrl-click / `window.open`; opener inheritance; SPA navigation) asserting on `mock_pkm_server` visit records. Confirm payload fields (`opener_tab_id`, navigation chain) exist before asserting.
-- **1.4** CI workflow runs Playwright headless via `channel: 'chromium'`.
+### Phase 1 — e2e harness (top priority) [DONE except 1.4]
+- **1.1 [DONE]** Added `@playwright/test`; removed `chrome-remote-interface` + all CDP/tsx e2e scripts + status docs; added `playwright.config.ts`.
+- **1.2 [DONE]** Extension fixture: `launchPersistentContext` (channel chromium, headless) + `service_worker` (CI-resilient attach) + `extension_id`; worker-scoped mock PKM server (oracle) + static page server.
+- **1.3 [DONE]** Cross-tab specs: basic capture, new tab via `target=_blank` / `window.open`, same-tab nav, SPA pushState — assert `group_id` + referrer chains on real visit records. Stable 5/5 across repeated runs.
+- **1.4 [TODO]** CI workflow runs Playwright headless via `channel: 'chromium'`. (`browser/e2e/e2e-workflows.html` visualizes the covered workflows.)
 
 ### Phase 2 — Transport consolidation [DONE]
 Discovery approach chosen: **HTTP port-range probing** (browser has no filesystem access, so it cannot read a port file — it probes the candidate range and matches a `/status` service marker). See [[native-messaging-vs-http-discovery]].
@@ -50,7 +50,7 @@ Discovery approach chosen: **HTTP port-range probing** (browser has no filesyste
 ### Phase 3 — Browser session-graph robustness
 - **3.2 [DONE]** Persist `tab_history_store` in `chrome.storage.session`: background hydrates the in-memory cache on cold start and persists after every mutation through a serialized operation chain (no read-modify-write races). Added serialize/deserialize helpers + `tab_history_persistence.ts` + tests; added the `storage` manifest permission. Opener-relationship resolution refactored into pure store→store transforms; group_id inherited from opener.
 - **3.1 [TODO — pair with Phase 1]** Move navigation detection to `chrome.webNavigation` (`onCommitted`, `onHistoryStateUpdated`, `onCreatedNavigationTarget`); remove the content-script MutationObserver; make `group_id` minting background-only (single authority). This rearchitects the core detection path and should land with the e2e safety net.
-- **3.3 [TODO]** Content-size cap + debounce for SPA captures; move zstd compression off the page main thread; gate logging behind `log_level`. (The "remove MutationObserver" part is folded into 3.1.)
+- **3.3 [DONE]** Content-size cap (`MAX_CONTENT_BYTES`) bounds the captured/compressed payload. The MutationObserver (the per-mutation hot path that spammed logs and URL normalization) was removed in 3.1, so debounce is moot (`webNavigation` already dedupes per navigation) and the noisy `url_cleaning` module was deleted as dead code. Off-main-thread zstd deferred (YAGNI — the size cap bounds compression cost).
 
 ### Phase 4 — Query interface polish
 - **4.1** Wire relational MCP tools using existing `duck_db.ts` helpers: `list_recent_visits`, `get_visit_by_url`, `search_by_title`, `list_navigation_trees`, `get_tree`. Resolve cross-process DuckDB access (extension holds it; MCP opens read-only or queries via the server).
