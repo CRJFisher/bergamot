@@ -13,15 +13,13 @@ import {
   get_page_sessions_with_tree_id,
   get_last_modified_trees_with_members_and_analysis,
 } from '../duck_db';
-import { MarkdownDatabase } from '../markdown_db';
 import { LanceDBMemoryStore } from '../lance_db';
-import { EpisodicMemoryStore } from '../memory/episodic_memory_store';
-import { ProceduralMemoryStore } from '../memory/procedural_memory_store';
 import { OrphanedVisitsManager } from '../orphaned_visits';
 import { VisitQueueProcessor, ExtendedPageVisit } from '../visit_queue_processor';
 import { ensure_inbox, persist_visit } from '../visit_inbox';
 import { PageActivitySessionWithoutTreeOrContentSchema } from '../duck_db_models';
 import { build_workflow } from '../reconcile_webpage_trees_workflow_vanilla';
+import { WebpageWorkflow } from '../workflow/simple_workflow';
 import { get_filter_config } from '../config/filter_config';
 
 /**
@@ -40,18 +38,12 @@ export const SERVER_PORT_RANGE: readonly number[] = [
  * @interface ServerConfig
  * @property {string} openai_api_key - OpenAI API key for AI-powered analysis
  * @property {DuckDB} duck_db - Database for structured webpage data
- * @property {MarkdownDatabase} markdown_db - Database for markdown content
  * @property {LanceDBMemoryStore} memory_db - Vector database for embeddings
- * @property {EpisodicMemoryStore} [episodic_store] - Optional episodic memory for learning
- * @property {ProceduralMemoryStore} [procedural_store] - Optional procedural memory for rules
  */
 export interface ServerConfig {
   openai_api_key: string;
   duck_db: DuckDB;
-  markdown_db: MarkdownDatabase;
   memory_db: LanceDBMemoryStore;
-  episodic_store?: EpisodicMemoryStore;
-  procedural_store?: ProceduralMemoryStore;
   /** Directory for the durable visit inbox (defaults off if unset) */
   inbox_dir?: string;
 }
@@ -66,7 +58,6 @@ export interface ServerConfig {
  * const serverManager = new ServerManager({
  *   openai_api_key: 'sk-...',
  *   duck_db: duckDb,
- *   markdown_db: markdownDb,
  *   memory_db: memoryDb
  * });
  * 
@@ -81,7 +72,7 @@ export class ServerManager {
   private server?: Server;
   private queue_processor?: VisitQueueProcessor;
   private app: express.Application;
-  private webpage_categoriser_app: any;
+  private webpage_categoriser_app!: WebpageWorkflow;
 
   constructor(private config: ServerConfig) {
     this.app = express();
@@ -120,13 +111,9 @@ export class ServerManager {
     const filter_config = get_filter_config();
     this.webpage_categoriser_app = build_workflow(
       this.config.openai_api_key,
-      null, // checkpointer no longer used
       this.config.duck_db,
-      this.config.markdown_db,
       this.config.memory_db,
-      filter_config,
-      this.config.episodic_store,
-      this.config.procedural_store
+      filter_config
     );
   }
 

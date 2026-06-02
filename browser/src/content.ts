@@ -14,8 +14,11 @@ console.log(
   `PKM: Using API base URL: ${get_api_base_url(config)} (debug: ${is_debug_mode(config)})`
 );
 
+// The zstd binding exposes a synchronous `compress` over raw bytes.
+type ZstdCompressor = { compress: (data: Uint8Array) => Uint8Array };
+
 // Compression instance — the only mutable state in the content script.
-let zstd_instance: any = null;
+let zstd_instance: ZstdCompressor | null = null;
 
 const SEND_RETRY_ATTEMPTS = 20;
 const SEND_RETRY_DELAY_MS = 100;
@@ -68,7 +71,7 @@ const listen_for_capture_requests = () => {
 };
 
 // Initialize the extension
-const initialize_pkm = async () => {
+const initialize_content_capture = async () => {
   // Initialize compression
   zstd_instance = await create_zstd_instance();
 
@@ -82,8 +85,8 @@ const initialize_pkm = async () => {
 
 // Wait for DOM to be ready, then initialize
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initialize_pkm);
+  document.addEventListener("DOMContentLoaded", initialize_content_capture);
 } else {
   // The DOM is already ready
-  initialize_pkm();
+  initialize_content_capture();
 }

@@ -1,20 +1,12 @@
 import * as vscode from 'vscode';
 import { CommandManager, CommandConfig } from './command_manager';
 import { DuckDB } from '../duck_db';
-import { MarkdownDatabase } from '../markdown_db';
 import { LanceDBMemoryStore } from '../lance_db';
-import { EpisodicMemoryStore } from '../memory/episodic_memory_store';
-import { ProceduralMemoryStore } from '../memory/procedural_memory_store';
-import { register_procedural_rule_commands } from '../memory/procedural_rule_commands';
-import { register_feedback_commands } from '../memory/feedback_commands';
 import { register_webpage_search_commands } from '../webpage_search_commands';
 import { register_webpage_hover_provider } from '../webpage_hover_provider';
 import { global_filter_metrics } from '../workflow/filter_metrics';
 
 // Mock dependencies
-jest.mock('../memory/procedural_rule_commands');
-jest.mock('../memory/feedback_commands');
-jest.mock('../memory/feedback_document_generator');
 jest.mock('../webpage_search_commands');
 jest.mock('../webpage_hover_provider');
 jest.mock('../workflow/filter_metrics');
@@ -33,22 +25,22 @@ describe('CommandManager', () => {
   let command_manager: CommandManager;
   let mock_config: CommandConfig;
   let mock_context: vscode.ExtensionContext;
+  let mock_subscriptions: vscode.Disposable[];
 
   beforeEach(() => {
     jest.clearAllMocks();
 
     // Setup mock context
+    mock_subscriptions = [];
+    jest.spyOn(mock_subscriptions, 'push');
     mock_context = {
-      subscriptions: {
-        push: jest.fn()
-      }
-    } as any;
+      subscriptions: mock_subscriptions
+    } as Partial<vscode.ExtensionContext> as vscode.ExtensionContext;
 
     // Setup mock config
     mock_config = {
       context: mock_context,
       duck_db: {} as DuckDB,
-      markdown_db: {} as MarkdownDatabase,
       memory_db: {} as LanceDBMemoryStore
     };
 
@@ -100,53 +92,14 @@ describe('CommandManager', () => {
       );
       expect(mock_context.subscriptions.push).toHaveBeenCalledWith(mock_command);
     });
-
-    it('should not register memory commands when stores not available', () => {
-      command_manager.register_all();
-
-      expect(register_procedural_rule_commands).not.toHaveBeenCalled();
-      expect(register_feedback_commands).not.toHaveBeenCalled();
-    });
-
-    it('should register procedural rule commands when store available', () => {
-      mock_config.procedural_store = {} as ProceduralMemoryStore;
-      command_manager = new CommandManager(mock_config);
-
-      command_manager.register_all();
-
-      expect(register_procedural_rule_commands).toHaveBeenCalledWith(
-        mock_context,
-        mock_config.procedural_store
-      );
-    });
-
-    it('should register feedback commands when episodic store available', () => {
-      mock_config.episodic_store = {} as EpisodicMemoryStore;
-      command_manager = new CommandManager(mock_config);
-
-      command_manager.register_all();
-
-      expect(register_feedback_commands).toHaveBeenCalledWith(
-        mock_context,
-        mock_config.episodic_store,
-        expect.any(Object)
-      );
-    });
-
-    it('should register all memory commands when both stores available', () => {
-      mock_config.procedural_store = {} as ProceduralMemoryStore;
-      mock_config.episodic_store = {} as EpisodicMemoryStore;
-      command_manager = new CommandManager(mock_config);
-
-      command_manager.register_all();
-
-      expect(register_procedural_rule_commands).toHaveBeenCalled();
-      expect(register_feedback_commands).toHaveBeenCalled();
-    });
   });
 
   describe('show_filter_metrics()', () => {
-    let mock_output_channel: any;
+    let mock_output_channel: {
+      clear: jest.Mock;
+      appendLine: jest.Mock;
+      show: jest.Mock;
+    };
 
     beforeEach(() => {
       mock_output_channel = {
@@ -208,9 +161,9 @@ describe('CommandManager', () => {
       mock_command_handler();
 
       // Check that page types are displayed in correct order
-      const calls = mock_output_channel.appendLine.mock.calls
-        .map((call: any[]) => call[0])
-        .filter((line: string) => line.includes('article') || 
+      const calls: string[] = mock_output_channel.appendLine.mock.calls
+        .map((call) => call[0] as string)
+        .filter((line) => line.includes('article') ||
                                    line.includes('documentation') || 
                                    line.includes('other'));
 

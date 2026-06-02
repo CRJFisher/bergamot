@@ -1,43 +1,37 @@
 import { WebpageWorkflow } from "./simple_workflow";
 import { DuckDB } from "../duck_db";
-import { MarkdownDatabase } from "../markdown_db";
 import { LanceDBMemoryStore } from "../lance_db";
-import { EpisodicMemoryStore } from "../memory/episodic_memory_store";
-import { ProceduralMemoryStore } from "../memory/procedural_memory_store";
-import { MemoryEnhancedClassifier } from "../memory/memory_enhanced_classifier";
-import { EnhancedWebpageFilter } from "./enhanced_webpage_filter";
 import * as openaiClient from "./openai_client";
 import * as webpageFilter from "./webpage_filter";
 import * as duckDbQueries from "../duck_db";
-import * as contentAnalyzer from "./content_analyzer";
 import { global_filter_metrics } from "./filter_metrics";
 import { PageActivitySessionWithMeta } from "../reconcile_webpage_trees_workflow_models";
 import { PageActivitySessionWithoutContent } from "../duck_db_models";
+import { FilterConfig } from "./webpage_filter";
+
+type LlmClient = Awaited<ReturnType<typeof openaiClient.get_llm_client>>;
+type MockLlmClient = {
+  complete: jest.Mock;
+  complete_json: jest.Mock;
+};
 
 // Mock all dependencies
 jest.mock("../duck_db");
-jest.mock("../markdown_db");
 jest.mock("../lance_db");
-jest.mock("../memory/episodic_memory_store");
-jest.mock("../memory/procedural_memory_store");
-jest.mock("../memory/memory_enhanced_classifier");
-jest.mock("./enhanced_webpage_filter");
 jest.mock("./openai_client");
 jest.mock("./webpage_filter");
-jest.mock("./content_analyzer");
 jest.mock("./filter_metrics");
 
 describe("WebpageWorkflow", () => {
   let workflow: WebpageWorkflow;
   let mockDuckDb: jest.Mocked<DuckDB>;
-  let mockMarkdownDb: jest.Mocked<MarkdownDatabase>;
   let mockMemoryDb: jest.Mocked<LanceDBMemoryStore>;
-  let mockEpisodicStore: jest.Mocked<EpisodicMemoryStore>;
-  let mockProceduralStore: jest.Mocked<ProceduralMemoryStore>;
-  let mockLlmClient: any;
+  let mockLlmClient: MockLlmClient;
 
   const test_openai_key = "test-openai-key";
-  const test_filter_config = {
+  const test_filter_config: FilterConfig = {
+    enabled: true,
+    log_decisions: true,
     min_confidence: 0.7,
     allowed_types: ["knowledge", "interactive_app"],
   };
@@ -47,27 +41,18 @@ describe("WebpageWorkflow", () => {
 
     // Create mock instances
     mockDuckDb = {} as jest.Mocked<DuckDB>;
-    mockMarkdownDb = {
-      upsert: jest.fn().mockResolvedValue({
-        save: jest.fn().mockResolvedValue(undefined),
-      }),
-    } as any;
     mockMemoryDb = {
       put: jest.fn().mockResolvedValue(undefined),
-    } as any;
-    mockEpisodicStore = {
-      initialize: jest.fn().mockResolvedValue(undefined),
-    } as any;
-    mockProceduralStore = {
-      initialize: jest.fn().mockResolvedValue(undefined),
-    } as any;
+    } as Partial<jest.Mocked<LanceDBMemoryStore>> as jest.Mocked<LanceDBMemoryStore>;
 
     // Mock LLM client
     mockLlmClient = {
       complete: jest.fn(),
       complete_json: jest.fn(),
     };
-    jest.spyOn(openaiClient, "get_llm_client").mockResolvedValue(mockLlmClient);
+    jest
+      .spyOn(openaiClient, "get_llm_client")
+      .mockResolvedValue(mockLlmClient as Partial<LlmClient> as LlmClient);
 
     // Mock filter functions
     jest.spyOn(webpageFilter, "classify_webpage").mockResolvedValue({
@@ -79,16 +64,6 @@ describe("WebpageWorkflow", () => {
 
     jest.spyOn(webpageFilter, "should_process_page").mockReturnValue(true);
     jest.spyOn(webpageFilter, "log_filter_decision").mockImplementation(() => {});
-
-    // Mock content analyzer
-    jest.spyOn(contentAnalyzer, "extract_content_features").mockReturnValue({
-      word_count: 500,
-      has_code: false,
-      has_images: true,
-      estimated_reading_time: 3,
-      language: "en",
-      topics: ["technology", "ai"],
-    } as any);
 
     // Mock DuckDB queries
     jest.spyOn(duckDbQueries, "get_webpage_analysis_for_ids").mockResolvedValue([]);
@@ -106,43 +81,33 @@ describe("WebpageWorkflow", () => {
       workflow = new WebpageWorkflow(
         test_openai_key,
         mockDuckDb,
-        mockMarkdownDb,
         mockMemoryDb,
-        test_filter_config as any,
-        mockEpisodicStore,
-        mockProceduralStore
-      );
-
-      expect(MemoryEnhancedClassifier).toHaveBeenCalledWith(mockEpisodicStore);
-      expect(EnhancedWebpageFilter).toHaveBeenCalledWith(
-        mockProceduralStore,
-        mockEpisodicStore,
         test_filter_config
       );
+
+      expect(workflow).toBeInstanceOf(WebpageWorkflow);
     });
 
     it("should initialize without optional parameters", () => {
       workflow = new WebpageWorkflow(
         test_openai_key,
         mockDuckDb,
-        mockMarkdownDb,
         mockMemoryDb
       );
 
-      expect(MemoryEnhancedClassifier).not.toHaveBeenCalled();
-      expect(EnhancedWebpageFilter).not.toHaveBeenCalled();
+      expect(workflow).toBeInstanceOf(WebpageWorkflow);
     });
 
     it("should use default filter config when not provided", () => {
       workflow = new WebpageWorkflow(
         test_openai_key,
         mockDuckDb,
-        mockMarkdownDb,
         mockMemoryDb
       );
 
       // The workflow should have the default config
       // This would be tested through the run method
+      expect(workflow).toBeInstanceOf(WebpageWorkflow);
     });
   });
 
@@ -150,12 +115,12 @@ describe("WebpageWorkflow", () => {
     const test_inputs = {
       members: [
         {
-          id: "page-1",
-          url: "https://example.com/page1",
+          id: "page-2",
+          url: "https://example.com/page2",
           tree_id: "tree-123",
           analysis: {
-            title: "Page 1",
-            summary: "Summary of page 1",
+            title: "Page 2",
+            summary: "Summary of page 2",
             intentions: ["learn"],
           },
         },
@@ -163,6 +128,7 @@ describe("WebpageWorkflow", () => {
       new_page: {
         id: "page-2",
         url: "https://example.com/page2",
+        tree_id: "tree-123",
         page_loaded_at: "2024-01-01T12:00:00Z",
       } as PageActivitySessionWithoutContent,
       raw_content: "<html><body>Test content</body></html>",
@@ -172,9 +138,8 @@ describe("WebpageWorkflow", () => {
       workflow = new WebpageWorkflow(
         test_openai_key,
         mockDuckDb,
-        mockMarkdownDb,
         mockMemoryDb,
-        test_filter_config as any
+        test_filter_config
       );
 
       // Setup default mock responses
@@ -208,8 +173,14 @@ describe("WebpageWorkflow", () => {
 
       // Verify storage
       expect(duckDbQueries.insert_webpage_analysis).toHaveBeenCalled();
-      expect(mockMemoryDb.put).toHaveBeenCalled();
-      expect(mockMarkdownDb.upsert).toHaveBeenCalled();
+      expect(mockMemoryDb.put).toHaveBeenCalledWith(
+        ["webpage_content"],
+        "page-2",
+        expect.objectContaining({
+          url: "https://example.com/page2",
+          title: "Test Article",
+        })
+      );
     });
 
     it("should skip processing when page is filtered out", async () => {
@@ -221,7 +192,6 @@ describe("WebpageWorkflow", () => {
       expect(mockLlmClient.complete).not.toHaveBeenCalled();
       expect(duckDbQueries.insert_webpage_analysis).not.toHaveBeenCalled();
       expect(mockMemoryDb.put).not.toHaveBeenCalled();
-      expect(mockMarkdownDb.upsert).not.toHaveBeenCalled();
 
       // Should record metrics - filter_reason will be undefined since should_process is false but not due to specific filter rule
       expect(global_filter_metrics.record_classification).toHaveBeenCalledWith(
@@ -233,42 +203,61 @@ describe("WebpageWorkflow", () => {
       );
     });
 
-    it("should handle memory-enhanced classification when available", async () => {
-      // Create workflow with episodic store
-      const mockMemoryClassifier = {
-        classify_with_memory: jest.fn().mockResolvedValue({
-          base_classification: {
-            page_type: "knowledge",
-            confidence: 0.8,
-            should_process: true,
+    it("should generate tree intentions for multi-member trees", async () => {
+      const multi_member_inputs = {
+        members: [
+          {
+            id: "page-1",
+            url: "https://example.com/page1",
+            tree_id: "tree-123",
+            page_loaded_at: "2024-01-01T11:00:00Z",
+            analysis: {
+              title: "Page 1",
+              summary: "Summary of page 1",
+              intentions: ["learn"],
+            },
           },
-          final_classification: {
-            page_type: "knowledge",
-            confidence: 0.9,
-            should_process: true,
+          {
+            id: "page-2",
+            url: "https://example.com/page2",
+            tree_id: "tree-123",
+            page_loaded_at: "2024-01-01T12:00:00Z",
+            analysis: {
+              title: "Page 2",
+              summary: "Summary of page 2",
+              intentions: ["reference"],
+            },
           },
-          memory_adjustments: {
-            influenced_by: ["episode-1", "episode-2"],
-          },
-        }),
-        store_classification_episode: jest.fn().mockResolvedValue("episode-123"),
+        ] as Partial<PageActivitySessionWithMeta>[] as PageActivitySessionWithMeta[],
+        new_page: {
+          id: "page-2",
+          url: "https://example.com/page2",
+          tree_id: "tree-123",
+          page_loaded_at: "2024-01-01T12:00:00Z",
+        } as PageActivitySessionWithoutContent,
+        raw_content: "<html><body>Test content</body></html>",
       };
 
-      (MemoryEnhancedClassifier as jest.Mock).mockImplementation(() => mockMemoryClassifier);
+      mockLlmClient.complete.mockResolvedValue("# Processed Content");
+      // classify_webpage is mocked directly, so complete_json is only used for
+      // the analysis call and the tree-intentions call.
+      mockLlmClient.complete_json
+        .mockResolvedValueOnce({
+          title: "Test Article",
+          summary: "A test article",
+          intentions: ["learn"],
+        })
+        .mockResolvedValueOnce({
+          page_id_to_intentions: { "1": ["learn", "reference"] },
+        });
 
-      workflow = new WebpageWorkflow(
-        test_openai_key,
+      await workflow.run(multi_member_inputs);
+
+      expect(duckDbQueries.insert_webpage_tree_intentions).toHaveBeenCalledWith(
         mockDuckDb,
-        mockMarkdownDb,
-        mockMemoryDb,
-        test_filter_config as any,
-        mockEpisodicStore
+        "tree-123",
+        expect.any(Array)
       );
-
-      await workflow.run(test_inputs);
-
-      expect(mockMemoryClassifier.classify_with_memory).toHaveBeenCalled();
-      expect(mockMemoryClassifier.store_classification_episode).toHaveBeenCalled();
     });
 
     it("should handle errors gracefully", async () => {
@@ -287,32 +276,18 @@ describe("WebpageWorkflow", () => {
             url: "https://example.com/page2",
             tree_id: "tree-123",
             referrer: null,
+            analysis: {
+              title: "Page 2",
+              summary: "Summary",
+              intentions: [],
+            },
           },
-        ] as any,
+        ] as Partial<PageActivitySessionWithMeta>[] as PageActivitySessionWithMeta[],
       };
 
       await workflow.run(inputs_no_referrer);
 
       expect(duckDbQueries.insert_webpage_analysis).toHaveBeenCalled();
-    });
-
-    it("should extract and store content features", async () => {
-      await workflow.run(test_inputs);
-
-      expect(contentAnalyzer.extract_content_features).toHaveBeenCalledWith(
-        test_inputs.new_page.url,
-        test_inputs.raw_content
-      );
-
-      // Features should be used in memory storage if classifier is present
-      expect(mockMemoryDb.put).toHaveBeenCalledWith(
-        ["webpage_content"],
-        "page-2",
-        expect.objectContaining({
-          url: "https://example.com/page2",
-          title: "Test Article",
-        })
-      );
     });
   });
 
@@ -321,9 +296,8 @@ describe("WebpageWorkflow", () => {
       workflow = new WebpageWorkflow(
         test_openai_key,
         mockDuckDb,
-        mockMarkdownDb,
         mockMemoryDb,
-        test_filter_config as any
+        test_filter_config
       );
     });
 
@@ -337,8 +311,8 @@ describe("WebpageWorkflow", () => {
       jest.spyOn(webpageFilter, "should_process_page").mockReturnValue(false);
 
       const inputs = {
-        members: [{ id: "1", tree_id: "tree-1" }] as any,
-        new_page: { id: "2", url: "https://twitter.com" } as any,
+        members: [{ id: "2", tree_id: "tree-1" }] as Partial<PageActivitySessionWithMeta>[] as PageActivitySessionWithMeta[],
+        new_page: { id: "2", url: "https://twitter.com" } as Partial<PageActivitySessionWithoutContent> as PageActivitySessionWithoutContent,
         raw_content: "<html>Twitter</html>",
       };
 
@@ -363,8 +337,8 @@ describe("WebpageWorkflow", () => {
       jest.spyOn(webpageFilter, "should_process_page").mockReturnValue(false);
 
       const inputs = {
-        members: [{ id: "1", tree_id: "tree-1" }] as any,
-        new_page: { id: "2", url: "https://example.com" } as any,
+        members: [{ id: "2", tree_id: "tree-1" }] as Partial<PageActivitySessionWithMeta>[] as PageActivitySessionWithMeta[],
+        new_page: { id: "2", url: "https://example.com" } as Partial<PageActivitySessionWithoutContent> as PageActivitySessionWithoutContent,
         raw_content: "<html>Content</html>",
       };
 
@@ -389,8 +363,8 @@ describe("WebpageWorkflow", () => {
       jest.spyOn(webpageFilter, "should_process_page").mockReturnValue(false);
 
       const inputs = {
-        members: [{ id: "1", tree_id: "tree-1" }] as any,
-        new_page: { id: "2", url: "https://example.com" } as any,
+        members: [{ id: "2", tree_id: "tree-1" }] as Partial<PageActivitySessionWithMeta>[] as PageActivitySessionWithMeta[],
+        new_page: { id: "2", url: "https://example.com" } as Partial<PageActivitySessionWithoutContent> as PageActivitySessionWithoutContent,
         raw_content: "<html>Content</html>",
       };
 
@@ -411,17 +385,8 @@ describe("WebpageWorkflow", () => {
       workflow = new WebpageWorkflow(
         test_openai_key,
         mockDuckDb,
-        mockMarkdownDb,
         mockMemoryDb
       );
-    });
-
-    it("should handle single member", async () => {
-      const inputs = {
-        members: [{ id: "1", tree_id: "tree-1" }] as any,
-        new_page: { id: "2", url: "https://example.com" } as any,
-        raw_content: "<html>Content</html>",
-      };
 
       mockLlmClient.complete.mockResolvedValue("Processed content");
       mockLlmClient.complete_json.mockResolvedValue({
@@ -429,26 +394,55 @@ describe("WebpageWorkflow", () => {
         summary: "Summary",
         intentions: [],
       });
+    });
+
+    it("should handle single member", async () => {
+      const inputs = {
+        members: [
+          {
+            id: "2",
+            url: "https://example.com",
+            tree_id: "tree-1",
+            page_loaded_at: "2024-01-01T12:00:00Z",
+            analysis: { title: "Title", summary: "Summary", intentions: [] },
+          },
+        ] as Partial<PageActivitySessionWithMeta>[] as PageActivitySessionWithMeta[],
+        new_page: {
+          id: "2",
+          url: "https://example.com",
+          tree_id: "tree-1",
+          page_loaded_at: "2024-01-01T12:00:00Z",
+        } as Partial<PageActivitySessionWithoutContent> as PageActivitySessionWithoutContent,
+        raw_content: "<html>Content</html>",
+      };
 
       await workflow.run(inputs);
 
       expect(duckDbQueries.insert_webpage_analysis).toHaveBeenCalled();
+      // Single-member trees do not generate tree intentions
+      expect(duckDbQueries.insert_webpage_tree_intentions).not.toHaveBeenCalled();
     });
 
     it("should handle very large content", async () => {
       const large_content = "x".repeat(1000000);
       const inputs = {
-        members: [{ id: "1", tree_id: "tree-1" }] as any,
-        new_page: { id: "2", url: "https://example.com" } as any,
+        members: [
+          {
+            id: "2",
+            url: "https://example.com",
+            tree_id: "tree-1",
+            page_loaded_at: "2024-01-01T12:00:00Z",
+            analysis: { title: "Title", summary: "Summary", intentions: [] },
+          },
+        ] as Partial<PageActivitySessionWithMeta>[] as PageActivitySessionWithMeta[],
+        new_page: {
+          id: "2",
+          url: "https://example.com",
+          tree_id: "tree-1",
+          page_loaded_at: "2024-01-01T12:00:00Z",
+        } as Partial<PageActivitySessionWithoutContent> as PageActivitySessionWithoutContent,
         raw_content: large_content,
       };
-
-      mockLlmClient.complete.mockResolvedValue("Processed large content");
-      mockLlmClient.complete_json.mockResolvedValue({
-        title: "Large Page",
-        summary: "Summary",
-        intentions: [],
-      });
 
       await workflow.run(inputs);
 
@@ -462,17 +456,23 @@ describe("WebpageWorkflow", () => {
     it("should handle malformed HTML content", async () => {
       const malformed_html = "<div><p>Unclosed tags <span>";
       const inputs = {
-        members: [{ id: "1", tree_id: "tree-1" }] as any,
-        new_page: { id: "2", url: "https://example.com" } as any,
+        members: [
+          {
+            id: "2",
+            url: "https://example.com",
+            tree_id: "tree-1",
+            page_loaded_at: "2024-01-01T12:00:00Z",
+            analysis: { title: "Title", summary: "Summary", intentions: [] },
+          },
+        ] as Partial<PageActivitySessionWithMeta>[] as PageActivitySessionWithMeta[],
+        new_page: {
+          id: "2",
+          url: "https://example.com",
+          tree_id: "tree-1",
+          page_loaded_at: "2024-01-01T12:00:00Z",
+        } as Partial<PageActivitySessionWithoutContent> as PageActivitySessionWithoutContent,
         raw_content: malformed_html,
       };
-
-      mockLlmClient.complete.mockResolvedValue("Processed malformed content");
-      mockLlmClient.complete_json.mockResolvedValue({
-        title: "Page",
-        summary: "Summary",
-        intentions: [],
-      });
 
       await workflow.run(inputs);
 
@@ -481,20 +481,23 @@ describe("WebpageWorkflow", () => {
 
     it("should handle special characters in URLs", async () => {
       const inputs = {
-        members: [{ id: "1", tree_id: "tree-1" }] as any,
+        members: [
+          {
+            id: "2",
+            url: "https://example.com/page?q=test&foo=<script>alert('xss')</script>",
+            tree_id: "tree-1",
+            page_loaded_at: "2024-01-01T12:00:00Z",
+            analysis: { title: "Title", summary: "Summary", intentions: [] },
+          },
+        ] as Partial<PageActivitySessionWithMeta>[] as PageActivitySessionWithMeta[],
         new_page: {
           id: "2",
           url: "https://example.com/page?q=test&foo=<script>alert('xss')</script>",
-        } as any,
+          tree_id: "tree-1",
+          page_loaded_at: "2024-01-01T12:00:00Z",
+        } as Partial<PageActivitySessionWithoutContent> as PageActivitySessionWithoutContent,
         raw_content: "<html>Content</html>",
       };
-
-      mockLlmClient.complete.mockResolvedValue("Processed content");
-      mockLlmClient.complete_json.mockResolvedValue({
-        title: "Page",
-        summary: "Summary",
-        intentions: [],
-      });
 
       await workflow.run(inputs);
 

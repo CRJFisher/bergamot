@@ -25,35 +25,22 @@ Bergamot automatically captures knowledge-rich webpages as you browse, stores th
 
 ## Key Features
 
-### 🌐 Intelligent Knowledge Capture
+### 🌐 Capture
 
-- Automatically captures webpages as you browse
-- AI-powered filtering to focus on knowledge-rich content (tutorials, documentation, articles)
+- Automatically captures knowledge-rich webpages as you browse
+- AI-powered filtering to focus on tutorials, documentation, and articles
 - Preserves full navigation context and referrer chains
-- Stores content in both structured (DuckDB) and vector (LanceDB) databases
 
-### 🔍 MCP-Powered Knowledge Access
+### 💾 Store
 
-- **MCP Server** with two primary tools:
-  - `semantic_search`: Query your knowledge base using natural language
-  - `get_webpage_content`: Retrieve full content of specific pages
-- Semantic vector search across all captured content
-- Direct integration with AI agents (Claude, ChatGPT, etc.) for RAG workflows
-- VS Code command palette for quick searches
+- Persists each visit to DuckDB (relational visit record) and LanceDB (page content + vectors)
+- An LLM extracts the main content of each page during ingestion
 
-### 🧠 Smart Content Classification
+### 🔍 Query
 
-- ML-based classification to identify knowledge vs. transient content
-- Learns from your feedback to improve filtering accuracy
-- Customizable rules for domains and content patterns
-- Review interface to correct misclassifications
-
-### 📊 Knowledge Base Management
-
-- Storage metrics and statistics
-- Browse captured pages by domain, date, or topic
-- Visualize relationships between related pages
-- Export capabilities for backup and migration
+- **MCP server** for AI agents — `semantic_search` and `get_webpage_content`, plus relational tools
+- **HTTP query API** for scripts
+- **Direct read-only DuckDB access** when the extension is not running
 
 ## Installation
 
@@ -61,7 +48,7 @@ Bergamot automatically captures knowledge-rich webpages as you browse, stores th
 
 - Node.js >= 18.0.0
 - VS Code >= 1.60.0
-- Chrome, Firefox or Edge browser
+- A Chromium-based browser (Chrome, Edge, or Brave)
 
 ### Quick Start
 
@@ -73,9 +60,7 @@ Bergamot automatically captures knowledge-rich webpages as you browse, stores th
    ```
 
 2. **Install the Browser Extension**
-
-   - Chrome: Chrome Web Store (coming soon)
-   - Firefox: Firefox Add-ons (coming soon)
+   - Chrome / Edge / Brave: Chrome Web Store (coming soon)
    - Or build from source (see Development section)
 
 3. **Configure OpenAI API Key**
@@ -98,11 +83,11 @@ The MCP server enables AI agents to query your browsing knowledge:
 ```javascript
 // Example: Using with Claude or other MCP-compatible agents
 await use_mcp_tool("semantic_search", {
-  query: "React hooks best practices"
+  query: "React hooks best practices",
 });
 
 await use_mcp_tool("get_webpage_content", {
-  session_id: "abc123"
+  session_id: "abc123",
 });
 ```
 
@@ -111,12 +96,7 @@ await use_mcp_tool("get_webpage_content", {
 - **Command Palette**: `Bergamot: Search Webpages` - Semantic search
 - **Hover over links**: View metadata for captured pages
 - **Quick access**: Recent and frequently accessed pages
-
-### Managing Filters
-
-- **Review filtered pages**: `Bergamot: Generate Filtering Review`
-- **Correct decisions**: Click correction links in the review document
-- **View metrics**: `Bergamot: Show Filter Metrics`
+- **Filter metrics**: `Bergamot: Show Filter Metrics`
 
 ## MCP Server Integration
 
@@ -224,13 +204,13 @@ npm run chrome:debug  # Launches Chrome with extension loaded
 
 ### VS Code Settings
 
-| Setting                                     | Description                       | Default         |
-| ------------------------------------------- | --------------------------------- | --------------- |
+| Setting                                | Description                       | Default         |
+| -------------------------------------- | --------------------------------- | --------------- |
 | `bergamot.openaiApiKey`                | Your OpenAI API key               | -               |
 | `bergamot.webpageFilter.enabled`       | Enable AI filtering               | `true`          |
 | `bergamot.webpageFilter.allowedTypes`  | Page types to capture             | `["knowledge"]` |
 | `bergamot.webpageFilter.minConfidence` | Min confidence for classification | `0.7`           |
-| `bergamot.agentMemory.enabled`         | Enable learning from feedback     | `true`          |
+| `bergamot.webpageFilter.logDecisions`  | Log filter decisions              | `false`         |
 
 ## Architecture
 
@@ -255,6 +235,6 @@ MIT © Bergamot Team
 
 ## Acknowledgments
 
-- Built with [LangChain](https://github.com/langchain-ai/langchain) and [OpenAI](https://openai.com)
+- Built with [OpenAI](https://openai.com)
 - Uses [DuckDB](https://duckdb.org) and [LanceDB](https://lancedb.com)
 - MCP integration via [Model Context Protocol](https://modelcontextprotocol.io)

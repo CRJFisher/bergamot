@@ -58,56 +58,6 @@ describe('ConfigManager', () => {
     });
   });
 
-  describe('get_memory_config()', () => {
-    it('should return memory configuration with enabled true by default', () => {
-      const mock_config = {
-        get: jest.fn().mockReturnValue(true)
-      };
-      (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue(mock_config);
-      
-      const result = ConfigManager.get_memory_config();
-      
-      expect(result).toEqual({ enabled: true });
-      expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('bergamot.agentMemory');
-      expect(mock_config.get).toHaveBeenCalledWith('enabled', true);
-    });
-
-    it('should return memory configuration with enabled false when disabled', () => {
-      const mock_config = {
-        get: jest.fn().mockReturnValue(false)
-      };
-      (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue(mock_config);
-      
-      const result = ConfigManager.get_memory_config();
-      
-      expect(result).toEqual({ enabled: false });
-    });
-  });
-
-  describe('get_markdown_db_path()', () => {
-    const fake_context = {
-      globalStorageUri: { fsPath: '/tmp/bergamot-storage' },
-    } as unknown as import('vscode').ExtensionContext;
-
-    it('defaults to webpages_db.md under the global storage path', () => {
-      (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
-        get: jest.fn().mockReturnValue(undefined),
-      });
-
-      expect(ConfigManager.get_markdown_db_path(fake_context)).toBe(
-        '/tmp/bergamot-storage/webpages_db.md'
-      );
-    });
-
-    it('uses the configured markdownDbPath when set', () => {
-      (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
-        get: jest.fn().mockReturnValue('/custom/notes.md'),
-      });
-
-      expect(ConfigManager.get_markdown_db_path(fake_context)).toBe('/custom/notes.md');
-    });
-  });
-
   describe('get_duck_db_path()', () => {
     it('should construct correct DuckDB path from storage path', () => {
       const storage_path = '/test/storage/path';

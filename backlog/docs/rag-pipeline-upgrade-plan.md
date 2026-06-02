@@ -1,6 +1,6 @@
 # State-of-the-Art RAG Pipeline: Architecture & Upgrade Plan
 
-This document defines the target retrieval-augmented generation (RAG) architecture for Bergamot and the phased plan to reach it. It synthesises fact-checked 2024–2026 research (sources at the end) and maps each technique onto Bergamot's stack: a TypeScript/Node pipeline that ingests noisy web pages into **DuckDB** (relational visit records) + **LanceDB** (vectors) + **markdown**, exposed through an **MCP server**.
+This document defines the target retrieval-augmented generation (RAG) architecture for Bergamot and the phased plan to reach it. It synthesises fact-checked 2024–2026 research (sources at the end) and maps each technique onto Bergamot's stack: a TypeScript/Node pipeline that ingests noisy web pages into **DuckDB** (relational visit records) + **LanceDB** (vectors), exposed through an **MCP server**.
 
 The goal is a _measured, production-grade_ RAG pipeline — the kind whose quality is proven by metrics, not asserted.
 
@@ -8,7 +8,7 @@ The goal is a _measured, production-grade_ RAG pipeline — the kind whose quali
 
 | Stage              | Current implementation                                                               |
 | ------------------ | ------------------------------------------------------------------------------------ |
-| Ingestion          | LLM extracts main content → markdown (`reconcile_webpage_trees_workflow.ts`)         |
+| Ingestion          | LLM extracts main content → stored in DuckDB + LanceDB (`simple_workflow.ts`)        |
 | Chunking           | **None** — each whole page is stored as a single LanceDB record                      |
 | Embedding          | OpenAI `text-embedding-3-small`, single dense vector (`workflow/embeddings.ts`)      |
 | Index              | LanceDB vector search (IVF family)                                                   |

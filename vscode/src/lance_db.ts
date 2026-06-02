@@ -48,17 +48,6 @@ export type OperationResults<T extends Operation[]> = {
                   never;
 };
 import * as lancedb from "@lancedb/lancedb";
-import {
-  // WebpageCategorisationAndMetadata,
-  Note,
-  NoteSchema,
-} from "./model_schema";
-import { NoteTools } from "./note_tools";
-
-// Memory namespace constants
-export const MEMORY_NAMESPACES = {
-  NOTE_DESCRIPTIONS: "note_descriptions",
-};
 
 /**
  * LanceDB-based implementation of memory store with vector search capabilities.
@@ -97,8 +86,7 @@ export class LanceDBMemoryStore {
 
   /**
    * Creates and initializes a new LanceDBMemoryStore instance.
-   * Automatically populates note descriptions if embeddings are provided and the table doesn't exist.
-   * 
+   *
    * @param db_path - File system path where the LanceDB database will be stored
    * @param options - Optional configuration object
    * @param options.embeddings - Embeddings instance for vector operations (required for search)
@@ -116,17 +104,7 @@ export class LanceDBMemoryStore {
     options?: { embeddings?: Embeddings }
   ): Promise<LanceDBMemoryStore> {
     const db = await lancedb.connect(db_path);
-    const store = new LanceDBMemoryStore(db, options);
-    const namespaces = await store.list_namespaces();
-
-    const should_populate_note_descriptions = !namespaces.some(
-      (ns) => ns.join("_") === MEMORY_NAMESPACES.NOTE_DESCRIPTIONS
-    );
-    if (should_populate_note_descriptions && store.embeddings) {
-      const table = await create_note_descriptions_table(store, db);
-      store.tableCache.set(MEMORY_NAMESPACES.NOTE_DESCRIPTIONS, table);
-    }
-    return store;
+    return new LanceDBMemoryStore(db, options);
   }
 
   private async get_table(namespace: string[]): Promise<lancedb.Table> {
@@ -217,7 +195,6 @@ export class LanceDBMemoryStore {
    * @param namespace - Array of strings defining the namespace path
    * @param key - Unique identifier for the item
    * @param value - Data object to store (will be flattened for storage)
-   * @param _index - Reserved for future indexing functionality (currently unused)
    * @returns Promise that resolves when the item is stored
    * @throws {Error} If table access or embedding generation fails
    * 
@@ -233,9 +210,7 @@ export class LanceDBMemoryStore {
   async put(
     namespace: string[],
     key: string,
-    value: Record<string, unknown>,
-    _index?: false | string[] // TODO: implement indexing for improved performance
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    value: Record<string, unknown>
   ): Promise<void> {
     const table = await this.get_table(namespace);
     const now = new Date().toISOString();
@@ -574,265 +549,4 @@ function get_value_string(value: Record<string, unknown>): string {
   return Object.values(value)
     .filter((v) => typeof v === "string")
     .join(" ");
-}
-
-async function create_note_descriptions_table(
-  store: LanceDBMemoryStore,
-  db: lancedb.Connection
-): Promise<lancedb.Table> {
-  const all_notes = await NoteTools.fetch_existing_notes();
-  const all_note_strings = all_notes.map(
-    (note) => get_value_string(note).slice(0, 1000) // There is a limit on the number of tokens that can be embedded
-  );
-  const all_note_embeddings = await store.embeddings.embedDocuments(
-    all_note_strings
-  );
-  const values = all_notes.map((note, index) => {
-    // Convert sections array to a delimited string
-    const sections_string = Array.isArray(note.sections)
-      ? note.sections.join("|||")
-      : String(note.sections || "");
-
-    return {
-      key: note.path,
-      name: note.name,
-      sections_string: sections_string, // Store as string with delimiter
-      description: note.description,
-      path: note.path,
-      body: note.body,
-      created_at: note.created_at.toISOString(),
-      updated_at: note.updated_at.toISOString(),
-      vector: all_note_embeddings[index],
-    };
-  });
-
-  const table = await db.createTable(
-    MEMORY_NAMESPACES.NOTE_DESCRIPTIONS,
-    values,
-    {
-      mode: "overwrite",
-    }
-  );
-  return table;
-}
-
-/**
- * Retrieves notes that are semantically similar to the provided search string.
- * Uses vector embeddings to find the most relevant notes based on content similarity.
- * 
- * @param store - The LanceDBMemoryStore instance to search in
- * @param search_string - Text query to find similar notes for
- * @param limit - Maximum number of similar notes to return (default: 3)
- * @returns Promise that resolves to array of similar Note objects
- * @throws {Error} If search operation fails or note parsing errors occur
- * 
- * @example
- * ```typescript
- * const similarNotes = await retrieve_similar_notes(
- *   memoryStore,
- *   'machine learning algorithms',
- *   5
- * );
- * console.log(`Found ${similarNotes.length} similar notes`);
- * ```
- */
-export async function retrieve_similar_notes(
-  store: LanceDBMemoryStore,
-  search_string: string,
-  limit = 3
-): Promise<Note[]> {
-  const results = await store.search([MEMORY_NAMESPACES.NOTE_DESCRIPTIONS], {
-    query: search_string,
-    limit: limit * limit,
-  });
-  
-  // Type for search results with note fields
-  type NoteSearchResult = SearchItem & {
-    name: string;
-    sections_string?: string;
-    description: string;
-    path: string;
-    body: string;
-    created_at: string;
-    updated_at: string;
-    _distance: number;
-  };
-  
-  const notes = results
-    .map((r: SearchItem) => {
-      const result = r as NoteSearchResult;
-      // Convert the delimited string back to an array
-      const sections = result.sections_string ? result.sections_string.split("|||") : [];
-
-      try {
-        const note = NoteSchema.parse({
-          name: result.name,
-          sections: sections,
-          description: result.description,
-          path: result.path,
-          body: result.body,
-          created_at: new Date(result.created_at),
-          updated_at: new Date(result.updated_at),
-        });
-        return [note, result._distance, note.updated_at.getTime()];
-      } catch (e) {
-        console.log("Error parsing note:", e);
-        return null;
-      }
-    })
-    // Remove any null values that might have resulted from parsing errors
-    .filter((item): item is [Note, number, number] => item !== null);
-
-  if (notes.length === 0) {
-    console.log("No valid notes found");
-    return [];
-  }
-
-  const similar_notes = notes.map(([note]) => note).slice(0, limit);
-
-  return similar_notes;
-}
-
-/**
- * Retrieves notes that are semantically similar to the search string with optional recency filtering.
- * Combines similarity scoring with temporal relevance to find the most appropriate notes.
- * 
- * @param store - The LanceDBMemoryStore instance to search in
- * @param search_string - Text query to find similar notes for
- * @param limit - Maximum number of similar notes to return (default: 3)
- * @param options - Optional filtering and scoring configuration
- * @param options.days_back - Only return notes from the last N days
- * @param options.min_date - Only return notes after this specific date
- * @param options.combine_scores - Whether to combine similarity and recency scores for ranking
- * @returns Promise that resolves to array of similar Note objects
- * @throws {Error} If search operation fails or note parsing errors occur
- * 
- * @example
- * ```typescript
- * // Get recent notes similar to query
- * const recentSimilar = await retrieve_similar_notes_with_recency(
- *   memoryStore,
- *   'project planning',
- *   5,
- *   { days_back: 30, combine_scores: true }
- * );
- * 
- * // Get notes after specific date
- * const dateFiltered = await retrieve_similar_notes_with_recency(
- *   memoryStore,
- *   'meeting notes',
- *   3,
- *   { min_date: new Date('2024-01-01') }
- * );
- * ```
- */
-export async function retrieve_similar_notes_with_recency(
-  store: LanceDBMemoryStore,
-  search_string: string,
-  limit = 3,
-  options?: {
-    days_back?: number; // Only return notes from the last N days
-    min_date?: Date; // Only return notes after this date
-    combine_scores?: boolean; // Whether to combine similarity and recency scores
-  }
-): Promise<Note[]> {
-  const search_options: {
-    query: string;
-    limit: number;
-    filter?: Record<string, string | { operator: string; value: string }>;
-  } = {
-    query: search_string,
-    limit: limit * limit,
-  };
-
-  // Add time-based filter if specified
-  if (options?.days_back) {
-    const cutoff_date = new Date();
-    cutoff_date.setDate(cutoff_date.getDate() - options.days_back);
-    search_options.filter = {
-      updated_at: { operator: ">=", value: cutoff_date.toISOString() },
-    };
-  } else if (options?.min_date) {
-    search_options.filter = {
-      updated_at: { operator: ">=", value: options.min_date.toISOString() },
-    };
-  }
-
-  const results = await store.search(
-    [MEMORY_NAMESPACES.NOTE_DESCRIPTIONS],
-    search_options
-  );
-
-  type NoteWithMetrics = [Note, number, number];
-  type SearchResultWithNoteFields = SearchItem & {
-    name: string;
-    sections_string?: string;
-    description: string;
-    path: string;
-    body: string;
-    created_at: string;
-    updated_at: string;
-    _distance: number;
-  };
-
-  const notes: NoteWithMetrics[] = results
-    .map((r: SearchItem) => {
-      const result = r as SearchResultWithNoteFields;
-      const sections = result.sections_string
-        ? result.sections_string.split("|||")
-        : [];
-
-      try {
-        const note = NoteSchema.parse({
-          name: result.name,
-          sections: sections,
-          description: result.description,
-          path: result.path,
-          body: result.body,
-          created_at: new Date(result.created_at),
-          updated_at: new Date(result.updated_at),
-        });
-        return [
-          note,
-          result._distance,
-          note.updated_at.getTime(),
-        ] as NoteWithMetrics;
-      } catch (e) {
-        console.log("Error parsing note:", e);
-        return null;
-      }
-    })
-    .filter((item): item is NoteWithMetrics => item !== null);
-
-  if (notes.length === 0) {
-    console.log("No valid notes found");
-    return [];
-  }
-
-  // If combine_scores is true, re-rank based on both similarity and recency
-  if (options?.combine_scores) {
-    const now = Date.now();
-    const max_age_ms = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
-
-    notes.sort((a: NoteWithMetrics, b: NoteWithMetrics) => {
-      const [, distance_a, timestamp_a] = a;
-      const [, distance_b, timestamp_b] = b;
-
-      // Normalize similarity score (lower distance is better, so invert)
-      const similarity_a = 1 / (1 + distance_a);
-      const similarity_b = 1 / (1 + distance_b);
-
-      // Normalize recency score (more recent is better)
-      const recency_a = Math.max(0, 1 - (now - timestamp_a) / max_age_ms);
-      const recency_b = Math.max(0, 1 - (now - timestamp_b) / max_age_ms);
-
-      // Combine scores (you can adjust weights as needed)
-      const combined_a = 0.7 * similarity_a + 0.3 * recency_a;
-      const combined_b = 0.7 * similarity_b + 0.3 * recency_b;
-
-      return combined_b - combined_a; // Higher combined score is better
-    });
-  }
-
-  return notes.map(([note]) => note).slice(0, limit);
 }

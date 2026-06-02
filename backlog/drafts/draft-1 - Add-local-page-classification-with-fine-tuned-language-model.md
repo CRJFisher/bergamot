@@ -1,5 +1,5 @@
 ---
-id: task-27
+id: DRAFT-1
 title: Add local page classification with fine-tuned language model
 status: To Do
 assignee: []
@@ -10,19 +10,26 @@ dependencies: []
 
 ## Description
 
+<!-- SECTION:DESCRIPTION:BEGIN -->
+
 Implement fully local page classification functionality using a fine-tuned language model. Options include using transformers.js with models like SmolLM v2 (e.g., SmolLM2-135M-Instruct) or MobileBERT. This will enable offline, privacy-preserving content classification without requiring external API calls. The system should support custom classification models that users can train or fine-tune based on their specific needs and preferences.
+
+<!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 
-- [ ] Research and decide which library to use for local language model inference. Ideally it would also support fine-tuning.
-- [ ] Research and decide which model to use.
-- [ ] Research and decide whether this should happen in the browser extension (see notes below) or in the VSCode extension where we have more control e.g. access to the Node API etc.
-- [ ] Local language model integration (e.g. transformers.js with SmolLM v2 or MobileBERT) implemented
-- [ ] Page classification works entirely offline without API calls
-- [ ] Model inference runs efficiently in browser/extension context
-- [ ] Support for multiple predefined classification categories
-- [ ] Clear documentation on how to use local classification
-- [ ] Performance benchmarks showing classification speed and accuracy
+<!-- AC:BEGIN -->
+
+- [ ] #1 Research and decide which library to use for local language model inference. Ideally it would also support fine-tuning.
+- [ ] #2 Research and decide which model to use.
+- [ ] #3 Research and decide whether this should happen in the browser extension (see notes below) or in the VSCode extension where we have more control e.g. access to the Node API etc.
+- [ ] #4 Local language model integration (e.g. transformers.js with SmolLM v2 or MobileBERT) implemented
+- [ ] #5 Page classification works entirely offline without API calls
+- [ ] #6 Model inference runs efficiently in browser/extension context
+- [ ] #7 Support for multiple predefined classification categories
+- [ ] #8 Clear documentation on how to use local classification
+- [ ] #9 Performance benchmarks showing classification speed and accuracy
+<!-- AC:END -->
 
 ## Notes on Browser Extension Implementation
 
@@ -130,7 +137,7 @@ function callOffscreen(method, payload, signal) {
           });
           reject(new DOMException("Aborted", "AbortError"));
         },
-        { once: true }
+        { once: true },
       );
     }
   });
@@ -156,7 +163,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const controller = new AbortController();
 
     const result = await queue.push(() =>
-      callOffscreen("generate", { input, options }, controller.signal)
+      callOffscreen("generate", { input, options }, controller.signal),
     );
 
     respond({ ok: true, requestId, result });
@@ -272,7 +279,6 @@ If you want **WebGPU in Node.js**, you need a native binding or a polyfill that 
 ### 1. **Official WebGPU in Node.js (via Chrome’s Dawn)**
 
 - The Chrome team’s **Dawn** WebGPU implementation can be used from Node through wrappers like:
-
   - [`@webgpu/types`](https://www.npmjs.com/package/@webgpu/types) + experimental Node flags (future direction, not stable yet).
   - [`@webgpu/glslang`](https://www.npmjs.com/package/@webgpu/glslang) + [`@webgpu/wgpu`](https://www.npmjs.com/package/wgpu) for low-level access.
 
@@ -283,7 +289,6 @@ If you want **WebGPU in Node.js**, you need a native binding or a polyfill that 
 ### 2. **wgpu-native bindings**
 
 - Rust’s [`wgpu`](https://github.com/gfx-rs/wgpu) project has Node.js bindings such as:
-
   - [`@webgpu/node`](https://www.npmjs.com/package/@webgpu/node) (thin wrapper)
   - [`wgpu-native`](https://github.com/gfx-rs/wgpu-native) plus your own FFI bindings.
 
@@ -301,7 +306,6 @@ If you want **WebGPU in Node.js**, you need a native binding or a polyfill that 
 ### 4. **ONNX Runtime Web + Node**
 
 - If your goal is _model inference_, not arbitrary GPU code:
-
   - In the browser, ONNX Runtime Web can use WebGPU.
   - In Node, ONNX Runtime has its **native** backend (`onnxruntime-node`) which uses CUDA, DirectML, or CoreML – not WebGPU, but gives GPU acceleration without needing `navigator.gpu`.
 

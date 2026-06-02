@@ -5,20 +5,14 @@ import * as path from 'path';
 import request from 'supertest';
 import { ServerManager, ServerConfig, SERVER_PORT_RANGE } from './server_manager';
 import { DuckDB } from '../duck_db';
-import { MarkdownDatabase } from '../markdown_db';
 import { LanceDBMemoryStore } from '../lance_db';
-import { EpisodicMemoryStore } from '../memory/episodic_memory_store';
-import { ProceduralMemoryStore } from '../memory/procedural_memory_store';
 import { VisitQueueProcessor } from '../visit_queue_processor';
 import { build_workflow } from '../reconcile_webpage_trees_workflow_vanilla';
 import { decompress } from '@mongodb-js/zstd';
 
 // Mock dependencies
 jest.mock('../duck_db');
-jest.mock('../markdown_db');
 jest.mock('../lance_db');
-jest.mock('../memory/episodic_memory_store');
-jest.mock('../memory/procedural_memory_store');
 jest.mock('../orphaned_visits');
 jest.mock('../visit_queue_processor');
 jest.mock('../reconcile_webpage_trees_workflow_vanilla');
@@ -44,7 +38,7 @@ describe('ServerManager', () => {
       start: jest.fn(),
       stop: jest.fn(),
       enqueue: jest.fn().mockReturnValue(1)
-    } as any;
+    } as Partial<jest.Mocked<VisitQueueProcessor>> as jest.Mocked<VisitQueueProcessor>;
 
     (VisitQueueProcessor as jest.Mock).mockImplementation(() => mock_queue_processor);
 
@@ -55,10 +49,7 @@ describe('ServerManager', () => {
     mock_config = {
       openai_api_key: 'test-api-key',
       duck_db: {} as DuckDB,
-      markdown_db: {} as MarkdownDatabase,
-      memory_db: {} as LanceDBMemoryStore,
-      episodic_store: {} as EpisodicMemoryStore,
-      procedural_store: {} as ProceduralMemoryStore
+      memory_db: {} as LanceDBMemoryStore
     };
 
     server_manager = new ServerManager(mock_config);
@@ -100,13 +91,9 @@ describe('ServerManager', () => {
 
       expect(build_workflow).toHaveBeenCalledWith(
         'test-api-key',
-        null,
         mock_config.duck_db,
-        mock_config.markdown_db,
         mock_config.memory_db,
-        expect.any(Object),
-        mock_config.episodic_store,
-        mock_config.procedural_store
+        expect.any(Object)
       );
     });
   });
@@ -117,7 +104,7 @@ describe('ServerManager', () => {
     beforeEach(async () => {
       await server_manager.start();
       // Access the Express app directly for testing
-      app = (server_manager as any).app;
+      app = (server_manager as object as { app: express.Application }).app;
     });
 
     describe('GET /status', () => {
@@ -267,34 +254,6 @@ describe('ServerManager', () => {
       const processor = server_manager.get_queue_processor();
       expect(processor).toBeDefined();
       expect(processor).toBe(mock_queue_processor);
-    });
-  });
-
-  describe('without memory features', () => {
-    it('should work without episodic and procedural stores', async () => {
-      const config_without_memory: ServerConfig = {
-        openai_api_key: 'test-api-key',
-        duck_db: {} as DuckDB,
-        markdown_db: {} as MarkdownDatabase,
-        memory_db: {} as LanceDBMemoryStore
-      };
-
-      const server_without_memory = new ServerManager(config_without_memory);
-      const port = await server_without_memory.start();
-
-      expect(port).toBeGreaterThan(0);
-      expect(build_workflow).toHaveBeenCalledWith(
-        'test-api-key',
-        null,
-        config_without_memory.duck_db,
-        config_without_memory.markdown_db,
-        config_without_memory.memory_db,
-        expect.any(Object),
-        undefined,
-        undefined
-      );
-
-      await server_without_memory.stop();
     });
   });
 });

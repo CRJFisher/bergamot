@@ -1,35 +1,23 @@
 import * as vscode from 'vscode';
 import { DuckDB } from '../duck_db';
-import { MarkdownDatabase } from '../markdown_db';
 import { LanceDBMemoryStore } from '../lance_db';
-import { EpisodicMemoryStore } from '../memory/episodic_memory_store';
-import { ProceduralMemoryStore } from '../memory/procedural_memory_store';
-import { register_procedural_rule_commands } from '../memory/procedural_rule_commands';
-import { register_feedback_commands } from '../memory/feedback_commands';
 import { register_webpage_search_commands } from '../webpage_search_commands';
 import { register_webpage_hover_provider } from '../webpage_hover_provider';
-import { FeedbackDocumentGenerator } from '../memory/feedback_document_generator';
 import { global_filter_metrics } from '../workflow/filter_metrics';
 
 /**
  * Configuration for command registration.
  * Contains all dependencies required to register VS Code commands.
- * 
+ *
  * @interface CommandConfig
  * @property {vscode.ExtensionContext} context - VS Code extension context for registrations
  * @property {DuckDB} duck_db - Database for structured data queries
- * @property {MarkdownDatabase} markdown_db - Database for markdown content
  * @property {LanceDBMemoryStore} memory_db - Vector database for semantic search
- * @property {EpisodicMemoryStore} [episodic_store] - Optional episodic memory for feedback
- * @property {ProceduralMemoryStore} [procedural_store] - Optional procedural memory for rules
  */
 export interface CommandConfig {
   context: vscode.ExtensionContext;
   duck_db: DuckDB;
-  markdown_db: MarkdownDatabase;
   memory_db: LanceDBMemoryStore;
-  episodic_store?: EpisodicMemoryStore;
-  procedural_store?: ProceduralMemoryStore;
 }
 
 /**
@@ -41,10 +29,7 @@ export interface CommandConfig {
  * const commandManager = new CommandManager({
  *   context: extensionContext,
  *   duck_db: duckDb,
- *   markdown_db: markdownDb,
- *   memory_db: memoryDb,
- *   episodic_store: episodicStore,
- *   procedural_store: proceduralStore
+ *   memory_db: memoryDb
  * });
  * 
  * // Register all commands
@@ -72,7 +57,6 @@ export class CommandManager {
   register_all(): void {
     this.register_core_commands();
     this.register_search_commands();
-    this.register_memory_commands();
     this.register_filter_commands();
   }
 
@@ -98,34 +82,6 @@ export class CommandManager {
    */
   private register_search_commands(): void {
     // Already handled by register_webpage_search_commands in core commands
-  }
-
-  /**
-   * Registers memory-related commands if memory features are enabled.
-   * Conditionally registers procedural rules and feedback commands based on available stores.
-   * @private
-   */
-  private register_memory_commands(): void {
-    // Register procedural rule commands if available
-    if (this.config.procedural_store) {
-      register_procedural_rule_commands(
-        this.config.context, 
-        this.config.procedural_store
-      );
-    }
-
-    // Register feedback commands if episodic store is available
-    if (this.config.episodic_store) {
-      const feedback_generator = new FeedbackDocumentGenerator(
-        this.config.episodic_store,
-        this.config.markdown_db
-      );
-      register_feedback_commands(
-        this.config.context,
-        this.config.episodic_store,
-        feedback_generator
-      );
-    }
   }
 
   /**

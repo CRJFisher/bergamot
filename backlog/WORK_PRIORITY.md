@@ -2,100 +2,50 @@
 
 ## Current Status
 
-All major infrastructure and testing tasks have been completed. The project now has:
+Bergamot is a lean capture-to-query pipeline. The browser extension captures
+web-page visits and stitches them into cross-page navigation sessions, posts
+them to the VS Code HTTP server, and the server persists each visit into DuckDB
+(relational record) and LanceDB (page text + vectors). An LLM categorizes and
+extracts the main content of each page during ingestion. The stored record is
+queryable through an MCP server, an HTTP query API, and direct read-only DuckDB
+access.
 
-- ✅ Comprehensive E2E test coverage for navigation tracking
-- ✅ Native messaging implementation with fallback
-- ✅ Release packaging for VS Code and browser extensions
-- ✅ CI/CD pipeline with GitHub Actions
-- ✅ Procedural memory system for custom filtering rules
-- ✅ Webpage search command with dropdown selection
-- ✅ Tooltip system for webpage links
+The infrastructure for that core is in place:
+
+- ✅ Cross-tab E2E test coverage (Playwright, MV3 extension, real visit records)
+- ✅ Single authenticated local HTTP transport with port-range discovery
+- ✅ DuckDB + LanceDB ingestion wired end-to-end via `simple_workflow.ts`
+- ✅ Durable visit inbox — in-flight visits survive restarts
+- ✅ Relational MCP tools + HTTP query API over the DuckDB record
+- ✅ Semantic search MCP tool over LanceDB content
+- ✅ LLM webpage filtering and content extraction (direct OpenAI calls)
+- ✅ `Bergamot: Search Webpages` and `Bergamot: Show Filter Metrics` commands
 
 ## Next Priority Areas
 
-### 1. Production Readiness
+### 1. RAG pipeline (task 31 series)
 
-- Run comprehensive E2E tests and fix any failures
-- Performance optimization for large browsing sessions
-- Memory usage optimization in browser extension
-- Error recovery and resilience improvements
+The biggest lever. Build a measured, production-grade retrieval pipeline on the
+existing DuckDB + LanceDB stores: evaluation harness first, then hybrid search
+(dense + BM25 via RRF), chunking + contextual retrieval + parent-document
+expansion, reranking, clean ingestion, and embedding-model selection. See
+`backlog/docs/rag-pipeline-upgrade-plan.md`.
 
-### 2. User Experience Polish
+### 2. Image-aware content extraction
 
-- Improve VS Code command palette integration
-- Add configuration UI for procedural memory rules
-- Enhanced tooltip formatting and information display
-- Better error messages and user feedback
+Extend the ingestion content extraction to handle images on captured pages so
+visual knowledge is represented in the stored record and retrievable.
 
-### 3. Advanced Features
+### 3. Query-interface completeness
 
-- Implement semantic search across webpage history
-- Add export/import for browsing sessions
-- Create visualization for navigation graphs
-- Implement smart summarization of browsing sessions
+Round out the query surface over the existing stores:
 
-### 4. Documentation & Distribution
-
-- Create user documentation and tutorials
-- Set up project website
-- Prepare for VS Code Marketplace submission
-- Prepare for Chrome Web Store submission
-- Prepare for Firefox Add-ons submission
-
-## Recent Achievements (Completed & Archived)
-
-### Infrastructure & Testing
-
-- ✅ **Task 4**: Epic - Comprehensive E2E Browser Extension Testing
-  - Task 4.1: Set up E2E test infrastructure
-  - Task 4.2: Test SPA navigation tracking
-  - Task 4.3: Test multi-tab navigation chains
-  - Task 4.4: Test traditional website navigation
-  - Task 4.5: Test edge cases and special scenarios
-  - Task 4.6: Test referrer and navigation metadata
-  - Task 4.7: Run and debug all E2E navigation tests
-- ✅ **Task 5**: CI/CD integration for E2E tests
-- ✅ **Task 2**: Migrate IDE-browser communication to Native Messaging
-- ✅ **Task 3**: Release project as VS Code and browser extensions
-
-### Core Functionality
-
-- ✅ Complete browser extension overhaul to functional architecture
-- ✅ 89%+ test coverage with Jest and Chrome DevTools Protocol
-- ✅ Comprehensive documentation with API reference
-- ✅ Documented core webpage processing architecture
-- ✅ Replaced LangChain with vanilla TypeScript
-- ✅ Implemented intelligent webpage filtering with LLM
-- ✅ Added agent memory and feedback system with episodic memory
-- ✅ **Task 10**: Implement procedural memory for custom filtering rules
-- ✅ **Task 11**: Add command to search webpages with dropdown selection
-- ✅ **Task 12**: Add tooltip for webpage links showing database content
-- ✅ MCP server integration for RAG queries
-- ✅ Created automated Chrome extension debugging scripts
+- Sort-by-time ordering on query results
+- Date-range filtering
+- Hybrid (relational + semantic) search across MCP / HTTP query API
 
 ## Technical Debt & Improvements
 
-1. **Code Quality**
-
-   - Fix TypeScript compilation warnings in E2E tests
-   - Refactor test helpers to reduce duplication
-   - Improve error handling in native messaging
-
-2. **Performance**
-
-   - Optimize DuckDB queries for large datasets
-   - Implement connection pooling for database access
-   - Add caching layer for frequently accessed data
-
-3. **Testing**
-   - Actually run E2E tests and verify they pass
-   - Add integration tests for native messaging
-   - Add performance benchmarks
-
-## Next Steps
-
-1. **Immediate**: Run `npm run test:e2e:run-all` and fix any failing tests
-2. **Short-term**: Polish user experience and fix any bugs discovered
-3. **Medium-term**: Prepare for public release on extension stores
-4. **Long-term**: Build advanced features based on user feedback
+- Optimize DuckDB queries for large datasets
+- Add performance benchmarks for ingestion and query paths
+- Reduce duplication in E2E test helpers

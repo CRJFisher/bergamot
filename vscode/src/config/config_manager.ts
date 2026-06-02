@@ -1,10 +1,9 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 
 /**
  * Configuration manager for the Bergamot extension.
  * Handles retrieval and validation of extension settings from VS Code's workspace configuration.
- * 
+ *
  * @example
  * ```typescript
  * // Get OpenAI API key
@@ -12,12 +11,6 @@ import * as path from 'path';
  * if (!apiKey) {
  *   // Handle missing API key
  *   return;
- * }
- * 
- * // Check if memory features are enabled
- * const memoryConfig = ConfigManager.get_memory_config();
- * if (memoryConfig.enabled) {
- *   // Initialize memory features
  * }
  * ```
  */
@@ -52,44 +45,6 @@ export class ConfigManager {
     
     console.log('OpenAI API key found in configuration');
     return api_key;
-  }
-
-  /**
-   * Retrieves the agent memory configuration from VS Code settings.
-   * 
-   * @returns Object containing memory configuration settings
-   * @returns.enabled - Whether memory features are enabled (defaults to true)
-   * @example
-   * ```typescript
-   * const config = ConfigManager.get_memory_config();
-   * if (config.enabled) {
-   *   // Initialize episodic and procedural memory stores
-   * }
-   * ```
-   */
-  static get_memory_config(): { enabled: boolean } {
-    const config = vscode.workspace.getConfiguration(`${this.CONFIG_NAMESPACE}.agentMemory`);
-    return {
-      enabled: config.get<boolean>('enabled', true)
-    };
-  }
-
-  /**
-   * Gets the path for the markdown database. Uses the `bergamot.markdownDbPath`
-   * setting when set; otherwise defaults to `webpages_db.md` in the extension's
-   * global storage directory (machine-independent).
-   *
-   * @param context - Extension context, for the global storage path
-   * @returns Path to the markdown database file
-   */
-  static get_markdown_db_path(context: vscode.ExtensionContext): string {
-    const configured = vscode.workspace
-      .getConfiguration(ConfigManager.CONFIG_NAMESPACE)
-      .get<string>('markdownDbPath');
-    if (configured && configured.trim().length > 0) {
-      return configured;
-    }
-    return path.join(context.globalStorageUri.fsPath, 'webpages_db.md');
   }
 
   /**

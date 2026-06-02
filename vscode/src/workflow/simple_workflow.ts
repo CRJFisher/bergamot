@@ -12,11 +12,6 @@ import {
   FilterConfig,
 } from "./webpage_filter";
 import { global_filter_metrics } from "./filter_metrics";
-import { MemoryEnhancedClassifier } from "../memory/memory_enhanced_classifier";
-import { EpisodicMemoryStore } from "../memory/episodic_memory_store";
-import { ProceduralMemoryStore } from "../memory/procedural_memory_store";
-import { EnhancedWebpageFilter } from "./enhanced_webpage_filter";
-import { extract_content_features } from "./content_analyzer";
 import {
   DuckDB,
   insert_webpage_analysis,
@@ -30,10 +25,6 @@ import {
   PageAnalysisWithoutPageSessionId,
   TreeIntentions,
 } from "../reconcile_webpage_trees_workflow_models";
-import {
-  MarkdownDatabase,
-  WebpageTreeNodeCollectionSpec,
-} from "../markdown_db";
 import { LanceDBMemoryStore } from "../lance_db";
 
 const WEBPAGE_CONTENT_NAMESPACE = "webpage_content";
@@ -94,42 +85,19 @@ function webpage_tree_to_md_string(
 export class WebpageWorkflow {
   private openai_key: string;
   private duck_db: DuckDB;
-  private markdown_db: MarkdownDatabase;
   private memory_db: LanceDBMemoryStore;
   private filter_config: FilterConfig;
-  private episodic_store?: EpisodicMemoryStore;
-  private memory_classifier?: MemoryEnhancedClassifier;
-  private procedural_store?: ProceduralMemoryStore;
-  private enhanced_filter?: EnhancedWebpageFilter;
 
   constructor(
     openai_key: string,
     duck_db: DuckDB,
-    markdown_db: MarkdownDatabase,
     memory_db: LanceDBMemoryStore,
-    filter_config?: FilterConfig,
-    episodic_store?: EpisodicMemoryStore,
-    procedural_store?: ProceduralMemoryStore
+    filter_config?: FilterConfig
   ) {
     this.openai_key = openai_key;
     this.duck_db = duck_db;
-    this.markdown_db = markdown_db;
     this.memory_db = memory_db;
     this.filter_config = filter_config || DEFAULT_FILTER_CONFIG;
-    this.episodic_store = episodic_store;
-    this.procedural_store = procedural_store;
-
-    if (episodic_store) {
-      this.memory_classifier = new MemoryEnhancedClassifier(episodic_store);
-    }
-
-    if (episodic_store && procedural_store) {
-      this.enhanced_filter = new EnhancedWebpageFilter(
-        procedural_store,
-        episodic_store,
-        this.filter_config
-      );
-    }
   }
 
   async run(inputs: {
@@ -158,57 +126,11 @@ export class WebpageWorkflow {
 
       const llm_client = await get_llm_client(this.openai_key);
 
-      // Extract content features for memory storage
-      const content_features = extract_content_features(
+      const classification = await classify_webpage(
         inputs.new_page.url,
-        inputs.raw_content
+        inputs.raw_content,
+        llm_client.complete_json.bind(llm_client)
       );
-
-      // Classify with memory enhancement if available
-      let classification;
-      // let episode_id: string | undefined;
-
-      if (this.memory_classifier && this.episodic_store) {
-        const memory_classification =
-          await this.memory_classifier.classify_with_memory(
-            inputs.new_page.url,
-            inputs.raw_content,
-            llm_client.complete_json.bind(llm_client),
-            this.filter_config
-          );
-
-        classification = memory_classification.final_classification;
-
-        // Store the episode for future learning
-        await this.memory_classifier.store_classification_episode(
-          inputs.new_page.url,
-          memory_classification,
-          content_features,
-          inputs.raw_content.substring(0, 2000)
-        );
-
-        // Log memory influence if any
-        if (memory_classification.memory_adjustments.influenced_by.length > 0) {
-          console.log(
-            `  Memory influence: ${memory_classification.memory_adjustments.influenced_by.length} similar episodes`
-          );
-          if (
-            memory_classification.base_classification.should_process !==
-            classification.should_process
-          ) {
-            console.log(
-              `  Decision changed by memory: ${memory_classification.base_classification.should_process} → ${classification.should_process}`
-            );
-          }
-        }
-      } else {
-        // Fallback to basic classification
-        classification = await classify_webpage(
-          inputs.new_page.url,
-          inputs.raw_content,
-          llm_client.complete_json.bind(llm_client)
-        );
-      }
 
       // Note: Aggregator filtering now happens here via LLM classification
       // Pages classified as 'aggregator' type will be filtered based on config
@@ -300,8 +222,7 @@ export class WebpageWorkflow {
         return member;
       });
 
-      let new_tree = get_tree_with_id(tree_members);
-      let final_members = tree_members;
+      const new_tree = get_tree_with_id(tree_members);
 
       if (inputs.members.length > 1) {
         const page_id_to_index = Object.fromEntries(
@@ -335,28 +256,7 @@ export class WebpageWorkflow {
             })
           )
         );
-
-        final_members = tree_members.map((member) => {
-          const new_intentions =
-            tree_intentions.page_id_to_intentions[
-              page_id_to_index[member.id]
-            ] ?? member.tree_intentions;
-          return {
-            ...member,
-            tree_intentions: new_intentions,
-          };
-        });
-
-        new_tree = get_tree_with_id(final_members);
       }
-
-      await (
-        await this.markdown_db.upsert(
-          WebpageTreeNodeCollectionSpec,
-          new_tree,
-          "## Webpages"
-        )
-      ).save();
 
       console.log("\n--- Workflow Completed ---");
       console.log("State: completed, Status: completed");

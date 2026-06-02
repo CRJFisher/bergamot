@@ -22,71 +22,18 @@
     "webpage-capture"
   ],
   "activationEvents": [
-    "onStartupFinished",
-    "onLanguage:markdown"
+    "onStartupFinished"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "bergamot.addHighlight",
-        "title": "Add Highlight to Bullet Point"
-      },
-      {
-        "command": "bergamot.showFilterMetrics",
-        "title": "Bergamot: Show Filter Metrics"
-      },
-      {
-        "command": "bergamot.generateFilteringReview",
-        "title": "Bergamot: Generate Filtering Review"
-      },
-      {
-        "command": "bergamot.showMemoryStats",
-        "title": "Bergamot: Show Memory Statistics"
-      },
-      {
-        "command": "bergamot.correctDecision",
-        "title": "Bergamot: Correct Filtering Decision"
-      },
-      {
-        "command": "bergamot.correctType",
-        "title": "Bergamot: Correct Page Type"
-      },
-      {
-        "command": "bergamot.addExplanation",
-        "title": "Bergamot: Add Feedback Explanation"
-      },
-      {
         "command": "bergamot.searchWebpages",
         "title": "Bergamot: Search Webpages"
       },
       {
-        "command": "bergamot.createFilterRule",
-        "title": "Bergamot: Create Filter Rule"
-      },
-      {
-        "command": "bergamot.manageFilterRules",
-        "title": "Bergamot: Manage Filter Rules"
-      },
-      {
-        "command": "bergamot.createDomainRule",
-        "title": "Bergamot: Create Domain Rule"
-      },
-      {
-        "command": "bergamot.createContentPatternRule",
-        "title": "Bergamot: Create Content Pattern Rule"
-      },
-      {
-        "command": "bergamot.showRuleStatistics",
-        "title": "Bergamot: Show Rule Statistics"
-      },
-      {
-        "command": "bergamot.exportFilterRules",
-        "title": "Bergamot: Export Filter Rules"
-      },
-      {
-        "command": "bergamot.importFilterRules",
-        "title": "Bergamot: Import Filter Rules"
+        "command": "bergamot.showFilterMetrics",
+        "title": "Bergamot: Show Filter Metrics"
       }
     ],
     "configuration": {
@@ -96,12 +43,6 @@
           "type": "string",
           "default": "",
           "description": "Your OpenAI API key for Bergamot",
-          "scope": "application"
-        },
-        "bergamot.markdownDbPath": {
-          "type": "string",
-          "default": "",
-          "description": "Path to the markdown export file. When empty, defaults to webpages_db.md in the extension's global storage directory.",
           "scope": "application"
         },
         "bergamot.webpageFilter.enabled": {
@@ -138,25 +79,6 @@
           "type": "boolean",
           "default": true,
           "description": "Log filtering decisions to console"
-        },
-        "bergamot.agentMemory.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable agent memory for learning from feedback"
-        },
-        "bergamot.agentMemory.recentPagesDays": {
-          "type": "number",
-          "default": 7,
-          "minimum": 1,
-          "maximum": 30,
-          "description": "Days to show accepted pages in feedback document"
-        },
-        "bergamot.agentMemory.filteredPagesHours": {
-          "type": "number",
-          "default": 48,
-          "minimum": 1,
-          "maximum": 168,
-          "description": "Hours to show filtered pages in feedback document"
         }
       }
     }

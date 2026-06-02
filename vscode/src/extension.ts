@@ -18,8 +18,7 @@ let command_manager: CommandManager;
  * - Configures OpenAI API integration for AI-powered analysis
  * - Sets up DuckDB for structured webpage data storage
  * - Starts Express server for browser extension communication
- * - Initializes LanceDB memory store for content and embeddings
- * - Configures episodic and procedural memory systems
+ * - Initializes LanceDB vector store for content and embeddings
  * - Starts MCP (Model Context Protocol) server for external tool access
  * - Registers VS Code commands and providers for search and hover functionality
  *
@@ -48,14 +47,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // Step 2: Initialize databases
     console.log('Initializing databases...');
     database_manager = new DatabaseManager();
-    const memory_config = ConfigManager.get_memory_config();
-    const markdown_path = ConfigManager.get_markdown_db_path(context);
-    
+
     const databases = await database_manager.initialize_all(
       context,
-      openai_api_key,
-      markdown_path,
-      memory_config.enabled
+      openai_api_key
     );
 
     // Step 3: Start Express server for webpage categorization
@@ -63,13 +58,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     server_manager = new ServerManager({
       openai_api_key,
       duck_db: databases.duck_db,
-      markdown_db: databases.markdown_db,
       memory_db: databases.memory_db,
-      episodic_store: databases.episodic_store,
-      procedural_store: databases.procedural_store,
       inbox_dir: path.join(context.globalStorageUri.fsPath, 'visit_inbox')
     });
-    
+
     const port = await server_manager.start();
     console.log(`Server started on port ${port}`);
 
@@ -78,10 +70,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     command_manager = new CommandManager({
       context,
       duck_db: databases.duck_db,
-      markdown_db: databases.markdown_db,
-      memory_db: databases.memory_db,
-      episodic_store: databases.episodic_store,
-      procedural_store: databases.procedural_store
+      memory_db: databases.memory_db
     });
     command_manager.register_all();
 

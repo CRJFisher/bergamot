@@ -11,8 +11,6 @@ The VS Code extension owns the data under its global storage directory:
 
 - **DuckDB** — `webpage_categorizations.db`: the canonical relational record.
 - **LanceDB** — `webpage_memory.db/`: page text + embeddings for semantic search.
-- **Markdown** — `webpages_db.md`: a human-readable export (path configurable via
-  the `bergamot.markdownDbPath` setting).
 
 DuckDB is single-writer: while the extension is running it holds the connection,
 so other processes query through the HTTP API / MCP rather than opening the file.
@@ -53,14 +51,14 @@ Page **content** and **embeddings** live in LanceDB (`webpage_content`), keyed b
 
 The extension spawns an MCP server (`mcp_server_standalone.js`, stdio). Tools:
 
-| Tool | Returns |
-|------|---------|
-| `semantic_search(query, limit?)` | vector search over page content |
-| `get_webpage_content(page_session_id)` | full stored content for one visit |
-| `get_visit_by_url(url)` | latest visit for an exact URL (url, title, visited_at) |
-| `search_by_title(title)` | a page's content by title |
-| `get_navigation_tree(tree_id)` | all visits in a navigation session |
-| `list_recent_navigation_trees(limit?)` | recent sessions + members + analysis |
+| Tool                                   | Returns                                                |
+| -------------------------------------- | ------------------------------------------------------ |
+| `semantic_search(query, limit?)`       | vector search over page content                        |
+| `get_webpage_content(page_session_id)` | full stored content for one visit                      |
+| `get_visit_by_url(url)`                | latest visit for an exact URL (url, title, visited_at) |
+| `search_by_title(title)`               | a page's content by title                              |
+| `get_navigation_tree(tree_id)`         | all visits in a navigation session                     |
+| `list_recent_navigation_trees(limit?)` | recent sessions + members + analysis                   |
 
 The relational tools proxy to the HTTP API below (the extension owns DuckDB).
 

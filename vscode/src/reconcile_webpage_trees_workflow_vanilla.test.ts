@@ -1,27 +1,19 @@
 import { run_workflow, build_workflow } from "./reconcile_webpage_trees_workflow_vanilla";
 import { WebpageWorkflow } from "./workflow/simple_workflow";
 import { DuckDB } from "./duck_db";
-import { MarkdownDatabase } from "./markdown_db";
 import { LanceDBMemoryStore } from "./lance_db";
-import { EpisodicMemoryStore } from "./memory/episodic_memory_store";
-import { ProceduralMemoryStore } from "./memory/procedural_memory_store";
 import { PageActivitySessionWithMeta } from "./reconcile_webpage_trees_workflow_models";
 import { PageActivitySessionWithoutContent } from "./duck_db_models";
+import { FilterConfig } from "./workflow/webpage_filter";
 
 // Mock all dependencies
 jest.mock("./workflow/simple_workflow");
 jest.mock("./duck_db");
-jest.mock("./markdown_db");
 jest.mock("./lance_db");
-jest.mock("./memory/episodic_memory_store");
-jest.mock("./memory/procedural_memory_store");
 
 describe("reconcile_webpage_trees_workflow_vanilla", () => {
   let mockDuckDb: jest.Mocked<DuckDB>;
-  let mockMarkdownDb: jest.Mocked<MarkdownDatabase>;
   let mockMemoryDb: jest.Mocked<LanceDBMemoryStore>;
-  let mockEpisodicStore: jest.Mocked<EpisodicMemoryStore>;
-  let mockProceduralStore: jest.Mocked<ProceduralMemoryStore>;
   let mockWorkflowInstance: jest.Mocked<WebpageWorkflow>;
 
   beforeEach(() => {
@@ -29,15 +21,12 @@ describe("reconcile_webpage_trees_workflow_vanilla", () => {
 
     // Create mock instances
     mockDuckDb = {} as jest.Mocked<DuckDB>;
-    mockMarkdownDb = {} as jest.Mocked<MarkdownDatabase>;
     mockMemoryDb = {} as jest.Mocked<LanceDBMemoryStore>;
-    mockEpisodicStore = {} as jest.Mocked<EpisodicMemoryStore>;
-    mockProceduralStore = {} as jest.Mocked<ProceduralMemoryStore>;
 
     // Create mock workflow instance
     mockWorkflowInstance = {
       run: jest.fn().mockResolvedValue(undefined),
-    } as any;
+    } as Partial<jest.Mocked<WebpageWorkflow>> as jest.Mocked<WebpageWorkflow>;
 
     // Mock WebpageWorkflow constructor
     (WebpageWorkflow as jest.Mock).mockImplementation(() => mockWorkflowInstance);
@@ -46,27 +35,20 @@ describe("reconcile_webpage_trees_workflow_vanilla", () => {
   describe("build_workflow", () => {
     it("should create a WebpageWorkflow instance with all parameters", () => {
       const openai_key = "test-key-123";
-      const filter_config = { min_confidence: 0.7 };
+      const filter_config: FilterConfig = { min_confidence: 0.7 } as Partial<FilterConfig> as FilterConfig;
 
       const result = build_workflow(
         openai_key,
-        null, // Legacy checkpointer parameter
         mockDuckDb,
-        mockMarkdownDb,
         mockMemoryDb,
-        filter_config as any,
-        mockEpisodicStore,
-        mockProceduralStore
+        filter_config
       );
 
       expect(WebpageWorkflow).toHaveBeenCalledWith(
         openai_key,
         mockDuckDb,
-        mockMarkdownDb,
         mockMemoryDb,
-        filter_config,
-        mockEpisodicStore,
-        mockProceduralStore
+        filter_config
       );
       expect(result).toBe(mockWorkflowInstance);
     });
@@ -76,19 +58,14 @@ describe("reconcile_webpage_trees_workflow_vanilla", () => {
 
       const result = build_workflow(
         openai_key,
-        null,
         mockDuckDb,
-        mockMarkdownDb,
         mockMemoryDb
       );
 
       expect(WebpageWorkflow).toHaveBeenCalledWith(
         openai_key,
         mockDuckDb,
-        mockMarkdownDb,
         mockMemoryDb,
-        undefined,
-        undefined,
         undefined
       );
       expect(result).toBe(mockWorkflowInstance);
@@ -161,21 +138,17 @@ describe("reconcile_webpage_trees_workflow_vanilla", () => {
   describe("integration scenarios", () => {
     it("should handle workflow creation and execution", async () => {
       const openai_key = "test-key-789";
-      const filter_config = {
+      const filter_config: FilterConfig = {
         min_confidence: 0.8,
         allowed_types: ["article", "documentation"],
-      };
+      } as Partial<FilterConfig> as FilterConfig;
 
       // Build workflow
       const workflow = build_workflow(
         openai_key,
-        null,
         mockDuckDb,
-        mockMarkdownDb,
         mockMemoryDb,
-        filter_config as any,
-        mockEpisodicStore,
-        mockProceduralStore
+        filter_config
       );
 
       // Prepare inputs
