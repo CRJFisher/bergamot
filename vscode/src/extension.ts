@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { ConfigManager } from './config/config_manager';
 import { DatabaseManager } from './database/database_manager';
 import { ServerManager } from './server/server_manager';
@@ -48,7 +49,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     console.log('Initializing databases...');
     database_manager = new DatabaseManager();
     const memory_config = ConfigManager.get_memory_config();
-    const markdown_path = ConfigManager.get_markdown_db_path();
+    const markdown_path = ConfigManager.get_markdown_db_path(context);
     
     const databases = await database_manager.initialize_all(
       context,
@@ -65,7 +66,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       markdown_db: databases.markdown_db,
       memory_db: databases.memory_db,
       episodic_store: databases.episodic_store,
-      procedural_store: databases.procedural_store
+      procedural_store: databases.procedural_store,
+      inbox_dir: path.join(context.globalStorageUri.fsPath, 'visit_inbox')
     });
     
     const port = await server_manager.start();

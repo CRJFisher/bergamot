@@ -6,13 +6,20 @@ import * as path from 'path';
 import { Server } from 'http';
 import { decompress } from '@mongodb-js/zstd';
 import { md5_hash } from '../hash_utils';
-import { DuckDB } from '../duck_db';
+import {
+  DuckDB,
+  get_webpage_by_url,
+  get_page_by_title,
+  get_page_sessions_with_tree_id,
+  get_last_modified_trees_with_members_and_analysis,
+} from '../duck_db';
 import { MarkdownDatabase } from '../markdown_db';
 import { LanceDBMemoryStore } from '../lance_db';
 import { EpisodicMemoryStore } from '../memory/episodic_memory_store';
 import { ProceduralMemoryStore } from '../memory/procedural_memory_store';
 import { OrphanedVisitsManager } from '../orphaned_visits';
 import { VisitQueueProcessor, ExtendedPageVisit } from '../visit_queue_processor';
+import { ensure_inbox, persist_visit } from '../visit_inbox';
 import { PageActivitySessionWithoutTreeOrContentSchema } from '../duck_db_models';
 import { build_workflow } from '../reconcile_webpage_trees_workflow_vanilla';
 import { get_filter_config } from '../config/filter_config';
@@ -45,6 +52,8 @@ export interface ServerConfig {
   memory_db: LanceDBMemoryStore;
   episodic_store?: EpisodicMemoryStore;
   procedural_store?: ProceduralMemoryStore;
+  /** Directory for the durable visit inbox (defaults off if unset) */
+  inbox_dir?: string;
 }
 
 /**
@@ -127,6 +136,9 @@ export class ServerManager {
    * @private
    */
   private setup_queue_processor(): void {
+    if (this.config.inbox_dir) {
+      ensure_inbox(this.config.inbox_dir);
+    }
     const orphan_manager = new OrphanedVisitsManager();
     this.queue_processor = new VisitQueueProcessor(
       this.config.duck_db,
@@ -136,7 +148,8 @@ export class ServerManager {
       {
         batch_size: 3,
         batch_timeout: 1000,
-        orphan_retry_interval: 5000
+        orphan_retry_interval: 5000,
+        inbox_dir: this.config.inbox_dir
       }
     );
     this.queue_processor.start();
@@ -196,13 +209,69 @@ export class ServerManager {
       console.log('Received payload:', payload.url);
 
       // Add to queue instead of processing immediately
-      const extended_visit: ExtendedPageVisit = { 
-        ...payload, 
-        raw_content: content 
+      const extended_visit: ExtendedPageVisit = {
+        ...payload,
+        raw_content: content
       };
+      // Persist durably before acknowledging: the browser will not resend, so
+      // the visit must survive an extension restart before it reaches DuckDB.
+      if (this.config.inbox_dir) {
+        persist_visit(this.config.inbox_dir, extended_visit);
+      }
       const position = this.queue_processor?.enqueue(extended_visit) ?? 0;
 
       res.json({ status: 'queued', position });
+    });
+
+    // Read-only relational query endpoints. The extension process owns the
+    // DuckDB connection (DuckDB is single-writer), so other processes — the MCP
+    // server, scripts — query the tracking record through these instead of
+    // opening the database file directly. See backlog/docs/query-interface.md.
+    this.app.get('/query/visit_by_url', async (req, res) => {
+      const url = String(req.query.url ?? '');
+      if (!url) {
+        res.status(400).json({ error: 'Missing url query parameter' });
+        return;
+      }
+      res.json(await get_webpage_by_url(this.config.duck_db, url));
+    });
+
+    this.app.get('/query/page_by_title', async (req, res) => {
+      const title = String(req.query.title ?? '');
+      if (!title) {
+        res.status(400).json({ error: 'Missing title query parameter' });
+        return;
+      }
+      res.json(
+        await get_page_by_title(this.config.duck_db, this.config.memory_db, title)
+      );
+    });
+
+    this.app.get('/query/tree', async (req, res) => {
+      const tree_id = String(req.query.tree_id ?? '');
+      if (!tree_id) {
+        res.status(400).json({ error: 'Missing tree_id query parameter' });
+        return;
+      }
+      res.json(
+        await get_page_sessions_with_tree_id(
+          this.config.duck_db,
+          this.config.memory_db,
+          tree_id
+        )
+      );
+    });
+
+    this.app.get('/query/recent_trees', async (req, res) => {
+      const limit = Number(req.query.limit ?? 5);
+      res.json(
+        await get_last_modified_trees_with_members_and_analysis(
+          this.config.duck_db,
+          this.config.memory_db,
+          '',
+          Number.isFinite(limit) ? limit : 5
+        )
+      );
     });
   }
 

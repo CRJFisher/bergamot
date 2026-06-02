@@ -85,14 +85,27 @@ describe('ConfigManager', () => {
   });
 
   describe('get_markdown_db_path()', () => {
-    it('should return the hardcoded markdown database path', () => {
-      const path = ConfigManager.get_markdown_db_path();
-      
-      expect(path).toBe('/Users/chuck/workspace/pkm/webpages_db.md');
+    const fake_context = {
+      globalStorageUri: { fsPath: '/tmp/bergamot-storage' },
+    } as unknown as import('vscode').ExtensionContext;
+
+    it('defaults to webpages_db.md under the global storage path', () => {
+      (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+        get: jest.fn().mockReturnValue(undefined),
+      });
+
+      expect(ConfigManager.get_markdown_db_path(fake_context)).toBe(
+        '/tmp/bergamot-storage/webpages_db.md'
+      );
     });
 
-    // TODO: Add test for configurable path when implemented
-    it.todo('should return configurable path from settings when implemented');
+    it('uses the configured markdownDbPath when set', () => {
+      (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+        get: jest.fn().mockReturnValue('/custom/notes.md'),
+      });
+
+      expect(ConfigManager.get_markdown_db_path(fake_context)).toBe('/custom/notes.md');
+    });
   });
 
   describe('get_duck_db_path()', () => {

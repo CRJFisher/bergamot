@@ -37,7 +37,7 @@ Preserve the core product — a durable record of web-page tracking (cross-page/
 - **1.1 [DONE]** Added `@playwright/test`; removed `chrome-remote-interface` + all CDP/tsx e2e scripts + status docs; added `playwright.config.ts`.
 - **1.2 [DONE]** Extension fixture: `launchPersistentContext` (channel chromium, headless) + `service_worker` (CI-resilient attach) + `extension_id`; worker-scoped mock PKM server (oracle) + static page server.
 - **1.3 [DONE]** Cross-tab specs: basic capture, new tab via `target=_blank` / `window.open`, same-tab nav, SPA pushState — assert `group_id` + referrer chains on real visit records. Stable 5/5 across repeated runs.
-- **1.4 [TODO]** CI workflow runs Playwright headless via `channel: 'chromium'`. (`browser/e2e/e2e-workflows.html` visualizes the covered workflows.)
+- **1.4 [DONE]** `e2e-tests.yml` runs unit + Playwright e2e (`playwright install chromium`, headless via `channel: 'chromium'`); publish workflow uses the Playwright step and drops Firefox. (`browser/e2e/e2e-workflows.html` visualizes the covered workflows.)
 
 ### Phase 2 — Transport consolidation [DONE]
 Discovery approach chosen: **HTTP port-range probing** (browser has no filesystem access, so it cannot read a port file — it probes the candidate range and matches a `/status` service marker). See [[native-messaging-vs-http-discovery]].
@@ -52,12 +52,12 @@ Discovery approach chosen: **HTTP port-range probing** (browser has no filesyste
 - **3.1 [TODO — pair with Phase 1]** Move navigation detection to `chrome.webNavigation` (`onCommitted`, `onHistoryStateUpdated`, `onCreatedNavigationTarget`); remove the content-script MutationObserver; make `group_id` minting background-only (single authority). This rearchitects the core detection path and should land with the e2e safety net.
 - **3.3 [DONE]** Content-size cap (`MAX_CONTENT_BYTES`) bounds the captured/compressed payload. The MutationObserver (the per-mutation hot path that spammed logs and URL normalization) was removed in 3.1, so debounce is moot (`webNavigation` already dedupes per navigation) and the noisy `url_cleaning` module was deleted as dead code. Off-main-thread zstd deferred (YAGNI — the size cap bounds compression cost).
 
-### Phase 4 — Query interface polish
-- **4.1** Wire relational MCP tools using existing `duck_db.ts` helpers: `list_recent_visits`, `get_visit_by_url`, `search_by_title`, `list_navigation_trees`, `get_tree`. Resolve cross-process DuckDB access (extension holds it; MCP opens read-only or queries via the server).
-- **4.2** Dedupe `mcp_server.ts` / `mcp_server_standalone.ts` into one shared module; pick one entry point.
-- **4.3** Config-derive the markdown path (remove hardcoded `/Users/chuck/...`).
-- **4.4** One-page schema doc + dependency-free example (open DuckDB read-only, run SQL) as the documented "easy interface."
-- **4.5** Durable visit inbox: persist ingestion queue / orphan state so restarts don't drop in-flight visits.
+### Phase 4 — Query interface polish [DONE]
+- **4.1 [DONE]** Relational queries exposed. Cross-process access resolved via the extension's HTTP server (DuckDB is single-writer): added `GET /query/visit_by_url|page_by_title|tree|recent_trees` backed by existing `duck_db` helpers; MCP tools `get_visit_by_url`, `search_by_title`, `get_navigation_tree`, `list_recent_navigation_trees` proxy to them, discovering the port via `~/.bergamot/port.json`.
+- **4.2 [DONE]** Deleted the dead class-based `mcp_server.ts` (+ test); `mcp_server_standalone.js` is the single MCP entry point.
+- **4.3 [DONE]** `get_markdown_db_path(context)` derives from the `bergamot.markdownDbPath` setting or defaults under global storage (removed the hardcoded `/Users/chuck/...`).
+- **4.4 [DONE]** `backlog/docs/query-interface.md`: DuckDB schema + MCP tools + HTTP query API with dependency-free `curl` examples (and direct read-only DuckDB access when the extension is closed).
+- **4.5 [DONE]** Durable visit inbox (`visit_inbox.ts`): each visit is persisted before the POST is acknowledged, removed once written to DuckDB, and reloaded on startup — restarts no longer drop in-flight visits.
 
 ### Phase 5 — LangChain removal
 - **5.1** Remove `@langchain/*`; reimplement the categorization workflow with direct OpenAI calls. Correct/replace `WORK_PRIORITY.md` and any docs claiming it was already removed.

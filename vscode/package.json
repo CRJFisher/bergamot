@@ -98,6 +98,12 @@
           "description": "Your OpenAI API key for Bergamot",
           "scope": "application"
         },
+        "bergamot.markdownDbPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the markdown export file. When empty, defaults to webpages_db.md in the extension's global storage directory.",
+          "scope": "application"
+        },
         "bergamot.webpageFilter.enabled": {
           "type": "boolean",
           "default": true,

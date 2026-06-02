@@ -14,6 +14,7 @@ import {
 import { OrphanedVisitsManager } from "./orphaned_visits";
 import { insert_page_activity_session_with_tree_management } from "./webpage_tree";
 import { run_workflow } from "./reconcile_webpage_trees_workflow_vanilla";
+import { load_inbox, remove_visit } from "./visit_inbox";
 
 /**
  * Extended visit type that includes raw content and tab metadata
@@ -37,6 +38,8 @@ export interface QueueProcessorConfig {
   batch_timeout?: number;
   /** Interval for retrying orphaned visits (milliseconds) */
   orphan_retry_interval?: number;
+  /** Directory of the durable visit inbox; entries are removed once persisted to DuckDB */
+  inbox_dir?: string;
 }
 
 /**
@@ -88,6 +91,7 @@ export class VisitQueueProcessor {
   private readonly batch_size: number;
   private readonly batch_timeout: number;
   private readonly orphan_retry_interval: number;
+  private readonly inbox_dir?: string;
 
   constructor(
     private readonly duck_db: DuckDB,
@@ -99,6 +103,7 @@ export class VisitQueueProcessor {
     this.batch_size = config.batch_size ?? 3;
     this.batch_timeout = config.batch_timeout ?? 1000;
     this.orphan_retry_interval = config.orphan_retry_interval ?? 5000;
+    this.inbox_dir = config.inbox_dir;
   }
 
   /**
@@ -129,8 +134,23 @@ export class VisitQueueProcessor {
    * Starts the queue processor and orphan retry timer.
    */
   start(): void {
+    this.reload_persisted_visits();
     this.start_orphan_retry_timer();
     this.schedule_batch_processing();
+  }
+
+  /**
+   * Re-enqueues any visits left in the durable inbox by a previous run (e.g. the
+   * extension restarted before they were written to DuckDB). Reprocessing is
+   * safe: visit ids are deterministic, so insertion is idempotent.
+   */
+  private reload_persisted_visits(): void {
+    if (!this.inbox_dir) return;
+    const persisted = load_inbox(this.inbox_dir);
+    if (persisted.length > 0) {
+      console.log(`📥 Reloading ${persisted.length} visit(s) from the durable inbox`);
+      this.request_queue.push(...persisted);
+    }
   }
 
   /**
@@ -293,12 +313,17 @@ export class VisitQueueProcessor {
       const batch_promises = batch.map(async (visit) => {
         try {
           await this.process_single_visit(visit);
+          // The visit is now in DuckDB (whether it completed or was parked as an
+          // orphan), so it no longer needs to survive a restart.
+          if (this.inbox_dir) {
+            remove_visit(this.inbox_dir, visit.id);
+          }
         } catch (error) {
           console.error(
             `Error processing page visit ${visit.url}:`,
             error
           );
-          // Continue processing other items even if one fails
+          // Leave the visit in the durable inbox so it is retried on restart.
         }
       });
 

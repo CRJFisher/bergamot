@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 
 /**
  * Configuration manager for the Bergamot extension.
@@ -74,20 +75,21 @@ export class ConfigManager {
   }
 
   /**
-   * Gets the path for the markdown database.
-   * Currently hardcoded but should be made configurable through settings.
-   * 
+   * Gets the path for the markdown database. Uses the `bergamot.markdownDbPath`
+   * setting when set; otherwise defaults to `webpages_db.md` in the extension's
+   * global storage directory (machine-independent).
+   *
+   * @param context - Extension context, for the global storage path
    * @returns Path to the markdown database file
-   * @todo Make this path configurable through VS Code settings
-   * @example
-   * ```typescript
-   * const dbPath = ConfigManager.get_markdown_db_path();
-   * const markdownDb = new MarkdownDatabase(dbPath);
-   * ```
    */
-  static get_markdown_db_path(): string {
-    // TODO: make this path configurable
-    return '/Users/chuck/workspace/pkm/webpages_db.md';
+  static get_markdown_db_path(context: vscode.ExtensionContext): string {
+    const configured = vscode.workspace
+      .getConfiguration(ConfigManager.CONFIG_NAMESPACE)
+      .get<string>('markdownDbPath');
+    if (configured && configured.trim().length > 0) {
+      return configured;
+    }
+    return path.join(context.globalStorageUri.fsPath, 'webpages_db.md');
   }
 
   /**
