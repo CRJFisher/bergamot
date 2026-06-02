@@ -107,8 +107,12 @@ export class DatabaseManager {
     openai_api_key: string
   ): Promise<LanceDBMemoryStore> {
     console.log('Initializing memory store...');
-    
-    const memory_db = await LanceDBMemoryStore.create(storage_path, {
+
+    // The LanceDB store lives in a dedicated subdirectory of the storage path.
+    // Readers (the MCP server) resolve the same `webpage_memory.db` path, so the
+    // writer must use it too or semantic search reads an empty store.
+    const memory_db_path = path.join(storage_path, 'webpage_memory.db');
+    const memory_db = await LanceDBMemoryStore.create(memory_db_path, {
       embeddings: new OpenAIEmbeddings({
         model: 'text-embedding-3-small',
         apiKey: openai_api_key,

@@ -76,9 +76,11 @@ describe('DatabaseManager', () => {
       const api_key = 'test-api-key';
       
       await database_manager.initialize_memory_store(storage_path, api_key);
-      
+
+      // The store must be created in the `webpage_memory.db` subdirectory so the
+      // MCP reader (which resolves the same subdir) sees what the writer stored.
       expect(LanceDBMemoryStore.create).toHaveBeenCalledWith(
-        storage_path,
+        `${storage_path}/webpage_memory.db`,
         expect.objectContaining({
           embeddings: expect.any(Object)
         })

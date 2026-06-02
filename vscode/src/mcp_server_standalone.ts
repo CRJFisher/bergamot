@@ -10,7 +10,6 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { LanceDBMemoryStore } from "./lance_db";
 import { OpenAIEmbeddings } from "./workflow/embeddings";
-import { DuckDB } from "./duck_db";
 import { get_webpage_content } from "./duck_db";
 import path from "path";
 
@@ -29,16 +28,11 @@ async function main() {
   // Get configuration from environment variables
   const openai_api_key = process.env.OPENAI_API_KEY;
   const storage_path = process.env.STORAGE_PATH;
-  const duck_db_path = process.env.DUCK_DB_PATH;
 
-  if (!openai_api_key || !storage_path || !duck_db_path) {
+  if (!openai_api_key || !storage_path) {
     console.error("Missing required environment variables");
     process.exit(1);
   }
-
-  // Initialize databases
-  const duck_db = new DuckDB({ database_path: duck_db_path });
-  await duck_db.init();
 
   const embeddings = new OpenAIEmbeddings({
     apiKey: openai_api_key,
@@ -128,15 +122,13 @@ async function main() {
   console.error("MCP Server started");
 
   // Handle graceful shutdown
-  process.on("SIGINT", async () => {
+  process.on("SIGINT", () => {
     console.error("Shutting down MCP server...");
-    await duck_db.close();
     process.exit(0);
   });
 
-  process.on("SIGTERM", async () => {
+  process.on("SIGTERM", () => {
     console.error("Shutting down MCP server...");
-    await duck_db.close();
     process.exit(0);
   });
 }

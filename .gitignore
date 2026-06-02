@@ -61,9 +61,14 @@ e2e-videos/
 # Package manager
 .pnpm-store/
 .yarn/
-package-lock.json
 yarn.lock
 
 # Misc
 *.bak
 *.orig
+*.backup
+
+# Per-workspace lockfiles — the root package-lock.json is the workspace's
+# single source of truth; nested lockfiles are stray per-package installs.
+browser/package-lock.json
+vscode/package-lock.json

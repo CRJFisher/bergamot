@@ -58,7 +58,8 @@ export class DuckDB {
 
   /**
    * Creates a new DuckDB instance with the specified configuration.
-   * Note: Database is recreated on each instantiation (existing file is deleted).
+   * The database file is opened if it exists and created if it does not;
+   * existing data is preserved across instantiations.
    *
    * @param config - Database configuration options
    *
@@ -72,12 +73,8 @@ export class DuckDB {
    */
   constructor(config: DuckDBConfig) {
     this.config = config;
-    // Ensure the directory exists
+    // Ensure the parent directory exists so the database file can be created.
     const dir = path.dirname(config.database_path);
-    // Delete table first
-    if (fs.existsSync(config.database_path)) {
-      fs.unlinkSync(config.database_path);
-    }
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -102,8 +99,20 @@ export class DuckDB {
    * ```
    */
   async init(): Promise<void> {
-    this.db = await DuckDBInstance.create(this.config.database_path);
+    const create_options = this.config.read_only
+      ? { access_mode: "read_only" }
+      : undefined;
+    this.db = await DuckDBInstance.create(
+      this.config.database_path,
+      create_options
+    );
     this.connection = await this.db.connect();
+
+    if (this.config.read_only) {
+      // Read-only connections cannot create tables or indexes; the schema is
+      // expected to already exist (created by the read-write owner process).
+      return;
+    }
 
     const webpage_trees_schema = [
       "id TEXT PRIMARY KEY", // hash of the root page session ID + its load time

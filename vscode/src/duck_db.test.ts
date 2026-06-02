@@ -80,13 +80,15 @@ describe("DuckDB", () => {
       expect(testDb).toBeDefined();
     });
 
-    it("should delete existing database file if it exists", () => {
+    it("should preserve an existing database file instead of deleting it", () => {
       mockFs.existsSync.mockReturnValueOnce(true); // File exists
-      mockFs.existsSync.mockReturnValueOnce(false); // Directory doesn't exist
-      
+      mockFs.existsSync.mockReturnValueOnce(true); // Directory exists
+
       new DuckDB({ database_path: "/test/db.db" });
-      
-      expect(mockFs.unlinkSync).toHaveBeenCalledWith("/test/db.db");
+
+      // The database must be durable: constructing the wrapper never deletes
+      // the backing file. Data is opened in place, not recreated.
+      expect(mockFs.unlinkSync).not.toHaveBeenCalled();
     });
 
     it("should create directory if it doesn't exist", () => {
