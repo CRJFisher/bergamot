@@ -48,9 +48,9 @@ Discovery approach chosen: **HTTP port-range probing** (browser has no filesyste
 - **2.5 [DONE]** Trimmed manifest permissions to `tabs`, `activeTab` (removed `scripting`, `webRequest`, `nativeMessaging`); dropped Firefox (manifest, build/copy/package/publish/version-bump/test wiring, gecko block). Chromium-only.
 
 ### Phase 3 — Browser session-graph robustness
-- **3.1** Move navigation detection to `chrome.webNavigation` (`onCommitted`, `onHistoryStateUpdated`, `onCreatedNavigationTarget`); remove the MutationObserver.
-- **3.2** Persist `tab_history_store` in `chrome.storage.session`; `group_id` minting becomes background-only (single authority).
-- **3.3** Content-size cap + debounce for SPA captures; move zstd compression off the page main thread; gate logging behind `log_level`.
+- **3.2 [DONE]** Persist `tab_history_store` in `chrome.storage.session`: background hydrates the in-memory cache on cold start and persists after every mutation through a serialized operation chain (no read-modify-write races). Added serialize/deserialize helpers + `tab_history_persistence.ts` + tests; added the `storage` manifest permission. Opener-relationship resolution refactored into pure store→store transforms; group_id inherited from opener.
+- **3.1 [TODO — pair with Phase 1]** Move navigation detection to `chrome.webNavigation` (`onCommitted`, `onHistoryStateUpdated`, `onCreatedNavigationTarget`); remove the content-script MutationObserver; make `group_id` minting background-only (single authority). This rearchitects the core detection path and should land with the e2e safety net.
+- **3.3 [TODO]** Content-size cap + debounce for SPA captures; move zstd compression off the page main thread; gate logging behind `log_level`. (The "remove MutationObserver" part is folded into 3.1.)
 
 ### Phase 4 — Query interface polish
 - **4.1** Wire relational MCP tools using existing `duck_db.ts` helpers: `list_recent_visits`, `get_visit_by_url`, `search_by_title`, `list_navigation_trees`, `get_tree`. Resolve cross-process DuckDB access (extension holds it; MCP opens read-only or queries via the server).

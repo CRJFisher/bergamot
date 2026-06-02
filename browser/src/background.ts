@@ -1,106 +1,64 @@
-import { 
-  TabHistoryStore, 
-  create_tab_history_store, 
+import {
+  TabHistoryStore,
   create_tab_history,
   add_tab_history,
   remove_tab_history,
   get_tab_history,
-  update_tab_history
+  update_tab_history,
 } from './core/tab_history_manager';
+import { load_store, save_store } from './core/tab_history_persistence';
 import { handle_message } from './core/message_router';
 import { TabHistory } from './types/navigation';
 
-console.log("🚀 PKM Extension: Background script initialized");
+console.log("🚀 Bergamot Extension: Background script initialized");
 
-// Mutable state - the only non-functional part
-let tab_history_store: TabHistoryStore = create_tab_history_store();
+// In-memory cache of the session graph. It is hydrated from
+// chrome.storage.session on cold start and persisted after every mutation, so
+// MV3 service-worker eviction does not fragment cross-page sessions.
+let tab_history_store: TabHistoryStore | null = null;
 
-// Tab event handlers
-const handle_tab_created = async (tab: chrome.tabs.Tab) => {
-  console.log(`🆕 Tab created:`, {
-    tab_id: tab.id,
-    opener_tab_id: tab.openerTabId,
-    pending_url: tab.pendingUrl,
-    url: tab.url,
-  });
+// All store reads/writes are serialized through this chain so concurrent tab
+// and message events cannot interleave a read-modify-write and lose updates.
+let operation_chain: Promise<unknown> = Promise.resolve();
 
-  if (tab.id) {
-    // Get opener's group_id if there's an opener
-    let opener_group_id: string | undefined = undefined;
-    if (tab.openerTabId) {
-      const opener_history = get_tab_history(tab_history_store, tab.openerTabId);
-      opener_group_id = opener_history?.group_id;
-      console.log(`🔗 Tab ${tab.id} has opener ${tab.openerTabId}:`, {
-        opener_has_history: !!opener_history,
-        opener_group_id: opener_group_id || 'NOT SET YET',
-        opener_url: opener_history?.current_url || 'NO URL YET'
-      });
+const ensure_hydrated = async (): Promise<TabHistoryStore> => {
+  if (tab_history_store === null) {
+    tab_history_store = await load_store();
+  }
+  return tab_history_store;
+};
+
+// Runs `mutator` against the current (hydrated) store, persists the result, and
+// returns whatever the mutator returns. Operations are queued, never overlapped.
+const with_store = <T>(
+  mutator: (
+    store: TabHistoryStore
+  ) => Promise<{ store: TabHistoryStore; result?: T }> | { store: TabHistoryStore; result?: T }
+): Promise<T | undefined> => {
+  const next = operation_chain.then(async () => {
+    const store = await ensure_hydrated();
+    const { store: new_store, result } = await mutator(store);
+    if (new_store !== store) {
+      tab_history_store = new_store;
+      await save_store(new_store);
     }
-      
-    const history = create_tab_history(
-      tab.url || tab.pendingUrl,
-      tab.openerTabId,
-      undefined,
-      opener_group_id
-    );
-    
-    console.log(`📝 Created history for tab ${tab.id}:`, {
-      group_id: history.group_id,
-      opener_tab_id: history.opener_tab_id,
-      inherited_from_opener: !!opener_group_id
-    });
-    
-    tab_history_store = add_tab_history(tab_history_store, tab.id, history);
-  }
-
-  if (tab.id && tab.openerTabId) {
-    await handle_tab_opener(tab.id, tab.openerTabId);
-  }
-};
-
-const handle_tab_updated = async (
-  tab_id: number,
-  change_info: chrome.tabs.TabChangeInfo,
-  tab: chrome.tabs.Tab
-) => {
-  // Handle delayed opener info
-  if (tab.openerTabId && !get_tab_history(tab_history_store, tab_id)?.opener_tab_id) {
-    console.log(`📌 Tab ${tab_id} got opener info after creation:`, {
-      opener_tab_id: tab.openerTabId,
-      url: tab.url,
-    });
-    await handle_tab_opener(tab_id, tab.openerTabId);
-  }
-
-  // Handle URL changes
-  if (change_info.status === "loading" && change_info.url) {
-    const current_history = get_tab_history(tab_history_store, tab_id);
-    const updated_history = update_tab_history(current_history, change_info.url, tab.openerTabId);
-    tab_history_store = add_tab_history(tab_history_store, tab_id, updated_history);
-
-    console.log(`📍 Tab ${tab_id} navigated to: ${change_info.url}`, {
-      previous_url: current_history?.current_url,
-      preserved_referrer: updated_history.previous_url,
-      opener: tab.openerTabId || "none",
-      updated_previous: current_history?.current_url !== change_info.url,
-    });
-  }
-};
-
-const handle_tab_removed = (tab_id: number) => {
-  tab_history_store = remove_tab_history(tab_history_store, tab_id);
-};
-
-const handle_tab_opener = async (tab_id: number, opener_tab_id: number) => {
-  console.log(`🔍 Handling tab opener relationship:`, {
-    tab_id: tab_id,
-    opener_tab_id: opener_tab_id,
+    return result;
   });
+  operation_chain = next.catch(() => undefined);
+  return next;
+};
 
-  let opener_history = get_tab_history(tab_history_store, opener_tab_id);
+// Resolves the opener relationship for a tab: looks up (and if needed queries)
+// the opener's URL, then sets this tab's referrer and inherits its group_id.
+const apply_tab_opener = async (
+  store: TabHistoryStore,
+  tab_id: number,
+  opener_tab_id: number
+): Promise<TabHistoryStore> => {
+  let working = store;
+  let opener_history = get_tab_history(working, opener_tab_id);
   const now = Date.now();
 
-  // If we don't have the opener's URL, query it
   if (!opener_history?.current_url) {
     try {
       const opener_tab = await chrome.tabs.get(opener_tab_id);
@@ -113,13 +71,8 @@ const handle_tab_opener = async (tab_id: number, opener_tab_id: number) => {
           opener_history?.opener_tab_id,
           opener_history?.group_id
         );
-        tab_history_store = add_tab_history(tab_history_store, opener_tab_id, new_opener_history);
+        working = add_tab_history(working, opener_tab_id, new_opener_history);
         opener_history = new_opener_history;
-        
-        console.log(`✅ Updated opener history for tab ${tab_id}:`, {
-          opener_url: opener_tab.url,
-          opener_tab_id: opener_tab_id,
-        });
       }
     } catch (error) {
       console.warn(`Failed to get opener tab ${opener_tab_id}:`, error);
@@ -127,62 +80,105 @@ const handle_tab_opener = async (tab_id: number, opener_tab_id: number) => {
   }
 
   if (opener_history?.current_url) {
-    const current_history = get_tab_history(tab_history_store, tab_id);
+    const current_history = get_tab_history(working, tab_id);
     const new_history = new TabHistory(
       opener_history.current_url,
       current_history?.current_url,
       now,
       opener_history.timestamp,
       opener_tab_id,
-      opener_history.group_id // Inherit group_id from opener
+      opener_history.group_id // inherit group_id from opener (single authority)
     );
-    tab_history_store = add_tab_history(tab_history_store, tab_id, new_history);
-    
-    console.log(`✅ Set referrer for tab ${tab_id}:`, {
-      referrer: opener_history.current_url,
-      referrer_timestamp: opener_history.timestamp,
-      opener_tab_id: opener_tab_id,
-    });
-  } else {
-    console.log(`⚠️  Could not determine opener URL for tab ${tab_id}`);
+    working = add_tab_history(working, tab_id, new_history);
   }
+
+  return working;
 };
 
-// Set up event listeners
+// Tab event handlers — each returns the next store for `with_store` to persist.
+const handle_tab_created = (tab: chrome.tabs.Tab) =>
+  with_store(async (store) => {
+    if (!tab.id) {
+      return { store };
+    }
+
+    const opener_group_id = tab.openerTabId
+      ? get_tab_history(store, tab.openerTabId)?.group_id
+      : undefined;
+
+    const history = create_tab_history(
+      tab.url || tab.pendingUrl,
+      tab.openerTabId,
+      undefined,
+      opener_group_id
+    );
+    let working = add_tab_history(store, tab.id, history);
+
+    if (tab.openerTabId) {
+      working = await apply_tab_opener(working, tab.id, tab.openerTabId);
+    }
+
+    return { store: working };
+  });
+
+const handle_tab_updated = (
+  tab_id: number,
+  change_info: chrome.tabs.TabChangeInfo,
+  tab: chrome.tabs.Tab
+) =>
+  with_store(async (store) => {
+    let working = store;
+
+    // Handle delayed opener info that arrives after tab creation.
+    if (tab.openerTabId && !get_tab_history(working, tab_id)?.opener_tab_id) {
+      working = await apply_tab_opener(working, tab_id, tab.openerTabId);
+    }
+
+    // Handle committed URL changes.
+    if (change_info.status === "loading" && change_info.url) {
+      const current_history = get_tab_history(working, tab_id);
+      const updated_history = update_tab_history(
+        current_history,
+        change_info.url,
+        tab.openerTabId
+      );
+      working = add_tab_history(working, tab_id, updated_history);
+    }
+
+    return { store: working };
+  });
+
+const handle_tab_removed = (tab_id: number) =>
+  with_store((store) => ({ store: remove_tab_history(store, tab_id) }));
+
+// Set up event listeners (registered synchronously at top level, as MV3 requires).
 chrome.tabs.onCreated.addListener(handle_tab_created);
 chrome.tabs.onUpdated.addListener(handle_tab_updated);
 chrome.tabs.onRemoved.addListener(handle_tab_removed);
 
-// Message handling
+// Message handling — routed through the same serialized store chain.
 chrome.runtime.onMessage.addListener((request, sender, send_response) => {
-  console.log(
-    `📨 Background received message:`,
-    request.action,
-    `from tab:`,
-    sender.tab?.id
-  );
-
-  handle_message(request, sender.tab?.id, tab_history_store)
-    .then(({ response, new_store }) => {
-      if (new_store) {
-        tab_history_store = new_store;
-      }
-      send_response(response);
-    })
-    .catch(error => {
+  with_store(async (store) => {
+    const { response, new_store } = await handle_message(
+      request,
+      sender.tab?.id,
+      store
+    );
+    return { store: new_store ?? store, result: response };
+  })
+    .then((response) => send_response(response))
+    .catch((error) => {
       console.error(`Error handling message ${request.action}:`, error);
       send_response({ error: error.message });
     });
 
-  return true; // Keep message channel open for async response
+  return true; // keep the message channel open for the async response
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("PKM Extension: Installed and ready to track browsing chains");
+  console.log("Bergamot Extension: Installed and ready to track browsing chains");
 });
 
-// Export for testing - using a function to get current state
+// Export for testing — returns the current in-memory cache (may be null before
+// the first hydration).
 export const get_tab_history_store = () => tab_history_store;
-
-// Make it available globally for CDP testing
-(globalThis as any).get_tab_history_store = get_tab_history_store;

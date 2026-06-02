@@ -28,6 +28,10 @@ global.chrome = {
       get: jest.fn(),
       set: jest.fn(),
     },
+    session: {
+      get: jest.fn(),
+      set: jest.fn(),
+    },
   },
   runtime: {
     onMessage: {
