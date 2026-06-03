@@ -15,6 +15,8 @@ parent_task_id: TASK-31
 
 Build the measurement foundation for the whole RAG overhaul: nothing else merges without a measured delta against a baseline. Construct a golden dataset of queries mapped to known-relevant captured pages drawn from the user's own corpus, plus a metrics suite covering retrieval (Recall@k, MRR, nDCG) and generation (context precision/recall, faithfulness, answer relevance) scored RAGAS-style with an LLM-as-judge. Capture a baseline report for the current whole-page pure-dense pipeline so every later phase reports an improvement delta. This is the portfolio centrepiece — it is what makes the pipeline 'production-grade' rather than asserted. See backlog/docs/rag-pipeline-upgrade-plan.md (Phase A). Supersedes task-30 ACs #1/#3/#4/#7.
 
+
+**Learning companion:** [backlog/docs/rag-explainers/01-evaluation-harness.html](01-evaluation-harness.html) — interactive explainer of the concepts and the decision logic for this phase.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

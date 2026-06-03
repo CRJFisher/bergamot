@@ -16,6 +16,8 @@ parent_task_id: TASK-31
 
 Add optional query-side transformation, behind config and measured before defaulting on. (1) HyDE: generate a hypothetical answer document from the query and retrieve by its embedding (strong for zero-shot / label-poor retrieval). (2) Multi-query rewriting: expand a query into variants and merge results. (3) A lightweight router deciding whether to retrieve at all. Keep each a toggle; measure marginal gain on the harness and only enable by default if it pays. See backlog/docs/rag-pipeline-upgrade-plan.md (Phase F).
 
+
+**Learning companion:** [backlog/docs/rag-explainers/07-query-transformation.html](07-query-transformation.html) — interactive explainer of the concepts and the decision logic for this phase.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

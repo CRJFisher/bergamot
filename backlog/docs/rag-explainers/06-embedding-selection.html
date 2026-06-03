@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Embedding model selection · RAG Explainers</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    /* demo-specific layout only */
+    .lead-tag { font-family: var(--mono); font-size: 11px; color: var(--accent-2); }
+    .sortbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+    .sort-note {
+      margin-top: 12px; font-size: 13px; color: var(--muted);
+      background: var(--bg); border: 1px solid var(--border-soft);
+      border-left: 3px solid var(--accent-2); border-radius: 8px; padding: 10px 12px;
+    }
+    .sort-note b { color: var(--accent-2); }
+    table caption { caption-side: bottom; text-align: left; font-size: 11.5px; color: var(--faint); font-family: var(--mono); margin-top: 8px; }
+    .mtx-readout { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin-bottom: 14px; }
+    .mtx-dim { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+    .mtx-note { margin-top: 8px; }
+    .mtx-note b { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+
+    <!-- (a) HEADER -->
+    <header class="page-head">
+      <span class="tag">Phase G · task-31.6 · Embeddings</span>
+      <h1>Embedding model selection: read the Retrieval column, not the headline</h1>
+      <p class="lede">
+        An <em>embedding model</em> is the lens through which every document and query enters your
+        vector store. Pick it by its reputation and you optimise a number that has nothing to do
+        with retrieval. Pick it by measurement &mdash; on <em>your</em> data, by the right metric &mdash;
+        and the whole pipeline gets sharper for free.
+      </p>
+    </header>
+
+    <!-- (b) THE PROBLEM -->
+    <section class="block">
+      <h2><span class="num">01</span> The problem</h2>
+      <p>
+        Bergamot embeds every captured page with <strong>OpenAI text-embedding-3-small</strong> by
+        default. That model was chosen <strong>by reputation</strong> &mdash; it is popular, cheap, and
+        "good enough" by hearsay &mdash; and its retrieval quality on Bergamot's own corpus has
+        <strong>never been measured</strong>. We are trusting a default we cannot defend with a number.
+      </p>
+      <p>
+        An <em>embedding</em> maps a piece of text to a vector: a fixed-length list of numbers
+        (a few hundred to a few thousand) positioned so that texts with similar meaning land close
+        together. Retrieval works by embedding the query and returning the chunks whose vectors sit
+        nearest. So the embedding model <strong>is</strong> the retriever &mdash; everything downstream
+        (reranking, generation) only re-orders what the embedding first found.
+      </p>
+      <div class="bad-box">
+        <span class="callout-title">Failure mode</span>
+        <p>
+          <strong>Teams pick the model topping the headline leaderboard average.</strong> But the best
+          model <em>overall</em> is often <strong>not</strong> the best at <strong>retrieval</strong> &mdash;
+          the one task RAG actually needs. Worse, the headline number says nothing about
+          <strong>dimensions and cost</strong>: a model can win the average while producing
+          larger, pricier vectors that inflate storage and query latency for no retrieval gain.
+          Optimising the wrong column quietly degrades the whole pipeline.
+        </p>
+      </div>
+    </section>
+
+    <!-- (c) HOW IT WORKS -->
+    <section class="block">
+      <h2><span class="num">02</span> How it works</h2>
+      <p>
+        The <strong>MTEB</strong> (Massive Text Embedding Benchmark) is the standard yardstick for
+        embedding models. Its central idea is that "embedding quality" is not one number &mdash; it
+        scores each model across <strong>eight task categories</strong>, because a vector that is
+        excellent for one job can be mediocre for another.
+      </p>
+
+      <table>
+        <caption>MTEB's eight task categories. RAG cares about exactly one of them.</caption>
+        <thead>
+          <tr><th>Category</th><th>What it measures</th><th>RAG-relevant?</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Retrieval</strong></td><td>Given a query, rank the passages that answer it</td><td><span class="chip">the one RAG needs</span></td></tr>
+          <tr><td>Reranking</td><td>Re-order a candidate list for relevance</td><td>adjacent</td></tr>
+          <tr><td>STS</td><td>Semantic textual similarity: how alike are two sentences</td><td>weakly</td></tr>
+          <tr><td>Pair Classification</td><td>Are two texts a duplicate / entailment pair?</td><td>weakly</td></tr>
+          <tr><td>Classification</td><td>Label a text into categories</td><td>no</td></tr>
+          <tr><td>Clustering</td><td>Group texts by topic without labels</td><td>no</td></tr>
+          <tr><td>Summarization</td><td>Score how well a summary captures a source</td><td>no</td></tr>
+          <tr><td>Bitext Mining</td><td>Match translated sentence pairs across languages</td><td>no</td></tr>
+        </tbody>
+      </table>
+
+      <p>
+        The MTEB paper's key finding: <strong>no single model dominates all eight categories</strong>.
+        A model that tops the <em>overall average</em> may be carried there by Classification and
+        Clustering while trailing on Retrieval. So for RAG you must read the <strong>Retrieval
+        column</strong>, not the overall average.
+      </p>
+
+      <h3>Worked example: the average lies</h3>
+      <p>
+        From Modal's leaderboard writeup (numbers illustrative and time-sensitive): a model can lead
+        the overall average yet trail on Retrieval. <strong>NV-Embed-v2</strong> posts roughly
+        <code>72.31</code> overall but only <code>~62.65</code> on Retrieval &mdash; behind
+        <strong>Gemini Embedding 001</strong> at <code>~67.71</code> Retrieval, even though Gemini sits
+        lower on the headline average. If you chose by the average, you would pick the worse retriever.
+      </p>
+
+      <h3>Dimensions, cost, and Matryoshka</h3>
+      <p>
+        Each model also emits vectors of a fixed <strong>dimension</strong> (e.g. 768, 1536). Higher
+        dimensions cost more: every vector takes more <strong>storage</strong>, and every similarity
+        search does more arithmetic, so <strong>compute and latency</strong> rise too. A 1536-dim model
+        costs roughly twice the storage of a 768-dim one for the same corpus.
+      </p>
+      <p>
+        <strong>Matryoshka embeddings</strong> (named after nested Russian dolls) are trained so the most
+        important information is packed into the <em>front</em> of the vector. That lets you
+        <strong>truncate</strong> a vector to fewer dimensions and keep most of its quality &mdash;
+        a <em>graceful</em> loss rather than a cliff. You trade a little retrieval accuracy for a big
+        storage saving, on a dial you control.
+      </p>
+      <div class="note">
+        <span class="callout-title">The right move</span>
+        <p>
+          Don't trust headline averages. <strong>Benchmark your candidate models on your own golden
+          dataset</strong> (measuring Recall and nDCG) and on cost, using the evaluation harness. The
+          leaderboard narrows the field; your data picks the winner. All specific scores on this page
+          are <strong>illustrative and time-sensitive</strong> &mdash; current leaderboards will differ.
+        </p>
+      </div>
+    </section>
+
+    <!-- (d) TRY IT -->
+    <section class="block">
+      <h2><span class="num">03</span> Try it</h2>
+
+      <!-- WIDGET 1 -->
+      <div class="demo">
+        <div class="demo-head">
+          <span class="spark"></span>
+          <span class="demo-title"><b>Sort by the right column</b> — the leader changes</span>
+        </div>
+        <div class="demo-body">
+          <div class="sortbar">
+            <button class="btn primary" id="sort-overall">Sort by Overall</button>
+            <button class="btn" id="sort-retrieval">Sort by Retrieval</button>
+          </div>
+          <table id="model-table">
+            <caption>Illustrative values for teaching; real scores change over time.</caption>
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th class="num">Overall avg</th>
+                <th class="num">Retrieval</th>
+                <th class="num">Dims</th>
+                <th class="num">$/M tokens</th>
+              </tr>
+            </thead>
+            <tbody id="model-body"><!-- filled by script --></tbody>
+          </table>
+          <div class="sort-note" id="sort-note"></div>
+          <p class="demo-hint">
+            Flip between Sort-by-Overall and Sort-by-Retrieval &mdash; the "best" model changes.
+          </p>
+        </div>
+      </div>
+
+      <!-- WIDGET 2 -->
+      <div class="demo">
+        <div class="demo-head">
+          <span class="spark"></span>
+          <span class="demo-title"><b>Matryoshka tradeoff</b> — trim dimensions, save storage</span>
+        </div>
+        <div class="demo-body">
+          <div class="mtx-readout">
+            <div class="control">
+              <label for="dim-range">Vector dimensions</label>
+              <input type="range" id="dim-range" min="0" max="4" step="1" value="4">
+            </div>
+            <div class="mtx-dim">dims = <span id="dim-val">1536</span></div>
+          </div>
+          <div class="metrics">
+            <div class="metric">
+              <div class="m-val" id="storage-val">—</div>
+              <div class="m-lab">Storage / 100k chunks</div>
+            </div>
+            <div class="metric">
+              <div class="m-val" id="quality-val">—</div>
+              <div class="m-lab">Retrieval quality (nDCG)</div>
+            </div>
+          </div>
+          <div class="bars">
+            <div class="bar-row">
+              <span class="bar-label">Storage</span>
+              <div class="bar-track"><div class="bar-fill" id="storage-bar"></div></div>
+              <span class="bar-val" id="storage-pct">—</span>
+            </div>
+            <div class="bar-row">
+              <span class="bar-label">Quality</span>
+              <div class="bar-track"><div class="bar-fill" id="quality-bar"></div></div>
+              <span class="bar-val" id="quality-pct">—</span>
+            </div>
+          </div>
+          <div class="sort-note mtx-note" id="mtx-note"></div>
+          <p class="demo-hint">
+            Trim dimensions and watch storage fall faster than quality.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- (e) DECISION LENS -->
+    <section class="block">
+      <h2><span class="num">04</span> Decision lens</h2>
+      <div class="decision">
+        <span class="callout-title">When to reach for embedding selection &mdash; and when to skip it</span>
+        <div class="decision-grid">
+          <div class="cell use">
+            <h4>✓ Reach for it when</h4>
+            <ul>
+              <li>You have a <strong>golden set</strong> to measure on (task-31.1) &mdash; without it you can't adjudicate.</li>
+              <li>Embedding <strong>cost or storage is material</strong> at your corpus scale.</li>
+              <li>You <strong>suspect a better-fit model</strong> exists for your domain and want proof.</li>
+            </ul>
+          </div>
+          <div class="cell skip">
+            <h4>✕ Skip / overkill when</h4>
+            <ul>
+              <li>Your <strong>incumbent already measures well on your data</strong> &mdash; don't churn models for leaderboard vanity.</li>
+              <li>You have <strong>no eval</strong> to adjudicate &mdash; build the harness first, then choose.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="warn">
+        <span class="callout-title">The tradeoff</span>
+        <p>
+          Switching models forces a <strong>full re-embed of the corpus</strong> (compute + time), and
+          possibly a <strong>dimension change in the vector schema</strong>. Only do it when the measured
+          retrieval gain &mdash; or the cost saving &mdash; justifies the re-embed. Always pick by the
+          <strong>Retrieval column on your own data</strong>, never the headline average.
+        </p>
+      </div>
+    </section>
+
+    <!-- (f) IN BERGAMOT -->
+    <section class="block">
+      <h2><span class="num">05</span> In Bergamot</h2>
+      <p>
+        <strong>task-31.6</strong> replaces the unmeasured default with a measured choice. It ships:
+      </p>
+      <ul>
+        <li>At least <strong>three embedding models benchmarked</strong> on the golden dataset by <strong>Retrieval metrics</strong> (Recall, nDCG) and cost.</li>
+        <li>The model <strong>chosen by measured retrieval quality</strong> &mdash; not overall MTEB average &mdash; with the rationale recorded.</li>
+        <li>The embedding model made <strong>swappable via config</strong>, so future re-benchmarks are a one-line change.</li>
+        <li><strong>Matryoshka / dimension tradeoffs evaluated</strong> for storage savings against quality loss.</li>
+        <li>The <strong>corpus re-embedded under the winner</strong>, so live retrieval reflects the measured choice.</li>
+      </ul>
+    </section>
+
+    <!-- (g) FOOTER -->
+    <footer class="foot">
+      <div class="sources">
+        <h3>Sources</h3>
+        <ul>
+          <li><a href="https://arxiv.org/abs/2210.07316">MTEB: Massive Text Embedding Benchmark (Muennighoff et al., arXiv:2210.07316)</a></li>
+          <li><a href="https://modal.com/blog/mteb-leaderboard-article">Modal — Understanding the MTEB leaderboard</a></li>
+        </ul>
+      </div>
+      <div class="prevnext" data-prevnext></div>
+    </footer>
+
+  </main>
+
+  <script src="shared.js"></script>
+  <script>
+    (function () {
+      // ---------- WIDGET 1: sort by the right column ----------
+      // Illustrative, teaching-only numbers. The Overall leader is NOT the Retrieval leader,
+      // mirroring the NV-Embed (high overall, lower retrieval) vs Gemini (best retrieval) example.
+      var MODELS = [
+        { name: "NV-Embed-v2",            overall: 72.31, retrieval: 62.65, dims: 4096, cost: 0.00 },
+        { name: "Gemini Embedding 001",   overall: 68.37, retrieval: 67.71, dims: 3072, cost: 0.15 },
+        { name: "voyage-3-large",         overall: 70.20, retrieval: 66.10, dims: 1024, cost: 0.18 },
+        { name: "Cohere embed-v3",        overall: 66.50, retrieval: 64.40, dims: 1024, cost: 0.10 },
+        { name: "text-embedding-3-small", overall: 62.30, retrieval: 60.10, dims: 1536, cost: 0.02 }
+      ];
+
+      var body = $("#model-body");
+      var note = $("#sort-note");
+
+      function render(key) {
+        var sorted = MODELS.slice().sort(function (a, b) { return b[key] - a[key]; });
+        var best = sorted[0];
+        body.innerHTML = sorted.map(function (m, i) {
+          var cls = i === 0 ? ' class="row-best"' : "";
+          return "<tr" + cls + ">"
+            + "<td>" + m.name + (i === 0 ? ' <span class="chip">#1</span>' : "") + "</td>"
+            + '<td class="num">' + m.overall.toFixed(2) + "</td>"
+            + '<td class="num">' + m.retrieval.toFixed(2) + "</td>"
+            + '<td class="num">' + m.dims + "</td>"
+            + '<td class="num">$' + m.cost.toFixed(2) + "</td>"
+            + "</tr>";
+        }).join("");
+
+        if (key === "overall") {
+          note.innerHTML = 'Sorted by <b>Overall avg</b>. The leader is <b>' + best.name
+            + '</b> (' + best.overall.toFixed(2) + ' overall, but only ' + best.retrieval.toFixed(2)
+            + ' on Retrieval). The headline average chose it &mdash; yet it is <b>not</b> the best retriever.';
+        } else {
+          note.innerHTML = 'Sorted by <b>Retrieval</b> &mdash; the column RAG actually needs. The leader is now <b>'
+            + best.name + '</b> (' + best.retrieval.toFixed(2) + ' Retrieval). <b>The #1 model changed.</b> '
+            + 'That swap is the whole lesson: read the Retrieval column, not the average.';
+        }
+
+        $("#sort-overall").className = "btn" + (key === "overall" ? " primary" : "");
+        $("#sort-retrieval").className = "btn" + (key === "retrieval" ? " primary" : "");
+      }
+
+      $("#sort-overall").addEventListener("click", function () { render("overall"); });
+      $("#sort-retrieval").addEventListener("click", function () { render("retrieval"); });
+      render("overall");
+
+      // ---------- WIDGET 2: Matryoshka tradeoff ----------
+      var DIMS = [256, 512, 768, 1024, 1536];
+      // Illustrative quality (nDCG) per dimension: drops only slightly as dims fall.
+      var QUALITY = { 256: 0.79, 512: 0.83, 768: 0.85, 1024: 0.865, 1536: 0.87 };
+      var FULL_DIM = 1536;
+      // Storage at full 1536 dims for 100k chunks (float32, 4 bytes/dim) ≈ 614 MB.
+      var FULL_STORAGE_MB = (FULL_DIM * 4 * 100000) / (1024 * 1024); // ~586 MB
+
+      var range   = $("#dim-range");
+      var dimVal  = $("#dim-val");
+      var stoVal  = $("#storage-val");
+      var quaVal  = $("#quality-val");
+      var stoBar  = $("#storage-bar");
+      var quaBar  = $("#quality-bar");
+      var stoPct  = $("#storage-pct");
+      var quaPct  = $("#quality-pct");
+      var mtxNote = $("#mtx-note");
+
+      function updateMtx() {
+        var idx = clamp(parseInt(range.value, 10), 0, DIMS.length - 1);
+        var dims = DIMS[idx];
+        var quality = QUALITY[dims];
+
+        var storageMB = FULL_STORAGE_MB * (dims / FULL_DIM);
+        var storagePctOfFull = Math.round((dims / FULL_DIM) * 100);
+        var qualityPctOfFull = Math.round((quality / QUALITY[FULL_DIM]) * 100);
+
+        dimVal.textContent = dims;
+        stoVal.textContent = Math.round(storageMB) + " MB";
+        quaVal.textContent = quality.toFixed(3);
+
+        stoBar.style.width = storagePctOfFull + "%";
+        quaBar.style.width = qualityPctOfFull + "%";
+        stoPct.textContent = storagePctOfFull + "%";
+        quaPct.textContent = qualityPctOfFull + "%";
+
+        if (dims === FULL_DIM) {
+          mtxNote.innerHTML = 'Full <b>' + dims + '</b> dims: baseline storage and quality.';
+        } else {
+          var saved = 100 - storagePctOfFull;
+          var lost = 100 - qualityPctOfFull;
+          mtxNote.innerHTML = 'Truncated to <b>' + dims + '</b> dims: storage drops <b>' + saved
+            + '%</b> while quality falls only <b>' + lost + '%</b>. Storage falls faster than quality &mdash; that is the Matryoshka bargain.';
+        }
+      }
+
+      range.addEventListener("input", updateMtx);
+      updateMtx();
+    })();
+  </script>
+</body>
+</html>

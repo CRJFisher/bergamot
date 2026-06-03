@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clean ingestion — RAG Explainers</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    /* demo-specific layout only — a faux web-page mock + density meters */
+    .mock { display: flex; flex-direction: column; gap: 9px; margin: 6px 0 4px; }
+    .mock-block {
+      display: grid; grid-template-columns: 96px 1fr 150px; align-items: center;
+      gap: 12px; padding: 10px 12px;
+      background: var(--bg); border: 1px solid var(--border-soft); border-radius: 8px;
+      transition: opacity .25s, filter .25s;
+    }
+    .mock-block .mb-tag {
+      font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+      letter-spacing: .5px; color: var(--muted); flex: none;
+    }
+    .mock-block .mb-body { font-size: 12.5px; color: var(--text); min-width: 0; }
+    .mock-block .mb-body .mb-links { color: var(--violet); }
+    .mock-block .mb-body .mb-prose { color: #c9d4df; }
+    .mock-block.keep { border-color: var(--good); background: rgba(63,185,80,.07); }
+    .mock-block.pruned {
+      opacity: .38; filter: grayscale(.7);
+    }
+    .mock-block.pruned .mb-body { text-decoration: line-through; }
+    .mock-block .mb-meter { display: flex; flex-direction: column; gap: 3px; }
+    .mock-block .mb-meter .mb-track { background: var(--bg-2); }
+    .mock-block .mb-meter .mb-fill { background: linear-gradient(90deg, var(--accent-2), #d18f12); }
+    .mock-block .mb-meter .mb-cap {
+      font-family: var(--mono); font-size: 9.5px; color: var(--faint);
+      display: flex; justify-content: space-between;
+    }
+    .mock-block .mb-cap .mb-reason { color: var(--bad); }
+    .mock-block.keep .mb-cap .mb-reason { color: var(--good); }
+    .prune-out { margin-top: 16px; }
+    .prune-out .po-head {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--muted); margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+
+    <!-- (a) HEADER -->
+    <header class="page-head">
+      <span class="tag">Phase B · task-31.5 · Ingest</span>
+      <h1>Clean ingestion</h1>
+      <p class="lede">Before you embed a single web page, strip out the nav bars, cookie banners, and "related links" — because whatever you embed is what you will retrieve.</p>
+    </header>
+
+    <!-- (b) THE PROBLEM -->
+    <section class="block">
+      <h2><span class="num">01</span> The problem</h2>
+      <p>
+        Bergamot ingests the open web. When it captures a page, it does not get a clean article — it gets the
+        <strong>whole rendered HTML document</strong>: the navigation bar, the cookie-consent banner, ad containers,
+        a "related links" sidebar, social-share widgets, and a footer full of links. The actual article you care about is a
+        small subtree buried inside all of that <em>chrome</em> — the term for the repeating surrounding furniture of a site
+        (menus, headers, footers) that frames every page but is not the content of any one page.
+      </p>
+      <p>
+        That chrome is <strong>boilerplate</strong>: near-identical text that appears on thousands of pages across a site.
+        If you embed the page as-is, the boilerplate goes into the vector right alongside the article. An
+        <em>embedding</em> — the numeric vector that captures a passage's meaning — gets <strong>diluted</strong> when it has
+        to summarize "deep dive on React hooks" <em>and</em> "Subscribe to our newsletter · Privacy Policy · © 2026" in one
+        averaged direction.
+      </p>
+      <div class="bad-box">
+        <span class="callout-title">Failure mode</span>
+        <p>
+          Garbage in, garbage vectors out. Boilerplate text gets embedded alongside the article, <strong>diluting the page
+          vector</strong> so it no longer points cleanly at the topic. Worse, the boilerplate itself becomes retrievable:
+          a generic phrase like <em>"Subscribe to our newsletter"</em> lives on every page, so it matches far too many
+          queries and surfaces irrelevant pages. The chrome you never wanted is now competing with real answers for a slot
+          in the results.
+        </p>
+      </div>
+    </section>
+
+    <!-- (c) HOW IT WORKS -->
+    <section class="block">
+      <h2><span class="num">02</span> How it works</h2>
+      <p>
+        The fix is <strong>main-content extraction</strong>: isolate the article subtree and throw the rest away, <em>before</em>
+        anything is embedded. Bergamot does this the cheap, robust way — with <strong>heuristics</strong> (fixed rules), not a
+        trained model. This is the approach popularized by <strong>Trafilatura</strong>, an open-source extraction library. A
+        heuristic extractor is fast, dependency-light, and qualitatively <strong>competitive with neural extractors</strong>
+        (machine-learning models trained to find content) while being far simpler to run inline on every capture.
+      </p>
+
+      <h3>Step 1 — Prune by tag</h3>
+      <p>
+        Walk the <strong>DOM tree</strong> (the parsed structure of the HTML, where every element is a node) and remove
+        whole subtrees whose element type is <em>structurally boilerplate</em>. These tags almost never hold the article:
+        <code>&lt;nav&gt;</code> (navigation menus), <code>&lt;aside&gt;</code> (sidebars), <code>&lt;footer&gt;</code>
+        (page footers), <code>&lt;form&gt;</code> (search and signup forms), <code>&lt;iframe&gt;</code> (embedded
+        third-party frames), plus ad, <code>&lt;script&gt;</code>, and <code>&lt;style&gt;</code> nodes. Dropping them by tag
+        alone clears most of the chrome in one pass.
+      </p>
+
+      <h3>Step 2 — Prune by link density</h3>
+      <p>
+        Some boilerplate hides inside generic containers that a tag rule misses — a <code>&lt;div&gt;</code> that is really a
+        link farm. The signal that catches it is <strong>link density</strong>: the ratio of <em>anchor-text characters</em>
+        (text wrapped in clickable <code>&lt;a&gt;</code> links) to the <em>total characters</em> in a block.
+      </p>
+      <div class="diagram">link density = (characters inside &lt;a&gt; links) / (total characters in block)</div>
+      <p>
+        Prose runs low: an article paragraph is mostly plain sentences with the occasional inline link, so its density is
+        near <strong>0.05</strong>. A nav bar, a "related links" list, or a footer is almost entirely clickable text, so its
+        density is high — <strong>0.7 to 0.9</strong>. A block whose link density sits above a threshold is read as a
+        menu or link list rather than writing, and dropped.
+      </p>
+
+      <h3>Step 3 — Keep the article, then hand off</h3>
+      <p>
+        What survives both passes is the <strong>main article subtree</strong>. Bergamot serializes it to clean
+        <strong>markdown</strong> (lightweight plain-text formatting) and only <em>then</em> runs the existing LLM content
+        step and the embedding model. Every downstream stage now sees the article and nothing else.
+      </p>
+
+      <div class="diagram">raw HTML ─▶ prune by tag ─▶ prune by link-density ─▶ clean markdown ─▶ LLM content + embeddings
+   │            │                  │                      │                    │
+ captured    drop nav/         drop high-link-       article subtree      what actually
+ web page    aside/footer/     density blocks        only, as markdown    gets embedded
+             form/iframe/      (menus, link
+             ad/script/style   farms)</div>
+    </section>
+
+    <!-- (d) TRY IT -->
+    <section class="block">
+      <h2><span class="num">03</span> Try it</h2>
+      <p>
+        Here is a faux captured web page as a stack of labelled blocks, each with its measured link density. Turn on
+        heuristic extraction, then slide the <strong>link-density threshold</strong>: blocks above it — or carrying a
+        boilerplate tag — get struck out as <em>pruned</em>. The "clean markdown out" panel shows exactly what survives to be
+        embedded.
+      </p>
+
+      <div class="demo">
+        <div class="demo-head">
+          <span class="spark"></span>
+          <span class="demo-title">Prune the page · captured URL: <b>"blog.example.com/react-hooks-deep-dive"</b></span>
+        </div>
+        <div class="demo-body">
+
+          <div class="controls">
+            <label class="switch">
+              <input type="checkbox" id="runExtract" checked>
+              <span class="track"></span>
+              <span>Run heuristic extraction</span>
+            </label>
+            <div class="control">
+              <label for="threshold">link-density threshold = <span id="thVal">0.50</span></label>
+              <input type="range" id="threshold" min="0" max="1" step="0.05" value="0.5">
+            </div>
+          </div>
+
+          <div class="mock" id="mock"></div>
+
+          <div class="prune-out">
+            <div class="po-head">Clean markdown out — this is what gets embedded</div>
+            <pre id="cleanOut"></pre>
+          </div>
+
+          <p class="demo-hint">
+            Slide the threshold and watch boilerplate drop out while the article survives — the extracted markdown is what
+            gets embedded. Drag the threshold above ~0.9 and a high-density block creeps back in; toggle extraction off to
+            see the raw, polluted page that would otherwise hit the embedder.
+          </p>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- (e) DECISION LENS -->
+    <section class="block">
+      <h2><span class="num">04</span> Decision lens</h2>
+      <div class="decision">
+        <span class="callout-title">When to run heuristic main-content extraction</span>
+        <div class="decision-grid">
+          <div class="cell use">
+            <h4>✓ Reach for it when</h4>
+            <ul>
+              <li>Your source is <strong>raw web HTML</strong> — scraped or captured pages with heavy chrome. This is
+                <strong>exactly Bergamot's case</strong>: every ingest is a full rendered document.</li>
+              <li>You want <strong>clean vectors and clean LLM input cheaply</strong> — fast, fixed-rule extraction with no
+                model to host or pay for.</li>
+              <li>The boilerplate is generic enough that it would <strong>pollute retrieval</strong> ("newsletter", "privacy
+                policy") if left in.</li>
+            </ul>
+          </div>
+          <div class="cell skip">
+            <h4>✕ Skip / overkill when</h4>
+            <ul>
+              <li>Inputs are <strong>already clean</strong> — markdown notes, API docs, plain text. There is no chrome to
+                strip.</li>
+              <li>Content lives in <strong>well-defined semantic regions</strong> a simple CSS selector already isolates, so
+                you do not need density heuristics at all.</li>
+            </ul>
+          </div>
+        </div>
+        <p style="margin-top:14px;margin-bottom:0;">
+          <strong>The tradeoff:</strong> heuristic extraction is <em>fast and dependency-light</em>, but it is not perfect.
+          It can <strong>over-prune</strong> — clipping a legitimate aside that happened to look link-heavy — or
+          <strong>under-prune</strong> on unusual layouts that dodge the rules. Even so, it is a <em>quality-of-inputs win
+          that compounds with every downstream stage</em>: cleaner chunks, cleaner embeddings, cleaner LLM context, all from
+          one cheap pass. It depends on nothing else, so it can land <em>in parallel with chunking</em>.
+          <strong>Garbage in, garbage out — clean the inputs before you embed.</strong>
+        </p>
+      </div>
+    </section>
+
+    <!-- (f) IN BERGAMOT -->
+    <section class="block">
+      <h2><span class="num">05</span> In Bergamot</h2>
+      <p><strong>task-31.5</strong> inserts heuristic main-content extraction into the capture pipeline. Concretely it ships:</p>
+      <ul>
+        <li>Captured HTML passes through <strong>heuristic main-content extraction</strong> — pruning
+          nav, footer, aside, ad, and social-share blocks — <strong>before the LLM content step</strong>, not after.</li>
+        <li>The extracted <strong>markdown is measurably cleaner</strong>: less boilerplate on a set of sample noisy pages,
+          verified by comparison against the raw capture.</li>
+        <li><strong>Neutral-or-better retrieval quality</strong> on the evaluation harness — the extraction never regresses
+          the committed baseline, and on noisy pages it improves it.</li>
+      </ul>
+      <div class="note">
+        <span class="callout-title">Why Phase B</span>
+        <p>
+          Extraction sits early because it lifts the floor for everything after it. Chunking, hybrid search, reranking, and
+          generation all inherit cleaner text the moment ingestion stops feeding the pipeline chrome. It is the smallest
+          change with the widest blast radius.
+        </p>
+      </div>
+    </section>
+
+    <!-- (g) FOOTER -->
+    <footer class="foot">
+      <div class="sources">
+        <h3>Sources</h3>
+        <ul>
+          <li><a href="https://deepwiki.com/adbar/trafilatura">DeepWiki — adbar/trafilatura</a></li>
+          <li><a href="https://www.contextractor.com/trafilatura/">Contextractor — Trafilatura</a></li>
+        </ul>
+      </div>
+      <div class="prevnext" data-prevnext></div>
+    </footer>
+
+  </main>
+
+  <script src="shared.js"></script>
+  <script>
+    (function () {
+      // The faux captured page, top to bottom. `tag` is the element type; `boiler`
+      // marks tags that are structurally boilerplate (pruned regardless of density).
+      // `density` is the measured link density of the block.
+      var blocks = [
+        { tag: "nav",     label: "Nav bar",      boiler: true,  density: 0.88,
+          html: '<span class="mb-links">Home · Blog · Docs · Pricing · About · Login · Sign up</span>',
+          md: null },
+        { tag: "div.ad",  label: "Cookie / ad",  boiler: true,  density: 0.40,
+          html: '<span class="mb-prose">We use cookies. </span><span class="mb-links">Accept · Manage · Privacy Policy</span>',
+          md: null },
+        { tag: "article", label: "Article ¶1",   boiler: false, density: 0.05,
+          html: '<span class="mb-prose">React’s dependency array tells <code>useEffect</code> when to re-run. Get it wrong and your effect reads a stale value or loops forever.</span>',
+          md: "React’s dependency array tells `useEffect` when to re-run. Get it wrong and your effect reads a stale value or loops forever." },
+        { tag: "article", label: "Article ¶2",   boiler: false, density: 0.04,
+          html: '<span class="mb-prose">A stale closure captures the state from the render when the effect was created, not the latest one — the classic dependency-array bug.</span>',
+          md: "A stale closure captures the state from the render when the effect was created, not the latest one — the classic dependency-array bug." },
+        { tag: "article", label: "Article ¶3",   boiler: false, density: 0.06,
+          html: '<span class="mb-prose">The exhaustive-deps ESLint rule flags missing dependencies so you fix them before they ship.</span>',
+          md: "The exhaustive-deps ESLint rule flags missing dependencies so you fix them before they ship." },
+        { tag: "aside",   label: "Related links",boiler: true,  density: 0.82,
+          html: '<span class="mb-links">Related: useState pitfalls · useMemo vs useCallback · 10 React mistakes · Hooks FAQ</span>',
+          md: null },
+        { tag: "div",     label: "Social share",  boiler: false, density: 0.91,
+          html: '<span class="mb-links">Share on X · Share on LinkedIn · Copy link · Email</span>',
+          md: null },
+        { tag: "footer",  label: "Footer",        boiler: true,  density: 0.86,
+          html: '<span class="mb-links">© 2026 Example · Terms · Privacy · Subscribe to our newsletter · Contact</span>',
+          md: null }
+      ];
+
+      var mockEl  = $("#mock");
+      var outEl   = $("#cleanOut");
+      var thSlider= $("#threshold");
+      var thVal   = $("#thVal");
+      var runBox  = $("#runExtract");
+
+      function fmt(x) { return x.toFixed(2); }
+
+      // A block is pruned when extraction is on AND (it carries a boilerplate tag
+      // OR its link density is above the threshold).
+      function isPruned(b, on, th) {
+        if (!on) return false;
+        return b.boiler || b.density > th;
+      }
+
+      function reasonFor(b, pruned, th) {
+        if (!pruned) return "kept · prose";
+        if (b.boiler) return "pruned · <" + b.tag + ">";
+        return "pruned · density > " + fmt(th);
+      }
+
+      function render() {
+        var on = runBox.checked;
+        var th = parseFloat(thSlider.value);
+        thVal.textContent = fmt(th);
+
+        mockEl.innerHTML = "";
+        blocks.forEach(function (b) {
+          var pruned = isPruned(b, on, th);
+
+          var block = document.createElement("div");
+          block.className = "mock-block" + (pruned ? " pruned" : (on ? " keep" : ""));
+
+          var tag = document.createElement("span");
+          tag.className = "mb-tag";
+          tag.textContent = b.label;
+
+          var body = document.createElement("span");
+          body.className = "mb-body";
+          body.innerHTML = b.html;
+
+          var meter = document.createElement("span");
+          meter.className = "mb-meter";
+          var track = document.createElement("span");
+          track.className = "bar-track mb-track";
+          var fill = document.createElement("span");
+          fill.className = "bar-fill mb-fill";
+          fill.style.width = Math.round(b.density * 100) + "%";
+          track.appendChild(fill);
+          var cap = document.createElement("span");
+          cap.className = "mb-cap";
+          var dens = document.createElement("span");
+          dens.textContent = "density " + fmt(b.density);
+          var reason = document.createElement("span");
+          reason.className = "mb-reason";
+          reason.textContent = on ? reasonFor(b, pruned, th) : "raw";
+          cap.appendChild(dens);
+          cap.appendChild(reason);
+          meter.appendChild(track);
+          meter.appendChild(cap);
+
+          block.appendChild(tag);
+          block.appendChild(body);
+          block.appendChild(meter);
+          mockEl.appendChild(block);
+        });
+
+        renderOut(on, th);
+      }
+
+      function renderOut(on, th) {
+        if (!on) {
+          // Extraction off: the whole noisy page (visible text) reaches the embedder.
+          var raw = blocks.map(function (b) {
+            return b.label + ": " + b.html.replace(/<[^>]+>/g, "");
+          }).join("\n");
+          outEl.textContent = raw;
+          return;
+        }
+        var kept = blocks.filter(function (b) { return !isPruned(b, on, th); });
+        var md = kept.map(function (b) {
+          // Surviving blocks without real prose contribute nothing useful.
+          return b.md != null ? b.md : "[" + b.label + " — no extractable prose]";
+        }).join("\n\n");
+        outEl.textContent = md.length ? md : "(everything pruned — threshold too aggressive)";
+      }
+
+      thSlider.addEventListener("input", render);
+      runBox.addEventListener("change", render);
+
+      render();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Evaluation harness — RAG Explainers</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    /* demo-specific layout only */
+    .row .move { display: flex; flex-direction: column; gap: 2px; flex: none; }
+    .row .move button {
+      font-family: var(--mono); font-size: 10px; line-height: 1; cursor: pointer;
+      background: var(--bg-2); color: var(--muted); border: 1px solid var(--border);
+      border-radius: 5px; padding: 2px 6px;
+    }
+    .row .move button:hover { border-color: var(--accent); color: var(--accent); }
+    .row .move button[disabled] { opacity: .3; cursor: not-allowed; }
+    .row .truth { font-family: var(--mono); font-size: 10.5px; flex: none; opacity: .8; }
+    .row.hit .truth { color: var(--good); }
+    .row.miss .truth { color: var(--bad); }
+    .formula-list { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+    .formula-list .fml { background: var(--bg); border: 1px solid var(--border-soft); border-radius: 8px; padding: 10px 13px; }
+    .formula-list .fml .eq { font-family: var(--mono); font-size: 12px; color: #cbe7ea; }
+    .formula-list .fml .read { font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+    .formula-list .fml .read b { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+
+    <header class="page-head">
+      <span class="tag">Phase A · task-31.1 · Eval</span>
+      <h1>The evaluation harness</h1>
+      <p class="lede">Before you change a single retrieval knob, build the ruler that tells you whether the change actually made things better.</p>
+    </header>
+
+    <!-- (b) THE PROBLEM -->
+    <section class="block">
+      <h2><span class="num">01</span> The problem</h2>
+      <p>
+        Bergamot's retrieval baseline is deliberately minimal. Every captured web page is embedded as
+        <strong>one whole-page vector</strong> using OpenAI's <code>text-embedding-3-small</code> model and stored in
+        <strong>LanceDB</strong>. At query time the system embeds the query and returns the pages whose vectors are
+        closest by <em>dense cosine similarity</em> — the angle between two embedding vectors, where closer means more
+        semantically similar.
+      </p>
+      <p>
+        That is the <strong>whole pipeline</strong>. There is no <em>chunking</em> (splitting a page into smaller passages),
+        no <em>BM25</em> (a keyword-scoring algorithm that rewards rare exact-term matches), no <em>reranking</em>
+        (a second model that re-scores the shortlist), and no <em>query rewriting</em> (reformulating the user's question
+        before search). Most importantly, there is <strong>no evaluation</strong> at all.
+      </p>
+      <div class="bad-box">
+        <span class="callout-title">Failure mode</span>
+        <p>
+          Today nobody can say whether a change helped. Someone swaps the embedding model, adds chunking, or tweaks a
+          prompt, eyeballs a few queries, and declares victory. Those "improvements" are <strong>vibes, not measurements</strong>.
+          A change that looks great on the three queries you happen to test can silently regress the other ninety-seven.
+          Without a number to compare against, every later phase of this roadmap would be guesswork.
+        </p>
+      </div>
+    </section>
+
+    <!-- (c) HOW IT WORKS -->
+    <section class="block">
+      <h2><span class="num">02</span> How it works</h2>
+      <p>
+        An evaluation harness turns "did this help?" into a reproducible number. It has three moving parts: a fixed test
+        set, a battery of metrics, and a discipline for reporting deltas.
+      </p>
+
+      <h3>The golden dataset</h3>
+      <p>
+        A <strong>golden dataset</strong> is a fixed list of queries, each paired with the set of pages (or chunks) that
+        are <em>known to be relevant</em> — the ground truth. For Bergamot the golden set is drawn from the
+        <strong>user's own captured corpus</strong>, so the queries and relevant answers reflect the real content the
+        system actually serves, not a generic benchmark. Because the golden set is committed and frozen, every run is
+        measured against the same ruler.
+      </p>
+
+      <h3>Retrieval metrics</h3>
+      <p>
+        These ask one thing: <em>did the retriever surface the relevant material near the top?</em> They look only at the
+        ranked list of results, comparing it to the golden ground truth.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Metric</th><th>What it measures</th><th>Rewards</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Recall@k</strong></td>
+            <td>Fraction of all relevant items that appear in the top <code>k</code> results.</td>
+            <td>Not missing relevant material.</td>
+          </tr>
+          <tr>
+            <td><strong>Precision@k</strong></td>
+            <td>Fraction of the top <code>k</code> results that are relevant.</td>
+            <td>Not padding the top with junk.</td>
+          </tr>
+          <tr>
+            <td><strong>MRR</strong></td>
+            <td>Mean Reciprocal Rank — <code>1 / rank</code> of the <em>first</em> relevant result.</td>
+            <td>Putting a good answer at position 1.</td>
+          </tr>
+          <tr>
+            <td><strong>nDCG@k</strong></td>
+            <td>Normalized Discounted Cumulative Gain — relevance discounted by how far down the list it sits.</td>
+            <td>Ranking relevant items <em>higher</em>, not just including them.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Generation metrics (the RAGAS family)</h3>
+      <p>
+        Retrieval metrics stop at the shortlist. <strong>Generation metrics</strong> judge the answer the LLM writes from
+        that shortlist. They are scored by an <strong>LLM-as-judge</strong> — a separate model prompted to grade each
+        output against the question and the retrieved context.
+      </p>
+      <ul>
+        <li><strong>Context precision</strong> — of the retrieved context, how much is actually relevant (signal vs. filler).</li>
+        <li><strong>Context recall</strong> — did retrieval pull in <em>all</em> the context needed to answer fully.</li>
+        <li><strong>Faithfulness</strong> — is every claim in the answer grounded in the retrieved context, with no hallucinated additions.</li>
+        <li><strong>Answer relevance</strong> — does the answer actually address the question that was asked.</li>
+      </ul>
+
+      <h3>The discipline</h3>
+      <p>
+        The harness is only useful if it is used consistently. The rule: <strong>every change reports a delta against a
+        committed baseline</strong>. You run the same golden set through the old pipeline and the new one, and you publish
+        both score sheets side by side. A phase "wins" only if the numbers move the right way.
+      </p>
+
+      <div class="diagram">corpus ──▶ golden set ──▶ run pipeline ──▶ score ──▶ report
+ │            │              │            │          │
+ user's     queries +     dense /       retrieval   delta vs
+ captured   known-good    hybrid /      + RAGAS      committed
+ pages      relevant      reranked      metrics      baseline
+            pages</div>
+    </section>
+
+    <!-- (d) TRY IT -->
+    <section class="block">
+      <h2><span class="num">03</span> Try it</h2>
+      <p>
+        Here is one query with six retrieved chunks. Three of them are genuinely relevant (the harness knows the ground
+        truth). Reorder the list and change <code>k</code> to watch the four retrieval metrics respond.
+      </p>
+
+      <div class="demo">
+        <div class="demo-head">
+          <span class="spark"></span>
+          <span class="demo-title">Score a retrieval run · query: <b>"react hooks dependency array gotchas"</b></span>
+        </div>
+        <div class="demo-body">
+
+          <div class="controls">
+            <div class="control">
+              <label for="kSlider">k = <span id="kVal">3</span></label>
+              <input type="range" id="kSlider" min="1" max="6" value="3">
+            </div>
+            <button class="btn primary" id="btnPerfect">Perfect ranking</button>
+            <button class="btn" id="btnWorst">Worst ranking</button>
+          </div>
+
+          <div class="rows" id="rows"></div>
+
+          <div class="metrics" id="metrics">
+            <div class="metric"><div class="m-val" id="mRecall">–</div><div class="m-lab">Recall@k</div></div>
+            <div class="metric"><div class="m-val" id="mPrecision">–</div><div class="m-lab">Precision@k</div></div>
+            <div class="metric"><div class="m-val" id="mMrr">–</div><div class="m-lab">MRR</div></div>
+            <div class="metric"><div class="m-val" id="mNdcg">–</div><div class="m-lab">nDCG@k</div></div>
+          </div>
+
+          <div class="formula-list">
+            <div class="fml">
+              <div class="eq">Recall@k = (relevant items in top-k) / (total relevant items)</div>
+              <div class="read" id="readRecall"></div>
+            </div>
+            <div class="fml">
+              <div class="eq">Precision@k = (relevant items in top-k) / k</div>
+              <div class="read" id="readPrecision"></div>
+            </div>
+            <div class="fml">
+              <div class="eq">MRR = 1 / (rank of first relevant item)</div>
+              <div class="read" id="readMrr"></div>
+            </div>
+            <div class="fml">
+              <div class="eq">nDCG@k = DCG / IdealDCG,&nbsp;&nbsp;DCG = Σ relᵢ / log₂(i + 1)&nbsp;&nbsp;(i = 1…k)</div>
+              <div class="read" id="readNdcg"></div>
+            </div>
+          </div>
+
+          <p class="demo-hint">
+            Try this: drag the relevant chunks toward the bottom. Watch MRR and nDCG@k fall as the good answers sink,
+            while Recall@k can stay at 1.00 — being present is not the same as being ranked well.
+          </p>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- (e) DECISION LENS -->
+    <section class="block">
+      <h2><span class="num">04</span> Decision lens</h2>
+      <div class="decision">
+        <span class="callout-title">When to build an evaluation harness</span>
+        <div class="decision-grid">
+          <div class="cell use">
+            <h4>✓ Reach for it when</h4>
+            <ul>
+              <li>You are about to change retrieval and need <strong>proof</strong> the change helped, not a hunch.</li>
+              <li>You want <strong>regression safety</strong> — a guard that catches the day a "win" quietly breaks other queries.</li>
+              <li>You need <strong>portfolio or production credibility</strong>: a committed score sheet is the difference between "I think it's better" and "Recall@5 rose from 0.61 to 0.79."</li>
+            </ul>
+          </div>
+          <div class="cell skip">
+            <h4>✕ Skip / overkill when</h4>
+            <ul>
+              <li>It is a <strong>one-off throwaway script</strong> you will never tune or rerun.</li>
+              <li>The corpus is <strong>tiny enough</strong> that retrieval quality is obviously fine by inspection and there is nothing to optimize.</li>
+            </ul>
+          </div>
+        </div>
+        <p style="margin-top:14px;margin-bottom:0;">
+          <strong>The tradeoff:</strong> building and maintaining a golden set has a real <em>labeling cost</em>, and the
+          LLM-as-judge adds <em>eval-time API cost</em> plus its own noise — judges carry bias and can disagree run to run.
+          But the alternative is flying blind. This harness is the <strong>precondition for every other phase</strong>:
+          hybrid search, chunking, reranking, and query transformation are all defined by the delta they produce <em>against
+          this ruler</em>. That is exactly why it is listed first.
+        </p>
+      </div>
+    </section>
+
+    <!-- (f) IN BERGAMOT -->
+    <section class="block">
+      <h2><span class="num">05</span> In Bergamot</h2>
+      <p><strong>task-31.1</strong> ships the harness and supersedes the older, broader task-30. Concretely it delivers:</p>
+      <ul>
+        <li>A <strong>golden dataset</strong> built from Bergamot's own captured corpus, stored in-repo so it is versioned and frozen.</li>
+        <li>A <strong>runnable harness</strong> computing the retrieval metrics — Recall@k, MRR, and nDCG@k — over that golden set.</li>
+        <li><strong>RAGAS-style generation metrics</strong> (context precision, context recall, faithfulness, answer relevance) scored via an LLM-as-judge.</li>
+        <li>A <strong>committed baseline report</strong> for the current whole-page, pure-dense pipeline — the number every future phase must beat.</li>
+        <li>One <strong>comparable report format</strong> so every later phase produces a measurable delta against that baseline.</li>
+      </ul>
+      <div class="note">
+        <span class="callout-title">Why first</span>
+        <p>The roadmap puts evaluation in Phase A on purpose: it is the instrument that makes Phases B through H falsifiable. Build the ruler, then start measuring.</p>
+      </div>
+    </section>
+
+    <!-- (g) FOOTER -->
+    <footer class="foot">
+      <div class="sources">
+        <h3>Sources</h3>
+        <ul>
+          <li><a href="https://www.confident-ai.com/blog/rag-evaluation-metrics-answer-relevancy-faithfulness-and-more">Confident AI — RAG evaluation metrics: answer relevancy, faithfulness and more</a></li>
+          <li><a href="https://saulius.io/blog/ragas-rag-evaluation-metrics-llm-judge">saulius.io — RAGAS: RAG evaluation metrics with an LLM judge</a></li>
+          <li><a href="https://www.braintrust.dev/articles/rag-evaluation-metrics">Braintrust — RAG evaluation metrics</a></li>
+        </ul>
+      </div>
+      <div class="prevnext" data-prevnext></div>
+    </footer>
+
+  </main>
+
+  <script src="shared.js"></script>
+  <script>
+    (function () {
+      // Six retrieved chunks for the fixed query. `rel` is the hidden ground truth.
+      // 3 of 6 are relevant. Initial order is a realistic, imperfect ranking.
+      var chunks = [
+        { id: "a", title: "Stale closures: why your effect reads an old state value",      rel: true  },
+        { id: "b", title: "useEffect cleanup functions and unmount timing",                rel: false },
+        { id: "c", title: "Exhaustive-deps ESLint rule and what it really enforces",       rel: true  },
+        { id: "d", title: "CSS-in-JS performance in large React trees",                    rel: false },
+        { id: "e", title: "Passing objects/functions in deps and reference identity traps", rel: true  },
+        { id: "f", title: "History of React: from mixins to hooks",                        rel: false }
+      ];
+
+      var rowsEl  = $("#rows");
+      var kSlider = $("#kSlider");
+      var kVal    = $("#kVal");
+
+      function totalRelevant() {
+        return chunks.reduce(function (n, c) { return n + (c.rel ? 1 : 0); }, 0);
+      }
+
+      function fmt(x) { return x.toFixed(2); }
+
+      function computeMetrics(k) {
+        var total = totalRelevant();
+        var relInTopK = 0;
+        var firstRelRank = 0;          // 1-based; 0 means none found
+        var dcg = 0;
+
+        for (var i = 0; i < chunks.length; i++) {
+          var rank = i + 1;            // 1-based rank
+          if (i < k) {
+            if (chunks[i].rel) {
+              relInTopK++;
+              dcg += 1 / Math.log2(rank + 1);   // rel = 1 for relevant, 0 otherwise
+            }
+          }
+          if (firstRelRank === 0 && chunks[i].rel) firstRelRank = rank;
+        }
+
+        // Ideal DCG: all relevant items packed at the very top, capped at k.
+        var idealCount = Math.min(total, k);
+        var idcg = 0;
+        for (var j = 0; j < idealCount; j++) idcg += 1 / Math.log2((j + 1) + 1);
+
+        var recall    = total > 0 ? relInTopK / total : 0;
+        var precision = k > 0 ? relInTopK / k : 0;
+        var mrr       = firstRelRank > 0 ? 1 / firstRelRank : 0;
+        var ndcg      = idcg > 0 ? dcg / idcg : 0;
+
+        return {
+          recall: recall, precision: precision, mrr: mrr, ndcg: ndcg,
+          relInTopK: relInTopK, total: total, firstRelRank: firstRelRank
+        };
+      }
+
+      function reading(m, k) {
+        var quality = function (v) {
+          if (v >= 0.95) return "near-perfect";
+          if (v >= 0.75) return "good";
+          if (v >= 0.5)  return "middling";
+          return "poor";
+        };
+        $("#readRecall").innerHTML = "<b>Recall@" + k + " = " + fmt(m.recall) + "</b> — " +
+          m.relInTopK + " of " + m.total + " relevant chunks are in the top " + k + ".";
+        $("#readPrecision").innerHTML = "<b>Precision@" + k + " = " + fmt(m.precision) + "</b> — " +
+          m.relInTopK + " of the top " + k + " results are relevant.";
+        $("#readMrr").innerHTML = m.firstRelRank > 0
+          ? "<b>MRR = " + fmt(m.mrr) + "</b> — the first relevant chunk sits at rank " + m.firstRelRank + "."
+          : "<b>MRR = 0.00</b> — no relevant chunk was retrieved.";
+        $("#readNdcg").innerHTML = "<b>nDCG@" + k + " = " + fmt(m.ndcg) + "</b> — " +
+          quality(m.ndcg) + " ordering; relevant chunks are " +
+          (m.ndcg >= 0.99 ? "perfectly ranked." : "present but could be pushed higher.");
+      }
+
+      function move(index, dir) {
+        var target = index + dir;
+        if (target < 0 || target >= chunks.length) return;
+        var tmp = chunks[index];
+        chunks[index] = chunks[target];
+        chunks[target] = tmp;
+        render(true, [index, target]);
+      }
+
+      function render(animate, movedIdx) {
+        movedIdx = movedIdx || [];
+        rowsEl.innerHTML = "";
+        chunks.forEach(function (c, i) {
+          var row = document.createElement("div");
+          row.className = "row " + (c.rel ? "hit" : "miss");
+          if (animate && movedIdx.indexOf(i) !== -1) row.classList.add("moved", "flash");
+
+          var rank = document.createElement("span");
+          rank.className = "rank";
+          rank.textContent = (i + 1);
+
+          var body = document.createElement("span");
+          body.className = "body";
+          body.textContent = c.title;
+
+          var truth = document.createElement("span");
+          truth.className = "truth";
+          truth.textContent = c.rel ? "● relevant" : "○ not relevant";
+
+          var moveBox = document.createElement("span");
+          moveBox.className = "move";
+          var up = document.createElement("button");
+          up.innerHTML = "▲"; up.setAttribute("aria-label", "move up");
+          if (i === 0) up.setAttribute("disabled", "disabled");
+          up.addEventListener("click", function () { move(i, -1); });
+          var down = document.createElement("button");
+          down.innerHTML = "▼"; down.setAttribute("aria-label", "move down");
+          if (i === chunks.length - 1) down.setAttribute("disabled", "disabled");
+          down.addEventListener("click", function () { move(i, 1); });
+          moveBox.appendChild(up);
+          moveBox.appendChild(down);
+
+          row.appendChild(rank);
+          row.appendChild(body);
+          row.appendChild(truth);
+          row.appendChild(moveBox);
+          rowsEl.appendChild(row);
+        });
+        update();
+      }
+
+      function update() {
+        var k = parseInt(kSlider.value, 10);
+        kVal.textContent = k;
+        var m = computeMetrics(k);
+        $("#mRecall").textContent    = fmt(m.recall);
+        $("#mPrecision").textContent = fmt(m.precision);
+        $("#mMrr").textContent       = fmt(m.mrr);
+        $("#mNdcg").textContent      = fmt(m.ndcg);
+        reading(m, k);
+      }
+
+      $("#btnPerfect").addEventListener("click", function () {
+        chunks.sort(function (a, b) { return (b.rel ? 1 : 0) - (a.rel ? 1 : 0); });
+        render(true, [0, 1, 2]);
+      });
+      $("#btnWorst").addEventListener("click", function () {
+        chunks.sort(function (a, b) { return (a.rel ? 1 : 0) - (b.rel ? 1 : 0); });
+        render(true, [3, 4, 5]);
+      });
+      kSlider.addEventListener("input", update);
+
+      render(false);
+    })();
+  </script>
+</body>
+</html>

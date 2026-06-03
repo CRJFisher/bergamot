@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Generation surface · RAG Explainers</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    /* demo-only layout helpers (theme lives in shared.css) */
+    .slots { display: flex; gap: 4px; margin: 14px 0 6px; }
+    .slot {
+      flex: 1; min-width: 0; height: 46px; border-radius: 7px;
+      border: 1px solid var(--border-soft); background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--mono); font-size: 11px; color: var(--faint);
+      position: relative; transition: background .18s, border-color .18s, color .18s;
+    }
+    .slot .slot-n { position: absolute; top: 3px; left: 5px; font-size: 9px; color: var(--faint); }
+    .slot.edge { border-color: var(--border); color: var(--muted); }
+    .slot.key {
+      background: rgba(163,113,247,.16); border-color: var(--violet);
+      color: var(--violet); font-weight: 700;
+    }
+    .slots-caps { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--faint); margin-bottom: 12px; }
+    .recall-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 8px; }
+    .recall-bar-track { flex: 1; min-width: 160px; height: 16px; background: var(--bg); border: 1px solid var(--border-soft); border-radius: 6px; overflow: hidden; }
+    .recall-bar-fill { height: 100%; border-radius: 6px 0 0 6px; transition: width .35s cubic-bezier(.2,.7,.3,1), background .35s; }
+    .metric .m-val.warnval { color: var(--accent-2); }
+    .metric .m-val.badval { color: var(--bad); }
+    .readout { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 0 4px; }
+    .readout .size-val { font-family: var(--mono); font-size: 22px; color: var(--text); }
+    .corpus-note { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+    .cite-head { display: flex; align-items: center; gap: 14px; margin: 4px 0 10px; flex-wrap: wrap; }
+    pre.result { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; color: var(--muted); line-height: 1.55; overflow-x: auto; margin: 0; }
+    pre.result .k { color: var(--accent); }
+    pre.result .s { color: var(--good); }
+    pre.result .u { color: var(--violet); }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+
+    <header class="page-head">
+      <span class="tag">Phase H · task-31.8 · Generation</span>
+      <h1>Generation surface: order, cite, and know when to skip retrieval</h1>
+      <p class="lede">Retrieval can be perfect and the answer still wrong. How you <em>arrange</em> chunks in the prompt, whether you <em>cite</em> them, and whether you even <em>need</em> retrieval for a small corpus all decide whether the generator succeeds.</p>
+    </header>
+
+    <!-- (b) THE PROBLEM -->
+    <section class="block">
+      <h2><span class="num">01</span> The problem</h2>
+      <p>Bergamot's MCP <code>semantic_search</code> tool returns a <strong>200-character preview blob</strong> for each hit — a slice of text with no source link, no chunk id, and no thought given to <em>which order</em> the hits land in the prompt or to <em>how big the corpus is</em> in the first place. The retrieval layer (an <strong>MCP</strong>, or Model Context Protocol, tool the model calls) hands back text and stops there. Everything that happens between "good chunks retrieved" and "good answer generated" is left to chance.</p>
+      <div class="bad-box">
+        <span class="callout-title">Failure mode</span>
+        <p>Retrieval can be <strong>perfect</strong> yet generation still fails. Relevant context buried in the <strong>middle</strong> of a long prompt gets ignored — the model literally reads past it ("lost in the middle"). The answer <strong>can't be traced to a source</strong>, because nothing came back but a text fragment, so the user can't tell if it's grounded or hallucinated. And for a <strong>small corpus</strong> you pay the full cost and complexity of a retrieval pipeline you never needed — the whole knowledge base would have fit in the prompt.</p>
+      </div>
+    </section>
+
+    <!-- (c) HOW IT WORKS -->
+    <section class="block">
+      <h2><span class="num">02</span> How it works</h2>
+      <p>The generation surface is the thin layer that shapes retrieved results before they reach the model and the user. Four ideas do the work.</p>
+
+      <h3>1 · Lost in the middle — order chunks to the edges</h3>
+      <p>Large language models do <strong>not</strong> attend evenly across a long context. They attend most to what sits at the <strong>start</strong> and the <strong>end</strong>, and recall <em>sags in the middle</em> — plot accuracy against the position of a key fact and you get a <strong>U-shaped curve</strong>: high at both ends, lowest in the centre. A fact placed at position 6 of 11 can be quietly ignored even though it's right there in the prompt.</p>
+      <p>The mitigation is free: <strong>reorder retrieved chunks so the most relevant sit at the edges</strong>. Put the best chunk <strong>first</strong>, the second-best <strong>last</strong>, and let the weaker ones fill the soft middle. Same chunks, same tokens — better recall, just by arrangement.</p>
+
+      <h3>2 · Citations / attribution — make answers traceable</h3>
+      <p>Return each result's <strong>source URL</strong> and <strong>chunk id</strong> alongside its text. Now every claim in the generated answer can be traced back to a specific document and span. Attribution turns an ungrounded blob into something a reader can <strong>verify and trust</strong> — and lets an agent surface "according to <em>this page</em>" instead of an anonymous fragment.</p>
+
+      <h3>3 · Structured outputs — typed results, not prose</h3>
+      <p>Return <strong>typed result objects</strong> — fields like <code>title</code>, <code>url</code>, <code>chunk_id</code>, <code>score</code>, <code>text</code> — not a single prose blob. An agent consuming the tool can then read each field <strong>reliably</strong>: sort by score, deduplicate by url, render a citation, decide what to keep. Structure is what makes results <em>machine-consumable</em> rather than something the model has to re-parse out of free text.</p>
+
+      <h3>4 · Small-corpus short-circuit — sometimes skip retrieval entirely</h3>
+      <p>Per Anthropic's guidance: if your <strong>entire knowledge base is under ~200,000 tokens</strong> (roughly 500 pages), you can <strong>skip retrieval altogether</strong> and put the <em>whole corpus</em> directly in the prompt. No index, no embeddings, no ranking — the model sees everything, so there is nothing to miss. It's simpler and often <strong>better</strong>. The threshold isn't arbitrary: it tracks the model's <strong>context-window size</strong>, so as context windows grow, more corpora cross over into "just stuff it all in."</p>
+
+      <div class="diagram">  MCP result — bare preview (before)         MCP result — structured + cited (after)
+  ────────────────────────────────          ─────────────────────────────────────
+  "…the embedding pipeline runs in          {
+   two passes over each document,             "title":    "Embedding pipeline overview",
+   first chunking then…"                       "url":      "https://docs/ingest/embeddings#passes",
+                                               "chunk_id": "doc_4127:c08",
+   (no source · no id · no order)              "score":    0.91,
+                                               "text":     "The embedding pipeline runs in two…"
+                                             }</div>
+
+      <div class="note">
+        <span class="callout-title">The throughline</span>
+        <p>The first three ideas are cheap, high-trust <em>polish</em> on a retrieval pipeline: order the chunks, attach provenance, type the output. The fourth is a genuine <strong>architecture fork</strong> — below the threshold the right move is to <em>not build a RAG pipeline at all</em>.</p>
+      </div>
+    </section>
+
+    <!-- (d) TRY IT -->
+    <section class="block">
+      <h2><span class="num">03</span> Try it</h2>
+
+      <div class="demo">
+        <div class="demo-head">
+          <span class="spark"></span>
+          <span class="demo-title"><b>Lost in the middle</b> — move the key fact and watch model recall</span>
+        </div>
+        <div class="demo-body">
+          <div class="controls">
+            <div class="control">
+              <label for="pos">Position of the key fact: <span id="pos-val" class="mono">1</span> / 11</label>
+              <input type="range" id="pos" min="1" max="11" value="1">
+            </div>
+            <button class="btn primary" id="reorder-btn">Reorder: most-relevant to the edges</button>
+          </div>
+
+          <div class="slots" id="slots"></div>
+          <div class="slots-caps"><span>← prompt START (high attention)</span><span>prompt END (high attention) →</span></div>
+
+          <div class="recall-row">
+            <div class="metric">
+              <div class="m-val" id="recall-val">95%</div>
+              <div class="m-lab">model recall</div>
+            </div>
+            <div class="recall-bar-track"><div class="recall-bar-fill" id="recall-bar" style="width:95%"></div></div>
+          </div>
+
+          <p class="demo-hint">Drag the key fact into the middle and watch recall sag along the U-curve; then hit reorder to snap it to position 1.</p>
+        </div>
+      </div>
+
+      <div class="demo">
+        <div class="demo-head">
+          <span class="spark"></span>
+          <span class="demo-title"><b>Retrieve or stuff the whole corpus?</b> — let the size decide</span>
+        </div>
+        <div class="demo-body">
+          <div class="controls">
+            <div class="control">
+              <label for="kbsize">Knowledge-base size: <span id="kbsize-val" class="mono">10k tokens</span></label>
+              <input type="range" id="kbsize" min="0" max="100" value="10">
+            </div>
+          </div>
+
+          <div class="readout">
+            <span class="size-val" id="size-readout">10,000 tokens</span>
+            <span id="advice-chip" class="chip">Skip RAG — put the whole corpus in the prompt</span>
+          </div>
+          <p class="corpus-note">Anthropic's guidance: under <strong>~200,000 tokens</strong> (~500 pages) you can drop the whole corpus into the prompt and skip retrieval. The threshold tracks the model's <strong>context-window size</strong> — bigger windows push it higher.</p>
+
+          <div class="cite-head" style="margin-top:18px;">
+            <label class="switch">
+              <input type="checkbox" id="cite-toggle">
+              <span class="track"></span>
+              <span>Show citations</span>
+            </label>
+            <span class="mono" style="font-size:11px;color:var(--faint);">toggle a bare preview blob vs. a structured, cited result</span>
+          </div>
+          <pre class="result" id="result-pre"></pre>
+
+          <p class="demo-hint">Shrink the corpus under 200K and watch the advice flip to "don't bother retrieving." Flip the citation switch to see attribution appear.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- (e) DECISION LENS -->
+    <section class="block">
+      <h2><span class="num">04</span> Decision lens</h2>
+      <div class="decision">
+        <span class="callout-title">When to invest in the generation surface — and when it's moot</span>
+        <div class="decision-grid">
+          <div class="cell use">
+            <h4>✓ Reach for it when</h4>
+            <ul>
+              <li>You return <strong>multiple chunks</strong> into a long prompt — <strong>order them</strong> so the best sit at the edges.</li>
+              <li>Answers need to be <strong>trusted and traceable</strong> — attach <strong>citations</strong> (source URL + chunk id).</li>
+              <li><strong>Agents consume your results</strong> — return <strong>structured outputs</strong> they can read field by field.</li>
+              <li>Corpora <strong>vary in size</strong> — <strong>short-circuit</strong> the small ones straight into the prompt.</li>
+            </ul>
+          </div>
+          <div class="cell skip">
+            <h4>✕ Skip / overkill when</h4>
+            <ul>
+              <li>You only ever return <strong>1–2 chunks</strong> — there's nothing to order, so the U-curve fix is moot.</li>
+              <li>It's a <strong>private throwaway tool</strong> where provenance doesn't matter — citations buy you nothing.</li>
+            </ul>
+          </div>
+        </div>
+        <p style="margin-top:14px; font-size:14px; color:var(--muted);"><strong>Tradeoff:</strong> ordering, citations, and structured outputs are <strong>cheap, high-trust polish</strong> — mostly formatting plus a size check, with little runtime cost. But the <strong>small-corpus short-circuit is a genuine architecture fork</strong>: below the threshold, the simplest "stuff it all in" design beats a full RAG pipeline. Don't over-engineer a retrieval stack for a corpus that fits in the window.</p>
+      </div>
+    </section>
+
+    <!-- (f) IN BERGAMOT -->
+    <section class="block">
+      <h2><span class="num">05</span> In Bergamot</h2>
+      <p><strong>task-31.8</strong> ships the generation surface on top of the retrieval pipeline:</p>
+      <ul>
+        <li>MCP results include <strong>citations / attribution</strong> — each hit carries its <strong>source URL and chunk id</strong>, so answers are traceable.</li>
+        <li>Retrieved context is <strong>ordered to mitigate lost-in-the-middle</strong> — the most relevant chunks are placed at the <strong>edges</strong> of the prompt.</li>
+        <li>Retrieval config — <strong>weights, rerank, top-N</strong> — is <strong>exposed through the MCP layer</strong>, so consumers can tune the tradeoff.</li>
+        <li>A <strong>small-corpus path</strong> (under ~200K tokens) drops the <strong>whole corpus into the prompt</strong> automatically when applicable, skipping retrieval.</li>
+      </ul>
+    </section>
+
+    <!-- (g) FOOTER -->
+    <footer class="foot">
+      <div class="sources">
+        <h3>Sources</h3>
+        <ul>
+          <li><a href="https://www.getmaxim.ai/articles/solving-the-lost-in-the-middle-problem-advanced-rag-techniques-for-long-context-llms/">Maxim AI — Solving the "Lost in the Middle" Problem: Advanced RAG Techniques for Long-Context LLMs</a></li>
+          <li><a href="https://www.anthropic.com/news/contextual-retrieval">Anthropic — Introducing Contextual Retrieval</a></li>
+        </ul>
+      </div>
+      <div class="prevnext" data-prevnext></div>
+    </footer>
+
+  </main>
+
+  <script src="shared.js"></script>
+  <script>
+    (function () {
+      // ---------- WIDGET 1: lost in the middle ----------
+      var N = 11;
+      var posEl = $("#pos");
+      var posValEl = $("#pos-val");
+      var slotsEl = $("#slots");
+      var recallValEl = $("#recall-val");
+      var recallBarEl = $("#recall-bar");
+      var reorderBtn = $("#reorder-btn");
+
+      // U-shaped recall: high at the two ends, lowest in the centre.
+      // pos is 1..N. Normalise distance-from-nearest-edge to [0,1] at the centre.
+      function recallFor(pos) {
+        var edgeDist = Math.min(pos - 1, N - pos);   // 0 at an edge, 5 at centre (N=11)
+        var maxDist = (N - 1) / 2;                   // 5
+        var t = edgeDist / maxDist;                  // 0 at edge → 1 at centre
+        // smooth U: 95% at edges down to ~38% at the dead centre
+        var hi = 95, lo = 38;
+        var sag = Math.pow(t, 0.85);                 // gentle near edges, deeper toward middle
+        return Math.round(hi - (hi - lo) * sag);
+      }
+
+      function colorFor(r) {
+        if (r >= 75) return "var(--good)";
+        if (r >= 55) return "var(--accent-2)";
+        return "var(--bad)";
+      }
+      function valClass(r) {
+        if (r >= 75) return "";
+        if (r >= 55) return "warnval";
+        return "badval";
+      }
+
+      function renderSlots(keyPos) {
+        slotsEl.innerHTML = "";
+        for (var i = 1; i <= N; i++) {
+          var cell = document.createElement("div");
+          cell.className = "slot";
+          if (i === 1 || i === N) cell.classList.add("edge");
+          if (i === keyPos) cell.classList.add("key");
+          cell.innerHTML = '<span class="slot-n">' + i + '</span>' +
+            (i === keyPos ? '★ key fact' : '·');
+          slotsEl.appendChild(cell);
+        }
+      }
+
+      function update(keyPos) {
+        keyPos = clamp(keyPos, 1, N);
+        posValEl.textContent = keyPos;
+        renderSlots(keyPos);
+        var r = recallFor(keyPos);
+        recallValEl.textContent = r + "%";
+        recallValEl.className = "m-val " + valClass(r);
+        recallBarEl.style.width = r + "%";
+        recallBarEl.style.background = colorFor(r);
+      }
+
+      posEl.addEventListener("input", function () {
+        update(parseInt(posEl.value, 10));
+      });
+      reorderBtn.addEventListener("click", function () {
+        posEl.value = 1;            // best chunk → position 1 (an edge)
+        update(1);
+      });
+
+      update(1);
+
+      // ---------- WIDGET 2: retrieve or stuff the whole corpus? ----------
+      var kbEl = $("#kbsize");
+      var kbValEl = $("#kbsize-val");
+      var sizeReadoutEl = $("#size-readout");
+      var adviceChipEl = $("#advice-chip");
+      var citeToggle = $("#cite-toggle");
+      var resultPre = $("#result-pre");
+
+      var THRESHOLD = 200000; // ~200K tokens, Anthropic's guidance
+
+      // Map slider 0..100 to ~10k..2,000k tokens on a log-ish scale.
+      function tokensFor(slider) {
+        var minT = 10000, maxT = 2000000;
+        var f = slider / 100;
+        var val = minT * Math.pow(maxT / minT, f);
+        // round to a tidy figure
+        var step = val < 100000 ? 1000 : 50000;
+        return Math.round(val / step) * step;
+      }
+
+      function fmt(n) { return n.toLocaleString("en-US"); }
+      function fmtShort(n) {
+        if (n >= 1000000) return (n / 1000000).toFixed(n % 1000000 === 0 ? 0 : 1) + "m";
+        if (n >= 1000) return Math.round(n / 1000) + "k";
+        return "" + n;
+      }
+
+      function updateCorpus() {
+        var tokens = tokensFor(parseInt(kbEl.value, 10));
+        kbValEl.textContent = fmtShort(tokens) + " tokens";
+        sizeReadoutEl.textContent = fmt(tokens) + " tokens";
+        if (tokens < THRESHOLD) {
+          adviceChipEl.className = "chip";
+          adviceChipEl.textContent = "Skip RAG — put the whole corpus in the prompt";
+        } else {
+          adviceChipEl.className = "chip amber";
+          adviceChipEl.textContent = "Use retrieval — corpus exceeds the context window";
+        }
+      }
+
+      var BARE =
+        '"…the embedding pipeline runs in two passes over each\n' +
+        ' document, first chunking the text then computing a\n' +
+        ' vector for every chunk and writing it to the index…"\n\n' +
+        '(preview blob · no source · no chunk id · no score)';
+
+      function structuredHtml() {
+        return '{\n' +
+          '  <span class="k">"title"</span>:    "Embedding pipeline overview",\n' +
+          '  <span class="k">"url"</span>:      <span class="u">"https://docs/ingest/embeddings#passes"</span>,\n' +
+          '  <span class="k">"chunk_id"</span>: <span class="u">"doc_4127:c08"</span>,\n' +
+          '  <span class="k">"score"</span>:    <span class="s">0.91</span>,\n' +
+          '  <span class="k">"text"</span>:     "The embedding pipeline runs in two passes\n' +
+          '                over each document, first chunking the text…"\n' +
+          '}';
+      }
+
+      function updateResult() {
+        if (citeToggle.checked) {
+          resultPre.innerHTML = structuredHtml();
+        } else {
+          resultPre.textContent = BARE;
+        }
+      }
+
+      kbEl.addEventListener("input", updateCorpus);
+      citeToggle.addEventListener("change", updateResult);
+
+      updateCorpus();
+      updateResult();
+    })();
+  </script>
+</body>
+</html>

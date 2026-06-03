@@ -16,6 +16,8 @@ parent_task_id: TASK-31
 
 Capture the deliberate deferral (YAGNI) of advanced architectures so they are recorded, not forgotten. Write a decision record under backlog/decisions/ covering GraphRAG (global corpus-wide sensemaking via entity-graph + community-summary map-reduce), Agentic RAG (multi-step reasoning agents), Self-RAG (reflection-token adaptive retrieval, needs custom training), and CRAG (confidence-scored corrective retrieval with web-search fallback). For each: what problem it solves, why it is overkill for a baseline PKM now, and the concrete trigger that should make us revisit it. See backlog/docs/rag-pipeline-upgrade-plan.md (Deferred section).
 
+
+**Learning companion:** [backlog/docs/rag-explainers/09-deferred-architectures.html](09-deferred-architectures.html) — interactive explainer of the concepts and the decision logic for this phase.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

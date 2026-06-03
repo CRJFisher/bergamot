@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hybrid search (dense + BM25 + RRF) · RAG Explainers</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    /* demo-specific layout only */
+    .fuse-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    .fuse-col h4 {
+      margin: 0 0 9px; font-family: var(--mono); font-size: 11.5px;
+      text-transform: uppercase; letter-spacing: .6px; color: var(--muted);
+    }
+    .fuse-col.fused h4 { color: var(--accent); }
+    .fuse-col .row { font-size: 12.5px; padding: 8px 10px; }
+    .fuse-col .row .body { font-size: 12.5px; }
+    .annot {
+      margin-top: 10px; font-size: 12.5px; color: var(--muted);
+      background: var(--bg); border: 1px solid var(--border-soft);
+      border-left: 3px solid var(--good); border-radius: 8px; padding: 10px 12px;
+    }
+    .annot b { color: var(--good); }
+    @media (max-width: 680px) { .fuse-cols { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+
+    <header class="page-head">
+      <span class="tag">Phase D · task-31.2 · Hybrid</span>
+      <h1>Hybrid search: dense meaning + BM25 keywords, fused with RRF</h1>
+      <p class="lede">
+        Dense retrieval understands what you <em>mean</em>; keyword retrieval finds the exact tokens
+        you <em>typed</em>. Each is blind where the other sees. Hybrid search runs both lanes and fuses
+        their rankings so a single query is rescued by whichever modality has the answer.
+      </p>
+    </header>
+
+    <!-- (b) THE PROBLEM -->
+    <section class="block">
+      <h2><span class="num">01</span> The problem</h2>
+      <p>
+        Today, Bergamot's baseline retriever embeds each captured page as a <strong>single dense
+        vector</strong> — one embedding for the whole page — and stores it in <strong>LanceDB</strong>.
+        At query time it embeds the query and ranks pages by <strong>cosine similarity</strong> against
+        those vectors. That is the entire retrieval path: <strong>pure dense, no keyword search</strong>.
+      </p>
+      <p>
+        Dense vectors are wonderful at meaning. They are weak at <em>surface form</em>. An embedding
+        compresses a passage into a few hundred dimensions of "aboutness," and in doing so it blurs the
+        exact tokens — the precise spelling of a rare API name, an error code, a product ID, an acronym.
+        Two strings that look almost identical to a human can land far apart in embedding space, and a
+        query for one literal token may retrieve "semantically nearby" pages that never contain it.
+      </p>
+      <div class="bad-box">
+        <span class="callout-title">Failure mode</span>
+        <p>
+          <strong>Pure dense retrieval misses exact-term queries.</strong> Search for
+          <code>ECONNREFUSED</code>, a function name like <code>useDeferredValue</code>, an order ID, or
+          an acronym, and dense retrieval often floats up topically-related pages while the one page that
+          literally contains the token sinks — because embeddings smear those rare surface tokens away.
+        </p>
+        <p>
+          <strong>Pure keyword retrieval misses paraphrases.</strong> A lexical engine matching
+          <em>why does my server connection keep dropping</em> finds nothing if the right page says
+          "the socket is reset by the upstream host" — no shared words, even though it is the answer.
+        </p>
+        <p>
+          Each modality alone has a blind spot. The fix is not to pick one; it is to run both and
+          combine their results.
+        </p>
+      </div>
+    </section>
+
+    <!-- (c) HOW IT WORKS -->
+    <section class="block">
+      <h2><span class="num">02</span> How it works</h2>
+
+      <h3>Two kinds of retrieval</h3>
+      <p>
+        <strong>Dense retrieval.</strong> An embedding model maps text to a vector. The query is
+        embedded the same way, and documents are ranked by <strong>cosine similarity</strong> between
+        vectors. Because the vectors encode <em>meaning</em>, dense retrieval captures paraphrase and
+        synonymy: "connection dropping" can match "socket reset" even with zero shared words.
+      </p>
+      <p>
+        <strong>Sparse / BM25 retrieval.</strong> A keyword index scores documents by <strong>term
+        frequency</strong> — how often the query's words appear in a document, damped by how common each
+        word is across the corpus and by document length. This is lexical, exact-token matching: it
+        nails rare names, codes, and acronyms that appear verbatim, but it cannot bridge a paraphrase
+        because it only knows the words it was given. <code>BM25</code> ("Best Matching 25") is the
+        standard scoring function for this lane.
+      </p>
+
+      <h3>Fusing two ranked lists: Reciprocal Rank Fusion</h3>
+      <p>
+        The two lanes produce two ranked lists with <em>incomparable</em> scores — a cosine similarity
+        and a BM25 score live on different scales, so you cannot just add them. <strong>Reciprocal Rank
+        Fusion (RRF)</strong> sidesteps this by ignoring the raw scores entirely and combining
+        <em>ranks</em>. Each document earns, from each list, a contribution of <code>1 / (k + rank)</code>,
+        and its fused score is the sum across lists:
+      </p>
+      <pre><span class="c"># Reciprocal Rank Fusion — rank-based, no score calibration needed</span>
+score(d) = <span class="hl">&Sigma;</span><sub>lists</sub>  1 / (<span class="k">k</span> + rank<sub>list</sub>(d))
+
+<span class="c"># rank starts at 1 for the top hit in each list</span>
+<span class="c"># k is a smoothing constant; default k &asymp; 60</span>
+<span class="c"># a doc ranked #1 in a list contributes 1/(60+1) = 0.0164</span>
+<span class="c"># a doc ranked #5 contributes               1/(60+5) = 0.0154</span></pre>
+      <p>
+        Because RRF only reads each document's <em>position</em>, it needs <strong>no score
+        calibration</strong> between the lanes — a cosine of 0.83 and a BM25 of 14.2 never have to be
+        reconciled. The constant <code>k</code> (default <strong>&approx;60</strong>) softens the gap
+        between top ranks: a larger <code>k</code> flattens the curve so deeper-ranked documents
+        contribute almost as much as top ones; a smaller <code>k</code> sharpens the reward for being #1.
+      </p>
+      <p>
+        <strong>LanceDB supports hybrid search natively</strong> in its embedded TypeScript SDK. It runs
+        a dense vector query alongside a <strong>full-text / BM25 index built on Tantivy</strong>, then
+        merges the two result sets. Its <strong>default fusion is <code>RRFReranker()</code></strong> —
+        exactly the formula above. Anthropic, in its contextual retrieval work, reports starting from a
+        weighting around <strong>0.8 semantic / 0.2 BM25</strong> when blending the lanes, which is a
+        sensible default to tune from.
+      </p>
+
+      <div class="diagram">        query: "why does my server connection keep dropping"
+                         |
+            +------------+------------+
+            |                         |
+      [ DENSE lane ]            [ BM25 / FTS lane ]
+   embed + cosine in            Tantivy term-freq
+   LanceDB vector index         full-text index
+            |                         |
+   ranked list A             ranked list B
+   1. socket-reset doc       1. (no good lexical match)
+   2. ...                    2. ...
+            |                         |
+            +-----------+-------------+
+                        |
+              [ RRF fusion ]   score(d) = &Sigma; 1/(k + rank)
+                        |
+                fused ranked list  -->  top-k results
+      </div>
+    </section>
+
+    <!-- (d) TRY IT -->
+    <section class="block">
+      <h2><span class="num">03</span> Try it</h2>
+      <p>
+        A fixed corpus of six page titles. Pick a query, then watch the three columns: how each
+        document ranks under <strong>dense</strong> alone, under <strong>BM25</strong> alone, and after
+        <strong>RRF fusion</strong>. Drag <code>k</code> and the semantic weight to see the fused order
+        recompute live.
+      </p>
+
+      <div class="demo" id="fuse-demo">
+        <div class="demo-head">
+          <span class="spark"></span>
+          <span class="demo-title"><b>Fuse two rankings</b> · dense + BM25 &rarr; RRF</span>
+        </div>
+        <div class="demo-body">
+          <div class="controls">
+            <div class="control">
+              <label for="fz-query">Query</label>
+              <select id="fz-query">
+                <option value="exact">"ECONNREFUSED retry" (exact-term)</option>
+                <option value="para">"why does my server connection keep dropping" (paraphrase)</option>
+              </select>
+            </div>
+            <div class="control">
+              <label for="fz-k">RRF k = <span id="fz-k-val">60</span></label>
+              <input type="range" id="fz-k" min="10" max="80" step="1" value="60">
+            </div>
+            <div class="control">
+              <label for="fz-w">Semantic weight = <span id="fz-w-val">0.80</span></label>
+              <input type="range" id="fz-w" min="0" max="1" step="0.05" value="0.8">
+            </div>
+          </div>
+
+          <div class="fuse-cols">
+            <div class="fuse-col">
+              <h4>Dense rank</h4>
+              <div class="rows" id="fz-dense"></div>
+            </div>
+            <div class="fuse-col">
+              <h4>BM25 rank</h4>
+              <div class="rows" id="fz-bm25"></div>
+            </div>
+            <div class="fuse-col fused">
+              <h4>RRF fused</h4>
+              <div class="rows" id="fz-fused"></div>
+            </div>
+          </div>
+
+          <div class="annot" id="fz-annot"></div>
+
+          <p class="demo-hint">
+            Switch between the exact-term and paraphrase queries and watch which lane "rescues" the
+            right doc — fusion wins both.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- (e) DECISION LENS -->
+    <section class="block">
+      <h2><span class="num">04</span> Decision lens</h2>
+      <div class="decision">
+        <span class="callout-title">When to reach for hybrid search</span>
+        <div class="decision-grid">
+          <div class="cell use">
+            <h4>✓ Reach for it when</h4>
+            <ul>
+              <li>Your corpus is full of <strong>names, codes, jargon</strong> — web content, technical
+                docs, source code — <em>and</em> users also ask in paraphrase.</li>
+              <li>You need to retrieve exact tokens (API names, error codes, product IDs, acronyms) that
+                dense vectors blur away.</li>
+              <li>Your vector store supports it <strong>natively</strong> — LanceDB does — so the second
+                lane is nearly free to add.</li>
+            </ul>
+          </div>
+          <div class="cell skip">
+            <h4>✕ Skip / overkill when</h4>
+            <ul>
+              <li>Your content is <strong>purely conversational or semantic</strong> with no exact-match
+                needs — BM25 adds noise, not signal.</li>
+              <li>Your store has <strong>no FTS support</strong>, so you'd have to stand up and operate a
+                second search engine solely for this one lane.</li>
+            </ul>
+          </div>
+        </div>
+        <p style="margin-bottom:0; margin-top:12px; font-size:13.5px; color:var(--muted)">
+          <strong>Tradeoff:</strong> you pay a tiny indexing + fusion cost — one extra FTS index and one
+          more query lane per search. On a stack where the vector store already supports it, this is
+          <strong>essentially the highest ROI-per-effort retrieval upgrade available</strong>, which is
+          why it is sequenced right after the evaluation harness: cheap to ship, measurably better.
+        </p>
+      </div>
+    </section>
+
+    <!-- (f) IN BERGAMOT -->
+    <section class="block">
+      <h2><span class="num">05</span> In Bergamot</h2>
+      <p><strong>task-31.2</strong> ships hybrid retrieval on the existing LanceDB stack:</p>
+      <ul>
+        <li>A <strong>BM25 / full-text index</strong> is built alongside the dense vector index in the
+          same LanceDB table — no second engine.</li>
+        <li><code>semantic_search</code> issues a <strong>hybrid query</strong> — dense lane plus BM25
+          lane — fused with <strong>RRF</strong> through the LanceDB TypeScript SDK.</li>
+        <li>The <strong>semantic-vs-BM25 weighting is configurable</strong> (starting near 0.8 / 0.2, per
+          Anthropic's guidance) so it can be tuned per corpus.</li>
+        <li>On the evaluation harness from <strong>task-31.1</strong>, hybrid retrieval
+          <strong>beats the pure-dense baseline</strong> — the gain is measured, not assumed.</li>
+      </ul>
+    </section>
+
+    <footer class="foot">
+      <div class="sources">
+        <h3>Sources</h3>
+        <ul>
+          <li><a href="https://docs.lancedb.com/search/hybrid-search">LanceDB — Hybrid search (docs.lancedb.com/search/hybrid-search)</a></li>
+          <li><a href="https://lancedb.com/documentation/reranking/rrf/">LanceDB — Reciprocal Rank Fusion reranker (lancedb.com/documentation/reranking/rrf)</a></li>
+          <li><a href="https://www.anthropic.com/news/contextual-retrieval">Anthropic — Introducing Contextual Retrieval (anthropic.com/news/contextual-retrieval)</a></li>
+        </ul>
+      </div>
+      <div class="prevnext" data-prevnext></div>
+    </footer>
+
+  </main>
+
+  <script src="shared.js"></script>
+  <script>
+    (function () {
+      // Fixed corpus of 6 short web/programming doc titles.
+      var DOCS = [
+        { id: "d1", title: "Handling ECONNREFUSED: retry logic for flaky Node sockets" },
+        { id: "d2", title: "Why TCP connections reset and how to keep them alive" },
+        { id: "d3", title: "A beginner's guide to REST API status codes" },
+        { id: "d4", title: "Debugging dropped upstream requests behind a load balancer" },
+        { id: "d5", title: "CSS grid layout: a practical cheat sheet" },
+        { id: "d6", title: "Configuring exponential backoff and timeouts in fetch()" }
+      ];
+
+      // Hardcoded per-query dense + bm25 scores, chosen to make the teaching point.
+      // In each query, one doc is mediocre in BOTH lanes yet fusion lifts it to #1.
+      var QUERIES = {
+        // EXACT-TERM "ECONNREFUSED retry":
+        //   d2 wins the dense lane (topically nearest) but is dead-last on BM25 — it
+        //   never contains the literal token, so its fused score collapses.
+        //   d1 owns BM25 via the exact token but is buried on dense.
+        //   d6 is the rescue: #2 dense AND #1 BM25 — leader of neither lane, yet the
+        //   only doc strong in BOTH, so RRF lifts it to the top.
+        exact: {
+          label: '"ECONNREFUSED retry"',
+          rescue: "d6",
+          dense: { d2: 0.74, d6: 0.70, d4: 0.55, d1: 0.38, d3: 0.30, d5: 0.07 },
+          bm25:  { d6: 9.5, d1: 8.0, d4: 3.0, d3: 1.2, d5: 0.4, d2: 0.0 }
+        },
+        // PARAPHRASE "why does my server connection keep dropping":
+        //   d1 wins the dense lane (a near-duplicate distractor) but shares no literal
+        //   tokens, so it is dead-last on BM25 and sinks after fusion.
+        //   d4 is the rescue: #2 dense AND #1 BM25 — strong in both lanes at once, so
+        //   RRF surfaces it over the doc that led either lane alone.
+        para: {
+          label: '"why does my server connection keep dropping"',
+          rescue: "d4",
+          dense: { d1: 0.78, d4: 0.72, d2: 0.60, d6: 0.40, d3: 0.21, d5: 0.05 },
+          bm25:  { d4: 5.2, d2: 3.4, d3: 1.6, d6: 1.0, d5: 0.3, d1: 0.0 }
+        }
+      };
+
+      var $q = document.getElementById("fz-query");
+      var $k = document.getElementById("fz-k");
+      var $w = document.getElementById("fz-w");
+      var $kVal = document.getElementById("fz-k-val");
+      var $wVal = document.getElementById("fz-w-val");
+      var $dense = document.getElementById("fz-dense");
+      var $bm25 = document.getElementById("fz-bm25");
+      var $fused = document.getElementById("fz-fused");
+      var $annot = document.getElementById("fz-annot");
+
+      // rank a {id: score} map -> [{id, score, rank}] sorted desc, rank from 1
+      function rankList(scores) {
+        var arr = Object.keys(scores).map(function (id) {
+          return { id: id, score: scores[id] };
+        });
+        arr.sort(function (a, b) { return b.score - a.score; });
+        arr.forEach(function (r, i) { r.rank = i + 1; });
+        return arr;
+      }
+
+      function rankMapFrom(list) {
+        var m = {};
+        list.forEach(function (r) { m[r.id] = r.rank; });
+        return m;
+      }
+
+      function titleOf(id) {
+        for (var i = 0; i < DOCS.length; i++) { if (DOCS[i].id === id) return DOCS[i].title; }
+        return id;
+      }
+
+      function renderList(host, list, rescueId, scoreFmt) {
+        host.innerHTML = "";
+        list.forEach(function (r) {
+          var div = document.createElement("div");
+          div.className = "row" + (r.id === rescueId ? " hit" : "");
+          div.innerHTML =
+            '<span class="rank">' + r.rank + '</span>' +
+            '<span class="body">' + titleOf(r.id) + '</span>' +
+            '<span class="score">' + scoreFmt(r) + '</span>';
+          host.appendChild(div);
+        });
+      }
+
+      function render() {
+        var q = QUERIES[$q.value];
+        var k = parseInt($k.value, 10);
+        var w = parseFloat($w.value); // semantic (dense) weight; bm25 weight = 1 - w
+        $kVal.textContent = k;
+        $wVal.textContent = w.toFixed(2);
+
+        var denseList = rankList(q.dense);
+        var bm25List = rankList(q.bm25);
+        var denseRank = rankMapFrom(denseList);
+        var bm25Rank = rankMapFrom(bm25List);
+
+        // Weighted RRF: each lane contributes w_lane * 1/(k + rank)
+        var fused = DOCS.map(function (doc) {
+          var dr = denseRank[doc.id];
+          var br = bm25Rank[doc.id];
+          var contribDense = w * (1 / (k + dr));
+          var contribBm25 = (1 - w) * (1 / (k + br));
+          return { id: doc.id, score: contribDense + contribBm25 };
+        });
+        fused.sort(function (a, b) { return b.score - a.score; });
+        fused.forEach(function (r, i) { r.rank = i + 1; });
+
+        renderList($dense, denseList, q.rescue, function (r) { return r.score.toFixed(2); });
+        renderList($bm25, bm25List, q.rescue, function (r) { return r.score.toFixed(1); });
+        renderList($fused, fused, q.rescue, function (r) { return r.score.toFixed(4); });
+
+        // Annotate the rescued doc: leader of neither lane, strong in both, top after fusion.
+        var dr = denseRank[q.rescue];
+        var br = bm25Rank[q.rescue];
+        var fr = 0, fusedTop = fused[0].id;
+        for (var i = 0; i < fused.length; i++) { if (fused[i].id === q.rescue) { fr = fused[i].rank; break; } }
+        var lifted = (fr === 1 && fusedTop === q.rescue);
+        $annot.innerHTML =
+          '<b>Watch &ldquo;' + titleOf(q.rescue) + '&rdquo;.</b> ' +
+          'It leads <em>neither</em> lane — only <b>#' + dr + '</b> on dense and <b>#' + br + '</b> on BM25. ' +
+          'Each lane is topped by a doc that is weak in the <em>other</em> lane, so those leaders sink. ' +
+          'Because this doc ranks well in <em>both at once</em>, RRF sums two reciprocal-rank contributions and ' +
+          (lifted
+            ? 'lifts it to <b>#' + fr + '</b> fused. No single lane surfaces it; fusion does.'
+            : 'rates it <b>#' + fr + '</b> fused. (Push <code>k</code> very low or the semantic weight to an extreme and one lane dominates again — fusion collapses back to a single ranking.)');
+      }
+
+      $q.addEventListener("change", render);
+      $k.addEventListener("input", render);
+      $w.addEventListener("input", render);
+      render();
+    })();
+  </script>
+</body>
+</html>

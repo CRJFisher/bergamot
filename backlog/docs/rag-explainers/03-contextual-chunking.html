@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chunking + Contextual Retrieval · RAG Explainers</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    /* demo-only layout helpers (theme lives in shared.css) */
+    .src-page { background: var(--bg); border: 1px solid var(--border-soft); border-radius: 9px; padding: 12px 14px; font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+    .src-page h5 { margin: 0 0 8px; font-family: var(--mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: .6px; color: var(--faint); }
+    .src-page p { margin: 0 0 8px; }
+    .src-page p:last-child { margin: 0; }
+    .prefix-frag { color: var(--accent-2); }
+    .demo-controls { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin: 4px 0 14px; }
+    .chunk-text { display: block; }
+    .chunk-meta { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 4px; }
+    .parent-wrap { margin-top: 8px; margin-left: 34px; }
+    .arrow { color: var(--faint); }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+
+    <header class="page-head">
+      <span class="tag">Phase C · task-31.3 · Chunking</span>
+      <h1>Chunking &amp; Contextual Retrieval</h1>
+      <p class="lede">How to split a page so each piece is independently findable — and how to give every piece enough context to be understood on its own.</p>
+    </header>
+
+    <!-- (b) THE PROBLEM -->
+    <section class="block">
+      <h2><span class="num">01</span> The problem</h2>
+      <p>Bergamot's baseline retrieval embeds each captured web page as <strong>one vector</strong>. A whole page — sometimes thousands of words — is compressed into a single point in embedding space. <em>Embedding</em> means turning text into a fixed-length list of numbers (a vector) whose direction encodes meaning, so that similar texts land near each other. <em>Retrieval</em> is the step that, given a query vector, returns the stored vectors closest to it.</p>
+
+      <div class="bad-box">
+        <span class="callout-title">Failure mode</span>
+        <p>A whole-page vector is an <strong>averaged blur</strong>. The page covers ten topics, so its single vector sits in the bland middle of all of them. A query about one specific paragraph has to compete with the whole noisy page, and the signal it wants is diluted by everything else on the page. Long pages also exceed the granularity an embedding model can represent well — past a certain length the vector simply stops being faithful to any one passage.</p>
+        <p>The obvious fix is to cut the page into smaller pieces. But <strong>naive fixed-size chunking creates the opposite problem.</strong> Slice every 500 characters and you get a chunk like <code>"It rose 3% over the prior quarter."</code> — which has lost what <em>"it"</em> refers to and <em>which</em> quarter is meant. The chunk is now precise but <strong>contextless</strong>, so a relevant query can no longer match it.</p>
+      </div>
+
+      <p>So we are squeezed between two failures: chunks too big to be precise, or chunks too small to be self-explanatory. The techniques below resolve both.</p>
+    </section>
+
+    <!-- (c) HOW IT WORKS -->
+    <section class="block">
+      <h2><span class="num">02</span> How it works</h2>
+      <p>Three ideas stack together. The first decides <em>where</em> to cut, the second restores lost <em>context</em>, and the third reunites a matched chunk with its full <em>source</em>.</p>
+
+      <h3>1 · Structure-aware chunking</h3>
+      <p>Instead of cutting at a blind, fixed character count, split along the document's own structure. Break on Markdown headers (<code>#</code>, <code>##</code>), and within a section split recursively on paragraph and sentence boundaries until each piece is under a target size. <em>Recursive</em> here means: try the biggest natural boundary first (sections), and only fall back to smaller boundaries (paragraphs, then sentences) when a piece is still too large. The result is chunks that begin and end at meaningful seams — a heading and the prose under it travel together — rather than mid-sentence.</p>
+
+      <h3>2 · Anthropic Contextual Retrieval</h3>
+      <p>Structure-aware cuts still leave chunks that lean on the surrounding page for meaning. <strong>Contextual Retrieval</strong> fixes this directly. For each chunk, you send an LLM two things: the chunk <em>and</em> its full source document. The LLM writes a short <strong>situating context</strong> — 50–100 tokens describing what this specific chunk is about and where it sits in the document. That generated context is <strong>prepended to the chunk</strong> before the chunk is embedded, <em>and</em> before it goes into the BM25 keyword index. (<em>BM25</em> is a classic lexical scoring function that ranks by exact term overlap — it is the keyword half of hybrid search.) The chunk now carries its own context into both the dense vector and the keyword index.</p>
+      <p>The payoff is measured. In Anthropic's benchmark, contextual embeddings alone cut top-20 retrieval failures by <strong>35%</strong>; adding contextual BM25 on top reached a <strong>49%</strong> reduction in Anthropic's benchmark.</p>
+
+      <div class="diagram">  chunk  ──┐
+            ├──►  LLM  ──►  "This chunk is from Acme Cloud's
+  source ──┘   (writes      Q2 2025 earnings summary…"  (50–100 tok)
+  document     context)             │
+                                    ▼
+                       ┌─────────────────────────┐
+                       │  situating context      │  ← PREPENDED
+                       │  + original chunk text   │
+                       └─────────────────────────┘
+                              │             │
+                              ▼             ▼
+                        embed (dense)   BM25 (keyword)
+                              │             │
+                              └──── hybrid index ────┘</div>
+
+      <p>Concretely, the chunk text changes like this before indexing:</p>
+      <pre><span class="c"># BEFORE — ambiguous, contextless</span>
+"Revenue increased 3% over the previous quarter,
+ beating internal targets."
+
+<span class="c"># AFTER — LLM situating context prepended</span>
+<span class="hl">"This chunk is from Acme Cloud's Q2 2025 earnings
+ summary, discussing cloud-segment revenue.</span> Revenue
+ increased 3% over the previous quarter, beating
+ internal targets."</pre>
+
+      <h3>3 · Parent-document retrieval</h3>
+      <p>Small chunks match precisely, but a small chunk is a thin thing to hand to the generating model — it may lack the surrounding detail needed to answer well. <strong>Parent-document retrieval</strong> separates the unit you <em>match on</em> from the unit you <em>return</em>: you index the small chunks for precise matching, but on a hit you return the <strong>full parent page</strong> so the model receives complete context. Bergamot stores the chunk→page link in <strong>DuckDB</strong>, so resolving a matched chunk back to its source page is a single lookup.</p>
+    </section>
+
+    <!-- (d) TRY IT -->
+    <section class="block">
+      <h2><span class="num">03</span> Try it</h2>
+      <p>Below is a sample source page split into structure-aware chunks. Chunk&nbsp;#2 is deliberately ambiguous out of context. Run the query against it, then flip the switches and watch the score move.</p>
+
+      <div class="demo">
+        <div class="demo-head">
+          <span class="spark"></span>
+          <span class="demo-title">Demo · <b>Watch context get added</b></span>
+        </div>
+        <div class="demo-body">
+
+          <div class="control" style="margin-bottom:14px;">
+            <label for="q">Query</label>
+            <input type="text" id="q" value="Acme Cloud Q2 revenue growth">
+          </div>
+
+          <div class="demo-controls">
+            <div class="control">
+              <label for="strategy">Chunking strategy</label>
+              <select id="strategy">
+                <option value="markdown">markdown-header (structure-aware)</option>
+                <option value="fixed">fixed-size (blind windows)</option>
+              </select>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="ctx">
+              <span class="track"></span>
+              <span>Add contextual prefix</span>
+            </label>
+            <label class="switch">
+              <input type="checkbox" id="parent">
+              <span class="track"></span>
+              <span>Parent-document expansion</span>
+            </label>
+          </div>
+
+          <div class="rows" id="rows"></div>
+
+          <p class="demo-hint" id="hint"></p>
+        </div>
+      </div>
+
+      <p>Toggle <strong>Add contextual prefix</strong> and watch the ambiguous chunk go from <span class="row miss" style="display:inline;border:none;background:none;padding:0;color:var(--bad);">miss</span> to <span class="row hit" style="display:inline;border:none;background:none;padding:0;color:var(--good);">hit</span> — because the embedding and BM25 index now "know" the chunk is about Acme&nbsp;Cloud&nbsp;Q2.</p>
+    </section>
+
+    <!-- (e) DECISION LENS -->
+    <section class="block">
+      <h2><span class="num">04</span> Decision lens</h2>
+      <div class="decision">
+        <span class="callout-title">When to reach for it — and when to skip</span>
+        <div class="decision-grid">
+          <div class="cell use">
+            <h4>✓ Reach for it when</h4>
+            <ul>
+              <li>Chunks are frequently <strong>ambiguous out of context</strong> — web articles, docs, anything full of pronouns and relative references ("it", "this quarter", "the above").</li>
+              <li><strong>Precision matters</strong> and you are losing answers to averaged-blur whole-page vectors.</li>
+              <li>You can afford a <strong>one-time LLM pass over the corpus at ingest</strong>.</li>
+            </ul>
+          </div>
+          <div class="cell skip">
+            <h4>✕ Skip / overkill when</h4>
+            <ul>
+              <li>Documents are already <strong>short and self-contained</strong> — tweets, product titles, single-sentence FAQ entries. There is no context to restore.</li>
+              <li>You literally <strong>cannot run an LLM at ingest time</strong> (no budget, no API access, no batch window).</li>
+            </ul>
+          </div>
+        </div>
+        <p style="margin-top:14px;margin-bottom:0;"><strong>Tradeoff.</strong> Contextual prefixing costs <strong>one LLM call per chunk at ingest</strong> — one-time, not per query — plus a re-embed of the contextualized text. Anthropic notes that <strong>prompt caching</strong> (the source document is cached and reused across all of its chunks) makes this pass cheap. Structure-aware chunking, by contrast, is nearly free. This is the single <strong>highest-ROI retrieval-quality upgrade</strong> in the plan, which is why it sits right after hybrid search.</p>
+      </div>
+    </section>
+
+    <!-- (f) IN BERGAMOT -->
+    <section class="block">
+      <h2><span class="num">05</span> In Bergamot</h2>
+      <p><strong>task-31.3</strong> ships the full stack:</p>
+      <ul>
+        <li>Pages are split into <strong>structure-aware chunks</strong> instead of being stored whole.</li>
+        <li>Each chunk is <strong>embedded and BM25-indexed</strong> with a 50–100 token LLM <strong>situating context</strong> prepended.</li>
+        <li><strong>DuckDB</strong> stores the chunk→page linkage, so a hit returns its <strong>parent page</strong> for complete context.</li>
+        <li>The corpus is <strong>re-embedded</strong>, and the retrieval-failure reduction versus the whole-page baseline is <strong>measured on the harness</strong>.</li>
+      </ul>
+      <p>The contextual-BM25 half pairs with the hybrid index from <strong>task-31.2</strong> — the situating context lands in both the dense vectors and the keyword index, so both halves of hybrid search benefit at once.</p>
+    </section>
+
+    <!-- (g) FOOTER -->
+    <footer class="foot">
+      <div class="sources">
+        <h3>Sources</h3>
+        <ul>
+          <li><a href="https://www.anthropic.com/news/contextual-retrieval">Anthropic — Introducing Contextual Retrieval</a></li>
+          <li><a href="https://platform.claude.com/cookbook/capabilities-contextual-embeddings-guide">Claude Cookbook — Contextual Embeddings guide</a></li>
+        </ul>
+      </div>
+      <div class="prevnext" data-prevnext></div>
+    </footer>
+
+  </main>
+
+  <script src="shared.js"></script>
+  <script>
+    (function () {
+      // ----- the sample source page -----
+      var PAGE_TITLE = "Acme Cloud — Q2 2025 Earnings Summary";
+      var CHUNKS = [
+        {
+          id: 0,
+          // self-contained heading + lead
+          text: "Acme Cloud reported its Q2 2025 results today, with strong demand across its cloud-segment offerings."
+        },
+        {
+          id: 1,
+          // the deliberately ambiguous chunk
+          text: "Revenue increased 3% over the previous quarter, beating internal targets.",
+          ambiguous: true
+        },
+        {
+          id: 2,
+          text: "Management reaffirmed full-year guidance and pointed to enterprise migrations as the main driver."
+        }
+      ];
+
+      var CONTEXT_PREFIX = "This chunk is from Acme Cloud's Q2 2025 earnings summary, discussing cloud-segment revenue. ";
+
+      // fixed-size strategy cuts mid-stream into 3 blind windows that break sentences
+      var FIXED_CHUNKS = [
+        { id: 0, text: "Acme Cloud reported its Q2 2025 results today, with strong demand across its cloud-segment offerings. Revenue increased 3%" },
+        { id: 1, text: "over the previous quarter, beating internal targets. Management reaffirmed full-year guidance and pointed to enterprise", ambiguous: true },
+        { id: 2, text: "migrations as the main driver." }
+      ];
+
+      var STOP = { the: 1, a: 1, an: 1, of: 1, to: 1, in: 1, on: 1, over: 1, and: 1, its: 1, it: 1, "for": 1, with: 1, by: 1 };
+
+      function terms(s) {
+        return s.toLowerCase().replace(/[^a-z0-9% ]/g, " ").split(/\s+/)
+          .filter(function (t) { return t && !STOP[t]; });
+      }
+
+      // deterministic match score: fraction of query terms present in the chunk text
+      function score(queryStr, chunkText) {
+        var q = terms(queryStr);
+        if (!q.length) return 0;
+        var have = {};
+        terms(chunkText).forEach(function (t) { have[t] = 1; });
+        var hits = 0;
+        q.forEach(function (t) { if (have[t]) hits++; });
+        return hits / q.length;
+      }
+
+      var HIT_THRESHOLD = 0.5; // >= half the query terms matched counts as a hit
+
+      var rowsEl = $("#rows");
+      var hintEl = $("#hint");
+      var qEl = $("#q");
+      var ctxEl = $("#ctx");
+      var parentEl = $("#parent");
+      var stratEl = $("#strategy");
+
+      var prevScores = {}; // id -> last score, to detect a flash-worthy bump
+
+      function activeChunks() {
+        return stratEl.value === "fixed" ? FIXED_CHUNKS : CHUNKS;
+      }
+
+      function render() {
+        var chunks = activeChunks();
+        var query = qEl.value;
+        var withCtx = ctxEl.checked;
+        var withParent = parentEl.checked;
+
+        // compute scored chunks
+        var scored = chunks.map(function (c) {
+          var indexedText = (withCtx && c.ambiguous ? CONTEXT_PREFIX : "") + c.text;
+          return {
+            id: c.id,
+            ambiguous: !!c.ambiguous,
+            displayText: c.text,
+            prefixed: withCtx && c.ambiguous,
+            sc: score(query, indexedText)
+          };
+        });
+
+        // rank by score desc, stable on original order
+        scored.sort(function (a, b) { return b.sc - a.sc || a.id - b.id; });
+        var topId = scored.length ? scored[0].id : -1;
+
+        rowsEl.innerHTML = "";
+        scored.forEach(function (c, i) {
+          var isHit = c.sc >= HIT_THRESHOLD;
+          var row = document.createElement("div");
+          row.className = "row " + (isHit ? "hit" : "miss");
+
+          // flash if this chunk's score jumped upward since last render
+          var prev = prevScores.hasOwnProperty(c.id) ? prevScores[c.id] : c.sc;
+          if (c.sc > prev) row.classList.add("flash");
+
+          var rank = document.createElement("span");
+          rank.className = "rank";
+          rank.textContent = (i + 1);
+
+          var body = document.createElement("div");
+          body.className = "body";
+
+          var txt = document.createElement("span");
+          txt.className = "chunk-text";
+          if (c.prefixed) {
+            txt.innerHTML = '<span class="prefix-frag">' + CONTEXT_PREFIX + '</span>' + escapeHtml(c.displayText);
+          } else {
+            txt.textContent = c.displayText;
+          }
+          body.appendChild(txt);
+
+          var meta = document.createElement("span");
+          meta.className = "chunk-meta";
+          meta.textContent = "chunk #" + (c.id + 1)
+            + (c.ambiguous ? " · ambiguous out of context" : "")
+            + (c.prefixed ? " · contextual prefix applied" : "");
+          body.appendChild(meta);
+
+          // parent-document expansion: when ON and this chunk is the top hit, show its full source page
+          if (withParent && c.id === topId && isHit) {
+            var pw = document.createElement("div");
+            pw.className = "parent-wrap";
+            var page = document.createElement("div");
+            page.className = "src-page";
+            var h5 = document.createElement("h5");
+            h5.textContent = "↩ parent page returned · " + PAGE_TITLE;
+            page.appendChild(h5);
+            CHUNKS.forEach(function (full) {
+              var p = document.createElement("p");
+              p.textContent = full.text;
+              page.appendChild(p);
+            });
+            pw.appendChild(page);
+            body.appendChild(pw);
+          }
+
+          var sc = document.createElement("span");
+          sc.className = "score";
+          sc.textContent = (isHit ? "HIT " : "MISS ") + c.sc.toFixed(2);
+
+          row.appendChild(rank);
+          row.appendChild(body);
+          row.appendChild(sc);
+          rowsEl.appendChild(row);
+
+          prevScores[c.id] = c.sc;
+        });
+
+        updateHint(withCtx);
+      }
+
+      function updateHint(withCtx) {
+        if (withCtx) {
+          hintEl.textContent = "Prefix ON — the ambiguous chunk now carries \"Acme Cloud Q2\" into the index, so it matches the query and flips to a HIT.";
+        } else {
+          hintEl.textContent = "Prefix OFF — the ambiguous chunk has no \"Acme Cloud\" or \"Q2\" in its own text, so the query misses it.";
+        }
+      }
+
+      function escapeHtml(s) {
+        return s.replace(/[&<>"']/g, function (ch) {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+        });
+      }
+
+      qEl.addEventListener("input", render);
+      ctxEl.addEventListener("change", render);
+      parentEl.addEventListener("change", render);
+      stratEl.addEventListener("change", function () { prevScores = {}; render(); });
+
+      render();
+    })();
+  </script>
+</body>
+</html>

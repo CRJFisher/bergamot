@@ -17,6 +17,8 @@ parent_task_id: TASK-31
 
 Polish the generation-time / MCP surface. (1) Return citations/attribution (source URL + chunk) in MCP tool results. (2) Order context to combat lost-in-the-middle (most relevant at the edges). (3) Use structured outputs for results. (4) Expose retrieval config knobs (hybrid weights, rerank toggle, top-N) through the MCP layer. (5) Small-corpus short-circuit: when the knowledge base is under ~200K tokens (~500 pages), offer a whole-corpus-in-prompt path instead of retrieval, per Anthropic guidance. See backlog/docs/rag-pipeline-upgrade-plan.md (Phase H).
 
+
+**Learning companion:** [backlog/docs/rag-explainers/08-mcp-generation-surface.html](08-mcp-generation-surface.html) — interactive explainer of the concepts and the decision logic for this phase.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

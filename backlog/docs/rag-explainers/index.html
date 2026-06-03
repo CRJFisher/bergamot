@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAG Explainers — Bergamot</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  .hero { margin: 10px 0 30px; }
+  .hero h1 { font-size: 38px; letter-spacing: -.6px; margin: 10px 0; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    display: flex; flex-direction: column; gap: 6px; text-decoration: none;
+    border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px 14px;
+    background: linear-gradient(180deg, var(--bg-3), var(--panel)); color: var(--text);
+    transition: .14s; position: relative; overflow: hidden;
+  }
+  .card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow); }
+  .card .ph { font-family: var(--mono); font-size: 11px; color: var(--accent-2); letter-spacing: .6px; }
+  .card .ct { font-size: 16.5px; font-weight: 650; margin: 2px 0; }
+  .card .cd { font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .card .roi { margin-top: 8px; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  .card.defer { background: linear-gradient(180deg, #1a1622, var(--panel)); }
+  .card.defer:hover { border-color: var(--violet); }
+  .flow { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; color: var(--muted); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+<main class="wrap">
+
+  <header class="hero page-head">
+    <span class="tag"><span class="mono">task-31</span> · interactive coursebook</span>
+    <h1>Building a production RAG pipeline</h1>
+    <p class="lede">Nine hands-on explainers — one per implementation phase — covering how each retrieval technique works and, more importantly, <em>how to decide when to reach for it</em>.</p>
+  </header>
+
+  <section class="block">
+    <p>These pages are the learning companion to <code>backlog/docs/rag-pipeline-upgrade-plan.md</code> and tasks <code>task-31.1</code>–<code>task-31.9</code>. Each one is self-contained and interactive: open it and play with the demo. Every page ends with a <strong>Decision lens</strong> — the when-to-use-vs-skip reasoning that separates copying a tutorial from engineering a system.</p>
+    <div class="note">
+      <span class="callout-title">The one idea to take away</span>
+      <p>Sophistication is not the goal — <strong>measured fitness for your corpus</strong> is. The plan is ordered by return on effort: measure first, then the cheap high-impact retrieval upgrades, and only reach for advanced architectures when a measured problem demands them. Most teams never need the last page.</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">01</span> The pipeline, end to end</h2>
+    <div class="diagram">[captured web page]
+   │
+   ▼  <span style="color:var(--accent)">Phase B</span>  clean ingestion — prune nav/ads/footers (heuristic extraction)
+   ▼  <span style="color:var(--accent)">Phase C</span>  chunk + prepend LLM situating context  ──┐ highest-ROI
+   ▼  <span style="color:var(--accent)">Phase G</span>  embed (model chosen by measured retrieval)  │ quality win
+   ▼          store vectors → LanceDB   |   chunk↔page links → DuckDB
+   ·
+[query]
+   │
+   ▼  <span style="color:var(--accent-2)">Phase F</span>  optional query transform (HyDE / multi-query / route)
+   ▼  <span style="color:var(--accent)">Phase D</span>  hybrid retrieve: dense + BM25, fused by RRF      ← cheapest win
+   ▼  <span style="color:var(--accent)">Phase E</span>  rerank the top-N shortlist (cross-encoder)      ← biggest cumulative gain
+   ▼  <span style="color:var(--accent-2)">Phase H</span>  order context to the edges + attach citations → MCP result
+   ·
+[<span style="color:var(--good)">Phase A</span>  every change measured against the evaluation harness]</div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--good)"></span> measurement (do first)</span>
+      <span><span class="sw" style="background:var(--accent)"></span> core retrieval upgrades</span>
+      <span><span class="sw" style="background:var(--accent-2)"></span> optional / polish</span>
+      <span><span class="sw" style="background:var(--violet)"></span> deferred</span>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">02</span> The explainers</h2>
+    <p>Listed in task order. The phase letter shows where each sits in the data flow above; the ROI note shows why it's sequenced where it is.</p>
+    <div class="cards">
+
+      <a class="card" href="01-evaluation-harness.html">
+        <span class="ph">PHASE A · task-31.1</span>
+        <span class="ct">Evaluation harness</span>
+        <span class="cd">Golden datasets, Recall@k / MRR / nDCG, RAGAS-style faithfulness, LLM-as-judge. The measurement spine everything else reports against.</span>
+        <span class="roi">▸ do first — precondition for all other phases</span>
+      </a>
+
+      <a class="card" href="02-hybrid-search.html">
+        <span class="ph">PHASE D · task-31.2</span>
+        <span class="ct">Hybrid search</span>
+        <span class="cd">Dense vectors catch meaning, BM25 catches exact terms; Reciprocal Rank Fusion combines them. Native to LanceDB's TS SDK.</span>
+        <span class="roi">▸ cheapest retrieval win — do early</span>
+      </a>
+
+      <a class="card" href="03-contextual-chunking.html">
+        <span class="ph">PHASE C · task-31.3</span>
+        <span class="ct">Chunking + Contextual Retrieval</span>
+        <span class="cd">Stop embedding whole pages. Chunk, then prepend LLM-written situating context before embedding & BM25. Parent-document expansion on a hit.</span>
+        <span class="roi">▸ biggest single-technique quality gain</span>
+      </a>
+
+      <a class="card" href="04-reranking.html">
+        <span class="ph">PHASE E · task-31.4</span>
+        <span class="ct">Reranking</span>
+        <span class="cd">A cross-encoder re-scores the top-N shortlist with full query↔passage attention, pulling buried-but-relevant passages to the top.</span>
+        <span class="roi">▸ biggest cumulative failure reduction</span>
+      </a>
+
+      <a class="card" href="05-clean-ingestion.html">
+        <span class="ph">PHASE B · task-31.5</span>
+        <span class="ct">Clean ingestion</span>
+        <span class="cd">Heuristic main-content extraction strips nav, ads, and footers before embedding. Garbage in, garbage vectors.</span>
+        <span class="roi">▸ quality of inputs — lands in parallel with C</span>
+      </a>
+
+      <a class="card" href="06-embedding-selection.html">
+        <span class="ph">PHASE G · task-31.6</span>
+        <span class="ct">Embedding model selection</span>
+        <span class="cd">Pick by the MTEB <em>Retrieval</em> column on your own data, not the headline average. Matryoshka dimensions trade storage for a little quality.</span>
+        <span class="roi">▸ once the harness can adjudicate candidates</span>
+      </a>
+
+      <a class="card" href="07-query-transformation.html">
+        <span class="ph">PHASE F · task-31.7</span>
+        <span class="ct">Query transformation</span>
+        <span class="cd">HyDE embeds a hypothetical answer to bridge the query–document gap; multi-query widens recall; a router decides whether to retrieve at all.</span>
+        <span class="roi">▸ optional — measure marginal gain first</span>
+      </a>
+
+      <a class="card" href="08-mcp-generation-surface.html">
+        <span class="ph">PHASE H · task-31.8</span>
+        <span class="ct">Generation surface</span>
+        <span class="cd">Beat lost-in-the-middle with edge ordering, attach citations, return structured outputs, and short-circuit retrieval for tiny corpora.</span>
+        <span class="roi">▸ trust & polish — last in the chain</span>
+      </a>
+
+      <a class="card defer" href="09-deferred-architectures.html">
+        <span class="ph">task-31.9 · DEFERRED</span>
+        <span class="ct">Advanced architectures</span>
+        <span class="cd">GraphRAG, Agentic RAG, Self-RAG, CRAG — what each solves, why they're deliberately deferred, and the concrete trigger to revisit each.</span>
+        <span class="roi">▸ knowing what NOT to build is the lesson</span>
+      </a>
+
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">03</span> How to read the order</h2>
+    <p>The sequence is not the order of the data flow — it's the order of <strong>return on effort</strong>:</p>
+    <ol>
+      <li><strong>Measure first (A).</strong> Without a baseline you can't tell an improvement from a regression.</li>
+      <li><strong>Then the cheap, native win (D).</strong> Hybrid search is almost free on LanceDB and immediately broadens recall.</li>
+      <li><strong>Then the biggest quality lever (C).</strong> Contextual chunking is the single largest retrieval-quality gain — but it costs a one-time LLM pass, so it follows the free win.</li>
+      <li><strong>Then stack reranking (E).</strong> It compounds with C and D for the largest cumulative gain.</li>
+      <li><strong>Inputs & model (B, G)</strong> raise the ceiling; <strong>query transforms & generation polish (F, H)</strong> are marginal or trust-focused.</li>
+      <li><strong>Advanced architectures (31.9)</strong> stay deferred until a <em>measured</em> problem the baseline can't solve appears.</li>
+    </ol>
+    <div class="warn">
+      <span class="callout-title">Numbers caveat</span>
+      <p>Retrieval-improvement percentages quoted in these pages (e.g. −35% / −49% / −67% failure reduction) are Anthropic's own benchmarks on their own technique — accurate as cited, but best-case vendor figures, not independently reproduced. That is precisely why Phase A measures every change on <em>Bergamot's own corpus</em>.</p>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <div class="sources">
+      <h3>Canonical references</h3>
+      <ul>
+        <li><a href="../rag-pipeline-upgrade-plan.md">backlog/docs/rag-pipeline-upgrade-plan.md</a> — the architecture & phased plan</li>
+        <li>Tasks <span class="mono">task-31</span> and sub-tasks <span class="mono">31.1</span>–<span class="mono">31.9</span> in <span class="mono">backlog/tasks/</span></li>
+      </ul>
+    </div>
+  </footer>
+
+</main>
+<script src="shared.js"></script>
+</body>
+</html>

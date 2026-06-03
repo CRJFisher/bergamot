@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reranking · RAG Explainers</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    /* demo-only layout helpers (theme lives in shared.css) */
+    .rows .row .truth { font-family: var(--mono); font-size: 11px; color: var(--violet); flex: none; }
+    .row.dim { opacity: .32; filter: saturate(.5); }
+    .row.best { border-color: var(--good); }
+    .rank-badge { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+    .eligible-line { display: flex; align-items: center; gap: 8px; margin: 6px 0 14px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+    .legend { display: flex; flex-wrap: wrap; gap: 14px; font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 12px; }
+    .legend span b { color: var(--text); }
+    .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: middle; margin-right: 5px; }
+    .sw-coarse { background: var(--muted); }
+    .sw-truth { background: var(--violet); }
+    .bars .bar-fill.bad-bar { background: linear-gradient(90deg, var(--bad), #b3322d); }
+    .bars .bar-fill.win-bar { background: linear-gradient(90deg, var(--good), #2f8f3c); }
+    .bench-cap { font-family: var(--mono); font-size: 11px; color: var(--accent-2); margin: 0 0 12px; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+
+    <header class="page-head">
+      <span class="tag">Phase E · task-31.4 · Rerank</span>
+      <h1>Reranking: a precise second pass over the shortlist</h1>
+      <p class="lede">Fast retrieval gives you a roughly-ordered shortlist. A reranker reads each candidate against the query <em>together</em> and reorders them by true relevance — so the best passage isn't left stranded at rank 7.</p>
+    </header>
+
+    <!-- (b) THE PROBLEM -->
+    <section class="block">
+      <h2><span class="num">01</span> The problem</h2>
+      <p>Even after <strong>hybrid retrieval</strong> (dense vectors plus BM25, fused), the top-<em>k</em> ordering you get back is <strong>approximate</strong>. Vector and keyword scores are cheap proxies for relevance — they rank well enough to surface the right region of the corpus, but they routinely misjudge <em>which</em> of the close candidates is actually best. The truly best passage can sit at rank 6 or 7 while three weaker passages crowd the top.</p>
+      <p>That ordering matters because the context window is finite. If you only feed the generator the top 3–5 passages, a best-answer stuck at rank 7 never reaches the model — the system <em>retrieved</em> the answer but never <em>used</em> it.</p>
+      <div class="bad-box">
+        <span class="callout-title">Failure mode</span>
+        <p>A <strong>bi-encoder</strong> — the model behind fast vector search — embeds the query and each document <strong>separately</strong>. The two encodings never see each other, so there is <strong>no cross-attention</strong> between query terms and passage terms. The model can place a passage in the right neighbourhood but cannot judge fine-grained query↔passage interaction (negations, qualifiers, which entity the question actually asks about). Result: the best answer <em>is</em> retrieved, but ranked too low to make the context window.</p>
+      </div>
+    </section>
+
+    <!-- (c) HOW IT WORKS -->
+    <section class="block">
+      <h2><span class="num">02</span> How it works</h2>
+
+      <p>The fix is a second model that scores relevance properly — but only over a tiny shortlist, because it is far too slow to run over the whole corpus. Two model shapes do the work:</p>
+
+      <h3>Bi-encoder (the retriever)</h3>
+      <p>Encodes the query and every document <strong>independently</strong> into vectors, then compares those vectors (cosine / dot product). Because document vectors are computed <em>ahead of time</em> and indexed, a query only needs one encode plus a nearest-neighbour lookup. <strong>Fast, scales to millions of documents — but approximate</strong>, because query and document never interact during scoring.</p>
+
+      <h3>Cross-encoder reranker (the precise pass)</h3>
+      <p>Feeds the query and a single passage <strong>together</strong> through one model that <strong>attends across both</strong> at once, then outputs a single precise relevance score. Because it sees every query token against every passage token, it captures the interactions a bi-encoder misses. <strong>Accurate — but too slow to run over the whole corpus</strong>: every (query, document) pair is a fresh forward pass, so cost grows with the number of candidates scored.</p>
+
+      <p>So the pattern is: <strong>retrieve top-<em>N</em> cheaply</strong> with the bi-encoder (e.g. <em>N</em> = 20–50), then <strong>rerank only those <em>N</em></strong> with the cross-encoder and keep the top few for the context window. You pay the expensive model on dozens of candidates, not millions.</p>
+
+      <p>The reranker is <strong>pluggable</strong>. It can be a <strong>local cross-encoder</strong> running on your own hardware, or a <strong>hosted reranker</strong> such as <strong>Cohere</strong> or <strong>Voyage</strong> behind an API. <strong>LanceDB exposes a reranker step</strong> directly in its query pipeline, so the shortlist-then-rerank flow drops into the retrieval call.</p>
+
+      <div class="diagram">  corpus (millions)
+        │
+   [ bi-encoder retrieval ]   ← fast, approximate
+        │
+        ▼
+  retrieve top-N  (N = 20–50)
+        │
+   [ cross-encoder rerank ]   ← precise, attends query+passage together
+        │
+        ▼
+     keep top-k  (the context window)</div>
+
+      <div class="note">
+        <span class="callout-title">The headline number</span>
+        <p>In Anthropic's benchmark, stacking reranking on top of contextual hybrid retrieval reached a <strong>67% reduction in retrieval failures</strong>. The stack compounds: contextual embeddings <em>−35%</em> → adding contextual BM25 <em>−49%</em> → adding rerank <em>−67%</em>. Reranking delivers the largest single step in that chain — once hybrid and contextual retrieval are already in place.</p>
+      </div>
+    </section>
+
+    <!-- (d) TRY IT -->
+    <section class="block">
+      <h2><span class="num">03</span> Try it</h2>
+
+      <div class="demo">
+        <div class="demo-head">
+          <span class="spark"></span>
+          <span class="demo-title"><b>Rerank the shortlist</b> — the best passage starts buried at rank 7</span>
+        </div>
+        <div class="demo-body">
+          <div class="controls">
+            <div class="control">
+              <label for="topn">Top-N eligible for rerank: <span id="topn-val" class="mono">8</span></label>
+              <input type="range" id="topn" min="2" max="8" value="8">
+            </div>
+            <button class="btn primary" id="rerank-btn">Rerank by true relevance</button>
+            <button class="btn" id="reset-btn">Reset coarse order</button>
+          </div>
+
+          <div class="eligible-line">
+            <span class="rank-badge">Solid rows = within top-N (reranker can move them).</span>
+            <span class="rank-badge">Dim rows = below the cut (untouchable).</span>
+          </div>
+
+          <div class="rows" id="cand-rows"></div>
+
+          <div class="legend">
+            <span><i class="swatch sw-coarse"></i><b>coarse</b> = bi-encoder / hybrid score (the order you start in)</span>
+            <span><i class="swatch sw-truth"></i><b>true</b> = cross-encoder relevance (what rerank sorts by)</span>
+          </div>
+
+          <p class="demo-hint">Drop top-N below rank 7 and notice reranking can no longer save the best passage — retrieval recall caps what reranking can do.</p>
+        </div>
+      </div>
+
+      <div class="demo">
+        <div class="demo-head">
+          <span class="spark"></span>
+          <span class="demo-title"><b>Stacking gains</b> — each layer compounds on the last</span>
+        </div>
+        <div class="demo-body">
+          <p class="bench-cap">Top-20 retrieval FAILURE rate · Anthropic benchmark (their own technique). Lower is better.</p>
+          <div class="bars" id="stack-bars"></div>
+          <p class="demo-hint">Reranking is the final layer here — applied on top of contextual hybrid retrieval, not instead of it.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- (e) DECISION LENS -->
+    <section class="block">
+      <h2><span class="num">04</span> Decision lens</h2>
+      <div class="decision">
+        <span class="callout-title">When to reach for reranking — and when to skip it</span>
+        <div class="decision-grid">
+          <div class="cell use">
+            <h4>✓ Reach for it when</h4>
+            <ul>
+              <li>Retrieval recall is decent, but the right passage often <strong>isn't in the top 3–5</strong> — it's there, just ordered too low.</li>
+              <li>You can spend <strong>~tens to hundreds of ms</strong> and a little cost per query reranking <strong>20–50 candidates</strong>.</li>
+              <li>Answer quality is <strong>sensitive to precision</strong> — the generator only sees a few passages, so their order is load-bearing.</li>
+              <li>Hybrid + contextual retrieval are already in place — rerank gives the <strong>biggest cumulative failure reduction</strong> on top of them.</li>
+            </ul>
+          </div>
+          <div class="cell skip">
+            <h4>✕ Skip / overkill when</h4>
+            <ul>
+              <li>Your <strong>latency budget is razor-thin</strong> — a per-query rerank pass blows it.</li>
+              <li>Top-<em>k</em> is already near-perfect — <strong>measure first</strong> before adding a model that can only reorder.</li>
+              <li>Retrieval recall is so low the right doc <strong>isn't even in the top-N</strong> — <strong>fix retrieval first</strong>; rerank can only reorder what was retrieved.</li>
+            </ul>
+          </div>
+        </div>
+        <p style="margin-top:14px; font-size:14px; color:var(--muted);"><strong>Tradeoff:</strong> rerankers add per-query latency and (for hosted ones) cost, and both scale with <em>N</em> — so <strong>cap <em>N</em></strong>. But because it delivers the biggest cumulative failure reduction in the stack, it's worth it once hybrid + contextual retrieval are in.</p>
+      </div>
+    </section>
+
+    <!-- (f) IN BERGAMOT -->
+    <section class="block">
+      <h2><span class="num">05</span> In Bergamot</h2>
+      <p><strong>task-31.4</strong> ships the reranking stage of the retrieval pipeline:</p>
+      <ul>
+        <li>A <strong>reranking stage</strong> that re-scores the <strong>top-N hybrid candidates</strong> before they reach the context window.</li>
+        <li>At least <strong>two reranker options benchmarked on the evaluation harness</strong>, with one chosen by <strong>measured ROI / cost</strong> rather than reputation.</li>
+        <li><strong>Reranker choice and candidate count (<em>N</em>) are configurable</strong>, so the latency/precision tradeoff is tunable per deployment.</li>
+        <li>A <strong>measured improvement over hybrid-without-rerank</strong> on the harness — the layer has to earn its latency before it ships on by default.</li>
+      </ul>
+    </section>
+
+    <!-- (g) FOOTER -->
+    <footer class="foot">
+      <div class="sources">
+        <h3>Sources</h3>
+        <ul>
+          <li><a href="https://www.anthropic.com/news/contextual-retrieval">Anthropic — Introducing Contextual Retrieval</a></li>
+          <li><a href="https://medium.com/@mudassar.hakim/why-re-rankers-decide-rag-quality-choosing-between-open-source-cohere-and-voyage-1536fe4ca808">Why Re-rankers Decide RAG Quality — Open Source, Cohere, and Voyage</a></li>
+          <li><a href="https://blog.voyageai.com/2025/08/11/rerank-2-5/">Voyage AI — rerank-2.5</a></li>
+        </ul>
+      </div>
+      <div class="prevnext" data-prevnext></div>
+    </footer>
+
+  </main>
+
+  <script src="shared.js"></script>
+  <script>
+    (function () {
+      // ---------- WIDGET 1: rerank the shortlist ----------
+      // Candidates in their initial COARSE (bi-encoder / hybrid) order.
+      // `truth` = cross-encoder true relevance. The best (truth=98) starts at rank 7.
+      var CAND = [
+        { id: "c1", text: "Setup guide — installing the indexer CLI",            coarse: 0.91, truth: 41 },
+        { id: "c2", text: "Overview of the embedding pipeline (high level)",      coarse: 0.88, truth: 55 },
+        { id: "c3", text: "FAQ: why are my results out of order?",               coarse: 0.86, truth: 62 },
+        { id: "c4", text: "Config reference: vector store parameters",            coarse: 0.83, truth: 48 },
+        { id: "c5", text: "Changelog — v2.4 retrieval tweaks",                    coarse: 0.81, truth: 70 },
+        { id: "c6", text: "Tuning recall vs precision in hybrid search",          coarse: 0.79, truth: 84 },
+        { id: "c7", text: "EXACT ANSWER — how reranking rescues buried passages", coarse: 0.77, truth: 98 },
+        { id: "c8", text: "Glossary entry: 'bi-encoder'",                         coarse: 0.74, truth: 33 }
+      ];
+      var BEST_RANK = 7; // 1-indexed position of the best passage in coarse order
+
+      var rowsEl = $("#cand-rows");
+      var topnEl = $("#topn");
+      var topnValEl = $("#topn-val");
+      var rerankBtn = $("#rerank-btn");
+      var resetBtn = $("#reset-btn");
+
+      var order = CAND.map(function (c) { return c.id; }); // current display order (ids)
+
+      function byId(id) { return CAND.find(function (c) { return c.id === id; }); }
+
+      function render(movedIds) {
+        movedIds = movedIds || {};
+        var topN = parseInt(topnEl.value, 10);
+        rowsEl.innerHTML = "";
+        order.forEach(function (id, i) {
+          var c = byId(id);
+          var rank = i + 1;
+          var eligible = rank <= topN;
+          var isBest = c.truth === 98;
+
+          var row = document.createElement("div");
+          row.className = "row";
+          if (!eligible) row.classList.add("dim");
+          if (isBest) row.classList.add("best");
+          if (movedIds[id]) { row.classList.add("moved"); row.classList.add("flash"); }
+
+          row.innerHTML =
+            '<span class="rank">' + rank + '</span>' +
+            '<span class="body">' + c.text + (isBest ? ' &nbsp;<span class="rank-badge">★ best</span>' : '') + '</span>' +
+            '<span class="score">' + c.coarse.toFixed(2) + '</span>' +
+            '<span class="truth">t' + c.truth + '</span>';
+          rowsEl.appendChild(row);
+        });
+      }
+
+      function rerank() {
+        var topN = parseInt(topnEl.value, 10);
+        var prevPos = {};
+        order.forEach(function (id, i) { prevPos[id] = i; });
+
+        var eligible = order.slice(0, topN);
+        var rest = order.slice(topN);
+        eligible.sort(function (a, b) { return byId(b).truth - byId(a).truth; }); // desc by truth
+        order = eligible.concat(rest);
+
+        var moved = {};
+        order.forEach(function (id, i) { if (prevPos[id] !== i) moved[id] = true; });
+        render(moved);
+      }
+
+      function reset() {
+        order = CAND.map(function (c) { return c.id; });
+        render();
+      }
+
+      topnEl.addEventListener("input", function () {
+        topnValEl.textContent = topnEl.value;
+        render(); // re-render so the dim/solid cut updates live
+      });
+      rerankBtn.addEventListener("click", rerank);
+      resetBtn.addEventListener("click", reset);
+
+      render();
+
+      // ---------- WIDGET 2: stacking gains ----------
+      // Top-20 retrieval FAILURE rate, Anthropic benchmark. Lower is better.
+      var STACK = [
+        { label: "Baseline",               val: 5.7, delta: "",      win: false },
+        { label: "+ Contextual embeddings", val: 3.7, delta: "−35%", win: false },
+        { label: "+ Contextual BM25",       val: 2.9, delta: "−49%", win: false },
+        { label: "+ Reranking",             val: 1.9, delta: "−67%", win: true }
+      ];
+      var maxVal = 5.7;
+      var barsEl = $("#stack-bars");
+      barsEl.innerHTML = "";
+      STACK.forEach(function (b, i) {
+        var rowEl = document.createElement("div");
+        rowEl.className = "bar-row";
+        rowEl.innerHTML =
+          '<span class="bar-label">' + b.label + '</span>' +
+          '<div class="bar-track"><div class="bar-fill ' + (b.win ? "win-bar" : "bad-bar") + '" style="width:0%"></div></div>' +
+          '<span class="bar-val">' + b.val.toFixed(1) + '%' + (b.delta ? ' <span class="mono" style="color:var(--good)">' + b.delta + '</span>' : '') + '</span>';
+        barsEl.appendChild(rowEl);
+        var fill = rowEl.querySelector(".bar-fill");
+        // animate in
+        setTimeout(function () {
+          fill.style.width = (b.val / maxVal * 100).toFixed(1) + "%";
+        }, 80 + i * 120);
+      });
+    })();
+  </script>
+</body>
+</html>

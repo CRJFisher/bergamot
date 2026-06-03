@@ -16,6 +16,8 @@ parent_task_id: TASK-31
 
 Reduce noise entering the vectors by pruning non-content HTML (nav, footer, aside, ad containers, social widgets) via heuristic main-content extraction (tree-pruning + link-density analysis, Trafilatura-style) before the existing LLM content step, so both the LLM and the embeddings see clean article text. Can land in parallel with task-31.3. Do NOT cite specific extraction F1 leaderboard numbers — that specific research claim was refuted. See backlog/docs/rag-pipeline-upgrade-plan.md (Phase B).
 
+
+**Learning companion:** [backlog/docs/rag-explainers/05-clean-ingestion.html](05-clean-ingestion.html) — interactive explainer of the concepts and the decision logic for this phase.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

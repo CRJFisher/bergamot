@@ -4,6 +4,8 @@ This document defines the target retrieval-augmented generation (RAG) architectu
 
 The goal is a _measured, production-grade_ RAG pipeline — the kind whose quality is proven by metrics, not asserted.
 
+> **Learning companion:** an interactive coursebook explaining every technique below — and the decision logic for when to use vs skip each — lives in [rag-explainers/index.html](rag-explainers/index.html) (one page per sub-task, opens in any browser).
+
 ## Current pipeline (baseline)
 
 | Stage              | Current implementation                                                               |

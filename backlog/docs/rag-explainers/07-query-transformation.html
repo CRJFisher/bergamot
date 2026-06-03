@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Query transformation (HyDE, multi-query, routing) · RAG Explainers</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    /* demo-specific layout only */
+    .hyde-doc {
+      margin: 12px 0; font-size: 13px; color: var(--text); line-height: 1.55;
+      background: var(--bg); border: 1px solid var(--border-soft);
+      border-left: 3px solid var(--violet); border-radius: 8px; padding: 11px 13px;
+    }
+    .hyde-doc .lbl {
+      font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+      letter-spacing: .7px; color: var(--violet); display: block; margin-bottom: 6px;
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .added {
+      font-family: var(--mono); font-size: 10px; color: var(--good);
+      border: 1px solid rgba(63,185,80,.4); background: rgba(63,185,80,.08);
+      border-radius: 999px; padding: 1px 7px; margin-left: 8px;
+    }
+    .route-out { margin-top: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .route-why { font-size: 12.5px; color: var(--muted); }
+    .examples { font-size: 12px; color: var(--faint); font-family: var(--mono); margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+
+    <!-- (a) HEADER -->
+    <header class="page-head">
+      <span class="tag">Phase F · task-31.7 · Query</span>
+      <h1>Query transformation: rewrite the question before you search</h1>
+      <p class="lede">
+        The text you embed for retrieval need not be the text the user typed. Three optional
+        transforms — <em>HyDE</em>, <em>multi-query</em>, and <em>routing</em> — reshape a raw query
+        into something that matches your documents better, or decide it should skip retrieval
+        entirely.
+      </p>
+    </header>
+
+    <!-- (b) THE PROBLEM -->
+    <section class="block">
+      <h2><span class="num">01</span> The problem</h2>
+      <p>
+        Bergamot's baseline retriever embeds the user's <strong>raw query verbatim</strong>: it takes
+        whatever string the user typed, runs it through the embedding model, and ranks pages by
+        <strong>cosine similarity</strong> against their vectors. That works when the query already
+        reads like the answer. It works poorly when it does not.
+      </p>
+      <p>
+        An <strong>embedding</strong> maps text to a point in a high-dimensional vector space where
+        nearby points mean similar things. The trouble is that a <em>question</em> and its
+        <em>answer</em> are written in different registers — different lengths, vocabulary, and shape —
+        so they often land far apart even when one perfectly answers the other.
+      </p>
+      <div class="bad-box">
+        <span class="callout-title">Failure mode</span>
+        <p>
+          There is a <strong>query&ndash;document asymmetry</strong>. A short keyword query like
+          <code>react hooks deps</code> lives in a different region of embedding space than the verbose
+          answer passages that actually contain the answer — paragraphs full of words like
+          <em>"the dependency array tells useEffect when to re-run the effect&hellip;"</em>. Embedding
+          the bare query therefore retrieves <strong>weakly</strong>: the nearest vectors are other
+          short, keyword-shaped snippets, not the long explanatory passages you want.
+        </p>
+        <p>
+          The same asymmetry makes <strong>vague or multi-part queries retrieve a muddle</strong>. A
+          question that blends two intents ("how do hooks work and when do they re-run?") produces one
+          averaged vector that sits between both topics and matches neither sharply.
+        </p>
+      </div>
+    </section>
+
+    <!-- (c) HOW IT WORKS -->
+    <section class="block">
+      <h2><span class="num">02</span> How it works</h2>
+      <p>
+        Three independent techniques attack the asymmetry from different angles. All three are
+        <strong>optional</strong>, <strong>gated by config</strong>, and only enabled by default if
+        they actually pay off on the evaluation harness.
+      </p>
+
+      <h3>1. HyDE — Hypothetical Document Embeddings</h3>
+      <p>
+        <strong>HyDE</strong> bridges the gap by making the query <em>look like</em> an answer before
+        embedding it. You ask a language model to write a <strong>hypothetical answer</strong> to the
+        query — a short passage that <em>could</em> be the document you are looking for — and then you
+        embed <strong>that hypothetical document</strong> instead of the bare query. You retrieve real
+        documents that sit near this fake answer in embedding space.
+      </p>
+      <p>
+        The fake answer is allowed to be factually wrong; what matters is its <em>shape</em>. Because
+        it is written in the verbose, explanatory register of a real passage, it occupies the same
+        region of embedding space as the true answer passages — so it bridges the asymmetry that the
+        bare query could not. HyDE is <strong>zero-shot</strong>: it needs no labelled query&ndash;document
+        pairs to train on. Despite that, it is <strong>comparable to fine-tuned retrievers</strong> and
+        <strong>outperforms an unsupervised dense baseline</strong> across tasks and languages.
+      </p>
+      <div class="diagram">  query: "how do react hooks deps work?"
+        |
+  [ HyDE: LLM writes a hypothetical answer ]
+        |
+        v
+  "The dependency array of useEffect lists the values the
+   effect reads; React re-runs the effect whenever one of
+   them changes between renders..."   (hypothetical document)
+        |
+      embed   (embed the hypothetical answer, NOT the bare query)
+        |
+     retrieve real docs nearest the hypothetical answer
+        |
+        v
+   ranked results that now match answer-shaped text</div>
+
+      <h3>2. Multi-query — fan out, then union</h3>
+      <p>
+        <strong>Multi-query</strong> expands one query into <strong>several paraphrases or
+        sub-questions</strong>, retrieves for each variant independently, and then
+        <strong>unions and de-duplicates</strong> the result sets. A single phrasing has one blind
+        spot; several phrasings cover more of the answer's vocabulary, so a document missed by the
+        original wording can still be caught by a paraphrase. This mainly <strong>improves recall on
+        vague queries</strong> — the kind that one averaged vector matches poorly.
+      </p>
+
+      <h3>3. Routing — decide whether to retrieve at all</h3>
+      <p>
+        <strong>Routing</strong> puts a <strong>cheap classifier</strong> in front of retrieval to
+        decide <em>whether retrieval is even needed</em>. A general-knowledge or arithmetic question —
+        "what is 2+2", "who wrote Hamlet" — has its answer in the model's own weights and
+        <strong>should not hit the knowledge base</strong>; retrieving for it only adds latency and the
+        risk of injecting irrelevant passages. A question about the user's own captured content —
+        "summarize the article I read about hooks" — clearly <em>should</em> retrieve. The router sends
+        each query down the right path.
+      </p>
+    </section>
+
+    <!-- (d) TRY IT -->
+    <section class="block">
+      <h2><span class="num">03</span> Try it</h2>
+      <p>
+        Three widgets share one mock corpus of six document titles. Widget 1 shows HyDE re-ranking a
+        weak result; widget 2 fans a query into paraphrases; widget 3 routes a query to retrieval or
+        to a direct answer.
+      </p>
+
+      <!-- WIDGET 1: HyDE bridge -->
+      <div class="demo" id="hyde-demo">
+        <div class="demo-head">
+          <span class="spark"></span>
+          <span class="demo-title"><b>1 · HyDE bridge</b> · embed an answer, not the question</span>
+        </div>
+        <div class="demo-body">
+          <div class="controls">
+            <div class="control" style="flex:1; min-width:240px;">
+              <label for="hy-query">Query</label>
+              <input type="text" id="hy-query" value="how do react hooks deps work?">
+            </div>
+            <div class="control">
+              <label>Transform</label>
+              <label class="switch">
+                <input type="checkbox" id="hy-toggle">
+                <span class="track"></span>
+                <span>Use HyDE</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="hyde-doc" id="hy-hypo" style="display:none;">
+            <span class="lbl">LLM-generated hypothetical answer (this is what gets embedded)</span>
+            The dependency array passed to <code>useEffect</code> lists the reactive values the effect
+            reads. React compares the array between renders and re-runs the effect only when one of
+            those values changes; an empty array runs the effect once on mount, and omitting the array
+            runs it after every render.
+          </div>
+
+          <div class="rows" id="hy-rows"></div>
+
+          <p class="demo-hint">
+            Toggle HyDE and watch the right doc climb because you're now matching answer-shaped text,
+            not a bare keyword query.
+          </p>
+        </div>
+      </div>
+
+      <!-- WIDGET 2: Multi-query fan-out -->
+      <div class="demo" id="mq-demo">
+        <div class="demo-head">
+          <span class="spark"></span>
+          <span class="demo-title"><b>2 · Multi-query fan-out</b> · paraphrase, retrieve, union</span>
+        </div>
+        <div class="demo-body">
+          <p style="font-size:13.5px;">
+            Original query: <code>how do react hooks deps work?</code>
+          </p>
+          <button class="btn primary" id="mq-btn">Expand query</button>
+
+          <div id="mq-variants" style="display:none;">
+            <h4 style="font-family:var(--mono); font-size:11.5px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin:16px 0 4px;">Generated variants</h4>
+            <div class="chips" id="mq-chips"></div>
+            <h4 style="font-family:var(--mono); font-size:11.5px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin:16px 0 4px;">Unioned, de-duplicated results</h4>
+            <div class="rows" id="mq-rows"></div>
+          </div>
+
+          <p class="demo-hint">
+            The union pulls in a doc the single query never surfaced (marked <span class="added">+ new</span>).
+          </p>
+        </div>
+      </div>
+
+      <!-- WIDGET 3: Router -->
+      <div class="demo" id="rt-demo">
+        <div class="demo-head">
+          <span class="spark"></span>
+          <span class="demo-title"><b>3 · Router</b> · retrieve, or answer directly?</span>
+        </div>
+        <div class="demo-body">
+          <div class="controls">
+            <div class="control" style="flex:1; min-width:240px;">
+              <label for="rt-query">Query</label>
+              <input type="text" id="rt-query" value="summarize the article I read about hooks">
+            </div>
+            <div class="control">
+              <label>&nbsp;</label>
+              <button class="btn primary" id="rt-btn">Route</button>
+            </div>
+          </div>
+
+          <div class="route-out" id="rt-out"></div>
+          <div class="examples">
+            try: "what is 2+2" · "who wrote Hamlet" · "summarize the article I read about hooks" · "my notes on react"
+          </div>
+          <p class="demo-hint">
+            A general-knowledge or arithmetic question skips the knowledge base; a question about your
+            own captured content routes to retrieval.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- (e) DECISION LENS -->
+    <section class="block">
+      <h2><span class="num">04</span> Decision lens</h2>
+      <div class="decision">
+        <span class="callout-title">When to transform the query</span>
+        <div class="decision-grid">
+          <div class="cell use">
+            <h4>✓ Reach for it when</h4>
+            <ul>
+              <li>Queries are <strong>short, vague, or keyword-y</strong> while documents are verbose —
+                HyDE rewrites the query into answer-shaped text and closes the asymmetry.</li>
+              <li><strong>Recall on ambiguous queries is weak</strong> — multi-query fans the question
+                into paraphrases and unions the hits.</li>
+              <li>You want to <strong>avoid pointless retrievals</strong> on general-knowledge or
+                arithmetic questions — a router answers them directly.</li>
+            </ul>
+          </div>
+          <div class="cell skip">
+            <h4>✕ Skip / overkill when</h4>
+            <ul>
+              <li>Queries are already <strong>well-formed and specific</strong> — they match documents
+                fine on their own.</li>
+              <li><strong>Latency or cost is tight</strong>: every transform adds an LLM call
+                <em>before</em> retrieval even begins.</li>
+              <li>Measurement on the harness shows <strong>no marginal gain</strong> from the transform.</li>
+            </ul>
+          </div>
+        </div>
+        <p style="margin-bottom:0; margin-top:12px; font-size:13.5px; color:var(--muted)">
+          <strong>Tradeoff:</strong> each technique adds a <strong>pre-retrieval LLM round-trip</strong>
+          (latency + cost), and each can introduce <strong>drift</strong> — a bad hypothetical document
+          retrieves <em>worse</em> than the bare query, and a bad paraphrase pulls in noise. So keep
+          every transform behind a <strong>config toggle</strong> and only default-on what the harness
+          proves. This is precisely why query transformation is <strong>sequenced late</strong> in the
+          roadmap and marked <strong>optional</strong>: it is an upgrade you switch on once you can
+          measure that it helps, not a foundation you build on.
+        </p>
+      </div>
+    </section>
+
+    <!-- (f) IN BERGAMOT -->
+    <section class="block">
+      <h2><span class="num">05</span> In Bergamot</h2>
+      <p><strong>task-31.7</strong> ships all three transforms as measured, toggle-gated options:</p>
+      <ul>
+        <li><strong>HyDE</strong> behind a config toggle: an LLM writes a hypothetical answer, and that
+          document — not the bare query — is embedded for retrieval.</li>
+        <li><strong>Multi-query expansion</strong> behind a toggle: the query is fanned into
+          paraphrases, each is retrieved, and the results are unioned and de-duplicated.</li>
+        <li>A <strong>router</strong> that decides whether retrieval is needed at all, so
+          general-knowledge and arithmetic questions skip the knowledge base.</li>
+        <li>Each technique's <strong>marginal gain is measured on the harness</strong> from
+          <strong>task-31.1</strong>, and the default for each toggle is set by the result — on by
+          default only where it demonstrably helps.</li>
+      </ul>
+    </section>
+
+    <!-- (g) FOOTER -->
+    <footer class="foot">
+      <div class="sources">
+        <h3>Sources</h3>
+        <ul>
+          <li><a href="https://arxiv.org/abs/2212.10496">Gao et al. — Precise Zero-Shot Dense Retrieval without Relevance Labels (HyDE), arxiv.org/abs/2212.10496</a></li>
+        </ul>
+      </div>
+      <div class="prevnext" data-prevnext></div>
+    </footer>
+
+  </main>
+
+  <script src="shared.js"></script>
+  <script>
+    (function () {
+      // One mock corpus shared by all three widgets: 6 doc titles.
+      var DOCS = [
+        { id: "d1", title: "useEffect dependency arrays: when effects re-run" },
+        { id: "d2", title: "Rules of Hooks: why order and top-level calls matter" },
+        { id: "d3", title: "useState vs useReducer for component state" },
+        { id: "d4", title: "Stale closures and missing dependencies in effects" },
+        { id: "d5", title: "A gentle introduction to the React render cycle" },
+        { id: "d6", title: "CSS grid layout: a practical cheat sheet" }
+      ];
+
+      function titleOf(id) {
+        for (var i = 0; i < DOCS.length; i++) { if (DOCS[i].id === id) return DOCS[i].title; }
+        return id;
+      }
+
+      function rowHTML(rank, id, score, cls, badge) {
+        return '<div class="row' + (cls ? " " + cls : "") + '">' +
+          '<span class="rank">' + rank + '</span>' +
+          '<span class="body">' + titleOf(id) + (badge || "") + '</span>' +
+          '<span class="score">' + score + '</span></div>';
+      }
+
+      /* ---------- WIDGET 1: HyDE bridge ---------- */
+      // DIRECT: bare keyword query embeds to a keyword-shaped vector. The truly
+      // relevant doc (d1, the deps-array answer) sits mid-list; generic/keyword
+      // titles float above it. HyDE re-ranks so d1 rises to #1.
+      var HY_DIRECT = [
+        { id: "d2", s: 0.61 },
+        { id: "d5", s: 0.58 },
+        { id: "d1", s: 0.52 },   // the answer doc, buried mid-list
+        { id: "d3", s: 0.47 },
+        { id: "d4", s: 0.44 },
+        { id: "d6", s: 0.12 }
+      ];
+      var HY_HYDE = [
+        { id: "d1", s: 0.88 },   // answer-shaped hypothetical doc lands right on it
+        { id: "d4", s: 0.79 },
+        { id: "d5", s: 0.55 },
+        { id: "d2", s: 0.51 },
+        { id: "d3", s: 0.40 },
+        { id: "d6", s: 0.09 }
+      ];
+      var RELEVANT = "d1";
+
+      var $hyToggle = document.getElementById("hy-toggle");
+      var $hyHypo = document.getElementById("hy-hypo");
+      var $hyRows = document.getElementById("hy-rows");
+
+      function renderHyde() {
+        var on = $hyToggle.checked;
+        var list = on ? HY_HYDE : HY_DIRECT;
+        $hyHypo.style.display = on ? "" : "none";
+        var html = "";
+        list.forEach(function (r, i) {
+          var cls = r.id === RELEVANT ? "hit" + (on ? " flash" : "") : "";
+          html += rowHTML(i + 1, r.id, r.s.toFixed(2), cls, "");
+        });
+        $hyRows.innerHTML = html;
+      }
+      $hyToggle.addEventListener("change", renderHyde);
+      renderHyde();
+
+      /* ---------- WIDGET 2: Multi-query fan-out ---------- */
+      var MQ_VARIANTS = [
+        "what is the useEffect dependency array?",
+        "when does a React effect re-run?",
+        "how to avoid stale closures in hooks?"
+      ];
+      // Single-query baseline surfaced d1, d2, d5. The union adds d4 — caught only
+      // by the "stale closures" paraphrase — which the original query missed.
+      var MQ_UNION = [
+        { id: "d1", isNew: false },
+        { id: "d4", isNew: true },
+        { id: "d2", isNew: false },
+        { id: "d5", isNew: false }
+      ];
+
+      var $mqBtn = document.getElementById("mq-btn");
+      var $mqWrap = document.getElementById("mq-variants");
+      var $mqChips = document.getElementById("mq-chips");
+      var $mqRows = document.getElementById("mq-rows");
+
+      $mqBtn.addEventListener("click", function () {
+        $mqWrap.style.display = "";
+        $mqWrap.classList.add("fade-in");
+        $mqChips.innerHTML = MQ_VARIANTS.map(function (v) {
+          return '<span class="chip violet">' + v + '</span>';
+        }).join("");
+        $mqRows.innerHTML = MQ_UNION.map(function (r, i) {
+          var badge = r.isNew ? ' <span class="added">+ new</span>' : "";
+          return rowHTML(i + 1, r.id, r.isNew ? "union" : "", r.isNew ? "hit" : "", badge);
+        }).join("");
+        $mqBtn.textContent = "Expanded ✓";
+        $mqBtn.disabled = true;
+      });
+
+      /* ---------- WIDGET 3: Router ---------- */
+      // Cheap keyword rule: arithmetic or general-knowledge -> answer directly.
+      // References to the user's own captured content -> retrieve.
+      var RETRIEVE_HINTS = ["my notes", "the article", "i read", "i saved", "i captured", "summarize", "my "];
+      var SKIP_HINTS = ["what is", "who wrote", "who is", "capital of", "how many", "when was"];
+      var ARITHMETIC = /\d\s*[\+\-\*\/x]\s*\d/;
+
+      function routeQuery(q) {
+        var t = q.toLowerCase();
+        if (ARITHMETIC.test(t)) {
+          return { retrieve: false, why: "Arithmetic — the answer is computed, not retrieved." };
+        }
+        for (var i = 0; i < RETRIEVE_HINTS.length; i++) {
+          if (t.indexOf(RETRIEVE_HINTS[i]) !== -1) {
+            return { retrieve: true, why: "References the user's own captured content — hit the knowledge base." };
+          }
+        }
+        for (var j = 0; j < SKIP_HINTS.length; j++) {
+          if (t.indexOf(SKIP_HINTS[j]) !== -1) {
+            return { retrieve: false, why: "General-knowledge question — answer from the model's own weights." };
+          }
+        }
+        // Default: when unsure, retrieve (cheaper to over-retrieve than to miss).
+        return { retrieve: true, why: "No general-knowledge signal — default to retrieval." };
+      }
+
+      var $rtQuery = document.getElementById("rt-query");
+      var $rtBtn = document.getElementById("rt-btn");
+      var $rtOut = document.getElementById("rt-out");
+
+      function renderRoute() {
+        var d = routeQuery($rtQuery.value);
+        var chip = d.retrieve
+          ? '<span class="chip">Retrieve</span>'
+          : '<span class="chip amber">Answer directly (no retrieval)</span>';
+        $rtOut.innerHTML = chip + '<span class="route-why">' + d.why + '</span>';
+        $rtOut.classList.remove("fade-in");
+        void $rtOut.offsetWidth;
+        $rtOut.classList.add("fade-in");
+      }
+      $rtBtn.addEventListener("click", renderRoute);
+      $rtQuery.addEventListener("keydown", function (e) { if (e.key === "Enter") renderRoute(); });
+      renderRoute();
+    })();
+  </script>
+</body>
+</html>

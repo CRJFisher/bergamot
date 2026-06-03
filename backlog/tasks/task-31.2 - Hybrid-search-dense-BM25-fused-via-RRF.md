@@ -16,6 +16,8 @@ parent_task_id: TASK-31
 
 Enable LanceDB-native hybrid retrieval — the lowest-cost highest-ROI retrieval upgrade — on the existing store. Add a full-text/BM25 (Tantivy) index alongside the dense vector index, issue a hybrid query, and fuse results with Reciprocal Rank Fusion (RRFReranker is LanceDB's built-in default) via the embedded TypeScript SDK, so no separate search engine is needed. Make the semantic/BM25 weighting configurable (Anthropic's default ~0.8 semantic / 0.2 BM25 is the starting point) and tune it on the harness. Wire the new retrieval path into the MCP semantic_search tool. See backlog/docs/rag-pipeline-upgrade-plan.md (Phase D).
 
+
+**Learning companion:** [backlog/docs/rag-explainers/02-hybrid-search.html](02-hybrid-search.html) — interactive explainer of the concepts and the decision logic for this phase.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

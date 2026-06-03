@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deferred architectures — when advanced RAG is overkill</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    /* demo-only layout helpers (no theme redefinition) */
+    .wizard-q { font-size: 16px; color: var(--text); margin: 6px 0 16px; line-height: 1.5; }
+    .wizard-q b { color: var(--accent); }
+    .wizard-progress { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-bottom: 10px; letter-spacing: .5px; }
+    .wizard-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .rec-card { margin-top: 4px; }
+    .rec-card h4 { margin: 0 0 8px; font-size: 14px; font-family: var(--mono); }
+    .rec-card .rec-line { font-size: 13.5px; color: var(--muted); margin: 6px 0; }
+    .rec-card .rec-line b { color: var(--text); }
+    .rec-tech { font-family: var(--mono); color: var(--accent-2); }
+  </style>
+</head>
+<body>
+<main class="wrap">
+
+  <header class="page-head">
+    <span class="tag">task-31.9 · Advanced · Deferred</span>
+    <h1>Deferred architectures: when advanced RAG is overkill</h1>
+    <p class="lede">Knowing what <em>not</em> to build is a senior skill. This capstone is about the decision that precedes every advanced RAG architecture — measuring whether you actually have the problem it solves before you pay its cost.</p>
+  </header>
+
+  <section class="block">
+    <h2><span class="num">01</span> The problem</h2>
+    <p>The RAG literature moves fast, and it is tempting to reach for the most advanced architecture you have read about this week — a knowledge graph here, an agent swarm there. The newest paper always sounds like the obvious next step. But an architecture is only an asset if it solves a problem you can <em>measure</em>, and most teams never reach the point where they need more than a well-built baseline.</p>
+    <div class="bad-box">
+      <span class="callout-title">Failure mode</span>
+      <p>Adopting <strong>GraphRAG</strong>, <strong>Agentic RAG</strong>, <strong>Self-RAG</strong>, or <strong>CRAG</strong> before the baseline (contextual chunking + hybrid search + reranking) is even built and measured. This adds large cost and operational complexity to solve problems Bergamot may not actually have — <strong>premature sophistication</strong>. The discipline here is <strong>YAGNI</strong>: you aren't gonna need it until a measurement says you do.</p>
+    </div>
+    <p>The right move is the opposite of dropping these techniques: name them, understand them precisely, and <em>defer</em> them behind a written trigger that says when to revisit. The rest of this page is the primer plus the decision tool.</p>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">02</span> How it works — four architectures</h2>
+    <p>Each architecture below targets a specific gap that a single-shot "embed, retrieve top-k, generate" pipeline cannot close. To decide, you need to know exactly what each one solves, how it works, and what it costs.</p>
+
+    <h3>GraphRAG (Microsoft)</h3>
+    <p>GraphRAG uses a language model to extract an <strong>entity knowledge graph</strong> from the whole corpus — nodes are entities (people, projects, concepts) and edges are the relationships between them. It then runs <strong>community detection</strong> to cluster closely-related entities into groups, and <strong>pre-generates a summary for each community</strong> during indexing. To answer a <strong>global, sensemaking question</strong> — "what are the main themes across everything?" — it runs <strong>map-reduce</strong> over those community summaries: summarize each community's take (map), then combine into one answer (reduce). Naive RAG fails on these queries because the answer is not contained in any handful of local chunks; it is a property of the corpus as a whole. In Microsoft's evaluation, GraphRAG improved answer <strong>comprehensiveness</strong> and <strong>diversity</strong> over a conventional RAG baseline, with reported win rates around <strong>57–64%</strong>. Read that with care: it is an <em>LLM-as-judge</em> evaluation (a model grading answers, which carries known position and length biases), and the approach pays a real <strong>indexing cost</strong> — a heavy LLM pass over the corpus plus a graph store to maintain.</p>
+
+    <h3>Agentic RAG</h3>
+    <p>Agentic RAG embeds <strong>autonomous agents</strong> into the pipeline. Instead of one fixed retrieve-then-generate step, agents use <strong>reflection</strong> (critiquing their own intermediate results), <strong>planning</strong> (breaking a question into sub-steps), <strong>tool use</strong> (calling search, calculators, APIs), and <strong>multi-agent collaboration</strong> to <em>dynamically</em> manage retrieval across <strong>multi-step reasoning</strong>. This overcomes the ceiling of static, single-shot RAG, which cannot decide mid-answer that it needs to go look something else up. The cost is heavy: many LLM calls per query and real orchestration complexity (loops, state, failure handling) to keep agents from spinning.</p>
+
+    <h3>Self-RAG</h3>
+    <p>Self-RAG trains a single language model to <strong>retrieve on demand</strong> and <strong>self-critique</strong> using special <strong>reflection tokens</strong> it emits during generation. These tokens let the model decide <em>whether</em> retrieval is even needed for the current span, and then <strong>grade</strong> the retrieved passages (are they relevant?) and its own output (is it supported and useful?). The catch: this behaviour comes from <strong>custom model training</strong>, not prompting. That puts it out of scope for a TypeScript/Node application that consumes models through an API rather than fine-tuning them.</p>
+
+    <h3>CRAG (Corrective RAG)</h3>
+    <p>CRAG adds a lightweight <strong>retrieval evaluator</strong> — a small model that scores how good the retrieved documents are for the query. Based on that score it triggers one of three actions: <strong>Correct</strong> (refine and use the docs), <strong>Ambiguous</strong> (blend strategies), or <strong>Incorrect</strong> (the local docs are bad). On a poor score it falls back to <strong>web search</strong> to bring in external knowledge. It is deliberately <strong>plug-and-play</strong>: it bolts onto an existing RAG pipeline rather than replacing it. The cost is modest by comparison — an extra evaluator plus a dependency on an external web-search service.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Technique</th>
+          <th>Problem it solves</th>
+          <th>Rough cost / complexity</th>
+          <th>Bergamot revisit trigger</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>GraphRAG</strong></td>
+          <td>Global, corpus-wide sensemaking ("main themes across everything") that no few local chunks contain</td>
+          <td>High — LLM indexing pass over the whole corpus + a graph store to build and maintain</td>
+          <td>"Summarize my whole knowledge base / themes across everything" becomes a first-class feature</td>
+        </tr>
+        <tr>
+          <td><strong>Agentic RAG</strong></td>
+          <td>Multi-step reasoning and tool use that static single-shot retrieval can't handle</td>
+          <td>High — many LLM calls per query + orchestration (planning, loops, state)</td>
+          <td>Multi-hop reasoning over the KB becomes a core feature</td>
+        </tr>
+        <tr>
+          <td><strong>Self-RAG</strong></td>
+          <td>Adaptive, on-demand retrieval with self-critique via reflection tokens</td>
+          <td>Very high — requires custom model training (out of scope for a TS/Node app)</td>
+          <td>You control model training and need adaptive retrieval</td>
+        </tr>
+        <tr>
+          <td><strong>CRAG</strong></td>
+          <td>Persistent retrieval failure; corrects bad local retrieval with a web-search fallback</td>
+          <td>Modest — a retrieval evaluator + external web-search dependency; plug-and-play</td>
+          <td>Retrieval quality still fails <em>after</em> hybrid + rerank + contextual are in place</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">03</span> Try it</h2>
+    <p>Work through the decision honestly. The wizard asks one question at a time; your answers route you to a single recommendation — or, more often, back to the baseline.</p>
+
+    <div class="demo">
+      <div class="demo-head">
+        <span class="spark"></span>
+        <span class="demo-title">Do you actually need an <b>advanced architecture</b>?</span>
+      </div>
+      <div class="demo-body">
+        <div id="wiz-progress" class="wizard-progress"></div>
+        <div id="wiz-question" class="wizard-q"></div>
+        <div id="wiz-actions" class="wizard-actions"></div>
+        <div id="wiz-result"></div>
+      </div>
+    </div>
+    <p class="demo-hint">// notice how almost every honest path lands on "your baseline is enough" — that's the point.</p>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">04</span> Decision lens</h2>
+    <div class="decision">
+      <span class="callout-title">Decision lens — advanced / deferred architectures</span>
+      <p>For a baseline personal knowledge manager, <strong>contextual chunking + hybrid search + reranking</strong> is the sweet spot. The architectures below are deliberately <strong>deferred</strong> — recorded with revisit triggers, not dropped.</p>
+      <div class="decision-grid">
+        <div class="cell use">
+          <h4>✓ Reach for one when</h4>
+          <ul>
+            <li>You have a <strong>specific, measured</strong> problem the baseline can't solve:</li>
+            <li>global summarization → <strong>GraphRAG</strong></li>
+            <li>multi-hop reasoning → <strong>Agentic RAG</strong></li>
+            <li>persistent retrieval failure → <strong>CRAG</strong></li>
+            <li>…and you can absorb the cost.</li>
+          </ul>
+        </div>
+        <div class="cell skip">
+          <h4>✕ Skip / overkill when</h4>
+          <ul>
+            <li>You haven't measured the baseline yet.</li>
+            <li>You're adopting it because it's <strong>fashionable</strong>, not because a metric demands it.</li>
+            <li>The need is hypothetical ("users might one day…").</li>
+          </ul>
+        </div>
+      </div>
+      <p style="margin-top:12px;"><strong>Tradeoff:</strong> each adds substantial cost — GraphRAG a heavy LLM indexing pass plus a graph store; Agentic RAG many LLM calls and orchestration; Self-RAG custom training; CRAG an evaluator plus an external web-search dependency. Defer deliberately, with a written trigger.</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">05</span> In Bergamot</h2>
+    <p>Task <strong>task-31.9</strong> ships a <strong>decision record</strong> (under <code>backlog/decisions/</code>) documenting GraphRAG, Agentic RAG, Self-RAG, and CRAG. For each architecture it captures three things: the <strong>problem it solves</strong>, <strong>why it is deferred now</strong>, and the <strong>concrete trigger to revisit</strong> — linking back to <code>backlog/docs/rag-pipeline-upgrade-plan.md</code> so the baseline work and the deferred work stay connected.</p>
+    <p>The point is not avoidance. <strong>Deferring deliberately — with a written trigger that says exactly when to come back — is itself the engineering decision.</strong> It keeps the codebase simple today while making the upgrade path explicit for the day a measurement finally justifies it.</p>
+  </section>
+
+  <footer class="foot">
+    <div class="sources">
+      <h3>Sources</h3>
+      <ul>
+        <li>GraphRAG — From Local to Global: A Graph RAG Approach to Query-Focused Summarization. <a href="https://arxiv.org/abs/2404.16130">arxiv.org/abs/2404.16130</a></li>
+        <li>Agentic RAG — Agentic Retrieval-Augmented Generation: A Survey on Agentic RAG. <a href="https://arxiv.org/abs/2501.09136">arxiv.org/abs/2501.09136</a></li>
+        <li>Self-RAG — Learning to Retrieve, Generate, and Critique through Self-Reflection. <a href="https://arxiv.org/abs/2310.11511">arxiv.org/abs/2310.11511</a></li>
+        <li>CRAG — Corrective Retrieval Augmented Generation. <a href="https://arxiv.org/abs/2401.15884">arxiv.org/abs/2401.15884</a></li>
+      </ul>
+    </div>
+    <div class="prevnext" data-prevnext></div>
+  </footer>
+
+</main>
+
+<script src="shared.js"></script>
+<script>
+  (function () {
+    // --- Wizard state machine -------------------------------------------
+    // Q1 is a gate: no measured baseline => stop. After that, each
+    // differentiator routes to exactly one architecture; all-no => baseline.
+    var GATE = {
+      id: "q1",
+      text: 'Have you already shipped <b>and measured</b> the baseline (contextual chunking + hybrid + rerank)?',
+      // yes -> continue to differentiators; no -> stop early
+    };
+
+    var DIFFERENTIATORS = [
+      {
+        id: "q2",
+        text: 'Do users ask <b>global, corpus-wide sensemaking</b> questions ("main themes across everything")?',
+        tech: "GraphRAG",
+        problem: "Global, corpus-wide sensemaking that no few local chunks contain.",
+        trigger: '"Summarize my whole knowledge base / themes across everything" becomes a first-class feature.'
+      },
+      {
+        id: "q3",
+        text: 'Do queries need <b>multi-step reasoning / tool use</b> over the knowledge base?',
+        tech: "Agentic RAG",
+        problem: "Multi-step reasoning and tool use that static single-shot retrieval can't handle.",
+        trigger: "Multi-hop reasoning over the KB becomes a core feature."
+      },
+      {
+        id: "q4",
+        text: 'Is retrieval <b>still failing</b> after hybrid + rerank (and you\'d accept a web-search fallback)?',
+        tech: "CRAG (Corrective RAG)",
+        problem: "Persistent retrieval failure; corrects bad local retrieval with a web-search fallback.",
+        trigger: "Retrieval quality still fails AFTER hybrid + rerank + contextual are in place."
+      },
+      {
+        id: "q5",
+        text: 'Do you <b>train your own models</b> and need adaptive, on-demand retrieval?',
+        tech: "Self-RAG",
+        problem: "Adaptive, on-demand retrieval with self-critique via reflection tokens.",
+        trigger: "You control model training and need adaptive retrieval."
+      }
+    ];
+
+    var state = { phase: "gate", step: 0 };
+
+    var elProg = $("#wiz-progress");
+    var elQ = $("#wiz-question");
+    var elActions = $("#wiz-actions");
+    var elResult = $("#wiz-result");
+
+    function clearResult() { elResult.innerHTML = ""; }
+
+    function makeBtn(label, cls, onClick) {
+      var b = document.createElement("button");
+      b.className = "btn " + (cls || "");
+      b.textContent = label;
+      b.addEventListener("click", onClick);
+      return b;
+    }
+
+    function showRestart(host) {
+      var b = makeBtn("↻ Restart", "", restart);
+      host.appendChild(b);
+    }
+
+    function renderQuestion(text, progressLabel, onYes, onNo) {
+      clearResult();
+      elProg.textContent = progressLabel;
+      elQ.innerHTML = text;
+      elActions.innerHTML = "";
+      elActions.classList.add("fade-in");
+      // re-trigger animation
+      void elActions.offsetWidth;
+      elActions.appendChild(makeBtn("Yes", "primary", onYes));
+      elActions.appendChild(makeBtn("No", "", onNo));
+    }
+
+    function renderRecommendation(opts) {
+      // opts: { box, title, lead, tech, problem, trigger }
+      elProg.textContent = "RESULT";
+      elQ.innerHTML = "";
+      elActions.innerHTML = "";
+      var card = document.createElement("div");
+      card.className = (opts.box || "good-box") + " rec-card fade-in";
+      var html = '<span class="callout-title">' + opts.title + '</span>';
+      if (opts.lead) html += '<p class="rec-line">' + opts.lead + '</p>';
+      if (opts.tech) {
+        html += '<h4 class="rec-tech">→ ' + opts.tech + '</h4>';
+        html += '<p class="rec-line"><b>Problem it solves:</b> ' + opts.problem + '</p>';
+        html += '<p class="rec-line"><b>Revisit trigger:</b> ' + opts.trigger + '</p>';
+      }
+      card.innerHTML = html;
+      elResult.innerHTML = "";
+      elResult.appendChild(card);
+      showRestart(elResult);
+    }
+
+    function start() {
+      state = { phase: "gate", step: 0 };
+      renderQuestion(
+        GATE.text,
+        "STEP 1 — gate",
+        function () { state.phase = "diff"; state.step = 0; askDifferentiator(); },
+        function () {
+          renderRecommendation({
+            box: "good-box",
+            title: "Stop — build the baseline first",
+            lead: "Stop. Build and <b>MEASURE</b> the baseline first (contextual chunking + hybrid + rerank). Most teams never need more than this."
+          });
+        }
+      );
+    }
+
+    function askDifferentiator() {
+      if (state.step >= DIFFERENTIATORS.length) {
+        // all differentiators answered "no"
+        renderRecommendation({
+          box: "good-box",
+          title: "Your baseline is enough",
+          lead: "Your baseline is enough. Adding GraphRAG / Agentic / CRAG / Self-RAG now is <b>overkill (YAGNI)</b> — defer them with a written revisit trigger."
+        });
+        return;
+      }
+      var d = DIFFERENTIATORS[state.step];
+      renderQuestion(
+        d.text,
+        "STEP " + (state.step + 2) + " of " + (DIFFERENTIATORS.length + 1) + " — differentiator",
+        function () {
+          renderRecommendation({
+            box: "good-box",
+            title: "Recommendation",
+            tech: d.tech,
+            problem: d.problem,
+            trigger: d.trigger
+          });
+        },
+        function () { state.step += 1; askDifferentiator(); }
+      );
+    }
+
+    function restart() { start(); }
+
+    // boot
+    start();
+  })();
+</script>
+</body>
+</html>

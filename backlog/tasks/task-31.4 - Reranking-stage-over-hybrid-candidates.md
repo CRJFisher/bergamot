@@ -17,6 +17,8 @@ parent_task_id: TASK-31
 
 Add a reranking stage over the top-N candidates returned by hybrid retrieval — the add-on that stacks to the largest cumulative failure reduction (Anthropic: -67% retrieval failures with contextual hybrid + rerank). Use a LanceDB-pluggable reranker (cross-encoder local, or a hosted reranker such as Cohere/Voyage) and choose the concrete one by measured ROI and cost on the harness, not by reputation. Expose reranker choice and top-N via config. See backlog/docs/rag-pipeline-upgrade-plan.md (Phase E).
 
+
+**Learning companion:** [backlog/docs/rag-explainers/04-reranking.html](04-reranking.html) — interactive explainer of the concepts and the decision logic for this phase.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
