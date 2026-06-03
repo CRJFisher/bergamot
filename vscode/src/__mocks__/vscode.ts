@@ -14,11 +14,20 @@ export const workspace = {
     onDidChangeTextDocument: jest.fn(),
     onDidOpenTextDocument: jest.fn(),
     onDidCloseTextDocument: jest.fn(),
+    // Returns configured defaults: `get(key, default)` yields `default`.
+    getConfiguration: jest.fn(() => ({
+        get: <T>(_key: string, default_value?: T): T | undefined => default_value,
+    })),
 };
 
 export const window = {
     showInformationMessage: jest.fn(),
     showErrorMessage: jest.fn(),
+    createOutputChannel: jest.fn(() => ({
+        appendLine: jest.fn(),
+        show: jest.fn(),
+        clear: jest.fn(),
+    })),
 };
 
 export class Position {

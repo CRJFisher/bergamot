@@ -92,6 +92,19 @@ const enrich_visit_with_session = (
 // background service worker; it is simply re-discovered after SW eviction.
 let cached_server_url: string | null = null;
 
+// Surfaces POST health on the toolbar icon: a red "!" badge on final failure,
+// cleared on the next success. Guarded because `chrome.action` is only present
+// in the background service worker (and absent under unit-test mocks).
+const set_post_status_badge = (ok: boolean): void => {
+  if (typeof chrome === 'undefined' || !chrome.action) return;
+  if (ok) {
+    chrome.action.setBadgeText({ text: '' });
+  } else {
+    chrome.action.setBadgeBackgroundColor({ color: '#d33' });
+    chrome.action.setBadgeText({ text: '!' });
+  }
+};
+
 export const handle_server_request = async (
   endpoint: string,
   data: any,
@@ -103,6 +116,7 @@ export const handle_server_request = async (
   try {
     await send_to_server(target, endpoint, data);
     cached_server_url = target;
+    set_post_status_badge(true);
     return { success: true };
   } catch (error: any) {
     // The cached/default port may be stale, or the server bound a different
@@ -112,13 +126,16 @@ export const handle_server_request = async (
       try {
         await send_to_server(discovered, endpoint, data);
         cached_server_url = discovered;
+        set_post_status_badge(true);
         return { success: true };
       } catch (retry_error: any) {
         cached_server_url = null;
+        set_post_status_badge(false);
         return { success: false, error: retry_error.message };
       }
     }
     cached_server_url = null;
+    set_post_status_badge(false);
     return { success: false, error: error.message };
   }
 };

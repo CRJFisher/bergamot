@@ -1,9 +1,14 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
 import { DuckDB } from '../duck_db';
 import { LanceDBMemoryStore } from '../lance_db';
 import { register_webpage_search_commands } from '../webpage_search_commands';
 import { register_webpage_hover_provider } from '../webpage_hover_provider';
 import { global_filter_metrics } from '../workflow/filter_metrics';
+import { ServerManager } from '../server/server_manager';
+import { get_recent_outcomes, show_dev_log_channel } from '../dev_log';
+import { list_captures, load_capture } from '../captures';
 
 /**
  * Configuration for command registration.
@@ -18,6 +23,10 @@ export interface CommandConfig {
   context: vscode.ExtensionContext;
   duck_db: DuckDB;
   memory_db: LanceDBMemoryStore;
+  /** Owns the live queue processor; used by the dev observability commands */
+  server_manager: ServerManager;
+  /** Resolved storage base; used to locate captures + the visit inbox */
+  storage_base: string;
 }
 
 /**
@@ -58,6 +67,111 @@ export class CommandManager {
     this.register_core_commands();
     this.register_search_commands();
     this.register_filter_commands();
+    this.register_dev_commands();
+  }
+
+  /**
+   * Registers dev-phase observability commands: a recent-visit-outcomes view
+   * (why each visit dropped, plus live queue/inbox/orphan counts) and a replay
+   * command that re-runs a persisted capture through the pipeline.
+   * @private
+   */
+  private register_dev_commands(): void {
+    const show_outcomes = vscode.commands.registerCommand(
+      'bergamot.showVisitOutcomes',
+      () => this.show_visit_outcomes()
+    );
+    const replay = vscode.commands.registerCommand(
+      'bergamot.replayVisit',
+      () => this.replay_visit()
+    );
+    this.config.context.subscriptions.push(show_outcomes, replay);
+    this.disposables.push(show_outcomes, replay);
+  }
+
+  /**
+   * Renders recent per-visit outcomes plus live pipeline counts to the
+   * Bergamot Dev output channel.
+   * @private
+   */
+  private show_visit_outcomes(): void {
+    const stats = this.config.server_manager.get_queue_processor()?.get_stats();
+    const inbox_count = this.count_inbox();
+    const outcomes = get_recent_outcomes();
+
+    const lines: string[] = [];
+    lines.push('=== Bergamot Pipeline ===');
+    lines.push(`Queue length: ${stats?.queue_length ?? 0}`);
+    lines.push(`Processing: ${stats?.is_processing ?? false}`);
+    lines.push(`Inbox (unprocessed): ${inbox_count}`);
+    lines.push(`Orphans: ${stats?.orphan_stats.total_orphans ?? 0}`);
+    lines.push('');
+    lines.push(`=== Recent Visit Outcomes (${outcomes.length}) ===`);
+    for (const o of outcomes) {
+      const detail = [
+        o.page_type && `type=${o.page_type}`,
+        o.confidence !== undefined && `conf=${o.confidence}`,
+        o.reason && `reason=${o.reason}`,
+        o.error && `error=${o.error}`,
+      ]
+        .filter(Boolean)
+        .join(' ');
+      lines.push(`[${o.decision}] ${o.url} (${o.visit_id}) ${detail}`.trimEnd());
+    }
+
+    const channel = vscode.window.createOutputChannel('Bergamot Visit Outcomes');
+    channel.clear();
+    channel.appendLine(lines.join('\n'));
+    channel.show(true);
+    show_dev_log_channel();
+  }
+
+  /**
+   * Counts unprocessed visits remaining in the durable inbox.
+   * @private
+   */
+  private count_inbox(): number {
+    const inbox = path.join(this.config.storage_base, 'visit_inbox');
+    if (!fs.existsSync(inbox)) return 0;
+    return fs.readdirSync(inbox).filter((f) => f.endsWith('.json')).length;
+  }
+
+  /**
+   * Lets the developer pick a persisted capture and re-injects it into the
+   * queue, re-running the full classification/analysis pipeline without
+   * re-browsing the page.
+   * @private
+   */
+  private async replay_visit(): Promise<void> {
+    const captures = list_captures(this.config.storage_base);
+    if (captures.length === 0) {
+      vscode.window.showInformationMessage('Bergamot: no captures to replay.');
+      return;
+    }
+
+    const pick = await vscode.window.showQuickPick(
+      captures.map((c) => ({
+        label: c.url,
+        description: `${c.visit_id} · ${c.page_loaded_at}`,
+        visit_id: c.visit_id,
+      })),
+      { placeHolder: 'Select a capture to replay through the pipeline' }
+    );
+    if (!pick) return;
+
+    const visit = load_capture(this.config.storage_base, pick.visit_id);
+    if (!visit) {
+      vscode.window.showWarningMessage('Bergamot: capture was evicted before replay.');
+      return;
+    }
+
+    const processor = this.config.server_manager.get_queue_processor();
+    if (!processor) {
+      vscode.window.showWarningMessage('Bergamot: server not running; cannot replay.');
+      return;
+    }
+    processor.enqueue(visit);
+    vscode.window.showInformationMessage(`Bergamot: replaying ${visit.url}`);
   }
 
   /**

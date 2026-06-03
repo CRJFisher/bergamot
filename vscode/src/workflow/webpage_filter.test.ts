@@ -32,7 +32,7 @@ describe('webpage_filter', () => {
       expect(mock_llm_complete).toHaveBeenCalledWith(
         expect.stringContaining('https://docs.python.org/3/'),
         expect.any(String),
-        'gpt-4o-mini'
+        'fast'
       );
     });
 

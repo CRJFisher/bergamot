@@ -51,7 +51,9 @@ describe("LanceDBMemoryStore", () => {
     mockTable.limit.mockReturnThis();
     mockTable.toArray.mockResolvedValue([]);
 
-    mockConnection.tableNames.mockResolvedValue([]);
+    // Default to the steady state where the test namespace's table already
+    // exists; tests that exercise the first-write/create path override this.
+    mockConnection.tableNames.mockResolvedValue(["test-namespace"]);
     mockConnection.openTable.mockResolvedValue(mockTable);
     mockConnection.createTable.mockResolvedValue(mockTable);
   });
@@ -110,11 +112,21 @@ describe("LanceDBMemoryStore", () => {
       expect(result).toBeNull();
     });
 
-    it("should handle table opening errors", async () => {
+    it("should return null when the namespace has no table yet", async () => {
+      mockConnection.tableNames.mockResolvedValue([]);
+
+      const result = await store.get(["brand-new-namespace"], "test-key");
+
+      expect(result).toBeNull();
+      expect(mockConnection.openTable).not.toHaveBeenCalled();
+    });
+
+    it("should propagate errors opening an existing table", async () => {
+      mockConnection.tableNames.mockResolvedValue(["test-namespace"]);
       mockConnection.openTable.mockRejectedValue(new Error("Table not found"));
 
       await expect(
-        store.get(["nonexistent-namespace"], "test-key")
+        store.get(["test-namespace"], "test-key")
       ).rejects.toThrow("Table not found");
     });
   });
@@ -144,6 +156,25 @@ describe("LanceDBMemoryStore", () => {
           updated_at: expect.any(String),
         }),
       ]);
+    });
+
+    it("should create the table from the first record when none exists", async () => {
+      mockConnection.tableNames.mockResolvedValue([]);
+      const value = { title: "First Doc", content: "First content" };
+
+      await store.put(["fresh-namespace"], "first-key", value);
+
+      // First write to a namespace creates the table (LanceDB infers the schema
+      // from the record); subsequent writes would use add().
+      expect(mockConnection.createTable).toHaveBeenCalledWith("fresh-namespace", [
+        expect.objectContaining({
+          key: "first-key",
+          title: "First Doc",
+          content: "First content",
+          vector: expect.any(Buffer),
+        }),
+      ]);
+      expect(mockTable.add).not.toHaveBeenCalled();
     });
 
     it("should store an item without embeddings when no embeddings service available", async () => {
@@ -284,6 +315,9 @@ describe("LanceDBMemoryStore", () => {
     it("should execute multiple operations in sequence", async () => {
       const getResult = { key: "key1", value: "value1" };
       const searchResults = [{ key: "key2", value: "value2" }];
+
+      // The get/search namespaces already have tables in this scenario.
+      mockConnection.tableNames.mockResolvedValue(["ns1", "ns4"]);
 
       mockTable.toArray
         .mockResolvedValueOnce([getResult]) // for get operation

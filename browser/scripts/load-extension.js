@@ -22,13 +22,18 @@
  *   node scripts/load-extension.js --keep-profile     # Keeps profile for next run
  *   
  * PROGRAMMATIC USAGE:
- *   const { findChrome, launchChrome } = require('./scripts/load-extension.js');
+ *   import { findChrome, launchChrome } from './scripts/load-extension.js';
  */
 
-const { spawn } = require('child_process');
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
+import { spawn, execSync } from 'node:child_process';
+import http from 'node:http';
+import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Configuration - adjusted for new location in scripts/
 const EXTENSION_PATH = path.join(__dirname, '..', 'chrome');
@@ -37,6 +42,7 @@ const TEMP_PROFILE = path.join(os.tmpdir(), 'pkm-chrome-debug-profile');
 // Chrome executable paths for different platforms
 const CHROME_PATHS = {
   darwin: [
+    '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
     '/Applications/Chromium.app/Contents/MacOS/Chromium'
@@ -54,11 +60,20 @@ const CHROME_PATHS = {
   ]
 };
 
-// Find Chrome executable
+// Find a Chromium-family browser executable.
+// BROWSER_BIN takes priority so callers (e.g. `dev:brave`) can pin a specific
+// binary; otherwise the first existing path for the platform wins.
 function findChrome() {
+  if (process.env.BROWSER_BIN) {
+    if (!fs.existsSync(process.env.BROWSER_BIN)) {
+      throw new Error(`BROWSER_BIN does not exist: ${process.env.BROWSER_BIN}`);
+    }
+    return process.env.BROWSER_BIN;
+  }
+
   const platform = os.platform();
   const paths = CHROME_PATHS[platform] || [];
-  
+
   for (const chromePath of paths) {
     if (fs.existsSync(chromePath)) {
       return chromePath;
@@ -66,7 +81,7 @@ function findChrome() {
   }
   
   // Try to find in PATH
-  const which = require('child_process').execSync('which google-chrome || which chromium || echo ""', { encoding: 'utf-8' }).trim();
+  const which = execSync('which google-chrome || which chromium || echo ""', { encoding: 'utf-8' }).trim();
   if (which) return which;
   
   throw new Error('Chrome not found. Please install Google Chrome.');
@@ -77,30 +92,38 @@ function checkExtensionBuilt() {
   const backgroundScript = path.join(EXTENSION_PATH, 'dist', 'background.bundle.js');
   if (!fs.existsSync(backgroundScript)) {
     console.log('❌ Extension not built. Building now...');
-    require('child_process').execSync('npm run build', { 
+    execSync('npm run build', {
       cwd: path.join(__dirname, '..'),
-      stdio: 'inherit' 
+      stdio: 'inherit'
     });
   }
 }
 
-// Create temporary profile directory
-function createTempProfile(keepProfile = false) {
-  const profileDir = keepProfile 
-    ? path.join(os.homedir(), '.pkm-chrome-debug-profile')
-    : TEMP_PROFILE;
-    
+// Resolve the user-data-dir for this run.
+// Brave gets its own persistent profile so it never shares (and corrupts) a
+// Chrome profile; persistent profiles also survive across dev iterations.
+function resolveProfileDir(chromeBin, keepProfile) {
+  const isBrave = /Brave/i.test(chromeBin);
+  let profileDir;
+  if (isBrave) {
+    profileDir = path.join(os.homedir(), '.bergamot-brave-debug-profile');
+  } else if (keepProfile) {
+    profileDir = path.join(os.homedir(), '.pkm-chrome-debug-profile');
+  } else {
+    profileDir = TEMP_PROFILE;
+  }
+
   if (!fs.existsSync(profileDir)) {
     fs.mkdirSync(profileDir, { recursive: true });
   }
-  return profileDir;
+  return { profileDir, persistent: isBrave || keepProfile };
 }
 
 // Launch Chrome with extension
 function launchChrome() {
   const chrome = findChrome();
   const keepProfile = process.argv.includes('--keep-profile');
-  const profileDir = createTempProfile(keepProfile);
+  const { profileDir, persistent } = resolveProfileDir(chrome, keepProfile);
   
   console.log('🚀 Loading PKM Navigation Tracker Extension...');
   console.log('📁 Extension path:', EXTENSION_PATH);
@@ -109,8 +132,7 @@ function launchChrome() {
   console.log('');
   
   // Check if VS Code extension is running
-  const http = require('http');
-  http.get('http://localhost:5000', (res) => {
+  http.get('http://localhost:5000', () => {
     console.log('✅ VS Code extension detected on port 5000');
   }).on('error', () => {
     console.log('⚠️  VS Code extension not detected on port 5000');
@@ -124,7 +146,7 @@ function launchChrome() {
   console.log('  3. Click "service worker" link to debug background script');
   console.log('  4. Press F12 on any webpage to debug content script');
   console.log('');
-  if (keepProfile) {
+  if (persistent) {
     console.log('📌 Using persistent profile at:', profileDir);
   }
   console.log('🛑 Press Ctrl+C to stop and cleanup');
@@ -159,15 +181,15 @@ function launchChrome() {
   process.on('SIGINT', () => {
     console.log('\n🧹 Cleaning up...');
     chromeProcess.kill();
-    if (!keepProfile && fs.existsSync(profileDir)) {
+    if (!persistent && fs.existsSync(profileDir)) {
       fs.rmSync(profileDir, { recursive: true, force: true });
     }
     process.exit(0);
   });
-  
+
   chromeProcess.on('close', (code) => {
     console.log(`Chrome exited with code ${code}`);
-    if (!keepProfile && fs.existsSync(profileDir)) {
+    if (!persistent && fs.existsSync(profileDir)) {
       fs.rmSync(profileDir, { recursive: true, force: true });
     }
   });
@@ -210,8 +232,8 @@ function main() {
 }
 
 // Run if called directly
-if (require.main === module) {
+if (process.argv[1] === __filename) {
   main();
 }
 
-module.exports = { findChrome, launchChrome };
+export { findChrome, launchChrome };

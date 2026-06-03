@@ -14,9 +14,31 @@ import * as vscode from 'vscode';
  * }
  * ```
  */
+/** Which backend serves classification + the other LLM calls. */
+export type LlmProvider = 'claude' | 'openai' | 'vscode';
+
 export class ConfigManager {
   private static readonly CONFIG_NAMESPACE = 'bergamot';
-  
+
+  /**
+   * Whether dev-phase observability (the Bergamot Dev channel + dev-log.jsonl)
+   * is enabled. Off by default for installed extensions.
+   */
+  static get_dev_mode(): boolean {
+    const config = vscode.workspace.getConfiguration(this.CONFIG_NAMESPACE);
+    return config.get<boolean>('devMode', false);
+  }
+
+  /**
+   * The LLM provider for classification and analysis. Defaults to the Claude
+   * subscription (no API tokens); `openai` uses the OpenAI key, `vscode` uses
+   * the editor's language-model API.
+   */
+  static get_llm_provider(): LlmProvider {
+    const config = vscode.workspace.getConfiguration(this.CONFIG_NAMESPACE);
+    return config.get<LlmProvider>('llmProvider', 'claude');
+  }
+
   /**
    * Retrieves and validates the OpenAI API key from VS Code settings.
    * Shows an error message if the key is not configured.
@@ -34,17 +56,7 @@ export class ConfigManager {
   static get_openai_api_key(): string | undefined {
     const config = vscode.workspace.getConfiguration(this.CONFIG_NAMESPACE);
     const api_key = config.get<string>('openaiApiKey');
-
-    if (!api_key) {
-      console.error('OpenAI API key is not configured');
-      vscode.window.showErrorMessage(
-        'OpenAI API key is not configured. Please set it in settings.'
-      );
-      return undefined;
-    }
-    
-    console.log('OpenAI API key found in configuration');
-    return api_key;
+    return api_key || undefined;
   }
 
   /**

@@ -15,11 +15,14 @@ import { OrphanedVisitsManager } from "./orphaned_visits";
 import { insert_page_activity_session_with_tree_management } from "./webpage_tree";
 import { run_workflow } from "./reconcile_webpage_trees_workflow_vanilla";
 import { load_inbox, remove_visit } from "./visit_inbox";
+import { record_outcome } from "./dev_log";
 
 /**
  * Extended visit type that includes raw content and tab metadata
  */
 export interface ExtendedPageVisit extends PageActivitySessionWithoutTreeOrContent {
+  /** Correlation token threaded through the pipeline for end-to-end tracing */
+  visit_id: string;
   /** Raw HTML content of the page */
   raw_content: string;
   /** Browser tab ID that opened this page */
@@ -235,6 +238,7 @@ export class VisitQueueProcessor {
         members: tree_members,
         new_page: page_with_tree_id,
         raw_content: visit.raw_content,
+        visit_id: visit.visit_id,
       },
       this.webpage_categoriser_app,
       this.duck_db
@@ -319,10 +323,12 @@ export class VisitQueueProcessor {
             remove_visit(this.inbox_dir, visit.id);
           }
         } catch (error) {
-          console.error(
-            `Error processing page visit ${visit.url}:`,
-            error
-          );
+          record_outcome({
+            visit_id: visit.visit_id,
+            url: visit.url,
+            decision: 'failed',
+            error: error instanceof Error ? error.message : String(error),
+          });
           // Leave the visit in the durable inbox so it is retried on restart.
         }
       });

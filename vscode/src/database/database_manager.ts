@@ -1,8 +1,7 @@
-import * as vscode from 'vscode';
 import * as path from 'path';
 import { DuckDB } from '../duck_db';
 import { LanceDBMemoryStore } from '../lance_db';
-import { OpenAIEmbeddings } from '../workflow/embeddings';
+import { create_embeddings } from '../workflow/embeddings';
 
 /**
  * Result of database initialization containing all database instances.
@@ -55,8 +54,7 @@ export class DatabaseManager {
    * ```
    */
   async initialize_memory_store(
-    storage_path: string,
-    openai_api_key: string
+    storage_path: string
   ): Promise<LanceDBMemoryStore> {
     console.log('Initializing memory store...');
 
@@ -65,12 +63,9 @@ export class DatabaseManager {
     // writer must use it too or semantic search reads an empty store.
     const memory_db_path = path.join(storage_path, 'webpage_memory.db');
     const memory_db = await LanceDBMemoryStore.create(memory_db_path, {
-      embeddings: new OpenAIEmbeddings({
-        model: 'text-embedding-3-small',
-        apiKey: openai_api_key,
-      }),
+      embeddings: create_embeddings(),
     });
-    
+
     console.log('Memory store initialized successfully');
     return memory_db;
   }
@@ -79,32 +74,25 @@ export class DatabaseManager {
    * Initializes all databases required by the extension: the DuckDB relational
    * store and the LanceDB vector store.
    *
-   * @param context - VS Code extension context for accessing storage paths
-   * @param openai_api_key - OpenAI API key for embeddings
+   * @param storage_path - Resolved storage base directory (dev or global)
    * @returns Complete set of initialized databases
    * @throws {Error} If any database initialization fails
    * @example
    * ```typescript
    * const dbManager = new DatabaseManager();
-   * const databases = await dbManager.initialize_all(context, 'sk-...');
+   * const databases = await dbManager.initialize_all(storage_base);
    * // All databases are now ready to use
    * ```
    */
   async initialize_all(
-    context: vscode.ExtensionContext,
-    openai_api_key: string
+    storage_path: string
   ): Promise<DatabaseInstances> {
-    const storage_path = context.globalStorageUri.fsPath;
-
     const duck_db = new DuckDB({
       database_path: path.join(storage_path, 'webpage_categorizations.db'),
     });
     await duck_db.init();
 
-    const memory_db = await this.initialize_memory_store(
-      storage_path,
-      openai_api_key
-    );
+    const memory_db = await this.initialize_memory_store(storage_path);
 
     this.databases = { duck_db, memory_db };
     return this.databases;

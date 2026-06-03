@@ -40,14 +40,19 @@ const send_to_server = async (endpoint: string, data: Record<string, unknown>) =
         return;
       }
       // Background was reachable but reported a failure — do not spin on it.
-      console.warn(`PKM: Failed to send to ${endpoint}:`, response?.error);
+      console.warn(
+        `PKM: Failed to send to ${endpoint} (visit_id=${data.visit_id}):`,
+        response?.error
+      );
       return;
     } catch (error) {
       // Service worker not ready yet; wait and retry.
     }
     await new Promise((resolve) => setTimeout(resolve, SEND_RETRY_DELAY_MS));
   }
-  console.warn(`PKM: Gave up sending to ${endpoint} after retries`);
+  console.warn(
+    `PKM: Gave up sending to ${endpoint} (visit_id=${data.visit_id}) after retries`
+  );
 };
 
 // Main page visit handler. The content script only captures page content; the

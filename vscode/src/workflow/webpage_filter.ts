@@ -1,3 +1,5 @@
+import { ModelRole } from './openai_client';
+
 export interface PageClassification {
   page_type: 'knowledge' | 'interactive_app' | 'aggregator' | 'leisure' | 'navigation' | 'other';
   confidence: number;
@@ -56,17 +58,17 @@ export const DEFAULT_FILTER_CONFIG: FilterConfig = {
 export async function classify_webpage(
   url: string,
   content: string,
-  llm_complete_json: <T>(prompt: string, system_prompt: string, model?: string) => Promise<T>
+  llm_complete_json: <T>(prompt: string, system_prompt: string, role?: ModelRole) => Promise<T>
 ): Promise<PageClassification> {
   // Take first 2000 characters of content for classification
   const content_sample = content.substring(0, 2000);
-  
+
   const prompt = `URL: ${url}\n\nContent sample:\n${content_sample}`;
-  
+
   return await llm_complete_json<PageClassification>(
     prompt,
     PAGE_FILTER_PROMPT,
-    'gpt-4o-mini'
+    'fast'
   );
 }
 

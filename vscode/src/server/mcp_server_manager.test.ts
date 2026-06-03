@@ -47,7 +47,8 @@ describe('MCPServerManager', () => {
         globalStorageUri: { fsPath: '/test/storage' }
       } as any,
       openai_api_key: 'test-api-key',
-      duck_db: {} as DuckDB
+      duck_db: {} as DuckDB,
+      storage_base: '/test/storage'
     };
 
     mcp_manager = new MCPServerManager(mock_config);

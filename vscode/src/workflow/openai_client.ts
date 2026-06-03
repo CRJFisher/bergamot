@@ -1,34 +1,48 @@
 import OpenAI from 'openai';
 import * as vscode from 'vscode';
+import { LlmProvider } from '../config/config_manager';
+import { ClaudeAgentClient } from './claude_agent_client';
+import { FakeLLMClient } from './fake_llm_client';
 
-interface LLMClient {
-  complete(prompt: string, system_prompt: string, model?: string): Promise<string>;
-  complete_json<T>(prompt: string, system_prompt: string, model?: string): Promise<T>;
+/**
+ * Provider-neutral model role. Each client maps these to its own concrete
+ * model names so callers never hardcode a vendor model id.
+ */
+export type ModelRole = 'fast' | 'smart';
+
+export interface LLMClient {
+  complete(prompt: string, system_prompt: string, role?: ModelRole): Promise<string>;
+  complete_json<T>(prompt: string, system_prompt: string, role?: ModelRole): Promise<T>;
 }
+
+const OPENAI_MODELS: Record<ModelRole, string> = {
+  fast: 'gpt-4o-mini',
+  smart: 'gpt-4o',
+};
 
 export class OpenAIClient implements LLMClient {
   private openai: OpenAI;
-  
+
   constructor(api_key: string) {
     this.openai = new OpenAI({ apiKey: api_key });
   }
 
-  async complete(prompt: string, system_prompt: string, model = 'gpt-4o-mini'): Promise<string> {
+  async complete(prompt: string, system_prompt: string, role: ModelRole = 'fast'): Promise<string> {
     const response = await this.openai.chat.completions.create({
-      model,
+      model: OPENAI_MODELS[role],
       messages: [
         { role: 'system', content: system_prompt },
         { role: 'user', content: prompt }
       ],
       temperature: 0
     });
-    
+
     return response.choices[0]?.message?.content || '';
   }
 
-  async complete_json<T>(prompt: string, system_prompt: string, model = 'gpt-4o-mini'): Promise<T> {
+  async complete_json<T>(prompt: string, system_prompt: string, role: ModelRole = 'fast'): Promise<T> {
     const response = await this.openai.chat.completions.create({
-      model,
+      model: OPENAI_MODELS[role],
       messages: [
         { role: 'system', content: system_prompt },
         { role: 'user', content: prompt }
@@ -36,7 +50,7 @@ export class OpenAIClient implements LLMClient {
       temperature: 0,
       response_format: { type: 'json_object' }
     });
-    
+
     const content = response.choices[0]?.message?.content || '{}';
     return JSON.parse(content) as T;
   }
@@ -44,19 +58,19 @@ export class OpenAIClient implements LLMClient {
 
 export class VSCodeLLMClient implements LLMClient {
   private model: vscode.LanguageModelChat | null = null;
-  
+
   async initialize(model_id = 'gpt-4o'): Promise<boolean> {
     try {
       const models = await vscode.lm.selectChatModels({
         vendor: 'copilot',
         family: model_id,
       });
-      
+
       if (!models || models.length === 0) {
         console.log(`No chat models found for family: ${model_id}`);
         return false;
       }
-      
+
       this.model = models[0];
       return true;
     } catch (error) {
@@ -82,9 +96,9 @@ export class VSCodeLLMClient implements LLMClient {
 
     let full_response = '';
     for await (const chunk of response.stream) {
-      full_response += (chunk as any).value;
+      full_response += (chunk as vscode.LanguageModelTextPart).value;
     }
-    
+
     return full_response;
   }
 
@@ -93,42 +107,66 @@ export class VSCodeLLMClient implements LLMClient {
       prompt,
       `${system_prompt}\n\nIMPORTANT: Return only valid JSON, no markdown formatting or additional text.`
     );
-    
-    // Try to extract JSON from various formats
-    let json_content;
-    try {
-      // First attempt: Try direct parsing
-      json_content = JSON.parse(response);
-    } catch (e) {
-      // Second attempt: Try extracting from markdown code block
-      const markdown_json_match = response.match(/```json\s*([\s\S]*?)\s*```/);
-      if (markdown_json_match && markdown_json_match[1]) {
-        json_content = JSON.parse(markdown_json_match[1]);
-      } else {
-        // Third attempt: Try extracting any JSON object using regex
-        const json_match = response.match(/{[\s\S]*?}/);
-        if (json_match) {
-          json_content = JSON.parse(json_match[0]);
-        } else {
-          throw new Error('No valid JSON found in response');
-        }
-      }
-    }
-    
-    return json_content as T;
+
+    return extract_json<T>(response);
   }
 }
 
-export async function get_llm_client(open_ai_api_key: string, prefer_vscode = true): Promise<LLMClient> {
-  if (prefer_vscode) {
-    const vscode_client = new VSCodeLLMClient();
-    const initialized = await vscode_client.initialize();
-    if (initialized) {
-      console.log('Using VS Code LLM');
+/**
+ * Extracts a JSON value from a model response that may be raw JSON, fenced in a
+ * ```json block, or embedded in prose. Shared by the non-OpenAI clients, which
+ * have no native JSON-object response mode.
+ */
+export function extract_json<T>(response: string): T {
+  try {
+    return JSON.parse(response) as T;
+  } catch {
+    const markdown_json_match = response.match(/```json\s*([\s\S]*?)\s*```/);
+    if (markdown_json_match && markdown_json_match[1]) {
+      return JSON.parse(markdown_json_match[1]) as T;
+    }
+    const json_match = response.match(/{[\s\S]*}/);
+    if (json_match) {
+      return JSON.parse(json_match[0]) as T;
+    }
+    throw new Error('No valid JSON found in response');
+  }
+}
+
+/**
+ * Constructs the LLM client for the configured provider.
+ *
+ * `BERGAMOT_LLM=fake` short-circuits to an offline canned client — the single
+ * injection point used by full-pipeline tests (and the same seam the Claude
+ * move slots into).
+ *
+ * There is no silent cross-provider fallback: if the selected provider cannot
+ * initialize, the error surfaces rather than quietly switching backends (which
+ * would, for the Claude subscription, mean unexpectedly billing API credits).
+ */
+export async function get_llm_client(
+  openai_api_key: string,
+  provider: LlmProvider
+): Promise<LLMClient> {
+  if (process.env.BERGAMOT_LLM === 'fake') {
+    return new FakeLLMClient();
+  }
+
+  switch (provider) {
+    case 'claude':
+      return new ClaudeAgentClient();
+    case 'openai':
+      return new OpenAIClient(openai_api_key);
+    case 'vscode': {
+      const vscode_client = new VSCodeLLMClient();
+      const initialized = await vscode_client.initialize();
+      if (!initialized) {
+        throw new Error(
+          'VS Code language model unavailable (no Copilot chat model). ' +
+            'Set bergamot.llmProvider to "claude" or "openai".'
+        );
+      }
       return vscode_client;
     }
   }
-  
-  console.log('Using OpenAI LLM');
-  return new OpenAIClient(open_ai_api_key);
 }

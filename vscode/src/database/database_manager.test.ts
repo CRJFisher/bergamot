@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { DatabaseManager } from './database_manager';
 import { DuckDB } from '../duck_db';
 import { LanceDBMemoryStore } from '../lance_db';
-import { OpenAIEmbeddings } from '../workflow/embeddings';
+import { create_embeddings } from '../workflow/embeddings';
 
 // Mock dependencies
 jest.mock('../duck_db');
@@ -28,7 +28,7 @@ describe('DatabaseManager', () => {
     (LanceDBMemoryStore.create as jest.Mock) = jest.fn().mockResolvedValue({
       stop: jest.fn()
     });
-    (OpenAIEmbeddings as jest.Mock).mockImplementation(() => ({}));
+    (create_embeddings as jest.Mock).mockReturnValue({});
 
     mock_context = {
       globalStorageUri: { fsPath: '/test/storage' }
@@ -36,11 +36,10 @@ describe('DatabaseManager', () => {
   });
 
   describe('initialize_memory_store()', () => {
-    it('should create LanceDB memory store with embeddings', async () => {
+    it('should create LanceDB memory store with local embeddings', async () => {
       const storage_path = '/test/storage';
-      const api_key = 'test-api-key';
 
-      await database_manager.initialize_memory_store(storage_path, api_key);
+      await database_manager.initialize_memory_store(storage_path);
 
       // The store must be created in the `webpage_memory.db` subdirectory so the
       // MCP reader (which resolves the same subdir) sees what the writer stored.
@@ -50,18 +49,15 @@ describe('DatabaseManager', () => {
           embeddings: expect.any(Object)
         })
       );
-      expect(OpenAIEmbeddings).toHaveBeenCalledWith({
-        model: 'text-embedding-3-small',
-        apiKey: api_key
-      });
+      // Embeddings are local (zero-token); no OpenAI key is involved.
+      expect(create_embeddings).toHaveBeenCalled();
     });
   });
 
   describe('initialize_all()', () => {
     it('should initialize DuckDB and the memory store', async () => {
       const result = await database_manager.initialize_all(
-        mock_context,
-        'test-api-key'
+        mock_context.globalStorageUri.fsPath
       );
 
       expect(DuckDB).toHaveBeenCalledWith({
@@ -83,7 +79,7 @@ describe('DatabaseManager', () => {
       mock_duck_db.init.mockRejectedValue(new Error('DB init failed'));
 
       await expect(
-        database_manager.initialize_all(mock_context, 'test-api-key')
+        database_manager.initialize_all(mock_context.globalStorageUri.fsPath)
       ).rejects.toThrow('DB init failed');
     });
   });
@@ -92,7 +88,7 @@ describe('DatabaseManager', () => {
     it('should close all database connections', async () => {
       const mock_memory_db = { stop: jest.fn() } as Partial<LanceDBMemoryStore> as LanceDBMemoryStore;
 
-      await database_manager.initialize_all(mock_context, 'test-api-key');
+      await database_manager.initialize_all(mock_context.globalStorageUri.fsPath);
 
       // Override the memory_db with our mock
       const databases = database_manager.get_databases();
@@ -117,7 +113,7 @@ describe('DatabaseManager', () => {
     });
 
     it('should return databases after initialization', async () => {
-      await database_manager.initialize_all(mock_context, 'test-api-key');
+      await database_manager.initialize_all(mock_context.globalStorageUri.fsPath);
 
       const databases = database_manager.get_databases();
       expect(databases).toBeDefined();

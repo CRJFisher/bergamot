@@ -7,6 +7,7 @@
  */
 
 import { PageActivitySessionWithoutTreeOrContent } from "./duck_db_models";
+import { dev_log, record_outcome } from "./dev_log";
 
 /**
  * Represents a webpage visit that arrived before its opener/parent page was processed
@@ -14,7 +15,7 @@ import { PageActivitySessionWithoutTreeOrContent } from "./duck_db_models";
  */
 export interface OrphanedVisit {
   /** The page visit data including content */
-  visit: PageActivitySessionWithoutTreeOrContent & { raw_content: string };
+  visit: PageActivitySessionWithoutTreeOrContent & { raw_content: string; visit_id: string };
   /** Browser tab ID of the page that opened this page */
   opener_tab_id: number;
   /** Timestamp when this orphaned visit was first detected */
@@ -74,13 +75,14 @@ export class OrphanedVisitsManager {
    * ```
    */
   add_orphan(
-    visit: PageActivitySessionWithoutTreeOrContent & { raw_content: string },
+    visit: PageActivitySessionWithoutTreeOrContent & { raw_content: string; visit_id: string },
     opener_tab_id: number
   ): void {
-    console.log(`🚸 Adding orphaned visit for tab ${opener_tab_id}:`, {
+    dev_log('orphan_parked', {
+      visit_id: visit.visit_id,
       url: visit.url,
       opener_tab_id,
-      visit_tab_id: (visit as PageActivitySessionWithoutTreeOrContent & { tab_id?: number }).tab_id
+      visit_tab_id: (visit as PageActivitySessionWithoutTreeOrContent & { tab_id?: number }).tab_id,
     });
 
     const orphan: OrphanedVisit = {
@@ -200,10 +202,11 @@ export class OrphanedVisitsManager {
         const index = orphans.indexOf(orphan);
         if (index > -1) {
           orphans.splice(index, 1);
-          console.log(`❌ Orphan exceeded max retries, removing:`, {
+          record_outcome({
+            visit_id: orphan.visit.visit_id,
             url: orphan.visit.url,
-            opener_tab_id: orphan.opener_tab_id,
-            retries: orphan.retry_count
+            decision: 'orphan_dropped',
+            reason: 'max_retries',
           });
         }
         
@@ -225,10 +228,11 @@ export class OrphanedVisitsManager {
       const fresh_orphans = orphans.filter(orphan => {
         const age = now - orphan.arrival_time;
         if (age > this.max_age_ms) {
-          console.log(`🗑️ Removing old orphan:`, {
+          record_outcome({
+            visit_id: orphan.visit.visit_id,
             url: orphan.visit.url,
-            opener_tab_id: orphan.opener_tab_id,
-            age_ms: age
+            decision: 'orphan_dropped',
+            reason: 'expired',
           });
           return false;
         }

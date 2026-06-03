@@ -9,7 +9,7 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { LanceDBMemoryStore } from "./lance_db";
-import { OpenAIEmbeddings } from "./workflow/embeddings";
+import { create_embeddings } from "./workflow/embeddings";
 import { get_webpage_content } from "./duck_db";
 import path from "path";
 import os from "os";
@@ -69,19 +69,35 @@ interface GetWebpageContentArgs {
   page_session_id: string;
 }
 
+// Tool arguments arrive as `unknown`; narrow them to the expected shape by
+// reading fields defensively rather than casting the whole object.
+function to_semantic_search_args(raw: unknown): SemanticSearchArgs {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  return {
+    query: typeof r.query === "string" ? r.query : "",
+    limit: typeof r.limit === "number" ? r.limit : undefined,
+  };
+}
+
+function to_get_webpage_content_args(raw: unknown): GetWebpageContentArgs {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  return {
+    page_session_id: typeof r.page_session_id === "string" ? r.page_session_id : "",
+  };
+}
+
 async function main() {
   // Get configuration from environment variables
-  const openai_api_key = process.env.OPENAI_API_KEY;
   const storage_path = process.env.STORAGE_PATH;
 
-  if (!openai_api_key || !storage_path) {
-    console.error("Missing required environment variables");
+  if (!storage_path) {
+    console.error("Missing required environment variable: STORAGE_PATH");
     process.exit(1);
   }
 
-  const embeddings = new OpenAIEmbeddings({
-    apiKey: openai_api_key,
-  });
+  // Embeddings run locally (zero-token); they must match the writer's model so
+  // semantic search vectors are comparable.
+  const embeddings = create_embeddings();
 
   const memory_db_path = path.join(storage_path, "webpage_memory.db");
   const memory_store = await LanceDBMemoryStore.create(memory_db_path, {
@@ -185,12 +201,12 @@ async function main() {
     switch (request.params.name) {
       case "semantic_search":
         return handle_semantic_search(
-          request.params.arguments as unknown as SemanticSearchArgs,
+          to_semantic_search_args(request.params.arguments),
           memory_store
         );
       case "get_webpage_content":
         return handle_get_webpage_content(
-          request.params.arguments as unknown as GetWebpageContentArgs,
+          to_get_webpage_content_args(request.params.arguments),
           memory_store
         );
       case "get_visit_by_url":
@@ -249,18 +265,15 @@ async function handle_semantic_search(
 
     // Format results
     const formatted_results = search_results.map((result) => {
-      const value = result as unknown as {
-        url: string;
-        title: string;
-        pageContent: string;
-        score?: number;
-      };
+      const page_content = typeof result.pageContent === "string" ? result.pageContent : "";
+      const score = typeof result.score === "number" ? result.score : undefined;
+      const distance = typeof result._distance === "number" ? result._distance : 0;
       return {
         id: result.key,
-        url: value.url,
-        title: value.title,
-        score: value.score || result._distance || 0,
-        preview: value.pageContent.substring(0, 200) + "...",
+        url: typeof result.url === "string" ? result.url : "",
+        title: typeof result.title === "string" ? result.title : "",
+        score: score ?? distance,
+        preview: page_content.substring(0, 200) + "...",
       };
     });
 
@@ -294,11 +307,6 @@ async function handle_get_webpage_content(
     );
 
     if (item) {
-      const value = item as unknown as {
-        url: string;
-        title: string;
-        pageContent: string;
-      };
       return {
         content: [
           {
@@ -306,9 +314,9 @@ async function handle_get_webpage_content(
             text: JSON.stringify(
               {
                 id: page_session_id,
-                url: value.url,
-                title: value.title,
-                content: value.pageContent,
+                url: typeof item.url === "string" ? item.url : "",
+                title: typeof item.title === "string" ? item.title : "",
+                content: typeof item.pageContent === "string" ? item.pageContent : "",
               },
               null,
               2

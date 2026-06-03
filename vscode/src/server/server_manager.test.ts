@@ -49,7 +49,8 @@ describe('ServerManager', () => {
     mock_config = {
       openai_api_key: 'test-api-key',
       duck_db: {} as DuckDB,
-      memory_db: {} as LanceDBMemoryStore
+      memory_db: {} as LanceDBMemoryStore,
+      llm_provider: 'claude'
     };
 
     server_manager = new ServerManager(mock_config);
@@ -93,7 +94,8 @@ describe('ServerManager', () => {
         'test-api-key',
         mock_config.duck_db,
         mock_config.memory_db,
-        expect.any(Object)
+        expect.any(Object),
+        { provider: 'claude' }
       );
     });
   });
@@ -135,14 +137,18 @@ describe('ServerManager', () => {
           .send(visit_data)
           .expect(200);
 
+        // With no browser-supplied visit_id, the server falls back to the
+        // deterministic content hash and echoes it back.
         expect(response.body).toEqual({
           status: 'queued',
-          position: 1
+          position: 1,
+          visit_id: 'test-hash-id'
         });
 
         expect(mock_queue_processor.enqueue).toHaveBeenCalledWith(
           expect.objectContaining({
             id: 'test-hash-id',
+            visit_id: 'test-hash-id',
             url: 'https://example.com',
             raw_content: 'test content'
           })

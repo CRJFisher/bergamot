@@ -11,11 +11,13 @@ import { DuckDB } from '../duck_db';
  * @property {vscode.ExtensionContext} context - VS Code extension context for paths and storage
  * @property {string} openai_api_key - OpenAI API key for AI capabilities
  * @property {DuckDB} duck_db - Database instance for data access
+ * @property {string} storage_base - Resolved storage base (dev or global) shared with the writer
  */
 export interface MCPServerConfig {
   context: vscode.ExtensionContext;
   openai_api_key: string;
   duck_db: DuckDB;
+  storage_base: string;
 }
 
 /**
@@ -82,9 +84,9 @@ export class MCPServerManager {
           env: {
             ...process.env,
             OPENAI_API_KEY: this.config.openai_api_key,
-            STORAGE_PATH: this.config.context.globalStorageUri.fsPath,
+            STORAGE_PATH: this.config.storage_base,
             DUCK_DB_PATH: path.join(
-              this.config.context.globalStorageUri.fsPath,
+              this.config.storage_base,
               'webpage_categorizations.db'
             ),
           },

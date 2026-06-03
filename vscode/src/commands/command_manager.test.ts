@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { CommandManager, CommandConfig } from './command_manager';
 import { DuckDB } from '../duck_db';
 import { LanceDBMemoryStore } from '../lance_db';
+import { ServerManager } from '../server/server_manager';
 import { register_webpage_search_commands } from '../webpage_search_commands';
 import { register_webpage_hover_provider } from '../webpage_hover_provider';
 import { global_filter_metrics } from '../workflow/filter_metrics';
@@ -41,7 +42,11 @@ describe('CommandManager', () => {
     mock_config = {
       context: mock_context,
       duck_db: {} as DuckDB,
-      memory_db: {} as LanceDBMemoryStore
+      memory_db: {} as LanceDBMemoryStore,
+      server_manager: {
+        get_queue_processor: jest.fn().mockReturnValue(undefined)
+      } as Partial<ServerManager> as ServerManager,
+      storage_base: '/test/storage'
     };
 
     // Setup mock for filter metrics

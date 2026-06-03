@@ -12,6 +12,9 @@ export class TabHistory {
 
 export class VisitData {
   constructor(
+    // Correlation token generated at capture time, threaded through the server
+    // pipeline and echoed back so a visit is traceable end to end.
+    public readonly visit_id: string,
     public readonly url: string,
     public readonly page_loaded_at: string,
     public readonly referrer: string,

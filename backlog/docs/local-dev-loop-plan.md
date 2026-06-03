@@ -96,6 +96,37 @@ A developer-runnable test exercising the real seam (real extension → discovery
 - `ANTHROPIC_API_KEY` in the extension-host env silently bills paid credits over the subscription — scrub it from the SDK child env.
 - `SERVER_PORT_RANGE` is duplicated in `server_manager.ts` and `server_discovery.ts` with only a comment to keep them in sync — the real-discovery E2E should assert they match.
 
+## Running It Locally
+
+The loop is implemented. Day-to-day:
+
+- **Debug the VS Code extension**: press F5 ("Run Extension") in Cursor. This compiles `vscode/` in watch mode, opens `/Users/chuck/workspace/pkm` as the dev host, and writes all stores to repo-local `.dev-storage` (via `BERGAMOT_STORAGE_PATH`). Source maps bind breakpoints.
+- **Deploy the browser extension into Brave**: `cd browser && npm run dev:brave`. This bundles straight into `browser/chrome/dist`, starts an esbuild watch, and launches Brave with its own persistent profile (`~/.bergamot-brave-debug-profile`). After editing, reload the unpacked extension's service worker (MV3 does not hot-reload).
+- **Watch the pipeline**: dev logging is on automatically under F5. Run "Bergamot: Show Visit Outcomes" to see recent visits (why each dropped, plus live queue/inbox/orphan counts), tail `<storage>/dev-log.jsonl` for the correlated `visit_id` stages, and use "Bergamot: Replay Visit" to re-run a captured page through the pipeline without re-browsing. A red `!` badge on the toolbar icon means the last POST failed.
+- **Run the offline pipeline test**: `cd vscode && npx jest server_pipeline.integration` exercises the real server + DuckDB + LanceDB with the fake LLM/embeddings.
+- **Run the full real-browser E2E**: `npm run test:e2e:pipeline` (from the repo root) builds the extension plainly, starts the headless capture server with the fake LLM/embeddings, and drives a real Chromium through discovery → server → stores.
+
+### Configuration
+
+- `bergamot.llmProvider` (default `claude`): classification + analysis run on the Claude subscription via the Claude Agent SDK — no API tokens. `openai` and `vscode` are alternatives. Model roles are provider-neutral (`fast`/`smart`).
+- Embeddings always run locally (zero-token) via all-MiniLM-L6-v2 (`@xenova/transformers`, 384-dim). The model downloads once and is then cached offline. The OpenAI key is no longer required to activate the extension.
+- `bergamot.devMode`: forces dev logging on outside F5.
+
+### Implementation specifics
+
+- The Claude Agent SDK requires zod v4; it and zod 4 are installed at the **monorepo root** (peer satisfied there) while the `vscode` workspace keeps zod 3 for its schemas. The SDK resolves via workspace hoisting.
+- Both the SDK and Transformers.js are ESM-only and loaded via a dynamic-import bridge so the CommonJS extension (and jest) can use them.
+- `vscode/src/server/server_standalone.ts` runs the capture server headlessly; it is launched with `-r vscode/scripts/vscode-shim.js`, which stubs the `vscode` module in plain Node.
+- `BERGAMOT_LLM=fake` selects the offline fake LLM **and** fake embeddings — the single switch for hermetic full-pipeline tests.
+
+### Top unknown — verify before relying on Claude
+
+The Claude Agent SDK is assumed to use subscription OAuth from `~/.claude.json` with `ANTHROPIC_API_KEY` unset (the SDK child env is scrubbed of it). This must be smoke-tested **from inside the Cursor extension host** — HOME/keychain inheritance there is unverified. There is no silent fallback to OpenAI: if Claude auth fails, classification surfaces an error (visible in Show Visit Outcomes) rather than quietly billing API credits.
+
+### Manual step
+
+The OpenAI key only matters if you switch `llmProvider` to `openai`; the default Claude + local-embeddings path needs no OpenAI key. The live key currently sits under the stale, never-read `pkm-assistant.openaiApiKey` namespace in both user-level Cursor settings and the gitignored `.vscode/settings.json`. To use the `openai` provider, move it under `bergamot.openaiApiKey`; otherwise it can be deleted. (Automated edits to these credential files are blocked, so this is a manual step.)
+
 ## Suggested Backlog Tasks
 
 1. Fix Cursor F5 debug config for the monorepo (Phase A).

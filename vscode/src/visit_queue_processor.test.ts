@@ -5,12 +5,14 @@ import { LanceDBMemoryStore } from "./lance_db";
 import * as webpageTree from "./webpage_tree";
 import * as workflow from "./reconcile_webpage_trees_workflow_vanilla";
 import * as duckDbImports from "./duck_db";
+import { record_outcome } from "./dev_log";
 
 // Mock dependencies
 jest.mock("./duck_db");
 jest.mock("./lance_db");
 jest.mock("./webpage_tree");
 jest.mock("./reconcile_webpage_trees_workflow_vanilla");
+jest.mock("./dev_log");
 
 describe("VisitQueueProcessor", () => {
   let processor: VisitQueueProcessor;
@@ -84,6 +86,7 @@ describe("VisitQueueProcessor", () => {
     it("should add visit to queue and return position", () => {
       const visit: ExtendedPageVisit = {
         id: "visit-1",
+        visit_id: "v-visit-1",
         url: "https://example.com",
         referrer: null,
         page_loaded_at: "2024-01-01T12:00:00Z",
@@ -102,6 +105,7 @@ describe("VisitQueueProcessor", () => {
       const visits: ExtendedPageVisit[] = [
         {
           id: "visit-1",
+          visit_id: "v-visit-1",
           url: "https://example.com/1",
           referrer: null,
           page_loaded_at: "2024-01-01T12:00:00Z",
@@ -109,6 +113,7 @@ describe("VisitQueueProcessor", () => {
         },
         {
           id: "visit-2",
+          visit_id: "v-visit-2",
           url: "https://example.com/2",
           referrer: null,
           page_loaded_at: "2024-01-01T12:01:00Z",
@@ -116,6 +121,7 @@ describe("VisitQueueProcessor", () => {
         },
         {
           id: "visit-3",
+          visit_id: "v-visit-3",
           url: "https://example.com/3",
           referrer: null,
           page_loaded_at: "2024-01-01T12:02:00Z",
@@ -135,6 +141,7 @@ describe("VisitQueueProcessor", () => {
     it("should schedule delayed processing for partial batch", () => {
       const visit: ExtendedPageVisit = {
         id: "visit-1",
+        visit_id: "v-visit-1",
         url: "https://example.com",
         referrer: null,
         page_loaded_at: "2024-01-01T12:00:00Z",
@@ -159,6 +166,7 @@ describe("VisitQueueProcessor", () => {
       // Add regular visits first
       processor.enqueue({
         id: "regular-1",
+        visit_id: "v-regular-1",
         url: "https://example.com/regular",
         referrer: null,
         page_loaded_at: "2024-01-01T12:00:00Z",
@@ -169,6 +177,7 @@ describe("VisitQueueProcessor", () => {
       const priorityVisits: ExtendedPageVisit[] = [
         {
           id: "priority-1",
+          visit_id: "v-priority-1",
           url: "https://example.com/priority1",
           referrer: "https://example.com",
           page_loaded_at: "2024-01-01T12:01:00Z",
@@ -176,6 +185,7 @@ describe("VisitQueueProcessor", () => {
         },
         {
           id: "priority-2",
+          visit_id: "v-priority-2",
           url: "https://example.com/priority2",
           referrer: "https://example.com",
           page_loaded_at: "2024-01-01T12:02:00Z",
@@ -203,6 +213,7 @@ describe("VisitQueueProcessor", () => {
     it("should handle successful visit with tree change", async () => {
       const visit: ExtendedPageVisit = {
         id: "visit-1",
+        visit_id: "v-visit-1",
         url: "https://example.com",
         referrer: null,
         page_loaded_at: "2024-01-01T12:00:00Z",
@@ -218,6 +229,7 @@ describe("VisitQueueProcessor", () => {
       mockGetPageSessions.mockResolvedValue([
         {
           id: "visit-1",
+          visit_id: "v-visit-1",
           url: "https://example.com",
           tree_id: "tree-123",
           content: "<html>Test</html>",
@@ -242,6 +254,7 @@ describe("VisitQueueProcessor", () => {
     it("should handle orphaned visit", async () => {
       const visit: ExtendedPageVisit = {
         id: "orphan-1",
+        visit_id: "v-orphan-1",
         url: "https://example.com/child",
         referrer: "https://example.com/parent",
         page_loaded_at: "2024-01-01T12:00:00Z",
@@ -264,6 +277,7 @@ describe("VisitQueueProcessor", () => {
     it("should process orphaned children when parent is processed", async () => {
       const parentVisit: ExtendedPageVisit = {
         id: "parent-1",
+        visit_id: "v-parent-1",
         url: "https://example.com/parent",
         referrer: null,
         page_loaded_at: "2024-01-01T12:00:00Z",
@@ -274,6 +288,7 @@ describe("VisitQueueProcessor", () => {
       const orphanedChild = {
         visit: {
           id: "child-1",
+          visit_id: "v-child-1",
           url: "https://example.com/child",
           referrer: "https://example.com/parent",
           page_loaded_at: "2024-01-01T12:01:00Z",
@@ -299,6 +314,7 @@ describe("VisitQueueProcessor", () => {
     it("should handle visit with no tree assignment", async () => {
       const visit: ExtendedPageVisit = {
         id: "aggregator-1",
+        visit_id: "v-aggregator-1",
         url: "https://news.ycombinator.com",
         referrer: null,
         page_loaded_at: "2024-01-01T12:00:00Z",
@@ -322,6 +338,7 @@ describe("VisitQueueProcessor", () => {
     it("should process visits in batches", async () => {
       const visits: ExtendedPageVisit[] = Array.from({ length: 7 }, (_, i) => ({
         id: `visit-${i}`,
+        visit_id: `v-visit-${i}`,
         url: `https://example.com/${i}`,
         referrer: null,
         page_loaded_at: `2024-01-01T12:0${i}:00Z`,
@@ -348,6 +365,7 @@ describe("VisitQueueProcessor", () => {
       const visits: ExtendedPageVisit[] = [
         {
           id: "good-1",
+          visit_id: "v-good-1",
           url: "https://example.com/good",
           referrer: null,
           page_loaded_at: "2024-01-01T12:00:00Z",
@@ -355,6 +373,7 @@ describe("VisitQueueProcessor", () => {
         },
         {
           id: "bad-1",
+          visit_id: "v-bad-1",
           url: "https://example.com/bad",
           referrer: null,
           page_loaded_at: "2024-01-01T12:01:00Z",
@@ -362,6 +381,7 @@ describe("VisitQueueProcessor", () => {
         },
         {
           id: "good-2",
+          visit_id: "v-good-2",
           url: "https://example.com/good2",
           referrer: null,
           page_loaded_at: "2024-01-01T12:02:00Z",
@@ -376,26 +396,27 @@ describe("VisitQueueProcessor", () => {
         .mockResolvedValueOnce({ tree_id: "tree-3", was_tree_changed: true });
       
       visits.forEach(v => processor.enqueue(v));
-      
-      const consoleSpy = jest.spyOn(console, "error").mockImplementation();
-      
+
       await processor.process_queue();
-      
+
       // All three should be attempted
       expect(mockInsertPageActivitySession).toHaveBeenCalledTimes(3);
-      
-      // Error should be logged but not stop processing
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Error processing page visit"),
-        expect.any(Error)
+
+      // The failed visit is recorded as a 'failed' outcome but does not stop
+      // the batch — the other visits still process.
+      expect(record_outcome).toHaveBeenCalledWith(
+        expect.objectContaining({
+          visit_id: "v-bad-1",
+          decision: "failed",
+          error: "Database error"
+        })
       );
-      
-      consoleSpy.mockRestore();
     });
 
     it("should prevent concurrent processing", async () => {
       const visit: ExtendedPageVisit = {
         id: "visit-1",
+        visit_id: "v-visit-1",
         url: "https://example.com",
         referrer: null,
         page_loaded_at: "2024-01-01T12:00:00Z",
@@ -420,6 +441,7 @@ describe("VisitQueueProcessor", () => {
       const orphan = {
         visit: {
           id: "orphan-1",
+          visit_id: "v-orphan-1",
           url: "https://example.com/orphan",
           referrer: "https://example.com/parent",
           page_loaded_at: "2024-01-01T12:00:00Z",
@@ -464,6 +486,7 @@ describe("VisitQueueProcessor", () => {
       const visits: ExtendedPageVisit[] = [
         {
           id: "visit-1",
+          visit_id: "v-visit-1",
           url: "https://example.com/1",
           referrer: null,
           page_loaded_at: "2024-01-01T12:00:00Z",
@@ -471,6 +494,7 @@ describe("VisitQueueProcessor", () => {
         },
         {
           id: "visit-2",
+          visit_id: "v-visit-2",
           url: "https://example.com/2",
           referrer: null,
           page_loaded_at: "2024-01-01T12:01:00Z",
@@ -539,6 +563,7 @@ describe("VisitQueueProcessor", () => {
     it("should handle very large batches", async () => {
       const visits: ExtendedPageVisit[] = Array.from({ length: 100 }, (_, i) => ({
         id: `visit-${i}`,
+        visit_id: `v-visit-${i}`,
         url: `https://example.com/${i}`,
         referrer: null,
         page_loaded_at: `2024-01-01T12:00:00Z`,
@@ -559,6 +584,7 @@ describe("VisitQueueProcessor", () => {
     it("should handle visits with missing optional fields", async () => {
       const minimalVisit: ExtendedPageVisit = {
         id: "minimal-1",
+        visit_id: "v-minimal-1",
         url: "https://example.com",
         referrer: null,
         page_loaded_at: "2024-01-01T12:00:00Z",

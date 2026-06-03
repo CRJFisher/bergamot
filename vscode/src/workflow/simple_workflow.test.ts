@@ -165,7 +165,7 @@ describe("WebpageWorkflow", () => {
       expect(mockLlmClient.complete).toHaveBeenCalledWith(
         expect.stringContaining(test_inputs.raw_content),
         expect.any(String),
-        "gpt-4o-mini"
+        "fast"
       );
 
       // Verify analysis
@@ -449,7 +449,7 @@ describe("WebpageWorkflow", () => {
       expect(mockLlmClient.complete).toHaveBeenCalledWith(
         expect.stringContaining(large_content),
         expect.any(String),
-        "gpt-4o-mini"
+        "fast"
       );
     });
 

@@ -7,6 +7,8 @@
   "scripts": {
     "build": "esbuild src/content.ts --bundle --outfile=dist/content.bundle.js --format=iife --allow-overwrite && esbuild src/background.ts --bundle --outfile=dist/background.bundle.js --format=esm --allow-overwrite",
     "postbuild": "node copy-dist-to-browser-folders.js",
+    "watch": "esbuild src/content.ts --bundle --outfile=chrome/dist/content.bundle.js --format=iife --allow-overwrite --watch & esbuild src/background.ts --bundle --outfile=chrome/dist/background.bundle.js --format=esm --allow-overwrite --watch",
+    "dev:brave": "node scripts/dev-brave.js",
     "build:test": "node build-for-test.js",
     "postbuild:test": "node copy-dist-to-browser-folders.js",
     "build:production": "node scripts/build-production.js",

@@ -48,7 +48,8 @@ describe("reconcile_webpage_trees_workflow_vanilla", () => {
         openai_key,
         mockDuckDb,
         mockMemoryDb,
-        filter_config
+        filter_config,
+        undefined
       );
       expect(result).toBe(mockWorkflowInstance);
     });
@@ -66,7 +67,27 @@ describe("reconcile_webpage_trees_workflow_vanilla", () => {
         openai_key,
         mockDuckDb,
         mockMemoryDb,
+        undefined,
         undefined
+      );
+      expect(result).toBe(mockWorkflowInstance);
+    });
+
+    it("should forward llm_options to the workflow", () => {
+      const result = build_workflow(
+        "test-key-opts",
+        mockDuckDb,
+        mockMemoryDb,
+        undefined,
+        { provider: "claude" }
+      );
+
+      expect(WebpageWorkflow).toHaveBeenCalledWith(
+        "test-key-opts",
+        mockDuckDb,
+        mockMemoryDb,
+        undefined,
+        { provider: "claude" }
       );
       expect(result).toBe(mockWorkflowInstance);
     });

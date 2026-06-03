@@ -6,6 +6,10 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.spec.ts",
+  // The full-pipeline spec needs the real capture server (no mock, no baked
+  // MOCK_PKM_PORT); it runs only via scripts/run-pipeline-e2e.js using
+  // playwright.pipeline.config.ts.
+  testIgnore: "**/full_pipeline.spec.ts",
   globalSetup: "./e2e/global_setup.ts",
   fullyParallel: false,
   workers: 1,

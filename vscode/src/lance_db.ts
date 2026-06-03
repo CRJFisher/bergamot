@@ -55,7 +55,7 @@ import * as lancedb from "@lancedb/lancedb";
  * 
  * @example
  * ```typescript
- * const embeddings = new OpenAIEmbeddings({ apiKey: 'your-key' });
+ * const embeddings = create_embeddings();
  * const store = await LanceDBMemoryStore.create('/path/to/db', { embeddings });
  * 
  * // Store a document
@@ -95,7 +95,7 @@ export class LanceDBMemoryStore {
    * 
    * @example
    * ```typescript
-   * const embeddings = new OpenAIEmbeddings({ apiKey: 'your-key' });
+   * const embeddings = create_embeddings();
    * const store = await LanceDBMemoryStore.create('./memory.db', { embeddings });
    * ```
    */
@@ -107,37 +107,32 @@ export class LanceDBMemoryStore {
     return new LanceDBMemoryStore(db, options);
   }
 
-  private async get_table(namespace: string[]): Promise<lancedb.Table> {
+  /**
+   * Opens an existing table, or returns null if it does not exist yet. A fresh
+   * store has no tables until the first {@link put} creates one (LanceDB infers
+   * the schema from the first record), so readers must tolerate a missing table.
+   */
+  private async get_table(namespace: string[]): Promise<lancedb.Table | null> {
     const ns = namespace.join("_");
     if (this.tableCache.has(ns)) return this.tableCache.get(ns)!;
 
-    try {
-      // Try to open existing table first
-      const table = await this.db.openTable(ns);
-      
-      // Performance optimization: Limit table cache size to prevent memory leaks
-      if (this.tableCache.size >= this.MAX_CACHE_SIZE) {
-        // Remove oldest entry (first in, first out)
-        const first_key = this.tableCache.keys().next().value;
-        this.tableCache.delete(first_key);
-      }
-      
-      this.tableCache.set(ns, table);
-      return table;
-    } catch (e) {
-      // TODO: handle this
-      console.error("Error opening table:", e);
-      throw e;
-      // If table doesn't exist, create it with schema
-
-      // const table = await this.db.createTable(ns, [], {
-      //   mode: "create",
-      //   existOk: true,
-      //   schema: schema,
-      // });
-      // this.tableCache.set(ns, table);
-      // return table;
+    const existing = await this.db.tableNames();
+    if (!existing.includes(ns)) {
+      return null;
     }
+
+    const table = await this.db.openTable(ns);
+    this.cache_table(ns, table);
+    return table;
+  }
+
+  /** Caches a table handle, evicting the oldest entry past the cache cap. */
+  private cache_table(ns: string, table: lancedb.Table): void {
+    if (this.tableCache.size >= this.MAX_CACHE_SIZE) {
+      const first_key = this.tableCache.keys().next().value;
+      this.tableCache.delete(first_key);
+    }
+    this.tableCache.set(ns, table);
   }
 
   /**
@@ -182,6 +177,7 @@ export class LanceDBMemoryStore {
    */
   async get(namespace: string[], key: string): Promise<SearchItem | null> {
     const table = await this.get_table(namespace);
+    if (!table) return null;
     const results = await table.query().where(`key = '${key}'`).toArray();
     if (results.length === 0) return null;
 
@@ -253,8 +249,15 @@ export class LanceDBMemoryStore {
       }
     }
 
-    // Write to database
-    await table.add([flattened_record]);
+    if (table) {
+      await table.add([flattened_record]);
+    } else {
+      // First write to this namespace: create the table, letting LanceDB infer
+      // the schema (including the vector dimension) from the record.
+      const ns = namespace.join("_");
+      const created = await this.db.createTable(ns, [flattened_record]);
+      this.cache_table(ns, created);
+    }
   }
 
   /**
@@ -299,9 +302,10 @@ export class LanceDBMemoryStore {
     }
 
     const table = await this.get_table(namespacePrefix);
+    if (!table) return [];
 
     let results: SearchItem[];
-    
+
     if (options?.query && this.embeddings) {
       // Performance optimization: Use cached embeddings for query vector
       let query_vector = this.embedding_cache.get(options.query);
@@ -435,6 +439,7 @@ export class LanceDBMemoryStore {
    */
   async delete(namespace: string[], key: string): Promise<void> {
     const table = await this.get_table(namespace);
+    if (!table) return;
     await table.delete(`key = '${key}'`);
   }
 
@@ -513,6 +518,10 @@ export class LanceDBMemoryStore {
    */
   async debug_table(namespace: string[]): Promise<unknown[]> {
     const table = await this.get_table(namespace);
+    if (!table) {
+      console.log("Table does not exist yet:", namespace.join("_"));
+      return [];
+    }
     const results = await table.query().limit(5).toArray();
     console.log("Table schema:", table.schema);
     console.log("First 5 rows:", JSON.stringify(results, null, 2));

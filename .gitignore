@@ -7,6 +7,9 @@ dist/
 out/
 build/
 *.vsix
+
+# Local dev storage (DuckDB/LanceDB/inbox written during F5 debugging)
+.dev-storage/
 **/dist/
 **/out/
 **/build/

@@ -1,4 +1,5 @@
-import { get_llm_client } from "./openai_client";
+import { get_llm_client, LLMClient } from "./openai_client";
+import { LlmProvider } from "../config/config_manager";
 import {
   ANALYSIS_PROMPT,
   CONTENT_PROCESSING_PROMPT,
@@ -26,6 +27,7 @@ import {
   TreeIntentions,
 } from "../reconcile_webpage_trees_workflow_models";
 import { LanceDBMemoryStore } from "../lance_db";
+import { dev_log, record_outcome } from "../dev_log";
 
 const WEBPAGE_CONTENT_NAMESPACE = "webpage_content";
 
@@ -82,29 +84,41 @@ function webpage_tree_to_md_string(
   return lines.join("\n");
 }
 
+export interface WorkflowLLMOptions {
+  /** Pre-built client; bypasses provider selection. Used by tests (fake LLM). */
+  llm_client?: LLMClient;
+  /** Provider to construct a client for when none is injected. */
+  provider?: LlmProvider;
+}
+
 export class WebpageWorkflow {
   private openai_key: string;
   private duck_db: DuckDB;
   private memory_db: LanceDBMemoryStore;
   private filter_config: FilterConfig;
+  private llm_options: WorkflowLLMOptions;
 
   constructor(
     openai_key: string,
     duck_db: DuckDB,
     memory_db: LanceDBMemoryStore,
-    filter_config?: FilterConfig
+    filter_config?: FilterConfig,
+    llm_options: WorkflowLLMOptions = {}
   ) {
     this.openai_key = openai_key;
     this.duck_db = duck_db;
     this.memory_db = memory_db;
     this.filter_config = filter_config || DEFAULT_FILTER_CONFIG;
+    this.llm_options = llm_options;
   }
 
   async run(inputs: {
     members: PageActivitySessionWithMeta[];
     new_page: PageActivitySessionWithoutContent;
     raw_content: string;
+    visit_id?: string;
   }): Promise<void> {
+    const visit_id = inputs.visit_id ?? inputs.new_page.id;
     try {
       console.log("State: analyzing_page, Status: running");
 
@@ -124,7 +138,9 @@ export class WebpageWorkflow {
       //     5
       //   );
 
-      const llm_client = await get_llm_client(this.openai_key);
+      const llm_client =
+        this.llm_options.llm_client ??
+        (await get_llm_client(this.openai_key, this.llm_options.provider ?? 'claude'));
 
       const classification = await classify_webpage(
         inputs.new_page.url,
@@ -145,6 +161,13 @@ export class WebpageWorkflow {
         should_process,
         this.filter_config
       );
+      dev_log("classify_result", {
+        visit_id,
+        url: inputs.new_page.url,
+        page_type: classification.page_type,
+        confidence: classification.confidence,
+        should_process,
+      });
 
       // Record metrics
       let filter_reason: string | undefined;
@@ -171,8 +194,14 @@ export class WebpageWorkflow {
       );
 
       if (!should_process) {
-        console.log("\n--- Workflow Skipped: Page filtered out ---");
-        console.log("State: completed, Status: completed (filtered)");
+        record_outcome({
+          visit_id,
+          url: inputs.new_page.url,
+          page_type: classification.page_type,
+          confidence: classification.confidence,
+          decision: "dropped",
+          reason: filter_reason,
+        });
         return;
       }
 
@@ -180,7 +209,7 @@ export class WebpageWorkflow {
       const processed_content = await llm_client.complete(
         `HTML content to process:\n\n${inputs.raw_content}`,
         CONTENT_PROCESSING_PROMPT,
-        "gpt-4o-mini"
+        "fast"
       );
 
       // Content is now stored in LanceDB only (see memory_db.put below)
@@ -190,7 +219,7 @@ export class WebpageWorkflow {
         await llm_client.complete_json<PageAnalysisWithoutPageSessionId>(
           `Webpage url: ${inputs.new_page.url}\nWebpage content: ${processed_content}`,
           ANALYSIS_PROMPT,
-          "gpt-4o-mini"
+          "fast"
         );
 
       const analysis_with_id = {
@@ -208,6 +237,16 @@ export class WebpageWorkflow {
           title: analysis_with_id.title,
         }
       );
+
+      // Content + analysis are now in DuckDB and LanceDB. Tree-intention
+      // enrichment below is secondary; this is the durable "stored" milestone.
+      record_outcome({
+        visit_id,
+        url: inputs.new_page.url,
+        page_type: classification.page_type,
+        confidence: classification.confidence,
+        decision: "stored",
+      });
 
       const tree_members = inputs.members.map((member) => {
         if (member.id === inputs.new_page.id) {
@@ -236,7 +275,7 @@ export class WebpageWorkflow {
             true
           )}`,
           TREE_INTENTIONS_PROMPT,
-          "gpt-4o"
+          "smart"
         );
 
         const index_to_page_id = Object.fromEntries(

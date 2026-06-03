@@ -21,6 +21,9 @@ import { PageActivitySessionWithoutTreeOrContentSchema } from '../duck_db_models
 import { build_workflow } from '../reconcile_webpage_trees_workflow_vanilla';
 import { WebpageWorkflow } from '../workflow/simple_workflow';
 import { get_filter_config } from '../config/filter_config';
+import { dev_log, is_dev_log_enabled } from '../dev_log';
+import { persist_capture } from '../captures';
+import { LlmProvider } from '../config/config_manager';
 
 /**
  * Candidate ports the server tries to bind, in order. The browser extension
@@ -46,6 +49,10 @@ export interface ServerConfig {
   memory_db: LanceDBMemoryStore;
   /** Directory for the durable visit inbox (defaults off if unset) */
   inbox_dir?: string;
+  /** Storage base; used to persist raw captures for replay in dev mode */
+  storage_base?: string;
+  /** LLM backend for classification/analysis (defaults to Claude subscription) */
+  llm_provider?: LlmProvider;
 }
 
 /**
@@ -113,7 +120,8 @@ export class ServerManager {
       this.config.openai_api_key,
       this.config.duck_db,
       this.config.memory_db,
-      filter_config
+      filter_config,
+      { provider: this.config.llm_provider }
     );
   }
 
@@ -162,8 +170,15 @@ export class ServerManager {
 
     // Visit processing endpoint
     this.app.post('/visit', async (req, res) => {
-      console.log('Received request from:', req.body.url);
       const id = md5_hash(`${req.body.url}:${req.body.page_loaded_at}`);
+      // Correlation token: trust the browser's id if it supplied one, else fall
+      // back to the deterministic content hash. Echoed back and threaded through
+      // every downstream log line so a single visit is traceable end to end.
+      const visit_id: string =
+        typeof req.body.visit_id === 'string' && req.body.visit_id.length > 0
+          ? req.body.visit_id
+          : id;
+      dev_log('http_received', { visit_id, url: req.body.url });
 
       // Decompress content if it's base64 encoded zstd compressed data
       let content = req.body.content;
@@ -173,31 +188,40 @@ export class ServerManager {
           const decompressed_data = await decompress(compressed_data);
           content = decompressed_data.toString('utf-8');
         } catch (error) {
-          console.warn('Failed to decompress content, using as-is:', error);
+          dev_log('decompress_failed', {
+            visit_id,
+            url: req.body.url,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
 
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { content: _, ...req_body_without_content } = req.body;
+      const { content: _, visit_id: __, ...req_body_without_content } = req.body;
       const parse_result = PageActivitySessionWithoutTreeOrContentSchema.safeParse({
         ...req_body_without_content,
         id,
       });
 
       if (!parse_result.success) {
-        res.status(400).json({ 
-          error: 'Invalid payload', 
-          issues: parse_result.error.issues 
+        dev_log('parse_failed', {
+          visit_id,
+          url: req.body.url,
+          issues: parse_result.error.issues,
+        });
+        res.status(400).json({
+          error: 'Invalid payload',
+          issues: parse_result.error.issues,
         });
         return;
       }
 
       const payload = parse_result.data;
-      console.log('Received payload:', payload.url);
 
       // Add to queue instead of processing immediately
       const extended_visit: ExtendedPageVisit = {
         ...payload,
+        visit_id,
         raw_content: content
       };
       // Persist durably before acknowledging: the browser will not resend, so
@@ -205,9 +229,15 @@ export class ServerManager {
       if (this.config.inbox_dir) {
         persist_visit(this.config.inbox_dir, extended_visit);
       }
+      // In dev, keep a bounded ring of raw captures so the page can be replayed
+      // through the pipeline (bergamot.replayVisit) without re-browsing.
+      if (this.config.storage_base && is_dev_log_enabled()) {
+        persist_capture(this.config.storage_base, extended_visit);
+      }
       const position = this.queue_processor?.enqueue(extended_visit) ?? 0;
+      dev_log('queued', { visit_id, url: payload.url, position });
 
-      res.json({ status: 'queued', position });
+      res.json({ status: 'queued', position, visit_id });
     });
 
     // Read-only relational query endpoints. The extension process owns the
@@ -312,9 +342,19 @@ export class ServerManager {
    * console.log(`Server listening on port ${port}`);
    * ```
    */
-  async start(): Promise<number> {
+  /**
+   * Mounts routes and starts the queue processor without binding a port.
+   * Separated from {@link start} so the pipeline can be driven in-process
+   * (e.g. integration tests via supertest) without contending for a port or
+   * clobbering the shared `~/.bergamot/port.json`.
+   */
+  prepare(): void {
     this.setup_routes();
     this.setup_queue_processor();
+  }
+
+  async start(): Promise<number> {
+    this.prepare();
 
     let last_error: unknown;
     for (const port of SERVER_PORT_RANGE) {

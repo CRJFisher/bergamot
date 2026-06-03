@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { ConfigManager } from './config/config_manager';
+import { get_storage_base } from './config/storage_path';
+import { init_dev_log } from './dev_log';
 import { DatabaseManager } from './database/database_manager';
 import { ServerManager } from './server/server_manager';
 import { MCPServerManager } from './server/mcp_server_manager';
@@ -37,21 +39,34 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   console.log('Starting Bergamot extension activation...');
 
   try {
-    // Step 1: Validate configuration
-    const openai_api_key = ConfigManager.get_openai_api_key();
-    if (!openai_api_key) {
-      console.error('Activation aborted: Missing OpenAI API key');
+    // Step 1: Validate configuration. Classification defaults to the Claude
+    // subscription and embeddings run locally, so an OpenAI key is optional —
+    // required only when the provider is explicitly 'openai'.
+    const llm_provider = ConfigManager.get_llm_provider();
+    const openai_api_key = ConfigManager.get_openai_api_key() ?? '';
+    if (llm_provider === 'openai' && !openai_api_key) {
+      vscode.window.showErrorMessage(
+        'Bergamot: llmProvider is "openai" but no API key is set (bergamot.openaiApiKey).'
+      );
       return;
     }
+
+    // Resolve the storage base once: dev runs (F5) point BERGAMOT_STORAGE_PATH
+    // at a repo-local .dev-storage; installed extensions use globalStorageUri.
+    const storage_base = get_storage_base(context);
+
+    // Dev logging is on whenever explicitly enabled, or implicitly during F5
+    // debugging (BERGAMOT_STORAGE_PATH set), so the loop is observable by default.
+    init_dev_log(
+      storage_base,
+      ConfigManager.get_dev_mode() || !!process.env.BERGAMOT_STORAGE_PATH
+    );
 
     // Step 2: Initialize databases
     console.log('Initializing databases...');
     database_manager = new DatabaseManager();
 
-    const databases = await database_manager.initialize_all(
-      context,
-      openai_api_key
-    );
+    const databases = await database_manager.initialize_all(storage_base);
 
     // Step 3: Start Express server for webpage categorization
     console.log('Starting webpage categorizer service...');
@@ -59,7 +74,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       openai_api_key,
       duck_db: databases.duck_db,
       memory_db: databases.memory_db,
-      inbox_dir: path.join(context.globalStorageUri.fsPath, 'visit_inbox')
+      inbox_dir: path.join(storage_base, 'visit_inbox'),
+      storage_base,
+      llm_provider
     });
 
     const port = await server_manager.start();
@@ -70,7 +87,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     command_manager = new CommandManager({
       context,
       duck_db: databases.duck_db,
-      memory_db: databases.memory_db
+      memory_db: databases.memory_db,
+      server_manager,
+      storage_base
     });
     command_manager.register_all();
 
@@ -79,7 +98,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     mcp_server_manager = new MCPServerManager({
       context,
       openai_api_key,
-      duck_db: databases.duck_db
+      duck_db: databases.duck_db,
+      storage_base
     });
     mcp_server_manager.start_deferred(2000);
 
