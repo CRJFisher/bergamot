@@ -1,9 +1,10 @@
 ---
-id: task-22
+id: TASK-22
 title: Create evaluation system for webpage categorization LLM
 status: To Do
 assignee: []
-created_date: "2025-08-10 19:33"
+created_date: '2025-08-10 19:33'
+updated_date: '2026-06-04 17:33'
 labels:
   - evaluation
   - llm
@@ -14,24 +15,28 @@ dependencies: []
 
 ## Description
 
+<!-- SECTION:DESCRIPTION:BEGIN -->
 Design and implement a comprehensive evaluation system for the LLM-based webpage categorization that filters out non-knowledge pages. This includes researching best practices, collecting a diverse test dataset, establishing ground truth labels, evaluating current performance, and iteratively improving the prompt based on systematic evaluation results.
+<!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
-
-- [ ] Research completed on LLM evaluation best practices
-- [ ] Test dataset collected with 50+ examples per category (300+ total)
-- [ ] Ground truth labels established with clear criteria
-- [ ] Inter-annotator agreement measured (if multiple labelers)
-- [ ] Evaluation metrics implemented (accuracy precision recall F1 confusion matrix)
-- [ ] Baseline performance measured on current prompt
-- [ ] Edge cases and ambiguous examples documented
-- [ ] Prompt improvements tested and validated
-- [ ] Evaluation framework code created for ongoing monitoring
-- [ ] Performance report with recommendations
-- [ ] Continuous monitoring strategy defined
+<!-- AC:BEGIN -->
+- [ ] #1 Research completed on LLM evaluation best practices
+- [ ] #2 Test dataset collected with 50+ examples per category (300+ total)
+- [ ] #3 Ground truth labels established with clear criteria
+- [ ] #4 Inter-annotator agreement measured (if multiple labelers)
+- [ ] #5 Evaluation metrics implemented (accuracy precision recall F1 confusion matrix)
+- [ ] #6 Baseline performance measured on current prompt
+- [ ] #7 Edge cases and ambiguous examples documented
+- [ ] #8 Prompt improvements tested and validated
+- [ ] #9 Evaluation framework code created for ongoing monitoring
+- [ ] #10 Performance report with recommendations
+- [ ] #11 Continuous monitoring strategy defined
+<!-- AC:END -->
 
 ## Implementation Plan
 
+<!-- SECTION:PLAN:BEGIN -->
 ### Phase 1: Research and Planning (Completed)
 
 Key findings from LLM evaluation research:
@@ -186,3 +191,10 @@ Based on error analysis:
 - **Dataset Storage**: JSON or CSV with version control
 - **Metrics Visualization**: Matplotlib/Seaborn for confusion matrices
 - **Statistical Analysis**: Scikit-learn for metrics calculation
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+RE-SCOPED / likely obviated by task-35. This epic deletes the LLM categoriser that task-22 was meant to evaluate (task-35.8 replaces it with a deterministic gate). The light extraction+summary golden-set eval in task-35.10 replaces this scope. Do NOT build the 300+ F1 harness for the essence-capture work. After task-35.8's classifier-vs-heuristic parity check confirms the LLM classifier is unnecessary, close task-22; keep parked until then.
+<!-- SECTION:NOTES:END -->

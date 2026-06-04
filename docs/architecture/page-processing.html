@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Page Processing · Bergamot Architecture</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="brand"><span class="dot"></span> Bergamot Architecture</span>
+    <nav class="crumbs">
+      <a href="index.html">Overview</a>
+      <a href="browser-extension.html">Browser Extension</a>
+      <a href="vscode-extension.html">VS Code Extension</a>
+      <a href="page-processing.html" class="active">Page Processing</a>
+      <a href="storage.html">Storage</a>
+      <a href="mcp-and-query.html">MCP &amp; Query</a>
+      <a href="rag-pipeline.html">RAG Pipeline</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="hero">
+    <h1>📝 Page Processing</h1>
+    <p class="tagline">How a captured page becomes a stored record. Moving from an LLM categoriser that
+    runs up to four model calls per page to a deterministic essence-capture pipeline with a single cheap
+    Haiku call — usage-agnostic by design.</p>
+    <span class="pill">capture → extract (non-LLM) → gate → summarize (1× Haiku) → store essence</span>
+  </section>
+
+  <p class="lead">
+    Page processing is the stage inside the VS Code extension that turns a captured page into a durable
+    record. The redesign has one organising idea: <strong>capture the essence of a page deterministically,
+    and store it in a form that is agnostic to how it will later be used.</strong> Classification work
+    shrinks to a single deterministic gate, content extraction moves off the LLM entirely, and exactly one
+    cheap model call writes a short summary. <em>This page describes the target design (task-35); the
+    "before" is shown for contrast only.</em>
+  </p>
+
+  <h2><span class="num">1</span>Before → after at a glance</h2>
+  <table>
+    <tr><th>Dimension</th><th>Today</th><th>Target</th></tr>
+    <tr><td>LLM calls / stored page</td><td>up to <strong>4</strong> (classify · content · analysis · tree-intentions)</td><td><strong>1</strong> (summary + topics)</td></tr>
+    <tr><td>LLM calls / dropped page</td><td>1–2 (classify, sometimes content)</td><td><strong>0</strong></td></tr>
+    <tr><td>Main-content extraction</td><td>LLM (up to 100k chars → Haiku)</td><td>non-LLM (Defuddle + linkedom)</td></tr>
+    <tr><td>Relevance gate</td><td>LLM 6-way taxonomy, <code>knowledge</code>-only ≥ 0.7</td><td>deterministic word-count / link-density</td></tr>
+    <tr><td>Most expensive call</td><td>tree-intentions on <strong>sonnet</strong></td><td>removed</td></tr>
+    <tr><td>Stored record</td><td><code>webpage_analysis</code> {title, summary, intentions}</td><td><code>PageEssence</code> {title, excerpt, summary, topics, markdown, metadata}</td></tr>
+    <tr><td>Storage philosophy</td><td>usage-specific (<em>why</em> the user looked)</td><td>usage-agnostic (<em>what</em> is on the page)</td></tr>
+  </table>
+
+  <h2><span class="num">2</span>Today's pipeline</h2>
+  <p>The current workflow (<code>vscode/src/workflow/simple_workflow.ts</code>, class <code>WebpageWorkflow</code>)
+  fires up to four LLM calls over largely overlapping inputs, and the only non-LLM step is crude noise removal.</p>
+  <div class="diagram">
+    <p class="cap">Current — LLM-heavy categoriser</p>
+    <pre class="mermaid">
+flowchart TB
+    raw["captured body HTML (≤ 2 MB)"]
+    c1["1 · classify_webpage<br/>PAGE_FILTER_PROMPT · Haiku<br/>first 2000 chars → 6-way type + confidence"]
+    gate{"type = knowledge<br/>&amp; confidence ≥ 0.7?"}
+    drop1["drop (no store)"]
+    red["reduce_html_for_llm (non-LLM)<br/>regex strip scripts/styles/svg · 100k cap<br/>(noise only — keeps nav/footer/ads)"]
+    c2["2 · content-processing<br/>CONTENT_PROCESSING_PROMPT · Haiku<br/>HTML → markdown"]
+    c3["3 · analysis<br/>ANALYSIS_PROMPT · Haiku<br/>{title, summary, intentions}"]
+    store["DuckDB webpage_analysis + LanceDB content"]
+    c4["4 · tree-intentions<br/>TREE_INTENTIONS_PROMPT · SONNET<br/>(only if tree &gt; 1 page)"]
+
+    raw --> c1 --> gate
+    gate -- no --> drop1
+    gate -- yes --> red --> c2 --> c3 --> store --> c4
+
+    classDef llm fill:#3a2a1a,stroke:#f0883e,color:#f5d9c0;
+    classDef det fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
+    classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
+    class c1,c2,c3,c4 llm;
+    class red,gate,raw det;
+    class store st;
+    </pre>
+  </div>
+  <ul class="clean">
+    <li><strong>Overlapping work:</strong> classify, content-processing and analysis all re-read the same page from scratch.</li>
+    <li><strong>No real extraction:</strong> <code>reduce_html_for_llm</code> only strips obvious noise; it never isolates the article, so the LLM does the extraction over up to 100k chars — the dominant token cost.</li>
+    <li><strong>Usage-specific storage:</strong> <code>intentions</code> / <code>tree_intentions</code> guess <em>why</em> the user viewed a page — an interpretation baked into the capture record.</li>
+    <li><strong>The one expensive call:</strong> tree-intentions runs on sonnet and re-derives intentions across the whole visit tree.</li>
+  </ul>
+
+  <h2><span class="num">3</span>Target pipeline</h2>
+  <p>Deterministic extraction is the core. A real content extractor isolates the article and hands back
+  clean markdown <em>plus</em> title, excerpt, author, site, published date, word-count, language and lead
+  image — for free, with no model call. A deterministic gate decides keep/drop from those signals. Only
+  kept pages pay for a single Haiku call that writes a short summary and topic labels.</p>
+  <div class="diagram">
+    <p class="cap">Target — deterministic essence capture, one cheap call</p>
+    <pre class="mermaid">
+flowchart TB
+    raw["captured body HTML + url"]
+    ex["extract_essence (NON-LLM)<br/>Defuddle + linkedom<br/>→ markdown · title · excerpt · author · site<br/>· published_at · word_count · lang · lead_image"]
+    gate{"relevance_gate (NON-LLM)<br/>word_count / link-density<br/>/ empty-content"}
+    drop["drop · record reason<br/>(0 LLM calls)"]
+    sum["summarize_essence (1× HAIKU)<br/>{summary, topics}<br/>excerpt = deterministic fallback"]
+    store["store_essence<br/>DuckDB webpage_essence<br/>+ LanceDB content (markdown)"]
+    tree["link_tree (NON-LLM)<br/>structural relations only<br/>referrer / tree_id"]
+
+    raw --> ex --> gate
+    gate -- "no article" --> drop
+    gate -- keep --> sum --> store --> tree
+
+    classDef llm fill:#3a2a1a,stroke:#f0883e,color:#f5d9c0;
+    classDef det fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
+    classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
+    class sum llm;
+    class ex,gate,raw,tree det;
+    class store st;
+    </pre>
+  </div>
+  <div class="cards">
+    <div class="card"><h3>Non-LLM extraction</h3><p>Defuddle (via <code>defuddle/node</code>) with linkedom as the DOM provider isolates the main article and emits markdown + rich metadata. Readability + turndown is the all-CJS fallback if the ESM-in-CJS integration proves fragile.</p></div>
+    <div class="card"><h3>Deterministic gate</h3><p>No taxonomy, no model. The extractor's "no article found" signal — empty body, low word-count, high link-density — decides keep/drop. Dropped pages cost zero LLM calls. PDFs / non-HTML get a dedicated drop reason.</p></div>
+    <div class="card"><h3>One Haiku call</h3><p>Over already-clean text, a single call returns <code>{summary, topics}</code>. On failure or non-JSON it falls back to the extractor's free excerpt and records the stage + a snippet — it never crashes the workflow.</p></div>
+    <div class="card"><h3>Structural tree only</h3><p>Navigation trees are built from referrer / <code>tree_id</code> relations — independent of intentions. They keep working with the intention fields gone.</p></div>
+  </div>
+
+  <h2><span class="num">4</span>The stored record — <code>PageEssence</code></h2>
+  <p>One canonical, usage-agnostic record replaces <code>webpage_analysis</code>. It describes <em>what is on
+  the page</em>, not what the page was for — so any downstream consumer (browsing, RAG, future query-time
+  intent derivation) reads the same shape. The full markdown is stored <strong>durably in DuckDB</strong>
+  (<code>webpage_essence.markdown</code>), keyed by <code>page_session_id</code> — so when RAG chunking
+  (<a href="rag-pipeline.html">task-31.3</a>) later replaces the whole-page LanceDB record with chunk
+  records, parent-document retrieval still has a durable full-page source and a stable chunk↔page id.</p>
+  <div class="diagram">
+    <p class="cap">PageEssence — DuckDB <code>webpage_essence</code> is the durable source of truth; LanceDB <code>webpage_content</code> is the embedding copy</p>
+    <pre class="mermaid">
+classDiagram
+    class PageEssence {
+      +string page_session_id  «PK · stable chunk↔page id»
+      +string markdown  «extractor — canonical content, durable in DuckDB»
+      +string title
+      +string summary   «1× Haiku, excerpt fallback»
+      +string[] topics  «1× Haiku»
+      +string excerpt   «extractor — transient fallback, NOT stored»
+      +string author
+      +string site_name
+      +string published_at
+      +string lang
+      +int word_count
+      +string lead_image_url
+    }
+    note for PageEssence "No intentions.\nNo page_type.\nUsage-agnostic."
+    </pre>
+  </div>
+  <ul class="clean">
+    <li><strong>DuckDB</strong> <code>webpage_essence</code> (source of truth): <code>page_session_id</code> (PK) · <strong>markdown</strong> · title · summary · topics(JSON) · author · site_name · published_at · word_count · lang · lead_image_url. <em>(replaces <code>webpage_analysis</code>; the <code>intentions</code> column and the misspelled <code>page_sesssion_id</code> are gone.)</em></li>
+    <li><strong>LanceDB</strong> <code>webpage_content</code> (embedding copy): {page_session_id, pageContent: markdown, url, title, summary, topics, word_count} — embedded with local all-MiniLM-L6-v2 (384-dim). <code>page_session_id</code> + <code>word_count</code> ride along so citations and the task-31.8 small-corpus budget need no extra DuckDB round-trip.</li>
+    <li><strong>Removed:</strong> the <code>webpage_tree_intentions</code> table and the entire tree-intentions step.</li>
+  </ul>
+
+  <h2><span class="num">5</span>Default model &amp; cost</h2>
+  <p>Haiku is already what most calls use today (Claude provider, <code>fast</code> role). The redesign makes
+  it the <strong>explicit, configurable</strong> default and deletes the only sonnet call, so per-page cost
+  collapses to one small call over clean text.</p>
+  <div class="cards">
+    <div class="card"><h3>Configurable default</h3><p><code>bergamot.models.fast</code> / <code>bergamot.models.smart</code> override the built-in role→model maps. Unset = byte-identical to today (<code>fast → haiku</code>). The <code>smart</code> role is retained but currently has no caller.</p></div>
+    <div class="card"><h3>Cost shape</h3><p>Stored page: <strong>4 → 1</strong> calls, and the survivor runs over a few KB of clean markdown rather than up to 100k chars of raw HTML. Dropped page: <strong>→ 0</strong> calls. The sonnet spend is gone entirely.</p></div>
+    <div class="card"><h3>Proven, not assumed</h3><p>A light ~20–30 page golden set asserts extraction coverage and Haiku summary acceptability (deterministic keyword-overlap) and records a before/after tokens-per-page figure — without building a heavyweight F1 / RAGAS harness.</p></div>
+  </div>
+
+  <h2><span class="num">6</span>Information-architecture remodel</h2>
+  <p>With classification shrunk and "capture the essence" as the core, the modules are renamed to say what
+  they are, and the stateless <code>WebpageWorkflow</code> class dissolves into composable functions (the
+  repo forbids stateful classes). Pure renames land as a final, rename-only PR for reviewability.</p>
+  <table>
+    <tr><th>Today</th><th>Target</th></tr>
+    <tr><td><code>simple_workflow.ts</code> · class <code>WebpageWorkflow</code></td><td><code>page_ingest_pipeline.ts</code> · <code>run_page_ingest()</code> + named stage modules (<code>extract_essence</code> / <code>summarize_essence</code> / <code>store_essence</code> / <code>link_tree</code>)</td></tr>
+    <tr><td><code>webpage_filter.ts</code> · <code>PageClassification</code></td><td><code>page_gate.ts</code> · <code>GateDecision {keep, reason}</code></td></tr>
+    <tr><td><code>html_reduce.ts</code></td><td><code>html_prepass.ts</code> (parser input-sanitizer / hard-cap fallback)</td></tr>
+    <tr><td><code>reconcile_webpage_trees_workflow_models.ts</code></td><td><code>page_essence_models.ts</code></td></tr>
+    <tr><td><code>PageAnalysis</code> · <code>insert_webpage_analysis</code></td><td><code>PageEssence</code> · <code>insert_page_essence</code></td></tr>
+    <tr><td><code>build_workflow()</code> factory (<code>…_vanilla.ts</code>) · <code>server_manager.ts</code> field <code>webpage_categoriser_app</code></td><td>direct <code>run_page_ingest()</code> call — factory + seam removed, no <code>WebpageWorkflow</code> symbol remains</td></tr>
+  </table>
+
+  <h2><span class="num">7</span>Build order</h2>
+  <div class="diagram">
+    <p class="cap">Sub-task dependency graph (task-35.x) — every intermediate commit stays green</p>
+    <pre class="mermaid">
+flowchart LR
+    t1["35.1 · extractor<br/>(additive)"]
+    t2["35.2 · remove<br/>tree_intentions"]
+    t4["35.4 · drop content<br/>LLM call"]
+    t5["35.5 · drop per-page<br/>intentions"]
+    t6["35.6 · model<br/>overrides"]
+    t7["35.7 · 1× Haiku<br/>summary+topics"]
+    t8["35.8 · deterministic<br/>gate (last)"]
+    t9["35.9 · PageEssence<br/>record"]
+    t10["35.10 · golden-set<br/>eval"]
+    t11["35.11 · IA rename<br/>(rename-only)"]
+    t3["35.3 · dev-DB<br/>reset doc"]
+
+    t3 --> t2
+    t1 --> t4
+    t2 --> t5
+    t2 --> t6
+    t4 --> t7
+    t5 --> t7
+    t7 --> t8
+    t8 --> t9
+    t7 --> t9
+    t8 --> t10
+    t7 --> t10
+    t9 --> t11
+    t4 --> t11
+    t5 --> t11
+
+    classDef a fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
+    classDef b fill:#2a1f3a,stroke:#bc8cff,color:#e6d9ff;
+    classDef c fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
+    class t1,t4,t7,t8 a;
+    class t2,t5,t6,t11 b;
+    class t3,t9,t10 c;
+    </pre>
+  </div>
+
+  <h2><span class="num">8</span>Re-scoped neighbours</h2>
+  <div class="status-grid">
+    <div class="status done"><div class="ph">task-31.5</div><div class="nm">Heuristic extraction</div><span class="badge done">absorbed → 35.1</span></div>
+    <div class="status wip"><div class="ph">task-32</div><div class="nm">Image extraction</div><span class="badge wip">re-scoped</span></div>
+    <div class="status wip"><div class="ph">task-34</div><div class="nm">Empty/degraded content</div><span class="badge wip">folded in</span></div>
+    <div class="status wip"><div class="ph">task-22</div><div class="nm">Categorisation eval</div><span class="badge wip">obviated</span></div>
+    <div class="status done"><div class="ph">task-31.3</div><div class="nm">RAG chunking</div><span class="badge done">stays deferred</span></div>
+  </div>
+  <div class="note">
+    <strong>Locked decisions:</strong> full usage-agnostic density gate (no topic classification at ingest);
+    exactly one Haiku call for {summary, topics} with the extractor excerpt as fallback; Defuddle + linkedom
+    as the extractor (Readability + turndown documented fallback); full IA remodel with pure renames isolated
+    into the final PR. Schema changes are destructive dev-DB resets — no migration shims, no backwards
+    compatibility.
+  </div>
+
+  <footer class="foot"><a href="vscode-extension.html">← VS Code Extension</a> · <a href="storage.html">Storage →</a> · <a href="index.html">Back to overview</a></footer>
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'dark',
+    themeVariables: { background:'#161b22', primaryColor:'#1c2330', primaryBorderColor:'#2b3442', primaryTextColor:'#d7dde5', lineColor:'#6b7888', fontFamily:'ui-sans-serif, system-ui, sans-serif' },
+    flowchart: { curve:'basis', padding:12 }, securityLevel:'loose' });
+</script>
+</body>
+</html>
