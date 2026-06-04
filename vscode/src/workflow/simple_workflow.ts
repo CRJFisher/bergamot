@@ -28,6 +28,7 @@ import {
 } from "../reconcile_webpage_trees_workflow_models";
 import { LanceDBMemoryStore } from "../lance_db";
 import { dev_log, record_outcome } from "../dev_log";
+import { reduce_html_for_llm } from "./html_reduce";
 
 const WEBPAGE_CONTENT_NAMESPACE = "webpage_content";
 
@@ -189,9 +190,23 @@ export class WebpageWorkflow {
         return;
       }
 
+      // Reduce the raw HTML before the LLM call. The browser captures full
+      // body markup (scripts, styles, inline SVG, data: URIs) which is mostly
+      // non-content bulk and overruns the model's prompt-length limit on real
+      // pages; strip it to the meaningful markup first.
+      const reduced = reduce_html_for_llm(inputs.raw_content);
+      if (reduced.truncated) {
+        dev_log("content_truncated", {
+          visit_id,
+          url: inputs.new_page.url,
+          original_chars: reduced.original_length,
+          sent_chars: reduced.content.length,
+        });
+      }
+
       // Process content with LLM to extract main content as markdown
       const processed_content = await llm_client.complete(
-        `HTML content to process:\n\n${inputs.raw_content}`,
+        `HTML content to process:\n\n${reduced.content}`,
         CONTENT_PROCESSING_PROMPT,
         "fast"
       );

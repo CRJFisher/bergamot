@@ -50,6 +50,9 @@ export interface CommandConfig {
  */
 export class CommandManager {
   private disposables: vscode.Disposable[] = [];
+  /** Reused across invocations so repeated commands don't pile up duplicate
+   * channels in the Output dropdown. */
+  private visit_outcomes_channel: vscode.OutputChannel | null = null;
 
   constructor(private config: CommandConfig) {}
 
@@ -89,8 +92,9 @@ export class CommandManager {
   }
 
   /**
-   * Renders recent per-visit outcomes plus live pipeline counts to the
-   * Bergamot Dev output channel.
+   * Renders a point-in-time snapshot of recent per-visit outcomes plus live
+   * pipeline counts to the "Bergamot Visit Outcomes" output channel, then
+   * reveals the live "Bergamot Dev Log" channel.
    * @private
    */
   private show_visit_outcomes(): void {
@@ -118,10 +122,15 @@ export class CommandManager {
       lines.push(`[${o.decision}] ${o.url} (${o.visit_id}) ${detail}`.trimEnd());
     }
 
-    const channel = vscode.window.createOutputChannel('Bergamot Visit Outcomes');
-    channel.clear();
-    channel.appendLine(lines.join('\n'));
-    channel.show(true);
+    if (!this.visit_outcomes_channel) {
+      this.visit_outcomes_channel = vscode.window.createOutputChannel(
+        'Bergamot Visit Outcomes'
+      );
+      this.disposables.push(this.visit_outcomes_channel);
+    }
+    this.visit_outcomes_channel.clear();
+    this.visit_outcomes_channel.appendLine(lines.join('\n'));
+    this.visit_outcomes_channel.show(true);
     show_dev_log_channel();
   }
 

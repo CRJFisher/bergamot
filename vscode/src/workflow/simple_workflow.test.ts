@@ -8,6 +8,7 @@ import { global_filter_metrics } from "./filter_metrics";
 import { PageActivitySessionWithMeta } from "../reconcile_webpage_trees_workflow_models";
 import { PageActivitySessionWithoutContent } from "../duck_db_models";
 import { FilterConfig } from "./webpage_filter";
+import { MAX_LLM_CONTENT_CHARS } from "./html_reduce";
 
 type LlmClient = Awaited<ReturnType<typeof openaiClient.get_llm_client>>;
 type MockLlmClient = {
@@ -446,10 +447,13 @@ describe("WebpageWorkflow", () => {
 
       await workflow.run(inputs);
 
-      expect(mockLlmClient.complete).toHaveBeenCalledWith(
-        expect.stringContaining(large_content),
-        expect.any(String),
-        "fast"
+      // Large content is reduced and capped before the LLM call so it never
+      // overruns the model's prompt-length limit.
+      expect(mockLlmClient.complete).toHaveBeenCalledTimes(1);
+      const sent_prompt = mockLlmClient.complete.mock.calls[0][0] as string;
+      expect(sent_prompt).not.toContain(large_content);
+      expect(sent_prompt.length).toBeLessThanOrEqual(
+        "HTML content to process:\n\n".length + MAX_LLM_CONTENT_CHARS
       );
     });
 
