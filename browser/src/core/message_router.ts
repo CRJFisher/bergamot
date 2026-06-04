@@ -7,7 +7,8 @@ const error_message = (error: unknown): string =>
 
 export type MessageAction =
   | 'getReferrer'
-  | 'sendToPKMServer';
+  | 'sendToPKMServer'
+  | 'devSignal';
 
 export interface Message {
   action: MessageAction;
@@ -18,6 +19,9 @@ export interface Message {
   page_loaded_at?: string;
   referrer?: string;
   referrer_timestamp?: number;
+  // Browser-side dev signal (relayed to the server's dev-log sink).
+  stage?: string;
+  fields?: Record<string, unknown>;
 }
 
 export interface MessageResponse {
@@ -143,6 +147,25 @@ export const handle_server_request = async (
     cached_server_url = null;
     set_post_status_badge(false);
     return { success: false, error: error_message(error) };
+  }
+};
+
+// Relays a browser-side dev signal to the server's dev-log sink. Best-effort:
+// reuses the cached server URL (so it never triggers a discovery storm) and
+// swallows failures, since dev observability must never disrupt the pipeline.
+export const forward_dev_signal = async (
+  stage: string,
+  fields: Record<string, unknown>,
+  api_base_url: string
+): Promise<void> => {
+  const target = cached_server_url ?? api_base_url;
+  if (!stage || !target) {
+    return;
+  }
+  try {
+    await send_to_server(target, '/dev_signal', { stage, fields });
+  } catch {
+    // Dev observability is best-effort.
   }
 };
 

@@ -2,7 +2,8 @@ import { describe, it, expect, jest, beforeEach } from "@jest/globals";
 import {
   handle_get_referrer,
   handle_server_request,
-  handle_message
+  handle_message,
+  forward_dev_signal
 } from "../src/core/message_router";
 import { 
   create_tab_history_store, 
@@ -106,6 +107,41 @@ describe("message_router", () => {
     });
   });
 
+  describe("forward_dev_signal", () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it("posts the signal to the /dev_signal endpoint", async () => {
+      (send_to_server as jest.MockedFunction<typeof send_to_server>).mockResolvedValue(undefined);
+
+      await forward_dev_signal(
+        "capture_attempted",
+        { url: "https://leidendeclaration.ai/", visit_id: "v1" },
+        "http://localhost:5000"
+      );
+
+      expect(send_to_server).toHaveBeenCalledWith(
+        expect.any(String),
+        "/dev_signal",
+        { stage: "capture_attempted", fields: { url: "https://leidendeclaration.ai/", visit_id: "v1" } }
+      );
+    });
+
+    it("does nothing when the stage is empty", async () => {
+      await forward_dev_signal("", {}, "http://localhost:5000");
+      expect(send_to_server).not.toHaveBeenCalled();
+    });
+
+    it("swallows transport failures so a dev signal never throws", async () => {
+      (send_to_server as jest.MockedFunction<typeof send_to_server>).mockRejectedValue(new Error("boom"));
+
+      await expect(
+        forward_dev_signal("capture_failed", { url: "https://x.test/" }, "http://localhost:5000")
+      ).resolves.toBeUndefined();
+    });
+  });
+
   describe("handle_message", () => {
     let store = create_tab_history_store();
 
@@ -166,9 +202,11 @@ describe("message_router", () => {
       expect(result.response.error).toBe("Missing endpoint, data, or API base URL");
     });
 
-    it("should handle unknown action", async () => {
+    it("returns Unknown action for an action the router does not handle", async () => {
+      // devSignal is a valid MessageAction handled in the background, not the
+      // router, so it falls through to the default branch here.
       const result = await handle_message(
-        { action: "unknownAction" as any },
+        { action: "devSignal" },
         123,
         store
       );

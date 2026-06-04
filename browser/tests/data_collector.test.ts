@@ -8,20 +8,16 @@ import {
 } from "../src/core/data_collector";
 import { VisitData } from "../src/types/navigation";
 
-// Mock the zstd module
-jest.mock("@hpcc-js/wasm-zstd", () => {
-  const { jest } = require('@jest/globals');
-  return {
-    Zstd: {
-      load: jest.fn(() => Promise.resolve({
-        compress: jest.fn((data: Uint8Array) => {
-          // Simple mock compression - just return first 10 bytes
-          return data.slice(0, 10);
-        })
-      }))
-    }
-  };
-});
+// Mock the zstd module. Plain functions (not jest.fn) so the factory references
+// no out-of-scope variables — these mocks are never asserted on directly.
+jest.mock("@hpcc-js/wasm-zstd", () => ({
+  Zstd: {
+    // Simple mock compression — just return the first 10 bytes.
+    load: () => Promise.resolve({
+      compress: (data: Uint8Array) => data.slice(0, 10)
+    })
+  }
+}));
 
 describe("data_collector", () => {
   describe("uint8_array_to_base64", () => {
@@ -51,29 +47,29 @@ describe("data_collector", () => {
   describe("compress_content", () => {
     it("should compress string content", async () => {
       const mock_zstd = {
-        compress: jest.fn((data: Uint8Array) => new Uint8Array([1, 2, 3, 4, 5]))
+        compress: jest.fn(() => new Uint8Array([1, 2, 3, 4, 5]))
       };
-      
+
       const result = await compress_content("Hello World", mock_zstd);
-      
+
       expect(mock_zstd.compress).toHaveBeenCalled();
       expect(result).toBe("AQIDBAU="); // base64 of [1,2,3,4,5]
     });
 
-    it("should handle compression error", async () => {
+    it("should throw on compression error", async () => {
       const mock_zstd = {
         compress: jest.fn(() => { throw new Error("Compression failed"); })
       };
-      
-      const result = await compress_content("Hello World", mock_zstd);
-      
-      expect(result).toBe("Error compressing content.");
+
+      await expect(compress_content("Hello World", mock_zstd)).rejects.toThrow(
+        "Compression failed"
+      );
     });
 
     it("should log compression ratio", async () => {
       const console_spy = jest.spyOn(console, 'log');
       const mock_zstd = {
-        compress: jest.fn((data: Uint8Array) => new Uint8Array(5))
+        compress: jest.fn(() => new Uint8Array(5))
       };
       
       await compress_content("Hello World", mock_zstd);
@@ -114,11 +110,7 @@ describe("data_collector", () => {
   });
 
   describe("create_visit_data", () => {
-    it("should create VisitData with all fields", async () => {
-      const mock_zstd = {
-        compress: jest.fn((data: Uint8Array) => new Uint8Array([1, 2, 3]))
-      };
-      
+    it("should create VisitData with raw page content and all fields", () => {
       // Mock document.body
       const original_body = document.body;
       Object.defineProperty(document, 'body', {
@@ -126,21 +118,21 @@ describe("data_collector", () => {
         writable: true,
         configurable: true
       });
-      
-      const visit_data = await create_visit_data(
+
+      const visit_data = create_visit_data(
         "https://example.com",
         "https://referrer.com",
-        1234567890,
-        mock_zstd
+        1234567890
       );
-      
+
       expect(visit_data).toBeInstanceOf(VisitData);
       expect(visit_data.url).toBe("https://example.com");
       expect(visit_data.referrer).toBe("https://referrer.com");
       expect(visit_data.referrer_timestamp).toBe(1234567890);
-      expect(visit_data.content).toBe("AQID"); // base64 of [1,2,3]
+      // Content is the raw markup; the background service worker compresses it.
+      expect(visit_data.content).toBe("<body>Test</body>");
       expect(visit_data.page_loaded_at).toMatch(/^\d{4}-\d{2}-\d{2}T/); // ISO date
-      
+
       // Restore
       Object.defineProperty(document, 'body', {
         value: original_body,
@@ -149,18 +141,13 @@ describe("data_collector", () => {
       });
     });
 
-    it("should handle undefined referrer timestamp", async () => {
-      const mock_zstd = {
-        compress: jest.fn((data: Uint8Array) => new Uint8Array([]))
-      };
-      
-      const visit_data = await create_visit_data(
+    it("should handle undefined referrer timestamp", () => {
+      const visit_data = create_visit_data(
         "https://example.com",
         "",
-        undefined,
-        mock_zstd
+        undefined
       );
-      
+
       expect(visit_data.referrer_timestamp).toBeUndefined();
     });
   });

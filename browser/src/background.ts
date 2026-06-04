@@ -8,7 +8,9 @@ import {
   generate_group_id,
 } from './core/tab_history_manager';
 import { load_store, save_store } from './core/tab_history_persistence';
-import { handle_message } from './core/message_router';
+import { handle_message, forward_dev_signal, Message, MessageResponse } from './core/message_router';
+import { create_zstd_instance } from './core/data_collector';
+import { make_lazy_zstd, compress_visit_content } from './core/visit_compression';
 import { TabHistory } from './types/navigation';
 
 console.log("🚀 Bergamot Extension: Background script initialized");
@@ -212,9 +214,34 @@ chrome.webNavigation.onCommitted.addListener(handle_nav_committed);
 chrome.webNavigation.onHistoryStateUpdated.addListener(handle_nav_history_state);
 chrome.webNavigation.onCreatedNavigationTarget.addListener(handle_created_nav_target);
 
+// zstd WASM is compiled once here, lazily, in the service-worker context. A
+// page's CSP can block WebAssembly in the content script's isolated world, so
+// page content arrives uncompressed and is compressed here, where the
+// extension's own CSP (which permits `wasm-unsafe-eval`) applies.
+const get_zstd = make_lazy_zstd(create_zstd_instance);
+
 // Message handling — routed through the same serialized store chain.
-chrome.runtime.onMessage.addListener((request, sender, send_response) => {
-  with_store(async (store) => {
+const process_runtime_message = async (
+  request: Message,
+  sender: chrome.runtime.MessageSender
+): Promise<MessageResponse> => {
+  // Browser-side dev signals carry no session state; relay them straight to the
+  // server's dev-log sink without touching the store.
+  if (request.action === 'devSignal') {
+    await forward_dev_signal(
+      request.stage ?? '',
+      request.fields ?? {},
+      request.api_base_url ?? ''
+    );
+    return { success: true };
+  }
+
+  // Compress in the SW context before forwarding (page CSP cannot block it here).
+  const prepared = await compress_visit_content(request, get_zstd, (stage, fields) =>
+    forward_dev_signal(stage, fields, request.api_base_url ?? '')
+  );
+
+  const response = await with_store<MessageResponse>(async (store) => {
     // A page message can arrive before the tab/navigation events that would
     // create its history, so guarantee the tab has a group_id before we read or
     // attach session metadata.
@@ -234,16 +261,22 @@ chrome.runtime.onMessage.addListener((request, sender, send_response) => {
       }
     }
     const { response, new_store } = await handle_message(
-      request,
+      prepared,
       sender_tab?.id,
       base
     );
     return { store: new_store ?? base, result: response };
-  })
+  });
+
+  return response ?? { error: 'No response' };
+};
+
+chrome.runtime.onMessage.addListener((request, sender, send_response) => {
+  process_runtime_message(request, sender)
     .then((response) => send_response(response))
     .catch((error) => {
-      console.error(`Error handling message ${request.action}:`, error);
-      send_response({ error: error.message });
+      console.error(`Error handling message ${request?.action}:`, error);
+      send_response({ error: error instanceof Error ? error.message : String(error) });
     });
 
   return true; // keep the message channel open for the async response

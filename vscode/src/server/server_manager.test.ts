@@ -9,6 +9,7 @@ import { LanceDBMemoryStore } from '../lance_db';
 import { VisitQueueProcessor } from '../visit_queue_processor';
 import { build_workflow } from '../reconcile_webpage_trees_workflow_vanilla';
 import { decompress } from '@mongodb-js/zstd';
+import { dev_log } from '../dev_log';
 
 // Mock dependencies
 jest.mock('../duck_db');
@@ -24,6 +25,11 @@ jest.mock('fs');
 jest.mock('../hash_utils', () => ({
   md5_hash: jest.fn().mockReturnValue('test-hash-id')
 }));
+// Keep the real stage validator; spy on the sink so we can assert what is logged.
+jest.mock('../dev_log', () => {
+  const actual = jest.requireActual('../dev_log');
+  return { ...actual, dev_log: jest.fn() };
+});
 
 describe('ServerManager', () => {
   let server_manager: ServerManager;
@@ -124,6 +130,35 @@ describe('ServerManager', () => {
       it('reports the bergamot service marker the browser discovery probes for', async () => {
         const response = await request(app).get('/status').expect(200);
         expect(response.body.service).toBe('bergamot');
+      });
+    });
+
+    describe('POST /dev_signal', () => {
+      it('logs a recognized browser stage to the dev-log sink', async () => {
+        const response = await request(app)
+          .post('/dev_signal')
+          .send({
+            stage: 'capture_attempted',
+            fields: { url: 'https://leidendeclaration.ai/', visit_id: 'v1' },
+          })
+          .expect(200);
+
+        expect(response.body).toEqual({ ok: true });
+        expect(dev_log).toHaveBeenCalledWith('capture_attempted', {
+          source: 'browser',
+          url: 'https://leidendeclaration.ai/',
+          visit_id: 'v1',
+        });
+      });
+
+      it('ignores an unknown stage but still acknowledges', async () => {
+        const response = await request(app)
+          .post('/dev_signal')
+          .send({ stage: 'totally_made_up', fields: { url: 'https://x.test/' } })
+          .expect(200);
+
+        expect(response.body).toEqual({ ok: true });
+        expect(dev_log).not.toHaveBeenCalled();
       });
     });
 

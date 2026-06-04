@@ -4,8 +4,8 @@
  * Threads a single correlation `visit_id` through the capture pipeline
  * (browser → /visit → queue → workflow → store) and records:
  *  - structured stage events to a tail-able `<storage-base>/dev-log.jsonl`
- *  - the same events to a "Bergamot Dev" VS Code output channel (when running
- *    inside the extension host)
+ *  - the same events to a "Bergamot Dev Log" VS Code output channel (when
+ *    running inside the extension host)
  *  - a per-visit outcome ring buffer surfaced by `bergamot.showVisitOutcomes`
  *
  * Logging is gated (see {@link init_dev_log}) and the JSONL file is rotated at a
@@ -28,16 +28,38 @@ interface OutputChannelLike {
 }
 
 export type DevLogStage =
+  // Browser-relayed stages (occur before the visit reaches the server).
+  | 'capture_attempted'
+  | 'capture_failed'
+  | 'compression_failed'
+  // Server pipeline stages.
   | 'http_received'
   | 'parse_failed'
   | 'decompress_failed'
   | 'queued'
   | 'classify_result'
+  | 'content_truncated'
   | 'dropped'
   | 'workflow_failed'
   | 'stored'
   | 'orphan_parked'
   | 'orphan_dropped';
+
+/**
+ * Stages a browser-relayed dev signal may carry. The browser side is untrusted
+ * input, so the `/dev_signal` route validates against this set before logging.
+ */
+export const BROWSER_DEV_STAGES = [
+  'capture_attempted',
+  'capture_failed',
+  'compression_failed',
+] as const;
+
+export type BrowserDevStage = (typeof BROWSER_DEV_STAGES)[number];
+
+export function is_browser_dev_stage(value: string): value is BrowserDevStage {
+  return (BROWSER_DEV_STAGES as readonly string[]).includes(value);
+}
 
 export type VisitDecision =
   | 'stored'
@@ -82,7 +104,7 @@ function try_create_channel(): OutputChannelLike | undefined {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const vscode = require('vscode');
-    return vscode.window.createOutputChannel('Bergamot Dev');
+    return vscode.window.createOutputChannel('Bergamot Dev Log');
   } catch {
     // Headless (no extension host) — JSONL sink only.
     return undefined;

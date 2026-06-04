@@ -94,6 +94,15 @@ export class MockPKMServer {
             }
           });
           
+        } else if (req.method === 'POST' && pathname === '/dev_signal') {
+          // Browser-relayed dev observability signal. Drained and acknowledged so
+          // the extension's best-effort relay sees a 200; not asserted on by tests.
+          req.on('data', () => undefined);
+          req.on('end', () => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+          });
+
         } else if (req.method === 'GET' && pathname === '/visits') {
           // Get all visits (for testing)
           res.writeHead(200, { 'Content-Type': 'application/json' });

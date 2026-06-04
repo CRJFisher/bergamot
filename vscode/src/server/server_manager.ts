@@ -21,7 +21,7 @@ import { PageActivitySessionWithoutTreeOrContentSchema } from '../duck_db_models
 import { build_workflow } from '../reconcile_webpage_trees_workflow_vanilla';
 import { WebpageWorkflow } from '../workflow/simple_workflow';
 import { get_filter_config } from '../config/filter_config';
-import { dev_log, is_dev_log_enabled } from '../dev_log';
+import { dev_log, is_dev_log_enabled, is_browser_dev_stage } from '../dev_log';
 import { persist_capture } from '../captures';
 import { LlmProvider } from '../config/config_manager';
 
@@ -176,6 +176,21 @@ export class ServerManager {
         version: '1.0.0',
         uptime: process.uptime(),
       });
+    });
+
+    // Browser-relayed dev signals. These capture the browser-side stages of the
+    // pipeline (a page seen, a capture that failed, a compression failure) that
+    // occur before a visit reaches /visit — the point where a page's CSP, a cold
+    // service worker, or a content-script crash can otherwise drop it with no
+    // server-side trace. A `capture_attempted` with no matching `http_received`
+    // for the same visit_id is exactly the set of silently-untracked pages.
+    // Validated against the known browser stages; gated by the dev-log flag.
+    this.app.post('/dev_signal', (req, res) => {
+      const stage = req.body?.stage;
+      if (typeof stage === 'string' && is_browser_dev_stage(stage)) {
+        dev_log(stage, { source: 'browser', ...(req.body?.fields ?? {}) });
+      }
+      res.json({ ok: true });
     });
 
     // Visit processing endpoint
