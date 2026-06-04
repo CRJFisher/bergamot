@@ -139,6 +139,25 @@ export class OrphanedVisitsManager {
   }
 
   /**
+   * Removes a single orphaned visit (e.g. once it has been classified on retry).
+   *
+   * @param orphan - The exact orphan entry to remove
+   */
+  remove_orphan(orphan: OrphanedVisit): void {
+    const orphans = this.orphaned_visits.get(orphan.opener_tab_id);
+    if (!orphans) return;
+
+    const index = orphans.indexOf(orphan);
+    if (index > -1) {
+      orphans.splice(index, 1);
+    }
+
+    if (orphans.length === 0) {
+      this.orphaned_visits.delete(orphan.opener_tab_id);
+    }
+  }
+
+  /**
    * Retrieves all orphaned visits that are eligible for retry processing.
    * Excludes orphans that have exceeded the maximum retry count.
    * Automatically cleans up old orphans before returning results.

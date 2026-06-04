@@ -130,7 +130,7 @@ describe('CommandManager', () => {
       mock_command_handler();
 
       expect(vscode.window.createOutputChannel).toHaveBeenCalledWith(
-        'PKM Assistant Filter Metrics'
+        'Bergamot Filter Metrics'
       );
       expect(mock_output_channel.clear).toHaveBeenCalled();
       expect(mock_output_channel.appendLine).toHaveBeenCalledWith(

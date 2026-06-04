@@ -334,7 +334,7 @@ describe("LanceDBMemoryStore", () => {
         { type: "delete" as const, namespace: ["ns3"], key: "key3" },
         {
           type: "search" as const,
-          namespacePrefix: ["ns4"],
+          namespace_prefix: ["ns4"],
           query: "search query",
         },
       ];

@@ -32,6 +32,12 @@ const stub = {
     showErrorMessage: () => {},
     showInformationMessage: () => {},
   },
+  // The editor language-model API is unavailable outside the host. Report no
+  // models so a headless run with the 'vscode' provider fails with the clear
+  // "language model unavailable" error rather than a TypeError on `vscode.lm`.
+  lm: {
+    selectChatModels: async () => [],
+  },
 };
 
 Module._load = function (request) {

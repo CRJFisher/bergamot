@@ -286,10 +286,8 @@ async function handle_semantic_search(
       ],
     };
   } catch (error) {
-    throw new McpError(
-      ErrorCode.InternalError,
-      `Search failed: ${error.message}`
-    );
+    const message = error instanceof Error ? error.message : String(error);
+    throw new McpError(ErrorCode.InternalError, `Search failed: ${message}`);
   }
 }
 
@@ -355,9 +353,10 @@ async function handle_get_webpage_content(
     if (error instanceof McpError) {
       throw error;
     }
+    const message = error instanceof Error ? error.message : String(error);
     throw new McpError(
       ErrorCode.InternalError,
-      `Failed to retrieve content: ${error.message}`
+      `Failed to retrieve content: ${message}`
     );
   }
 }

@@ -26,7 +26,8 @@ describe('DatabaseManager', () => {
 
     (DuckDB as jest.Mock).mockImplementation(() => mock_duck_db);
     (LanceDBMemoryStore.create as jest.Mock) = jest.fn().mockResolvedValue({
-      stop: jest.fn()
+      stop: jest.fn(),
+      drop_table_if_vector_dim_mismatch: jest.fn().mockResolvedValue(undefined)
     });
     (create_embeddings as jest.Mock).mockReturnValue({});
 

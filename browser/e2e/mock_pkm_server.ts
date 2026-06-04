@@ -9,8 +9,8 @@ import * as url from 'url';
 export class MockPKMServer {
   private server: http.Server | null = null;
   private port: number;
-  private visits: any[] = [];
-  private requests_received: any[] = [];
+  private visits: unknown[] = [];
+  private requests_received: unknown[] = [];
   
   constructor(port: number = 5000) {
     this.port = port;
@@ -41,6 +41,9 @@ export class MockPKMServer {
           // Status endpoint
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
+            // The browser's server discovery only accepts a server whose /status
+            // reports this service marker, so the mock must include it too.
+            service: 'bergamot',
             status: 'ok',
             mock: true,
             visits_count: this.visits.length
@@ -81,12 +84,12 @@ export class MockPKMServer {
                 visit_id: this.visits.length
               }));
               
-            } catch (error: any) {
+            } catch (error) {
               console.error('❌ Error processing visit:', error);
               res.writeHead(400, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({
                 success: false,
-                error: error.message
+                error: error instanceof Error ? error.message : String(error)
               }));
             }
           });
@@ -111,7 +114,7 @@ export class MockPKMServer {
         resolve();
       });
       
-      this.server.on('error', (error: any) => {
+      this.server.on('error', (error: NodeJS.ErrnoException) => {
         if (error.code === 'EADDRINUSE') {
           console.log(`⚠️ Port ${this.port} is already in use`);
           reject(new Error(`Port ${this.port} is already in use`));
@@ -138,11 +141,11 @@ export class MockPKMServer {
     });
   }
   
-  get_visits(): any[] {
+  get_visits(): unknown[] {
     return this.visits;
   }
-  
-  get_requests(): any[] {
+
+  get_requests(): unknown[] {
     return this.requests_received;
   }
   
@@ -155,7 +158,7 @@ export class MockPKMServer {
     return this.visits.length;
   }
   
-  get_last_visit(): any | null {
+  get_last_visit(): unknown | null {
     return this.visits.length > 0 ? this.visits[this.visits.length - 1] : null;
   }
 }

@@ -25,9 +25,21 @@ function captures_dir(storage_base: string): string {
 }
 
 function capture_file(storage_base: string, visit_id: string): string {
-  // visit_id is a UUID or hex hash; sanitize defensively against path chars.
-  const safe = visit_id.replace(/[^a-zA-Z0-9_-]/g, '_');
+  // visit_id is normally a UUID or hex hash, but it can be browser-supplied, so
+  // sanitize against path characters and cap the length (filesystems reject
+  // names beyond ~255 bytes with ENAMETOOLONG).
+  const safe = visit_id.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 128);
   return path.join(captures_dir(storage_base), `${safe}.json`);
+}
+
+/** Lists `.json` entries in `dir`, most recent first by mtime. */
+function json_files_by_mtime(dir: string): string[] {
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.json'))
+    .map((f) => ({ f, mtime: fs.statSync(path.join(dir, f)).mtimeMs }))
+    .sort((a, b) => b.mtime - a.mtime)
+    .map(({ f }) => f);
 }
 
 /**
@@ -46,13 +58,8 @@ export function persist_capture(storage_base: string, visit: ExtendedPageVisit):
 }
 
 function prune(dir: string): void {
-  const entries = fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith('.json'))
-    .map((f) => ({ f, mtime: fs.statSync(path.join(dir, f)).mtimeMs }))
-    .sort((a, b) => b.mtime - a.mtime);
-  for (const stale of entries.slice(MAX_CAPTURES)) {
-    fs.rmSync(path.join(dir, stale.f), { force: true });
+  for (const stale of json_files_by_mtime(dir).slice(MAX_CAPTURES)) {
+    fs.rmSync(path.join(dir, stale), { force: true });
   }
 }
 
@@ -60,21 +67,16 @@ function prune(dir: string): void {
 export function list_captures(storage_base: string): CaptureSummary[] {
   const dir = captures_dir(storage_base);
   if (!fs.existsSync(dir)) return [];
-  return fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith('.json'))
-    .map((f) => ({ f, mtime: fs.statSync(path.join(dir, f)).mtimeMs }))
-    .sort((a, b) => b.mtime - a.mtime)
-    .map(({ f }) => {
-      const visit = JSON.parse(
-        fs.readFileSync(path.join(dir, f), 'utf-8')
-      ) as ExtendedPageVisit;
-      return {
-        visit_id: visit.visit_id,
-        url: visit.url,
-        page_loaded_at: visit.page_loaded_at,
-      };
-    });
+  return json_files_by_mtime(dir).map((f) => {
+    const visit = JSON.parse(
+      fs.readFileSync(path.join(dir, f), 'utf-8')
+    ) as ExtendedPageVisit;
+    return {
+      visit_id: visit.visit_id,
+      url: visit.url,
+      page_loaded_at: visit.page_loaded_at,
+    };
+  });
 }
 
 /** Loads a single capture by visit id, or null if it has been evicted. */

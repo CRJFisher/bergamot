@@ -120,10 +120,16 @@ describe('ServerManager', () => {
         expect(response.body).toHaveProperty('uptime');
         expect(typeof response.body.uptime).toBe('number');
       });
+
+      it('reports the bergamot service marker the browser discovery probes for', async () => {
+        const response = await request(app).get('/status').expect(200);
+        expect(response.body.service).toBe('bergamot');
+      });
     });
 
     describe('POST /visit', () => {
       it('should process valid visit request', async () => {
+        (decompress as jest.Mock).mockResolvedValue(Buffer.from('test content'));
         const visit_data = {
           url: 'https://example.com',
           page_loaded_at: '2024-01-01T00:00:00Z',
@@ -152,6 +158,30 @@ describe('ServerManager', () => {
             url: 'https://example.com',
             raw_content: 'test content'
           })
+        );
+      });
+
+      it('echoes a browser-supplied visit_id back and threads it into the queued visit', async () => {
+        (decompress as jest.Mock).mockResolvedValue(Buffer.from('content'));
+        const visit_data = {
+          url: 'https://example.com',
+          page_loaded_at: '2024-01-01T00:00:00Z',
+          content: 'content',
+          referrer: null,
+          referrer_page_session_id: null,
+          visit_id: 'browser-supplied-visit-id',
+        };
+
+        const response = await request(app)
+          .post('/visit')
+          .send(visit_data)
+          .expect(200);
+
+        // The browser-supplied correlation token is trusted and echoed back,
+        // not replaced by the server's content-hash fallback.
+        expect(response.body.visit_id).toBe('browser-supplied-visit-id');
+        expect(mock_queue_processor.enqueue).toHaveBeenCalledWith(
+          expect.objectContaining({ visit_id: 'browser-supplied-visit-id' })
         );
       });
 
@@ -197,10 +227,12 @@ describe('ServerManager', () => {
           .send(visit_data)
           .expect(200);
 
+        // On decompression failure the content is dropped (stored empty) rather
+        // than passing the raw base64 through as page text.
         expect(response.body.status).toBe('queued');
         expect(mock_queue_processor.enqueue).toHaveBeenCalledWith(
           expect.objectContaining({
-            raw_content: 'not-compressed-content'
+            raw_content: ''
           })
         );
       });

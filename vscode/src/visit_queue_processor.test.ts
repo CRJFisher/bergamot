@@ -2,8 +2,9 @@ import { VisitQueueProcessor, ExtendedPageVisit } from "./visit_queue_processor"
 import { OrphanedVisitsManager } from "./orphaned_visits";
 import { DuckDB } from "./duck_db";
 import { LanceDBMemoryStore } from "./lance_db";
+import { WebpageWorkflow } from "./workflow/simple_workflow";
+import { PageActivitySessionWithMeta } from "./reconcile_webpage_trees_workflow_models";
 import * as webpageTree from "./webpage_tree";
-import * as workflow from "./reconcile_webpage_trees_workflow_vanilla";
 import * as duckDbImports from "./duck_db";
 import { record_outcome } from "./dev_log";
 
@@ -11,14 +12,13 @@ import { record_outcome } from "./dev_log";
 jest.mock("./duck_db");
 jest.mock("./lance_db");
 jest.mock("./webpage_tree");
-jest.mock("./reconcile_webpage_trees_workflow_vanilla");
 jest.mock("./dev_log");
 
 describe("VisitQueueProcessor", () => {
   let processor: VisitQueueProcessor;
   let mockDuckDb: jest.Mocked<DuckDB>;
   let mockMemoryDb: jest.Mocked<LanceDBMemoryStore>;
-  let mockWorkflowApp: any;
+  let mockWorkflowApp: { run: jest.Mock };
   let mockOrphanManager: jest.Mocked<OrphanedVisitsManager>;
   
   // Mock functions
@@ -28,23 +28,21 @@ describe("VisitQueueProcessor", () => {
   const mockGetPageSessions = duckDbImports.get_page_sessions_with_tree_id as jest.MockedFunction<
     typeof duckDbImports.get_page_sessions_with_tree_id
   >;
-  const mockRunWorkflow = workflow.run_workflow as jest.MockedFunction<
-    typeof workflow.run_workflow
-  >;
 
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
-    
+
     // Create mock instances
     mockDuckDb = {} as jest.Mocked<DuckDB>;
     mockMemoryDb = {} as jest.Mocked<LanceDBMemoryStore>;
-    mockWorkflowApp = {};
-    
+    mockWorkflowApp = { run: jest.fn().mockResolvedValue(undefined) };
+
     mockOrphanManager = {
       add_orphan: jest.fn(),
       get_orphans_for_tab: jest.fn().mockReturnValue([]),
       remove_orphans_for_tab: jest.fn(),
+      remove_orphan: jest.fn(),
       get_orphans_for_retry: jest.fn().mockReturnValue([]),
       increment_retry_count: jest.fn(),
       get_stats: jest.fn().mockReturnValue({
@@ -52,22 +50,22 @@ describe("VisitQueueProcessor", () => {
         orphans_by_tab: new Map(),
         oldest_orphan_age_ms: null
       })
-    } as any;
+    } as Partial<jest.Mocked<OrphanedVisitsManager>> as jest.Mocked<OrphanedVisitsManager>;
     
     // Default mock implementations
     mockInsertPageActivitySession.mockResolvedValue({
       tree_id: "tree-123",
-      was_tree_changed: true
+      was_tree_changed: true,
+      referrer_session_id: null
     });
-    
+
     mockGetPageSessions.mockResolvedValue([]);
-    mockRunWorkflow.mockResolvedValue(undefined);
-    
+
     // Create processor with test config
     processor = new VisitQueueProcessor(
       mockDuckDb,
       mockMemoryDb,
-      mockWorkflowApp,
+      mockWorkflowApp as Partial<WebpageWorkflow> as WebpageWorkflow,
       mockOrphanManager,
       {
         batch_size: 3,
@@ -223,9 +221,10 @@ describe("VisitQueueProcessor", () => {
       
       mockInsertPageActivitySession.mockResolvedValue({
         tree_id: "tree-123",
-        was_tree_changed: true
+        was_tree_changed: true,
+        referrer_session_id: null
       });
-      
+
       mockGetPageSessions.mockResolvedValue([
         {
           id: "visit-1",
@@ -236,7 +235,7 @@ describe("VisitQueueProcessor", () => {
           referrer: null,
           referrer_page_session_id: null,
           page_loaded_at: "2024-01-01T12:00:00Z"
-        } as any
+        } as PageActivitySessionWithMeta
       ]);
       
       await processor.process_single_visit(visit);
@@ -247,7 +246,7 @@ describe("VisitQueueProcessor", () => {
         mockMemoryDb,
         "tree-123"
       );
-      expect(mockRunWorkflow).toHaveBeenCalled();
+      expect(mockWorkflowApp.run).toHaveBeenCalled();
       expect(mockOrphanManager.get_orphans_for_tab).toHaveBeenCalledWith(42);
     });
 
@@ -265,13 +264,14 @@ describe("VisitQueueProcessor", () => {
       
       mockInsertPageActivitySession.mockResolvedValue({
         tree_id: "tree-456",
-        was_tree_changed: true
+        was_tree_changed: true,
+        referrer_session_id: null
       });
-      
+
       await processor.process_single_visit(visit);
-      
+
       expect(mockOrphanManager.add_orphan).toHaveBeenCalledWith(visit, 10);
-      expect(mockRunWorkflow).not.toHaveBeenCalled(); // Should not run workflow for orphans
+      expect(mockWorkflowApp.run).not.toHaveBeenCalled(); // Should not run workflow for orphans
     });
 
     it("should process orphaned children when parent is processed", async () => {
@@ -323,13 +323,14 @@ describe("VisitQueueProcessor", () => {
       
       mockInsertPageActivitySession.mockResolvedValue({
         tree_id: null,
-        was_tree_changed: false
+        was_tree_changed: false,
+        referrer_session_id: null
       });
-      
+
       await processor.process_single_visit(visit);
-      
+
       expect(mockInsertPageActivitySession).toHaveBeenCalled();
-      expect(mockRunWorkflow).not.toHaveBeenCalled();
+      expect(mockWorkflowApp.run).not.toHaveBeenCalled();
       expect(mockOrphanManager.add_orphan).not.toHaveBeenCalled();
     });
   });
@@ -391,9 +392,9 @@ describe("VisitQueueProcessor", () => {
       
       // Make the second visit fail
       mockInsertPageActivitySession
-        .mockResolvedValueOnce({ tree_id: "tree-1", was_tree_changed: true })
+        .mockResolvedValueOnce({ tree_id: "tree-1", was_tree_changed: true, referrer_session_id: null })
         .mockRejectedValueOnce(new Error("Database error"))
-        .mockResolvedValueOnce({ tree_id: "tree-3", was_tree_changed: true });
+        .mockResolvedValueOnce({ tree_id: "tree-3", was_tree_changed: true, referrer_session_id: null });
       
       visits.forEach(v => processor.enqueue(v));
 
@@ -437,7 +438,7 @@ describe("VisitQueueProcessor", () => {
   });
 
   describe("orphan retry mechanism", () => {
-    it("should periodically retry orphaned visits", () => {
+    it("should re-attempt orphans and advance the retry count while the parent is still missing", async () => {
       const orphan = {
         visit: {
           id: "orphan-1",
@@ -445,37 +446,77 @@ describe("VisitQueueProcessor", () => {
           url: "https://example.com/orphan",
           referrer: "https://example.com/parent",
           page_loaded_at: "2024-01-01T12:00:00Z",
-          raw_content: "<html>Orphan</html>"
+          raw_content: "<html>Orphan</html>",
+          opener_tab_id: 10
         },
         opener_tab_id: 10,
         arrival_time: Date.now(),
         retry_count: 0
       };
-      
+
+      // Parent still absent: the re-insert keeps it a root (no referrer link), so
+      // it stays an orphan and is not re-parked (park_if_orphan: false on retry).
+      mockInsertPageActivitySession.mockResolvedValue({
+        tree_id: "tree-orphan",
+        was_tree_changed: false,
+        referrer_session_id: null
+      });
       mockOrphanManager.get_orphans_for_retry.mockReturnValue([orphan]);
-      
+
       processor.start();
-      
-      // Advance time to trigger retry interval
-      jest.advanceTimersByTime(1000);
-      
+
+      await jest.advanceTimersByTimeAsync(1000);
+
       expect(mockOrphanManager.get_orphans_for_retry).toHaveBeenCalled();
       expect(mockOrphanManager.increment_retry_count).toHaveBeenCalledWith(orphan);
-      
-      const stats = processor.get_stats();
-      expect(stats.queue_length).toBe(1); // Orphan should be re-queued
+      expect(mockOrphanManager.add_orphan).not.toHaveBeenCalled(); // not re-parked
+      expect(processor.get_stats().queue_length).toBe(0); // not re-queued
+    });
+
+    it("should classify and remove an orphan once its parent has arrived", async () => {
+      const orphan = {
+        visit: {
+          id: "orphan-1",
+          visit_id: "v-orphan-1",
+          url: "https://example.com/orphan",
+          referrer: "https://example.com/parent",
+          page_loaded_at: "2024-01-01T12:00:00Z",
+          raw_content: "<html>Orphan</html>",
+          opener_tab_id: 10
+        },
+        opener_tab_id: 10,
+        arrival_time: Date.now(),
+        retry_count: 0
+      };
+
+      // Parent now present: the re-insert links it to the parent tree, so it is
+      // classified and the orphan entry is removed (not incremented).
+      mockInsertPageActivitySession.mockResolvedValue({
+        tree_id: "tree-parent",
+        was_tree_changed: true,
+        referrer_session_id: "parent-session"
+      });
+      mockOrphanManager.get_orphans_for_retry.mockReturnValue([orphan]);
+
+      processor.start();
+
+      await jest.advanceTimersByTimeAsync(1000);
+
+      expect(mockWorkflowApp.run).toHaveBeenCalled();
+      expect(mockOrphanManager.remove_orphan).toHaveBeenCalledWith(orphan);
+      expect(mockOrphanManager.increment_retry_count).not.toHaveBeenCalled();
     });
 
     it("should not retry when no orphans available", () => {
       mockOrphanManager.get_orphans_for_retry.mockReturnValue([]);
-      
+
       processor.start();
-      
+
       jest.advanceTimersByTime(1000);
-      
+
       expect(mockOrphanManager.get_orphans_for_retry).toHaveBeenCalled();
       expect(mockOrphanManager.increment_retry_count).not.toHaveBeenCalled();
-      
+
       const stats = processor.get_stats();
       expect(stats.queue_length).toBe(0);
     });

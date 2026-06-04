@@ -41,8 +41,10 @@ const BUILDS = [
 async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
-  // Start a watch context per bundle. The first watch() also performs the
-  // initial build, so by the time it resolves the bundles exist in chrome/dist.
+  // Build each bundle once up front, THEN start watching. ctx.watch() resolves
+  // as soon as the watcher is armed and does not guarantee the first build has
+  // landed on disk, so an explicit rebuild() ensures chrome/dist is populated
+  // before Brave loads the extension.
   for (const build of BUILDS) {
     const ctx = await esbuild.context({
       entryPoints: build.entryPoints,
@@ -52,6 +54,7 @@ async function main() {
       allowOverwrite: true,
       logLevel: 'info',
     });
+    await ctx.rebuild();
     await ctx.watch();
   }
 

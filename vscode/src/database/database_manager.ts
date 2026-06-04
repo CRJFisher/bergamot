@@ -1,7 +1,10 @@
 import * as path from 'path';
 import { DuckDB } from '../duck_db';
 import { LanceDBMemoryStore } from '../lance_db';
-import { create_embeddings } from '../workflow/embeddings';
+import { create_embeddings, LOCAL_EMBEDDING_DIM } from '../workflow/embeddings';
+
+/** LanceDB namespace holding embedded webpage content. */
+const WEBPAGE_CONTENT_NAMESPACE = ['webpage_content'];
 
 /**
  * Result of database initialization containing all database instances.
@@ -16,14 +19,14 @@ export interface DatabaseInstances {
 }
 
 /**
- * Manages database initialization and lifecycle for the PKM Assistant extension.
+ * Manages database initialization and lifecycle for the Bergamot extension.
  * Provides centralized control over all database connections and ensures proper
  * initialization order and cleanup.
- * 
+ *
  * @example
  * ```typescript
  * const dbManager = new DatabaseManager();
- * const databases = await dbManager.initialize_all(context, apiKey);
+ * const databases = await dbManager.initialize_all(storage_base);
  *
  * // Use databases
  * await databases.duck_db.query('SELECT * FROM pages');
@@ -36,21 +39,15 @@ export class DatabaseManager {
   private databases?: DatabaseInstances;
 
   /**
-   * Initializes the memory store with embeddings support.
-   * Creates a LanceDB instance with OpenAI embeddings for semantic search capabilities.
-   * 
-   * @param storage_path - Path to extension storage directory
-   * @param openai_api_key - OpenAI API key for generating embeddings
+   * Initializes the memory store with local-embedding support for semantic search.
+   *
+   * @param storage_path - Resolved storage base directory
    * @returns Initialized LanceDB memory store
    * @throws {Error} If LanceDB initialization fails
    * @example
    * ```typescript
-   * const memoryDb = await dbManager.initialize_memory_store(
-   *   '/path/to/storage',
-   *   'sk-...'
-   * );
-   * // Now you can perform semantic search
-   * const results = await memoryDb.search('query text');
+   * const memoryDb = await dbManager.initialize_memory_store('/path/to/storage');
+   * const results = await memoryDb.search(['webpage_content'], { query: 'query text' });
    * ```
    */
   async initialize_memory_store(
@@ -65,6 +62,14 @@ export class DatabaseManager {
     const memory_db = await LanceDBMemoryStore.create(memory_db_path, {
       embeddings: create_embeddings(),
     });
+
+    // Discard any content store written with a different embedding dimension
+    // (e.g. a pre-existing 1536-dim OpenAI store); it would be unqueryable
+    // against the 384-dim local model and is rebuilt as pages are re-ingested.
+    await memory_db.drop_table_if_vector_dim_mismatch(
+      WEBPAGE_CONTENT_NAMESPACE,
+      LOCAL_EMBEDDING_DIM
+    );
 
     console.log('Memory store initialized successfully');
     return memory_db;

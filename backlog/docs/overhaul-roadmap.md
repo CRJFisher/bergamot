@@ -61,7 +61,7 @@ Discovery approach chosen: **HTTP port-range probing** (browser has no filesyste
 
 - **4.1 [DONE]** Relational queries exposed. Cross-process access resolved via the extension's HTTP server (DuckDB is single-writer): added `GET /query/visit_by_url|page_by_title|tree|recent_trees` backed by existing `duck_db` helpers; MCP tools `get_visit_by_url`, `search_by_title`, `get_navigation_tree`, `list_recent_navigation_trees` proxy to them, discovering the port via `~/.bergamot/port.json`.
 - **4.2 [DONE]** Deleted the dead class-based `mcp_server.ts` (+ test); `mcp_server_standalone.js` is the single MCP entry point.
-- **4.3 [DONE]** `get_markdown_db_path(context)` derives from the `bergamot.markdownDbPath` setting or defaults under global storage (removed the hardcoded `/Users/chuck/...`).
+- **4.3 [DONE]** The markdown DB path indirection was eliminated along with the markdown store. The canonical stores are DuckDB and LanceDB, both rooted under the extension's global storage path; there is no `bergamot.markdownDbPath` setting.
 - **4.4 [DONE]** `backlog/docs/query-interface.md`: DuckDB schema + MCP tools + HTTP query API with dependency-free `curl` examples (and direct read-only DuckDB access when the extension is closed).
 - **4.5 [DONE]** Durable visit inbox (`visit_inbox.ts`): each visit is persisted before the POST is acknowledged, removed once written to DuckDB, and reloaded on startup — restarts no longer drop in-flight visits.
 

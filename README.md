@@ -63,10 +63,10 @@ Bergamot automatically captures knowledge-rich webpages as you browse, stores th
    - Chrome / Edge / Brave: Chrome Web Store (coming soon)
    - Or build from source (see Development section)
 
-3. **Configure OpenAI API Key**
-   - Open VS Code settings
-   - Search for "Bergamot"
-   - Enter your OpenAI API key
+3. **No API key required**
+   - Classification and content analysis use your Claude subscription via the Claude Agent SDK (no API tokens).
+   - Embeddings run locally on your machine (zero-token).
+   - An OpenAI API key is only needed if you set `bergamot.llmProvider` to `openai`.
 
 ## Usage
 
@@ -87,7 +87,7 @@ await use_mcp_tool("semantic_search", {
 });
 
 await use_mcp_tool("get_webpage_content", {
-  session_id: "abc123",
+  page_session_id: "abc123",
 });
 ```
 
@@ -97,6 +97,8 @@ await use_mcp_tool("get_webpage_content", {
 - **Hover over links**: View metadata for captured pages
 - **Quick access**: Recent and frequently accessed pages
 - **Filter metrics**: `Bergamot: Show Filter Metrics`
+- **Visit outcomes**: `Bergamot: Show Visit Outcomes`
+- **Replay a visit**: `Bergamot: Replay Visit`
 
 ## MCP Server Integration
 
@@ -121,7 +123,7 @@ Retrieve the full markdown content of a specific webpage from your knowledge bas
 
 **Parameters:**
 
-- `session_id` (string): The unique ID of the webpage session
+- `page_session_id` (string): The unique ID of the webpage session
 
 **Returns:** Full markdown content of the webpage
 
@@ -155,9 +157,9 @@ npm run build
 
 ```text
 bergamot/
-├── packages/
-│   ├── vscode/        # VS Code extension
-│   └── browser/       # Browser extension
+├── vscode/            # VS Code extension
+├── browser/           # Browser extension
+├── scripts/           # Shared scripts
 ├── docs/              # Documentation
 ├── backlog/           # Task management
 └── .changeset/        # Version management
@@ -196,7 +198,7 @@ npm run release
 **Browser Extension:**
 
 ```bash
-cd packages/browser
+cd browser
 npm run chrome:debug  # Launches Chrome with extension loaded
 ```
 
@@ -204,18 +206,20 @@ npm run chrome:debug  # Launches Chrome with extension loaded
 
 ### VS Code Settings
 
-| Setting                                | Description                       | Default         |
-| -------------------------------------- | --------------------------------- | --------------- |
-| `bergamot.openaiApiKey`                | Your OpenAI API key               | -               |
-| `bergamot.webpageFilter.enabled`       | Enable AI filtering               | `true`          |
-| `bergamot.webpageFilter.allowedTypes`  | Page types to capture             | `["knowledge"]` |
-| `bergamot.webpageFilter.minConfidence` | Min confidence for classification | `0.7`           |
-| `bergamot.webpageFilter.logDecisions`  | Log filter decisions              | `false`         |
+| Setting                                | Description                                                          | Default         |
+| -------------------------------------- | -------------------------------------------------------------------- | --------------- |
+| `bergamot.llmProvider`                 | LLM backend for classification: `claude`, `openai`, or `vscode`      | `claude`        |
+| `bergamot.openaiApiKey`                | OpenAI API key (only required when `llmProvider` is `openai`)        | -               |
+| `bergamot.devMode`                     | Enable dev-phase observability (Bergamot Dev output + dev-log.jsonl) | `false`         |
+| `bergamot.webpageFilter.enabled`       | Enable AI filtering                                                  | `true`          |
+| `bergamot.webpageFilter.allowedTypes`  | Page types to capture                                                | `["knowledge"]` |
+| `bergamot.webpageFilter.minConfidence` | Min confidence for classification                                    | `0.7`           |
+| `bergamot.webpageFilter.logDecisions`  | Log filter decisions                                                 | `true`          |
 
 ## Architecture
 
 - **Storage**: DuckDB for structured data, LanceDB for vector embeddings
-- **AI**: OpenAI for content analysis and embeddings
+- **AI**: Claude subscription (via the Claude Agent SDK) for content analysis by default; embeddings run locally with all-MiniLM-L6-v2
 - **Communication**: HTTP API between browser and VS Code
 - **Protocols**: MCP for AI agent integration
 

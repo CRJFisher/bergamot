@@ -1,19 +1,18 @@
 # MCP Tools Usage Guide
 
-This document describes how to use the MCP (Model Context Protocol) tools exposed by the PKM Assistant extension.
+This document describes how to use the MCP (Model Context Protocol) tools exposed by the Bergamot extension.
 
 ## Overview
 
-The PKM Assistant extension exposes two MCP tools that allow AI agents to search and retrieve content from your browsing history:
+The Bergamot extension exposes two MCP tools that allow AI agents to search and retrieve content from your browsing history:
 
 1. **semantic_search** - Search through webpage history using semantic similarity
 2. **get_webpage_content** - Retrieve the full content of a specific webpage
 
 ## Prerequisites
 
-1. The PKM Assistant VSCode extension must be installed and activated
-2. An OpenAI API key must be configured in VSCode settings
-3. The MCP server should be running (started automatically with the extension)
+1. The Bergamot VSCode extension must be installed and activated
+2. The MCP server should be running (started automatically with the extension)
 
 ## Tool Descriptions
 
@@ -22,17 +21,19 @@ The PKM Assistant extension exposes two MCP tools that allow AI agents to search
 Performs vector similarity search on the user's browsing history to find relevant webpages based on a query.
 
 **Input Schema:**
+
 ```json
 {
   "name": "semantic_search",
   "arguments": {
     "query": "your search query here",
-    "limit": 10  // optional, defaults to 10
+    "limit": 10 // optional, defaults to 10
   }
 }
 ```
 
 **Output Format:**
+
 ```json
 [
   {
@@ -46,6 +47,7 @@ Performs vector similarity search on the user's browsing history to find relevan
 ```
 
 **Example Usage:**
+
 ```json
 {
   "name": "semantic_search",
@@ -61,6 +63,7 @@ Performs vector similarity search on the user's browsing history to find relevan
 Retrieves the full content of a specific webpage using its session ID.
 
 **Input Schema:**
+
 ```json
 {
   "name": "get_webpage_content",
@@ -71,6 +74,7 @@ Retrieves the full content of a specific webpage using its session ID.
 ```
 
 **Output Format:**
+
 ```json
 {
   "id": "page-session-id",
@@ -81,6 +85,7 @@ Retrieves the full content of a specific webpage using its session ID.
 ```
 
 **Example Usage:**
+
 ```json
 {
   "name": "get_webpage_content",
@@ -96,7 +101,7 @@ Retrieves the full content of a specific webpage using its session ID.
 
 To use these tools with Claude Desktop:
 
-1. Ensure the PKM Assistant extension is running in VSCode
+1. Ensure the Bergamot extension is running in VSCode
 2. The MCP server will be available at the configured port
 3. Claude can access the tools through the MCP protocol
 
@@ -143,8 +148,7 @@ Use the tools to answer questions based on previously visited webpages:
 ### MCP Server Not Starting
 
 1. Check VSCode Developer Tools console for errors
-2. Ensure OpenAI API key is configured
-3. Verify extension is activated
+2. Verify extension is activated
 
 ### Search Returns No Results
 
@@ -160,7 +164,7 @@ Use the tools to answer questions based on previously visited webpages:
 
 ## Technical Details
 
-- Search uses OpenAI embeddings (text-embedding-3-small model)
+- Search uses local embeddings (all-MiniLM-L6-v2, 384-dim, via `@xenova/transformers`)
 - Content is stored compressed using zstd compression
 - The memory store uses LanceDB for vector similarity search
 - Both tools operate on the same webpage dataset

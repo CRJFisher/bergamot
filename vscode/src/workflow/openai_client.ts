@@ -56,6 +56,12 @@ export class OpenAIClient implements LLMClient {
   }
 }
 
+/**
+ * Bridges classification onto the editor's language model (Copilot). It resolves
+ * a single chat model at {@link VSCodeLLMClient.initialize} and uses it for every
+ * request, so the `fast`/`smart` role is not differentiated on this provider —
+ * the editor exposes one model family, not a per-role pair.
+ */
 export class VSCodeLLMClient implements LLMClient {
   private model: vscode.LanguageModelChat | null = null;
 
@@ -113,6 +119,40 @@ export class VSCodeLLMClient implements LLMClient {
 }
 
 /**
+ * Scans for the first balanced top-level JSON object, tracking string literals
+ * so braces inside string values do not throw off the depth count. Returns the
+ * object substring, or null if none is found. More reliable than a greedy
+ * `/{[\s\S]*}/` match, which over-captures when prose or a second object
+ * follows the first.
+ */
+function find_balanced_json_object(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start === -1) return null;
+
+  let depth = 0;
+  let in_string = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (in_string) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') in_string = false;
+    } else if (ch === '"') {
+      in_string = true;
+    } else if (ch === '{') {
+      depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+
+  return null;
+}
+
+/**
  * Extracts a JSON value from a model response that may be raw JSON, fenced in a
  * ```json block, or embedded in prose. Shared by the non-OpenAI clients, which
  * have no native JSON-object response mode.
@@ -125,9 +165,9 @@ export function extract_json<T>(response: string): T {
     if (markdown_json_match && markdown_json_match[1]) {
       return JSON.parse(markdown_json_match[1]) as T;
     }
-    const json_match = response.match(/{[\s\S]*}/);
-    if (json_match) {
-      return JSON.parse(json_match[0]) as T;
+    const balanced = find_balanced_json_object(response);
+    if (balanced) {
+      return JSON.parse(balanced) as T;
     }
     throw new Error('No valid JSON found in response');
   }

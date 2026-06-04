@@ -14,7 +14,11 @@ export const load_configuration = (): PKMConfig => {
   }
 
   // Check for window.PKM_CONFIG
-  const window_config = (window as any).PKM_CONFIG;
+  const window_config = (
+    window as Window & {
+      PKM_CONFIG?: { apiBaseUrl?: string; debug?: boolean; logLevel?: 'error' | 'warn' | 'info' | 'debug' };
+    }
+  ).PKM_CONFIG;
   if (window_config?.apiBaseUrl) {
     return new PKMConfig(
       window_config.apiBaseUrl,
@@ -36,11 +40,3 @@ export const get_api_base_url = (config: PKMConfig): string => config.api_base_u
 export const is_debug_mode = (config: PKMConfig): boolean => config.debug;
 
 export const get_log_level = (config: PKMConfig): string => config.log_level;
-
-export const update_config = (config: PKMConfig, updates: Partial<PKMConfig>): PKMConfig => {
-  return new PKMConfig(
-    updates.api_base_url || config.api_base_url,
-    updates.debug !== undefined ? updates.debug : config.debug,
-    updates.log_level || config.log_level
-  );
-};

@@ -29,15 +29,23 @@ export const remove_visit = (dir: string, id: string): void => {
 };
 
 export const load_inbox = (dir: string): ExtendedPageVisit[] => {
+  let entries: string[];
   try {
-    return fs
-      .readdirSync(dir)
-      .filter((f) => f.endsWith(".json"))
-      .map(
-        (f) =>
-          JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")) as ExtendedPageVisit
-      );
+    entries = fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
   } catch {
+    // Inbox directory does not exist yet — nothing to reload.
     return [];
   }
+
+  // Read each entry independently so a single corrupt file does not discard the
+  // rest of the durable inbox.
+  return entries.flatMap((f) => {
+    const file_path = path.join(dir, f);
+    try {
+      return [JSON.parse(fs.readFileSync(file_path, "utf8")) as ExtendedPageVisit];
+    } catch {
+      console.warn(`Skipping unreadable inbox entry: ${file_path}`);
+      return [];
+    }
+  });
 };

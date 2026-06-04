@@ -3,34 +3,34 @@ import {
   load_configuration,
   get_api_base_url,
   is_debug_mode,
-  get_log_level,
-  update_config
+  get_log_level
 } from "../src/core/configuration_manager";
 import { PKMConfig } from "../src/types/navigation";
 
-// Declare the mock port
-declare const MOCK_PKM_PORT: string | undefined;
+type PkmConfigShape = { apiBaseUrl?: string; debug?: boolean; logLevel?: string };
+const test_window = window as Window & { PKM_CONFIG?: PkmConfigShape };
+const test_global = global as typeof globalThis & { MOCK_PKM_PORT?: string };
 
 describe("configuration_manager", () => {
-  let original_window_config: any;
+  let original_window_config: PkmConfigShape | undefined;
 
   beforeEach(() => {
     // Save original window.PKM_CONFIG
-    original_window_config = (window as any).PKM_CONFIG;
-    delete (window as any).PKM_CONFIG;
-    
+    original_window_config = test_window.PKM_CONFIG;
+    delete test_window.PKM_CONFIG;
+
     // Clear MOCK_PKM_PORT
-    (global as any).MOCK_PKM_PORT = undefined;
+    test_global.MOCK_PKM_PORT = undefined;
   });
 
   afterEach(() => {
     // Restore original
     if (original_window_config !== undefined) {
-      (window as any).PKM_CONFIG = original_window_config;
+      test_window.PKM_CONFIG = original_window_config;
     } else {
-      delete (window as any).PKM_CONFIG;
+      delete test_window.PKM_CONFIG;
     }
-    delete (global as any).MOCK_PKM_PORT;
+    delete test_global.MOCK_PKM_PORT;
   });
 
   describe("load_configuration", () => {
@@ -44,7 +44,7 @@ describe("configuration_manager", () => {
     });
 
     it("should load test configuration when MOCK_PKM_PORT is set", () => {
-      (global as any).MOCK_PKM_PORT = "9999";
+      test_global.MOCK_PKM_PORT = "9999";
       
       const config = load_configuration();
       
@@ -54,7 +54,7 @@ describe("configuration_manager", () => {
     });
 
     it("should load configuration from window.PKM_CONFIG", () => {
-      (window as any).PKM_CONFIG = {
+      test_window.PKM_CONFIG = {
         apiBaseUrl: "https://custom.example.com",
         debug: true,
         logLevel: "warn"
@@ -68,7 +68,7 @@ describe("configuration_manager", () => {
     });
 
     it("should handle partial window config", () => {
-      (window as any).PKM_CONFIG = {
+      test_window.PKM_CONFIG = {
         apiBaseUrl: "https://partial.example.com"
       };
       
@@ -80,8 +80,8 @@ describe("configuration_manager", () => {
     });
 
     it("should prioritize MOCK_PKM_PORT over window config", () => {
-      (global as any).MOCK_PKM_PORT = "8888";
-      (window as any).PKM_CONFIG = {
+      test_global.MOCK_PKM_PORT = "8888";
+      test_window.PKM_CONFIG = {
         apiBaseUrl: "https://should-be-ignored.com"
       };
       
@@ -114,63 +114,4 @@ describe("configuration_manager", () => {
     });
   });
 
-  describe("update_config", () => {
-    it("should update API base URL", () => {
-      const config = new PKMConfig("http://old.com", false, "info");
-      const updated = update_config(config, { api_base_url: "http://new.com" });
-      
-      expect(updated.api_base_url).toBe("http://new.com");
-      expect(updated.debug).toBe(false);
-      expect(updated.log_level).toBe("info");
-    });
-
-    it("should update debug mode", () => {
-      const config = new PKMConfig("http://localhost", false, "info");
-      const updated = update_config(config, { debug: true });
-      
-      expect(updated.api_base_url).toBe("http://localhost");
-      expect(updated.debug).toBe(true);
-      expect(updated.log_level).toBe("info");
-    });
-
-    it("should update log level", () => {
-      const config = new PKMConfig("http://localhost", false, "info");
-      const updated = update_config(config, { log_level: "error" });
-      
-      expect(updated.api_base_url).toBe("http://localhost");
-      expect(updated.debug).toBe(false);
-      expect(updated.log_level).toBe("error");
-    });
-
-    it("should update multiple fields", () => {
-      const config = new PKMConfig("http://old.com", false, "info");
-      const updated = update_config(config, {
-        api_base_url: "http://new.com",
-        debug: true,
-        log_level: "debug"
-      });
-      
-      expect(updated.api_base_url).toBe("http://new.com");
-      expect(updated.debug).toBe(true);
-      expect(updated.log_level).toBe("debug");
-    });
-
-    it("should handle empty updates", () => {
-      const config = new PKMConfig("http://localhost", true, "debug");
-      const updated = update_config(config, {});
-      
-      expect(updated.api_base_url).toBe("http://localhost");
-      expect(updated.debug).toBe(true);
-      expect(updated.log_level).toBe("debug");
-    });
-
-    it("should create new instance", () => {
-      const config = new PKMConfig("http://localhost", false, "info");
-      const updated = update_config(config, { debug: true });
-      
-      expect(config).not.toBe(updated);
-      expect(config.debug).toBe(false);
-      expect(updated.debug).toBe(true);
-    });
-  });
 });

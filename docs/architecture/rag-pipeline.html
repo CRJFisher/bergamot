@@ -39,7 +39,7 @@ flowchart LR
     subgraph ING["Ingestion"]
       a["captured HTML"] --> b["LLM extract<br/>→ Markdown"]
       b --> c["whole page = 1 record<br/>(no chunking)"]
-      c --> d["embed<br/>text-embedding-3-small"]
+      c --> d["embed<br/>all-MiniLM-L6-v2 (local, 384-dim)"]
       d --> e[("LanceDB")]
     end
     subgraph RET["Retrieval"]
@@ -56,7 +56,7 @@ flowchart LR
   </div>
   <ul class="clean">
     <li><strong>Chunking:</strong> none — one LanceDB record per page.</li>
-    <li><strong>Embedding:</strong> single dense vector (<code>text-embedding-3-small</code>).</li>
+    <li><strong>Embedding:</strong> single dense vector (local all-MiniLM-L6-v2, 384-dim).</li>
     <li><strong>Retrieval:</strong> pure dense similarity; no keyword search or fusion.</li>
     <li><strong>Reranking:</strong> none. <strong>Generation:</strong> previews or full page.</li>
   </ul>

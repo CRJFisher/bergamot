@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import * as child_process from 'child_process';
 import * as path from 'path';
-import { DuckDB } from '../duck_db';
 
 /**
  * Configuration for MCP server.
@@ -9,14 +8,11 @@ import { DuckDB } from '../duck_db';
  * 
  * @interface MCPServerConfig
  * @property {vscode.ExtensionContext} context - VS Code extension context for paths and storage
- * @property {string} openai_api_key - OpenAI API key for AI capabilities
- * @property {DuckDB} duck_db - Database instance for data access
- * @property {string} storage_base - Resolved storage base (dev or global) shared with the writer
+ * @property {string} storage_base - Resolved storage base (dev or global) shared with the writer.
+ *   The child process opens its own read-only stores from this path.
  */
 export interface MCPServerConfig {
   context: vscode.ExtensionContext;
-  openai_api_key: string;
-  duck_db: DuckDB;
   storage_base: string;
 }
 
@@ -29,8 +25,7 @@ export interface MCPServerConfig {
  * ```typescript
  * const mcpManager = new MCPServerManager({
  *   context: extensionContext,
- *   openai_api_key: 'sk-...',
- *   duck_db: duckDb
+ *   storage_base: '/path/to/storage'
  * });
  * 
  * // Start immediately
@@ -76,19 +71,14 @@ export class MCPServerManager {
 
         const mcp_script_path = path.join(
           this.config.context.extensionPath,
-          'dist',
+          'out',
           'mcp_server_standalone.js'
         );
 
         this.mcp_process = child_process.spawn('node', [mcp_script_path], {
           env: {
             ...process.env,
-            OPENAI_API_KEY: this.config.openai_api_key,
             STORAGE_PATH: this.config.storage_base,
-            DUCK_DB_PATH: path.join(
-              this.config.storage_base,
-              'webpage_categorizations.db'
-            ),
           },
           stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
         });

@@ -122,22 +122,6 @@ export class WebpageWorkflow {
     try {
       console.log("State: analyzing_page, Status: running");
 
-      // Commented out - may be needed for future context-aware analysis
-      // const other_pages_analysis = await get_webpage_analysis_for_ids(
-      //   this.duck_db,
-      //   inputs.members
-      //     .map((m) => m.id)
-      //     .filter((id) => id !== inputs.new_page.id)
-      // );
-
-      // const other_recent_trees =
-      //   await get_last_modified_trees_with_members_and_analysis(
-      //     this.duck_db,
-      //     this.memory_db,
-      //     inputs.members[0].tree_id,
-      //     5
-      //   );
-
       const llm_client =
         this.llm_options.llm_client ??
         (await get_llm_client(this.openai_key, this.llm_options.provider ?? 'claude'));
@@ -288,11 +272,20 @@ export class WebpageWorkflow {
         await insert_webpage_tree_intentions(
           this.duck_db,
           inputs.new_page.tree_id,
-          Object.entries(tree_intentions.page_id_to_intentions ?? {}).map(
-            ([index, intentions]) => ({
-              activity_session_id: index_to_page_id[index],
-              intentions,
-            })
+          Object.entries(tree_intentions.page_id_to_intentions ?? {}).flatMap(
+            ([index, intentions]) => {
+              const activity_session_id = index_to_page_id[index];
+              if (!activity_session_id) {
+                // The LLM returned an index outside the page set; skip it rather
+                // than inserting a row with an undefined session id (which would
+                // violate the foreign key / corrupt the intentions table).
+                console.warn(
+                  `Tree intentions: ignoring unknown page index "${index}"`
+                );
+                return [];
+              }
+              return [{ activity_session_id, intentions }];
+            }
           )
         );
       }

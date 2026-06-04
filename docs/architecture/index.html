@@ -171,7 +171,7 @@ sequenceDiagram
   <div class="note">
     <strong>Locked decisions:</strong> storage is two separate stores (DuckDB + LanceDB) — markdown is no longer a store;
     transport is a single HTTP server on a dynamically-discovered port; the browser side is Chromium-only;
-    LLM calls are vanilla OpenAI (no LangChain); e2e tests run on Playwright against a mock PKM server.
+    classification defaults to the Claude subscription (via the Claude Agent SDK), with OpenAI as an alternative provider; embeddings run locally with all-MiniLM-L6-v2; e2e tests run on Playwright against a mock capture server.
   </div>
 
   <footer class="foot">

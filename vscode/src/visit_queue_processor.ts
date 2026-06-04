@@ -13,7 +13,7 @@ import {
 } from "./duck_db_models";
 import { OrphanedVisitsManager } from "./orphaned_visits";
 import { insert_page_activity_session_with_tree_management } from "./webpage_tree";
-import { run_workflow } from "./reconcile_webpage_trees_workflow_vanilla";
+import { WebpageWorkflow } from "./workflow/simple_workflow";
 import { load_inbox, remove_visit } from "./visit_inbox";
 import { record_outcome } from "./dev_log";
 
@@ -53,6 +53,8 @@ interface InsertionResult {
   tree_id: string | null;
   /** Whether the tree structure was modified */
   was_tree_changed: boolean;
+  /** ID of the parent session this visit linked to, or null if it became a root (orphan). */
+  referrer_session_id: string | null;
 }
 
 /**
@@ -99,7 +101,7 @@ export class VisitQueueProcessor {
   constructor(
     private readonly duck_db: DuckDB,
     private readonly memory_db: LanceDBMemoryStore,
-    private readonly webpage_categoriser_app: any, // Workflow app type
+    private readonly webpage_categoriser_app: WebpageWorkflow,
     private readonly orphan_manager: OrphanedVisitsManager,
     config: QueueProcessorConfig = {}
   ) {
@@ -197,7 +199,7 @@ export class VisitQueueProcessor {
     return !!(
       visit.opener_tab_id &&
       inserted.tree_id &&
-      !visit.referrer_page_session_id
+      !inserted.referrer_session_id
     );
   }
 
@@ -233,16 +235,12 @@ export class VisitQueueProcessor {
       content: visit.raw_content
     };
     
-    await run_workflow(
-      {
-        members: tree_members,
-        new_page: page_with_tree_id,
-        raw_content: visit.raw_content,
-        visit_id: visit.visit_id,
-      },
-      this.webpage_categoriser_app,
-      this.duck_db
-    );
+    await this.webpage_categoriser_app.run({
+      members: tree_members,
+      new_page: page_with_tree_id,
+      raw_content: visit.raw_content,
+      visit_id: visit.visit_id,
+    });
 
     // Process any orphaned children waiting for this page
     await this.process_orphaned_children(visit);
@@ -278,18 +276,36 @@ export class VisitQueueProcessor {
 
   /**
    * Processes a single visit through the complete pipeline.
+   *
+   * @param visit - The visit to process.
+   * @param park_if_orphan - When true (the default), an unresolved orphan is
+   *   parked in the orphan manager. Retries pass false so the caller decides
+   *   whether to keep the existing orphan entry, avoiding duplicate parking.
+   * @returns true if the visit was fully classified, false if it was parked as
+   *   an orphan or made no progress.
    */
-  async process_single_visit(visit: ExtendedPageVisit): Promise<void> {
+  async process_single_visit(
+    visit: ExtendedPageVisit,
+    { park_if_orphan = true }: { park_if_orphan?: boolean } = {}
+  ): Promise<boolean> {
     const inserted = await insert_page_activity_session_with_tree_management(
       this.duck_db,
       visit
     );
 
     if (this.is_potential_orphan(visit, inserted)) {
-      await this.handle_orphan_visit(visit, visit.opener_tab_id!);
-    } else if (inserted.tree_id && inserted.was_tree_changed) {
-      await this.handle_successful_visit(visit, inserted.tree_id);
+      if (park_if_orphan) {
+        await this.handle_orphan_visit(visit, visit.opener_tab_id!);
+      }
+      return false;
     }
+
+    if (inserted.tree_id && inserted.was_tree_changed) {
+      await this.handle_successful_visit(visit, inserted.tree_id);
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -316,10 +332,11 @@ export class VisitQueueProcessor {
       // Process batch items in parallel for independent operations
       const batch_promises = batch.map(async (visit) => {
         try {
-          await this.process_single_visit(visit);
-          // The visit is now in DuckDB (whether it completed or was parked as an
-          // orphan), so it no longer needs to survive a restart.
-          if (this.inbox_dir) {
+          const completed = await this.process_single_visit(visit);
+          // Only drop the durable copy once the visit is fully classified. A
+          // visit parked as an orphan still needs to survive a restart so it can
+          // be re-linked to its parent and classified later.
+          if (completed && this.inbox_dir) {
             remove_visit(this.inbox_dir, visit.id);
           }
         } catch (error) {
@@ -373,17 +390,38 @@ export class VisitQueueProcessor {
     if (this.orphan_retry_timer) return; // Already running
 
     this.orphan_retry_timer = setInterval(() => {
-      const orphans = this.orphan_manager.get_orphans_for_retry();
-      if (orphans.length > 0) {
-        console.log(`🔄 Retrying ${orphans.length} orphaned visits...`);
-        
-        for (const orphan of orphans) {
-          this.orphan_manager.increment_retry_count(orphan);
-          this.request_queue.push(orphan.visit);
-        }
-        
-        this.schedule_batch_processing();
-      }
+      void this.retry_orphans();
     }, this.orphan_retry_interval);
+  }
+
+  /**
+   * Re-attempts parked orphans whose parent may have arrived since.
+   *
+   * Each orphan is re-inserted (without re-parking): the tree-management layer
+   * re-links it to its parent's tree if the parent is now present, in which case
+   * the visit is classified and the orphan removed. Otherwise its retry count
+   * advances and it is dropped once the ceiling is reached. Re-linking by parent
+   * is what restores classification — the previous implementation re-queued the
+   * raw orphan, which only re-parked it because the row already existed.
+   */
+  private async retry_orphans(): Promise<void> {
+    const orphans = this.orphan_manager.get_orphans_for_retry();
+    if (orphans.length === 0) return;
+
+    console.log(`🔄 Retrying ${orphans.length} orphaned visits...`);
+
+    for (const orphan of orphans) {
+      const completed = await this.process_single_visit(orphan.visit, {
+        park_if_orphan: false,
+      });
+      if (completed) {
+        this.orphan_manager.remove_orphan(orphan);
+        if (this.inbox_dir) {
+          remove_visit(this.inbox_dir, orphan.visit.id);
+        }
+      } else {
+        this.orphan_manager.increment_retry_count(orphan);
+      }
+    }
   }
 }

@@ -59,11 +59,24 @@ export interface VisitOutcome {
 
 const MAX_RECENT_OUTCOMES = 100;
 const MAX_LOG_BYTES = 5 * 1024 * 1024;
+// How often (in writes) to re-check the log size for rotation. Avoids a statSync
+// on every append while still bounding growth within a long-running session.
+const ROTATION_CHECK_INTERVAL = 200;
 
 let channel: OutputChannelLike | undefined;
 let log_file_path: string | undefined;
 let enabled = false;
+let writes_since_rotation_check = 0;
 const recent_outcomes: VisitOutcome[] = [];
+
+/** Maps a visit's terminal decision to its structured-log stage. */
+const DECISION_TO_STAGE: Record<VisitDecision, DevLogStage> = {
+  stored: 'stored',
+  dropped: 'dropped',
+  failed: 'workflow_failed',
+  orphan_parked: 'orphan_parked',
+  orphan_dropped: 'orphan_dropped',
+};
 
 function try_create_channel(): OutputChannelLike | undefined {
   try {
@@ -121,6 +134,12 @@ export function dev_log(stage: DevLogStage, fields: Record<string, unknown>): vo
     fs.appendFile(log_file_path, line + '\n', () => {
       /* best-effort: a failed dev-log write must never break the pipeline */
     });
+    // Periodically re-check the size so the file is rotated within a long
+    // session, not only once at init.
+    if (++writes_since_rotation_check >= ROTATION_CHECK_INTERVAL) {
+      writes_since_rotation_check = 0;
+      rotate_if_needed();
+    }
   }
 }
 
@@ -135,25 +154,14 @@ export function record_outcome(outcome: Omit<VisitOutcome, 'at'>): void {
   if (recent_outcomes.length > MAX_RECENT_OUTCOMES) {
     recent_outcomes.length = MAX_RECENT_OUTCOMES;
   }
-  dev_log(
-    outcome.decision === 'stored'
-      ? 'stored'
-      : outcome.decision === 'failed'
-        ? 'workflow_failed'
-        : outcome.decision === 'orphan_parked'
-          ? 'orphan_parked'
-          : outcome.decision === 'orphan_dropped'
-            ? 'orphan_dropped'
-            : 'dropped',
-    {
-      visit_id: outcome.visit_id,
-      url: outcome.url,
-      page_type: outcome.page_type,
-      confidence: outcome.confidence,
-      reason: outcome.reason,
-      error: outcome.error,
-    }
-  );
+  dev_log(DECISION_TO_STAGE[outcome.decision], {
+    visit_id: outcome.visit_id,
+    url: outcome.url,
+    page_type: outcome.page_type,
+    confidence: outcome.confidence,
+    reason: outcome.reason,
+    error: outcome.error,
+  });
 }
 
 export function get_recent_outcomes(): VisitOutcome[] {

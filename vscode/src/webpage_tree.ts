@@ -12,6 +12,18 @@ import { md5_hash } from "./hash_utils";
 import { WebpageTreeNode } from "./webpage_tree_models";
 
 /**
+ * Outcome of assigning a freshly-ingested visit to a navigation tree.
+ */
+export interface TreeManagementResult {
+  /** ID of the tree the visit was assigned to, or null if none. */
+  tree_id: string | null;
+  /** Whether the visit's tree assignment changed (new visit, or re-linked to a different tree). */
+  was_tree_changed: boolean;
+  /** ID of the parent session this visit was linked to, or null if it became a root. */
+  referrer_session_id: string | null;
+}
+
+/**
  * Inserts a page activity session and manages its navigation tree assignment.
  * 
  * If the session has a referrer:
@@ -44,9 +56,9 @@ import { WebpageTreeNode } from "./webpage_tree_models";
 export async function insert_page_activity_session_with_tree_management(
   db: DuckDB,
   session: PageActivitySessionWithoutTreeOrContent
-): Promise<{ tree_id: string | null; was_tree_changed: boolean }> {
+): Promise<TreeManagementResult> {
   try {
-    let result: { tree_id: string; was_tree_changed: boolean };
+    let result: TreeManagementResult;
 
     if (session.referrer) {
       result = await handle_page_with_referrer(db, session);
@@ -136,7 +148,7 @@ export function get_tree_with_id(
 async function handle_page_with_referrer(
   db: DuckDB,
   page: PageActivitySessionWithoutTreeOrContent
-): Promise<{ tree_id: string | null; was_tree_changed: boolean }> {
+): Promise<TreeManagementResult> {
   if (!page.referrer) {
     throw new Error("Referrer is required for this operation");
   }
@@ -153,7 +165,7 @@ async function handle_page_with_referrer(
       tree_id: referrer_page.tree_id,
       referrer_page_session_id: referrer_page.id,
     };
-    const { was_new_session } = await insert_page_activity_session(
+    const { tree_changed } = await insert_page_activity_session(
       db,
       page_with_tree_id
     );
@@ -164,7 +176,8 @@ async function handle_page_with_referrer(
     );
     return {
       tree_id: referrer_page.tree_id,
-      was_tree_changed: was_new_session,
+      was_tree_changed: tree_changed,
+      referrer_session_id: referrer_page.id,
     };
   } else {
     // Referrer exists but no tree contains it - likely a phantom referrer
@@ -179,7 +192,7 @@ async function handle_page_with_referrer(
 async function create_new_tree_as_root(
   db: DuckDB,
   session: PageActivitySession
-): Promise<{ tree_id: string | null; was_tree_changed: boolean }> {
+): Promise<TreeManagementResult> {
   // Note: Aggregator filtering has been moved to the workflow phase
   // where we have access to page content for LLM-based classification.
   // This allows for more intelligent and flexible aggregator detection.
@@ -196,10 +209,10 @@ async function create_new_tree_as_root(
     session.page_loaded_at,
     session.page_loaded_at
   );
-  const { was_new_session } = await insert_page_activity_session(
+  const { tree_changed } = await insert_page_activity_session(
     db,
     session_with_tree_id
   );
 
-  return { tree_id, was_tree_changed: was_new_session };
+  return { tree_id, was_tree_changed: tree_changed, referrer_session_id: null };
 }

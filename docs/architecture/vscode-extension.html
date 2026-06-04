@@ -33,8 +33,8 @@
   <h2><span class="num">1</span>Activation</h2>
   <p>On activation, <code>extension.ts</code> wires the whole system together in order:</p>
   <ul class="clean">
-    <li><strong>Config</strong> — validate the OpenAI API key from VS Code settings (<code>bergamot.openaiApiKey</code>).</li>
-    <li><strong>Databases</strong> — <code>DatabaseManager.initialize_all()</code> opens DuckDB and LanceDB (with OpenAI <code>text-embedding-3-small</code> embeddings).</li>
+    <li><strong>Config</strong> — resolve the LLM provider from VS Code settings (<code>bergamot.llmProvider</code>, defaulting to the Claude subscription via the Claude Agent SDK); an OpenAI API key (<code>bergamot.openaiApiKey</code>) is optional and only used when the provider is <code>openai</code>.</li>
+    <li><strong>Databases</strong> — <code>DatabaseManager.initialize_all()</code> opens DuckDB and LanceDB (with local all-MiniLM-L6-v2 384-dim embeddings).</li>
     <li><strong>Ingest server</strong> — <code>ServerManager.start()</code> binds the first free port in 5000–5009 and writes it to <code>~/.bergamot/port.json</code>.</li>
     <li><strong>Commands</strong> — <code>CommandManager.register_all()</code> registers webpage search, the hover provider, and the filter-metrics command.</li>
     <li><strong>MCP server</strong> — <code>MCPServerManager.start_deferred(2000)</code> spawns the standalone MCP subprocess after 2 s (non-blocking).</li>
@@ -151,7 +151,8 @@ flowchart LR
   <h2><span class="num">6</span>Key dependencies</h2>
   <table>
     <tr><th>Package</th><th>Used for</th></tr>
-    <tr><td><code>openai</code></td><td>LLM extraction/analysis + <code>text-embedding-3-small</code> embeddings</td></tr>
+    <tr><td><code>@xenova/transformers</code></td><td>Local all-MiniLM-L6-v2 embeddings (384-dim)</td></tr>
+    <tr><td><code>openai</code></td><td>LLM extraction/analysis when <code>llmProvider</code> is <code>openai</code></td></tr>
     <tr><td><code>@duckdb/node-api</code></td><td>Relational storage</td></tr>
     <tr><td><code>@lancedb/lancedb</code></td><td>Vector store + semantic search</td></tr>
     <tr><td><code>@modelcontextprotocol/sdk</code></td><td>MCP server + tools</td></tr>

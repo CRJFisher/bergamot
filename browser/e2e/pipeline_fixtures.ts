@@ -9,7 +9,7 @@ import { TestPageServer } from "./test_page_server";
  *
  * Unlike `fixtures.ts`, there is no mock server and no `MOCK_PKM_PORT`: the
  * extension performs real port-range discovery against the live Bergamot
- * capture server (started by `scripts/run-pipeline-e2e.js`). The service-worker
+ * capture server (started by `scripts/run-pipeline-e2e.mjs`). The service-worker
  * console error hook is always on and collected so the spec can fail the run if
  * the extension logged any errors.
  */

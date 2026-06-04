@@ -9,6 +9,7 @@ import {
 import {
   PageActivitySessionWithMeta
 } from "./reconcile_webpage_trees_workflow_models";
+import { LanceDBMemoryStore } from "./lance_db";
 import * as hash_utils from "./hash_utils";
 
 jest.mock("./hash_utils");
@@ -17,7 +18,7 @@ const mock_md5_hash = jest.spyOn(hash_utils, "md5_hash");
 
 describe("Webpage Tree Management", () => {
   let db: DuckDB;
-  let memory_db: any; // Mock memory store
+  let memory_db: LanceDBMemoryStore; // Mock memory store
 
   beforeEach(async () => {
     db = new DuckDB({ database_path: ":memory:" });
@@ -33,7 +34,7 @@ describe("Webpage Tree Management", () => {
       get: jest.fn().mockResolvedValue(null),
       put: jest.fn(),
       search: jest.fn().mockResolvedValue([]),
-    };
+    } as Partial<LanceDBMemoryStore> as LanceDBMemoryStore;
   });
 
   afterEach(async () => {
@@ -61,6 +62,7 @@ describe("Webpage Tree Management", () => {
         expect(result).toEqual({
           tree_id: "new-tree-id",
           was_tree_changed: true,
+          referrer_session_id: null,
         });
         expect(mock_md5_hash).toHaveBeenCalledWith(
           `${session.url}:${session.page_loaded_at}`
@@ -161,10 +163,11 @@ describe("Webpage Tree Management", () => {
         expect(result).toEqual({
           tree_id: "existing-tree-id-1",
           was_tree_changed: true,
+          referrer_session_id: "referrer-session-id",
         });
 
         // Verify the session was added with correct referrer
-        const session = await db.query_first<any>(
+        const session = await db.query_first<{ tree_id: string; referrer_page_session_id: string | null }>(
           "SELECT * FROM webpage_activity_sessions WHERE id = $id",
           { id: "test-session-id" }
         );
@@ -183,6 +186,7 @@ describe("Webpage Tree Management", () => {
         expect(result).toEqual({
           tree_id: "phantom-tree-id",
           was_tree_changed: true,
+          referrer_session_id: null,
         });
       });
 
@@ -230,12 +234,12 @@ describe("Webpage Tree Management", () => {
       });
 
       it("should handle invalid session data", async () => {
+        // Invalid: missing the required id, so the insert must reject.
         const invalid_session = {
-          id: null, // Invalid: null ID
           url: "https://example.com",
           referrer: null,
           page_loaded_at: "2025-01-01T00:00:00Z",
-        } as any;
+        } as Partial<PageActivitySessionWithoutTreeOrContent> as PageActivitySessionWithoutTreeOrContent;
 
         await expect(
           insert_page_activity_session_with_tree_management(db, invalid_session)

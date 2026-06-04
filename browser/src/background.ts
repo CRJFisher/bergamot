@@ -115,6 +115,22 @@ const ensure_history = (
     ? store
     : add_tab_history(store, tab_id, create_tab_history(url));
 
+// Records a navigation to `url` for a tab. For a brand-new tab it seeds the
+// history (current_url = url, no previous_url); for an existing tab it shifts
+// the prior url into previous_url. Calling ensure + update with the same url
+// instead would set previous_url to the tab's own url (a self-referral).
+const record_navigation = (
+  store: TabHistoryStore,
+  tab_id: number,
+  url: string
+): TabHistoryStore => {
+  const existing = get_tab_history(store, tab_id);
+  const next = existing
+    ? update_tab_history(existing, url)
+    : create_tab_history(url);
+  return add_tab_history(store, tab_id, next);
+};
+
 // Tab event handlers — each returns the next store for `with_store` to persist.
 const handle_tab_created = (tab: chrome.tabs.Tab) =>
   with_store(async (store) => {
@@ -152,9 +168,7 @@ const handle_tab_removed = (tab_id: number) =>
 const handle_nav_committed = (details: chrome.webNavigation.WebNavigationTransitionCallbackDetails) => {
   if (details.frameId !== 0) return;
   void with_store((store) => {
-    const ensured = ensure_history(store, details.tabId, details.url);
-    const updated = update_tab_history(get_tab_history(ensured, details.tabId), details.url);
-    return { store: add_tab_history(ensured, details.tabId, updated) };
+    return { store: record_navigation(store, details.tabId, details.url) };
   });
 };
 
@@ -164,9 +178,7 @@ const handle_nav_committed = (details: chrome.webNavigation.WebNavigationTransit
 const handle_nav_history_state = (details: chrome.webNavigation.WebNavigationTransitionCallbackDetails) => {
   if (details.frameId !== 0) return;
   void with_store((store) => {
-    const ensured = ensure_history(store, details.tabId, details.url);
-    const updated = update_tab_history(get_tab_history(ensured, details.tabId), details.url);
-    return { store: add_tab_history(ensured, details.tabId, updated) };
+    return { store: record_navigation(store, details.tabId, details.url) };
   }).then(() =>
     chrome.tabs
       .sendMessage(details.tabId, { action: "captureVisit", url: details.url })

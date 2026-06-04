@@ -127,7 +127,7 @@ erDiagram
     <tr><td>Class</td><td><code>LanceDBMemoryStore</code> in <code>lance_db.ts</code></td></tr>
     <tr><td>Namespace</td><td><code>webpage_content</code> (page content + embeddings)</td></tr>
     <tr><td>Operations</td><td><code>put</code> (auto-embed), <code>get</code>, <code>search({query, limit, filter})</code>, <code>batch()</code></td></tr>
-    <tr><td>Embeddings</td><td>OpenAI <code>text-embedding-3-small</code>, cached in memory</td></tr>
+    <tr><td>Embeddings</td><td>Local all-MiniLM-L6-v2 (384-dim, via <code>@xenova/transformers</code>), cached in memory</td></tr>
     <tr><td>Caching</td><td>Embedding cache (≤1000 entries, 5-min expiry), search-result cache, table cache (bounds memory)</td></tr>
   </table>
 

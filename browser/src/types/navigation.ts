@@ -30,15 +30,6 @@ export class VisitData {
   [key: string]: unknown;
 }
 
-export class NavigationEvent {
-  constructor(
-    public readonly type: 'standard' | 'spa' | 'tab' | 'link',
-    public readonly url: string,
-    public readonly timestamp: number = Date.now(),
-    public readonly referrer?: string
-  ) {}
-}
-
 export class PKMConfig {
   constructor(
     public readonly api_base_url: string,

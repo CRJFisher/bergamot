@@ -2,6 +2,9 @@ import { TabHistoryStore, get_tab_history, get_referrer_from_history } from './t
 import { send_to_server } from './api_client';
 import { discover_server_url } from './server_discovery';
 
+const error_message = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 export type MessageAction =
   | 'getReferrer'
   | 'sendToPKMServer';
@@ -10,7 +13,7 @@ export interface Message {
   action: MessageAction;
   url?: string;
   endpoint?: string;
-  data?: any;
+  data?: Record<string, unknown>;
   api_base_url?: string;
   page_loaded_at?: string;
   referrer?: string;
@@ -67,10 +70,10 @@ export const handle_get_referrer = (
 // these — it would race a cold service worker — so the background, which owns
 // the session graph, fills them in at forward time.
 const enrich_visit_with_session = (
-  data: any,
+  data: Record<string, unknown>,
   tab_id: number,
   tab_history_store: TabHistoryStore
-): any => {
+): Record<string, unknown> => {
   const history = get_tab_history(tab_history_store, tab_id);
   const opener_history = history?.opener_tab_id
     ? get_tab_history(tab_history_store, history.opener_tab_id)
@@ -107,7 +110,7 @@ const set_post_status_badge = (ok: boolean): void => {
 
 export const handle_server_request = async (
   endpoint: string,
-  data: any,
+  data: unknown,
   api_base_url: string
 ): Promise<MessageResponse> => {
   console.log(`🌐 Forwarding to Bergamot server:`, endpoint, data);
@@ -118,25 +121,28 @@ export const handle_server_request = async (
     cached_server_url = target;
     set_post_status_badge(true);
     return { success: true };
-  } catch (error: any) {
+  } catch (error) {
     // The cached/default port may be stale, or the server bound a different
-    // port in the candidate range. Re-discover once and retry.
+    // port in the candidate range. Re-discover once and retry. A rediscovered
+    // URL has passed the /status health check, so always retry it — even if it
+    // matches the target, the first failure may have been transient (server
+    // just coming up).
     const discovered = await discover_server_url();
-    if (discovered && discovered !== target) {
+    if (discovered) {
       try {
         await send_to_server(discovered, endpoint, data);
         cached_server_url = discovered;
         set_post_status_badge(true);
         return { success: true };
-      } catch (retry_error: any) {
+      } catch (retry_error) {
         cached_server_url = null;
         set_post_status_badge(false);
-        return { success: false, error: retry_error.message };
+        return { success: false, error: error_message(retry_error) };
       }
     }
     cached_server_url = null;
     set_post_status_badge(false);
-    return { success: false, error: error.message };
+    return { success: false, error: error_message(error) };
   }
 };
 

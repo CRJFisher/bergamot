@@ -35,6 +35,16 @@ export const SERVER_PORT_RANGE: readonly number[] = [
 ];
 
 /**
+ * Upper bound on decompressed capture content. The browser already caps what it
+ * sends; this is a defensive guard so a malformed or hostile payload cannot
+ * exhaust memory when it decompresses (zstd "zip bomb").
+ */
+const MAX_DECOMPRESSED_BYTES = 10 * 1024 * 1024; // 10 MB
+
+/** Maximum number of rows any read-only /query endpoint will return. */
+const MAX_QUERY_LIMIT = 100;
+
+/**
  * Configuration for the server manager.
  * Contains all dependencies required to run the webpage categorization server.
  * 
@@ -186,13 +196,27 @@ export class ServerManager {
         try {
           const compressed_data = Buffer.from(content, 'base64');
           const decompressed_data = await decompress(compressed_data);
-          content = decompressed_data.toString('utf-8');
+          if (decompressed_data.length > MAX_DECOMPRESSED_BYTES) {
+            // Refuse oversized payloads rather than holding them in memory and
+            // embedding them; store nothing for this visit's content.
+            dev_log('decompress_failed', {
+              visit_id,
+              url: req.body.url,
+              error: `decompressed size ${decompressed_data.length} exceeds ${MAX_DECOMPRESSED_BYTES}`,
+            });
+            content = '';
+          } else {
+            content = decompressed_data.toString('utf-8');
+          }
         } catch (error) {
           dev_log('decompress_failed', {
             visit_id,
             url: req.body.url,
             error: error instanceof Error ? error.message : String(error),
           });
+          // Never fall through with the raw base64 string as page content — it
+          // would be stored verbatim and corrupt the embeddings for this page.
+          content = '';
         }
       }
 
@@ -280,13 +304,17 @@ export class ServerManager {
     });
 
     this.app.get('/query/recent_trees', async (req, res) => {
-      const limit = Number(req.query.limit ?? 5);
+      const requested = Number(req.query.limit ?? 5);
+      const limit = Math.min(
+        Number.isFinite(requested) && requested > 0 ? requested : 5,
+        MAX_QUERY_LIMIT
+      );
       res.json(
         await get_last_modified_trees_with_members_and_analysis(
           this.config.duck_db,
           this.config.memory_db,
           '',
-          Number.isFinite(limit) ? limit : 5
+          limit
         )
       );
     });
@@ -320,12 +348,19 @@ export class ServerManager {
    */
   private listen_on(port: number): Promise<Server> {
     return new Promise((resolve, reject) => {
-      const server = this.app.listen(port);
-      server.once('listening', () => {
-        server.removeListener('error', reject);
+      // Bind to loopback only — the capture server is a local-only trust
+      // boundary and must not be reachable from other hosts on the network.
+      const server = this.app.listen(port, '127.0.0.1');
+      const on_listening = () => {
+        server.removeListener('error', on_error);
         resolve(server);
-      });
-      server.once('error', reject);
+      };
+      const on_error = (error: Error) => {
+        server.removeListener('listening', on_listening);
+        reject(error);
+      };
+      server.once('listening', on_listening);
+      server.once('error', on_error);
     });
   }
 
@@ -393,6 +428,9 @@ export class ServerManager {
     }
 
     if (this.server) {
+      // Drop idle keep-alive connections so close()'s callback can fire promptly
+      // instead of waiting for clients to disconnect (which can hang shutdown).
+      this.server.closeAllConnections();
       return new Promise((resolve) => {
         this.server!.close(() => {
           console.log('Server stopped');

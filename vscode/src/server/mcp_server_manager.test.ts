@@ -1,9 +1,7 @@
 import * as vscode from 'vscode';
 import * as child_process from 'child_process';
-import * as path from 'path';
 import { EventEmitter } from 'events';
 import { MCPServerManager, MCPServerConfig } from './mcp_server_manager';
-import { DuckDB } from '../duck_db';
 
 // Mock vscode module
 jest.mock('vscode', () => ({
@@ -15,8 +13,8 @@ jest.mock('vscode', () => ({
 // Create a mock child process
 class MockChildProcess extends EventEmitter {
   killed = false;
-  
-  kill(signal?: string): boolean {
+
+  kill(): boolean {
     this.killed = true;
     // Simulate async exit
     setTimeout(() => this.emit('exit', 0), 10);
@@ -45,9 +43,7 @@ describe('MCPServerManager', () => {
       context: {
         extensionPath: '/test/extension',
         globalStorageUri: { fsPath: '/test/storage' }
-      } as any,
-      openai_api_key: 'test-api-key',
-      duck_db: {} as DuckDB,
+      } as Partial<vscode.ExtensionContext> as vscode.ExtensionContext,
       storage_base: '/test/storage'
     };
 
@@ -69,12 +65,10 @@ describe('MCPServerManager', () => {
 
       expect(child_process.spawn).toHaveBeenCalledWith(
         'node',
-        ['/test/extension/dist/mcp_server_standalone.js'],
+        ['/test/extension/out/mcp_server_standalone.js'],
         {
           env: expect.objectContaining({
-            OPENAI_API_KEY: 'test-api-key',
-            STORAGE_PATH: '/test/storage',
-            DUCK_DB_PATH: '/test/storage/webpage_categorizations.db'
+            STORAGE_PATH: '/test/storage'
           }),
           stdio: ['pipe', 'pipe', 'pipe', 'ipc']
         }

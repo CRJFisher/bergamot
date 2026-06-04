@@ -1,7 +1,14 @@
-// Vanilla TypeScript implementation of memory store, replacing LangGraph checkpoint
+// Vector-backed memory store over LanceDB.
 import { Embeddings } from './workflow/embeddings';
 
-// Type definitions to replace LangGraph types
+/**
+ * Escapes a value for safe interpolation into a LanceDB SQL filter string literal
+ * by doubling single quotes. LanceDB's query builder takes filters as raw SQL, so
+ * keys (which can come from URLs) must be escaped to avoid breaking the predicate.
+ */
+function escape_sql_string(value: string): string {
+  return value.replace(/'/g, "''");
+}
 
 /**
  * Represents a searchable item in the memory store with metadata
@@ -28,7 +35,7 @@ export interface Operation {
   /** Namespace path for get/put/delete operations */
   namespace?: string[];
   /** Namespace prefix for search operations */
-  namespacePrefix?: string[];
+  namespace_prefix?: string[];
   /** Key identifier for get/put/delete operations */
   key?: string;
   /** Data to store for put operations */
@@ -36,6 +43,9 @@ export interface Operation {
   /** Search query text for search operations */
   query?: string;
 }
+
+/** Embedding-cache size at which a cleanup sweep is triggered. */
+const CACHE_CLEANUP_INTERVAL = 100;
 
 /**
  * Maps operation types to their expected return types
@@ -67,13 +77,11 @@ import * as lancedb from "@lancedb/lancedb";
  */
 export class LanceDBMemoryStore {
   private db: lancedb.Connection;
-  private tableCache = new Map<string, lancedb.Table>();
+  private table_cache = new Map<string, lancedb.Table>();
   public embeddings?: Embeddings;
-  
-  // Performance optimization: Add caching for embeddings and search results
+
+  // Cache embeddings so repeated puts/searches of identical text skip the model.
   private embedding_cache = new Map<string, number[]>();
-  private search_result_cache = new Map<string, { results: SearchItem[]; timestamp: number }>();
-  private readonly CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
   private readonly MAX_CACHE_SIZE = 1000;
 
   private constructor(
@@ -114,7 +122,7 @@ export class LanceDBMemoryStore {
    */
   private async get_table(namespace: string[]): Promise<lancedb.Table | null> {
     const ns = namespace.join("_");
-    if (this.tableCache.has(ns)) return this.tableCache.get(ns)!;
+    if (this.table_cache.has(ns)) return this.table_cache.get(ns)!;
 
     const existing = await this.db.tableNames();
     if (!existing.includes(ns)) {
@@ -126,30 +134,59 @@ export class LanceDBMemoryStore {
     return table;
   }
 
+  /**
+   * Drops the table for `namespace` if its stored vector dimension differs from
+   * `expected_dim`. Used to discard a store written with a different embedding
+   * model (e.g. a 1536-dim OpenAI store when the local model emits 384) — LanceDB
+   * cannot mix dimensions in one table, and querying it would error or return
+   * nothing. Best-effort: any inspection failure is logged, never thrown, so it
+   * cannot block activation.
+   */
+  async drop_table_if_vector_dim_mismatch(
+    namespace: string[],
+    expected_dim: number
+  ): Promise<void> {
+    const ns = namespace.join("_");
+    try {
+      const names = await this.db.tableNames();
+      if (!names.includes(ns)) return;
+
+      const table = await this.db.openTable(ns);
+      const schema = await table.schema();
+      const vector_field = schema.fields.find((f) => f.name === "vector");
+      const vector_type = vector_field?.type;
+      const dim =
+        vector_type && "listSize" in vector_type
+          ? (vector_type as { listSize: number }).listSize
+          : undefined;
+
+      if (typeof dim === "number" && dim !== expected_dim) {
+        console.warn(
+          `LanceDB table '${ns}' has vector dimension ${dim}, expected ${expected_dim}; ` +
+            `dropping the incompatible store so it is rebuilt with the current embedding model.`
+        );
+        this.table_cache.delete(ns);
+        await this.db.dropTable(ns);
+      }
+    } catch (error) {
+      console.warn(`Could not verify vector dimension for '${ns}':`, error);
+    }
+  }
+
   /** Caches a table handle, evicting the oldest entry past the cache cap. */
   private cache_table(ns: string, table: lancedb.Table): void {
-    if (this.tableCache.size >= this.MAX_CACHE_SIZE) {
-      const first_key = this.tableCache.keys().next().value;
-      this.tableCache.delete(first_key);
+    if (this.table_cache.size >= this.MAX_CACHE_SIZE) {
+      const first_key = this.table_cache.keys().next().value;
+      this.table_cache.delete(first_key);
     }
-    this.tableCache.set(ns, table);
+    this.table_cache.set(ns, table);
   }
 
   /**
-   * Performance optimization: Clean up expired cache entries to prevent memory leaks
+   * Bounds the embedding cache so it cannot grow without limit.
    * @private
    */
   private cleanup_caches(): void {
-    const now = Date.now();
-    
-    // Clean up search result cache
-    for (const [key, value] of this.search_result_cache.entries()) {
-      if (now - value.timestamp > this.CACHE_EXPIRY_MS) {
-        this.search_result_cache.delete(key);
-      }
-    }
-    
-    // Limit embedding cache size
     if (this.embedding_cache.size > this.MAX_CACHE_SIZE) {
       const entries = Array.from(this.embedding_cache.entries());
       const to_remove = entries.slice(0, entries.length - this.MAX_CACHE_SIZE);
@@ -178,7 +215,10 @@ export class LanceDBMemoryStore {
   async get(namespace: string[], key: string): Promise<SearchItem | null> {
     const table = await this.get_table(namespace);
     if (!table) return null;
-    const results = await table.query().where(`key = '${key}'`).toArray();
+    const results = await table
+      .query()
+      .where(`key = '${escape_sql_string(key)}'`)
+      .toArray();
     if (results.length === 0) return null;
 
     return results[0];
@@ -221,9 +261,9 @@ export class LanceDBMemoryStore {
       if (!embedding) {
         embedding = await this.embeddings.embedQuery(val_string);
         this.embedding_cache.set(val_string, embedding);
-        
+
         // Periodic cleanup
-        if (this.embedding_cache.size % 100 === 0) {
+        if (this.embedding_cache.size % CACHE_CLEANUP_INTERVAL === 0) {
           this.cleanup_caches();
         }
       }
@@ -250,6 +290,10 @@ export class LanceDBMemoryStore {
     }
 
     if (table) {
+      // Upsert: LanceDB's add() is append-only, so drop any prior row with this
+      // key first. Without this, re-storing a key (e.g. re-embedding) leaves the
+      // old vector behind and get()/search() can return stale rows.
+      await table.delete(`key = '${escape_sql_string(key)}'`);
       await table.add([flattened_record]);
     } else {
       // First write to this namespace: create the table, letting LanceDB infer
@@ -286,22 +330,14 @@ export class LanceDBMemoryStore {
    * ```
    */
   async search(
-    namespacePrefix: string[],
+    namespace_prefix: string[],
     options?: {
       query?: string;
       limit?: number;
       filter?: Record<string, string | { operator: string; value: string }>;
     }
   ): Promise<SearchItem[]> {
-    // Performance optimization: Create cache key for search results
-    const cache_key = JSON.stringify({ namespacePrefix, options });
-    const cached_result = this.search_result_cache.get(cache_key);
-    
-    if (cached_result && Date.now() - cached_result.timestamp < this.CACHE_EXPIRY_MS) {
-      return cached_result.results;
-    }
-
-    const table = await this.get_table(namespacePrefix);
+    const table = await this.get_table(namespace_prefix);
     if (!table) return [];
 
     let results: SearchItem[];
@@ -312,13 +348,13 @@ export class LanceDBMemoryStore {
       if (!query_vector) {
         query_vector = await this.embeddings.embedQuery(options.query);
         this.embedding_cache.set(options.query, query_vector);
-        
+
         // Periodic cleanup
-        if (this.embedding_cache.size % 50 === 0) {
+        if (this.embedding_cache.size % CACHE_CLEANUP_INTERVAL === 0) {
           this.cleanup_caches();
         }
       }
-      
+
       let search = table.search(query_vector);
 
       if (options.filter) {
@@ -344,13 +380,7 @@ export class LanceDBMemoryStore {
         .limit(options?.limit || 10)
         .toArray();
     }
-    
-    // Cache the results
-    this.search_result_cache.set(cache_key, {
-      results,
-      timestamp: Date.now()
-    });
-    
+
     return results;
   }
 
@@ -369,7 +399,7 @@ export class LanceDBMemoryStore {
   }
 
   private async execute_search_operation(operation: Operation): Promise<SearchItem[]> {
-    return await this.search(operation.namespacePrefix!, {
+    return await this.search(operation.namespace_prefix!, {
       query: operation.query,
     });
   }
@@ -440,7 +470,7 @@ export class LanceDBMemoryStore {
   async delete(namespace: string[], key: string): Promise<void> {
     const table = await this.get_table(namespace);
     if (!table) return;
-    await table.delete(`key = '${key}'`);
+    await table.delete(`key = '${escape_sql_string(key)}'`);
   }
 
   /**
@@ -546,10 +576,9 @@ export class LanceDBMemoryStore {
    * ```
    */
   stop(): void {
-    // Performance optimization: Clean up caches before closing to free memory
-    this.tableCache.clear();
+    // Clean up caches before closing to free memory
+    this.table_cache.clear();
     this.embedding_cache.clear();
-    this.search_result_cache.clear();
     this.db.close();
   }
 }

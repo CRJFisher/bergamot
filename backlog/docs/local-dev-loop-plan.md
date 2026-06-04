@@ -73,7 +73,7 @@ A developer-runnable test exercising the real seam (real extension → discovery
 - Add an LLM injection seam (env `BERGAMOT_LLM=fake` or DI into `build_workflow`/`WebpageWorkflow`) — prerequisite for offline full-pipeline tests, and the same injection point the Claude move uses. **[M]**
 - Server-side integration test: real `ServerManager` + real DuckDB/LanceDB on temp paths + fake LLM, POST a real zstd visit, drain the queue, assert DuckDB + LanceDB retrieval (`vscode/src/server/server_pipeline.integration.test.ts`). **[M]**
 - Headless standalone server entrypoint `vscode/src/server/server_standalone.ts` (mirrors `mcp_server_standalone.ts`) so the harness can run the server outside the extension host. **[M]**
-- On-demand full-pipeline harness `scripts/run-pipeline-e2e.js` + `browser/e2e/full_pipeline.spec.ts` reusing `fixtures.ts` minus `MOCK_PKM_PORT`/mock server; promote the `DEBUG_E2E` SW console hook to an always-on error collector that fails the run. **[L]**
+- On-demand full-pipeline harness `scripts/run-pipeline-e2e.mjs` + `browser/e2e/full_pipeline.spec.ts` reusing `fixtures.ts` minus `MOCK_PKM_PORT`/mock server; promote the `DEBUG_E2E` SW console hook to an always-on error collector that fails the run. **[L]**
 
 ## Key Decisions
 
@@ -116,7 +116,7 @@ The loop is implemented. Day-to-day:
 
 - The Claude Agent SDK requires zod v4; it and zod 4 are installed at the **monorepo root** (peer satisfied there) while the `vscode` workspace keeps zod 3 for its schemas. The SDK resolves via workspace hoisting.
 - Both the SDK and Transformers.js are ESM-only and loaded via a dynamic-import bridge so the CommonJS extension (and jest) can use them.
-- `vscode/src/server/server_standalone.ts` runs the capture server headlessly; it is launched with `-r vscode/scripts/vscode-shim.js`, which stubs the `vscode` module in plain Node.
+- `vscode/src/server/server_standalone.ts` runs the capture server headlessly; it is launched with `-r vscode/scripts/vscode-shim.mjs`, which stubs the `vscode` module in plain Node.
 - `BERGAMOT_LLM=fake` selects the offline fake LLM **and** fake embeddings — the single switch for hermetic full-pipeline tests.
 
 ### Top unknown — verify before relying on Claude

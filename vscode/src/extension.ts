@@ -17,23 +17,17 @@ let command_manager: CommandManager;
  * Activates the Bergamot VS Code extension.
  *
  * Initializes all core components:
- * - Configures OpenAI API integration for AI-powered analysis
+ * - Resolves the LLM provider (Claude subscription by default; OpenAI key only
+ *   required when the provider is "openai")
  * - Sets up DuckDB for structured webpage data storage
  * - Starts Express server for browser extension communication
- * - Initializes LanceDB vector store for content and embeddings
+ * - Initializes LanceDB vector store for content and local embeddings
  * - Starts MCP (Model Context Protocol) server for external tool access
  * - Registers VS Code commands and providers for search and hover functionality
  *
  * @param context - VS Code extension context providing access to extension resources
  * @returns Promise that resolves when activation is complete
  * @throws {Error} If required configuration is missing or initialization fails
- *
- * @example
- * ```typescript
- * // This function is automatically called by VS Code when the extension activates
- * // Users need to configure the OpenAI API key in VS Code settings:
- * // "bergamot.openaiApiKey": "your-openai-key"
- * ```
  */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   console.log('Starting Bergamot extension activation...');
@@ -97,8 +91,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     console.log('Scheduling MCP server startup...');
     mcp_server_manager = new MCPServerManager({
       context,
-      openai_api_key,
-      duck_db: databases.duck_db,
       storage_base
     });
     mcp_server_manager.start_deferred(2000);
@@ -114,16 +106,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     console.log('MCP server will start in background after 2 seconds');
 
   } catch (error) {
-    console.error('Failed to activate PKM Assistant extension:', error);
+    console.error('Failed to activate Bergamot extension:', error);
     vscode.window.showErrorMessage(
-      `PKM Assistant activation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Bergamot activation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
     );
     throw error;
   }
 }
 
 /**
- * Deactivates the PKM Assistant extension.
+ * Deactivates the Bergamot extension.
  * Performs cleanup of all resources including:
  * - Stopping the Express server
  * - Closing database connections
@@ -133,7 +125,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
  * @returns Promise that resolves when deactivation is complete
  */
 export async function deactivate(): Promise<void> {
-  console.log('Deactivating PKM Assistant extension...');
+  console.log('Deactivating Bergamot extension...');
 
   try {
     // Stop servers
@@ -159,7 +151,7 @@ export async function deactivate(): Promise<void> {
       console.log('Commands disposed');
     }
 
-    console.log('PKM Assistant extension deactivated successfully');
+    console.log('Bergamot extension deactivated successfully');
     
   } catch (error) {
     console.error('Error during deactivation:', error);

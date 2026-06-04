@@ -20,6 +20,7 @@
  */
 
 import { execSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -84,8 +85,14 @@ async function main() {
 
     console.log('\n✅ Full-pipeline E2E passed.');
   } finally {
-    if (server) {
+    if (server && server.exitCode === null) {
+      // Wait for the server to actually exit before deleting its storage, so we
+      // don't rm the DuckDB/LanceDB directory out from under an in-flight write.
       server.kill('SIGTERM');
+      await Promise.race([
+        once(server, 'exit'),
+        new Promise((resolve) => setTimeout(resolve, 5_000)),
+      ]);
     }
     fs.rmSync(storage_dir, { recursive: true, force: true });
     // Restore (or remove) the canonical port file we may have overwritten.

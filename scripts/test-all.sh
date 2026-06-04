@@ -150,35 +150,6 @@ fi
 
 cd ..
 
-# Test Native Messaging Host
-print_section "Testing Native Messaging Host"
-
-if [ -f "native-host/test_native_host.py" ]; then
-    run_test "Native host Python tests" "python3 native-host/test_native_host.py"
-else
-    print_info "Native host tests not found - skipping"
-    SKIPPED_TESTS=$((SKIPPED_TESTS + 1))
-fi
-
-# Test Procedural Memory
-print_section "Testing Procedural Memory"
-
-cd vscode
-if [ -f "src/memory/__tests__/procedural_memory_store.test.ts" ]; then
-    run_test "Procedural memory tests" "npx jest src/memory/__tests__/procedural_memory_store.test.ts"
-else
-    print_info "Procedural memory tests not found - skipping"
-    SKIPPED_TESTS=$((SKIPPED_TESTS + 1))
-fi
-
-if [ -f "src/workflow/__tests__/enhanced_webpage_filter.test.ts" ]; then
-    run_test "Enhanced filter tests" "npx jest src/workflow/__tests__/enhanced_webpage_filter.test.ts"
-else
-    print_info "Enhanced filter tests not found - skipping"
-    SKIPPED_TESTS=$((SKIPPED_TESTS + 1))
-fi
-cd ..
-
 # Test Packaging
 print_section "Testing Package Creation"
 

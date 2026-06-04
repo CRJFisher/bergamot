@@ -574,7 +574,9 @@ export async function get_webpage_analysis_for_ids(
  *
  * @param db - DuckDB instance to insert into
  * @param session - Page activity session data (without content field)
- * @returns Promise that resolves to object indicating if session was new
+ * @returns Promise resolving to whether the session row was newly created
+ *   (`was_new_session`) and whether its tree assignment changed (`tree_changed`,
+ *   true for a new row or when an existing row is moved to a different tree).
  * @throws {Error} If insertion fails
  *
  * @example
@@ -592,15 +594,20 @@ export async function get_webpage_analysis_for_ids(
 export async function insert_page_activity_session(
   db: DuckDB,
   session: PageActivitySessionWithoutContent
-): Promise<{ was_new_session: boolean }> {
+): Promise<{ was_new_session: boolean; tree_changed: boolean }> {
   try {
-    // Check if the session already exists
+    // Check if the session already exists, capturing its current tree so we can
+    // tell whether this call moves it to a different tree (e.g. a previously
+    // orphaned page being re-linked to its parent once the parent arrives).
     const existing_session = await db.connection.runAndReadAll(
-      `SELECT id FROM ${WEBPAGE_ACTIVITY_SESSIONS_TABLE} WHERE id = $id`,
+      `SELECT tree_id FROM ${WEBPAGE_ACTIVITY_SESSIONS_TABLE} WHERE id = $id`,
       { id: session.id }
     );
 
-    const was_new_session = existing_session.getRowObjects().length === 0;
+    const existing_rows = existing_session.getRowObjects();
+    const was_new_session = existing_rows.length === 0;
+    const tree_changed =
+      was_new_session || existing_rows[0].tree_id !== session.tree_id;
 
     if (was_new_session) {
       // Insert new session
@@ -654,7 +661,7 @@ export async function insert_page_activity_session(
       );
     }
 
-    return { was_new_session };
+    return { was_new_session, tree_changed };
   } catch (error) {
     console.error("Error inserting page activity session:", error);
     throw error;
@@ -883,21 +890,21 @@ export async function update_webpage_tree_activity_time(
     if (existing.latest_activity_time >= latest_activity_time) {
       return;
     }
-    
-    // Use direct SQL to avoid foreign key issues with parameterized queries
-    const escaped_id = tree_id.replace(/'/g, "''");
-    const escaped_time = latest_activity_time.replace(/'/g, "''");
-    
-    await db.exec(
-      `UPDATE ${WEBPAGE_TREES_TABLE} 
-      SET latest_activity_time = '${escaped_time}'
-      WHERE id = '${escaped_id}'`
+
+    await db.execute(
+      `UPDATE ${WEBPAGE_TREES_TABLE}
+      SET latest_activity_time = $latest_activity_time
+      WHERE id = $id`,
+      { id: tree_id, latest_activity_time }
     );
   } catch (error) {
-    // Log the error but don't throw for foreign key constraint issues in tests
-    // This is a workaround for DuckDB's handling of UPDATE with foreign keys
-    if (error.message?.includes("foreign key constraint")) {
-      console.warn("Skipping tree update due to DuckDB foreign key handling:", error.message);
+    // DuckDB raises a foreign-key constraint error when UPDATEing a table that
+    // is referenced by a foreign key, even for a non-key column. This is a known
+    // DuckDB limitation, not a real integrity problem (only latest_activity_time
+    // changes), so the update is skipped rather than aborting the visit.
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("foreign key constraint")) {
+      console.warn("Skipping tree update due to DuckDB foreign key handling:", message);
       return;
     }
     console.error("Error updating webpage tree activity time:", error);

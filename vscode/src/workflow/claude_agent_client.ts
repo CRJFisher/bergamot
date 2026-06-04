@@ -39,15 +39,23 @@ export class ClaudeAgentClient implements LLMClient {
       systemPrompt: system_prompt,
       model: CLAUDE_MODELS[role],
       maxTurns: 1,
-      allowedTools: [],
+      // `tools: []` removes all built-in tools so this is a pure completion;
+      // `allowedTools` only governs auto-approval and would not disable them.
+      tools: [],
       settingSources: [],
       env: scrubbed_env(),
     };
 
     let result = '';
     for await (const message of query({ prompt, options })) {
-      if (message.type === 'result' && message.subtype === 'success') {
-        result = message.result;
+      if (message.type === 'result') {
+        if (message.subtype === 'success') {
+          result = message.result;
+        } else {
+          // Surface auth/usage/turn-limit failures instead of silently
+          // returning '' (which would look like an empty classification).
+          throw new Error(`Claude Agent SDK error: ${message.subtype}`);
+        }
       }
     }
     return result;

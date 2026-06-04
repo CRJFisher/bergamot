@@ -100,7 +100,8 @@ export function register_webpage_search_commands(
             // Add selected webpage to current document
             await add_webpage_to_document(selected.result);
           } catch (error) {
-            vscode.window.showErrorMessage(`Search failed: ${error.message}`);
+            const message = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`Search failed: ${message}`);
           }
         }
       );

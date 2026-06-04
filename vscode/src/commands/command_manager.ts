@@ -31,7 +31,7 @@ export interface CommandConfig {
 
 /**
  * Manages registration of all VS Code extension commands.
- * Centralizes command registration and lifecycle management for the PKM Assistant.
+ * Centralizes command registration and lifecycle management for Bergamot.
  * 
  * @example
  * ```typescript
@@ -65,7 +65,6 @@ export class CommandManager {
    */
   register_all(): void {
     this.register_core_commands();
-    this.register_search_commands();
     this.register_filter_commands();
     this.register_dev_commands();
   }
@@ -190,15 +189,6 @@ export class CommandManager {
   }
 
   /**
-   * Registers search-related commands.
-   * Currently handled by core commands registration.
-   * @private
-   */
-  private register_search_commands(): void {
-    // Already handled by register_webpage_search_commands in core commands
-  }
-
-  /**
    * Registers filter metrics command.
    * Provides command to display webpage filtering statistics.
    * @private
@@ -220,7 +210,7 @@ export class CommandManager {
    */
   private show_filter_metrics(): void {
     const metrics = global_filter_metrics.get_metrics();
-    const output = vscode.window.createOutputChannel('PKM Assistant Filter Metrics');
+    const output = vscode.window.createOutputChannel('Bergamot Filter Metrics');
     
     output.clear();
     output.appendLine('=== Webpage Filter Metrics ===');

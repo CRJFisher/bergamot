@@ -4,7 +4,7 @@ import { test, expect, wait_for_stored } from "./pipeline_fixtures";
  * Full real-pipeline E2E: a page load in the extension flows through real
  * server discovery → the live Bergamot capture server → DuckDB/LanceDB, with
  * the LLM and embeddings faked (offline, zero-token). Run via
- * `scripts/run-pipeline-e2e.js`, which builds the extension plainly and starts
+ * `scripts/run-pipeline-e2e.mjs`, which builds the extension plainly and starts
  * the headless server before invoking this spec.
  */
 test("captures a real page visit end to end into the store", async ({

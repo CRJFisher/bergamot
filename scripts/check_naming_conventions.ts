@@ -36,10 +36,6 @@ function is_upper_snake_case(name: string): boolean {
 // Whitelist of specific names that are exceptions
 const NAMING_WHITELIST = [
   'PageAnalysisSchemaWithoutPageSessionId',  // Zod schema
-  'AgentStateAnnotation',  // Annotation type
-  'WebpageTreeNodeCollectionSpec',  // Spec type
-  'ConnectionCollectionSpec',  // Spec type
-  'NoteSchema',  // Zod schema
 ];
 
 function should_skip(name: string, file: string): boolean {
@@ -96,7 +92,7 @@ async function check_file(file_path: string, verbose: boolean): Promise<Violatio
       regex: /(?:export\s+)?(?:async\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)/g,
       type: 'function',
       expected: 'snake_case',
-      check: (name: string, line?: string) => !is_snake_case(name)
+      check: (name: string) => !is_snake_case(name)
     },
     // Const/let/var declarations (not in test files for mocks)
     {
@@ -142,21 +138,21 @@ async function check_file(file_path: string, verbose: boolean): Promise<Violatio
       regex: /(?:export\s+)?class\s+([a-zA-Z_][a-zA-Z0-9_]*)/g,
       type: 'class',
       expected: 'PascalCase',
-      check: (name: string, line?: string) => !is_pascal_case(name)
+      check: (name: string) => !is_pascal_case(name)
     },
     // Interface declarations
     {
       regex: /(?:export\s+)?interface\s+([a-zA-Z_][a-zA-Z0-9_]*)/g,
       type: 'interface',
       expected: 'PascalCase',
-      check: (name: string, line?: string) => !is_pascal_case(name)
+      check: (name: string) => !is_pascal_case(name)
     },
     // Type declarations
     {
       regex: /(?:export\s+)?type\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=/g,
       type: 'type',
       expected: 'PascalCase',
-      check: (name: string, line?: string) => !is_pascal_case(name)
+      check: (name: string) => !is_pascal_case(name)
     }
   ];
   
@@ -201,11 +197,11 @@ async function main() {
   
   const patterns = [
     'vscode/src/**/*.ts',
-    'vscode/src/**/*.tsx', 
-    'browser-extension/src/**/*.ts',
-    'browser-extension/src/**/*.tsx',
-    'browser-extension/src/**/*.js',
-    'browser-extension/src/**/*.jsx'
+    'vscode/src/**/*.tsx',
+    'browser/src/**/*.ts',
+    'browser/src/**/*.tsx',
+    'browser/src/**/*.js',
+    'browser/src/**/*.jsx'
   ];
   
   const all_violations: Violation[] = [];

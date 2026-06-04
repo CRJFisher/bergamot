@@ -2,7 +2,7 @@
 export const send_to_server = async (
   api_base_url: string,
   endpoint: string,
-  data: any
+  data: unknown
 ): Promise<void> => {
   console.log(`🚀 Making request to: ${api_base_url}${endpoint}`);
   

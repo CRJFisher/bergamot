@@ -61,7 +61,7 @@ const send_to_server = async (endpoint: string, data: Record<string, unknown>) =
 // a possibly-cold service worker.
 const handle_page_visit = async (url: string) => {
   const visit_data = await create_visit_data(url, "", undefined, zstd_instance);
-  send_to_server("/visit", visit_data);
+  await send_to_server("/visit", visit_data);
 };
 
 // The background detects SPA navigations authoritatively via chrome.webNavigation
