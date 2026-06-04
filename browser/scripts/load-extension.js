@@ -39,6 +39,59 @@ const __dirname = path.dirname(__filename);
 const EXTENSION_PATH = path.join(__dirname, '..', 'chrome');
 const TEMP_PROFILE = path.join(os.tmpdir(), 'pkm-chrome-debug-profile');
 
+// The VS Code extension binds the first free port in this range, mirroring
+// SERVER_PORT_RANGE in vscode/src/server/server_manager.ts. The browser
+// extension discovers the live port at runtime; this probe is informational.
+const SERVER_PORTS = [5000, 5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009];
+const DETECT_TIMEOUT_MS = 30000;
+const DETECT_INTERVAL_MS = 1000;
+
+// Resolve to the first port in SERVER_PORTS that accepts a connection, or null
+// if none respond. Any HTTP response (even 404) means the server is listening.
+function probeServerPorts() {
+  return new Promise((resolve) => {
+    let remaining = SERVER_PORTS.length;
+    let settled = false;
+    for (const port of SERVER_PORTS) {
+      const req = http.get(`http://localhost:${port}`, (res) => {
+        res.resume();
+        if (!settled) {
+          settled = true;
+          resolve(port);
+        }
+      });
+      req.on('error', () => {
+        remaining -= 1;
+        if (remaining === 0 && !settled) {
+          settled = true;
+          resolve(null);
+        }
+      });
+    }
+  });
+}
+
+// Poll the port range until the extension answers or DETECT_TIMEOUT_MS elapses.
+// Runs in the background so Brave launches immediately; under the F5 compound
+// the extension host boots in parallel, so a one-shot probe would race it and
+// always warn before the server is up.
+async function waitForVsCodeExtension() {
+  const deadline = Date.now() + DETECT_TIMEOUT_MS;
+  for (;;) {
+    const port = await probeServerPorts();
+    if (port !== null) {
+      console.log(`✅ VS Code extension detected on port ${port}`);
+      return;
+    }
+    if (Date.now() >= deadline) {
+      console.log('⚠️  VS Code extension not detected on ports 5000-5009');
+      console.log('   Make sure to run the VS Code extension from your IDE');
+      return;
+    }
+    await new Promise((r) => setTimeout(r, DETECT_INTERVAL_MS));
+  }
+}
+
 // Chrome executable paths for different platforms
 const CHROME_PATHS = {
   darwin: [
@@ -131,13 +184,9 @@ function launchChrome() {
   console.log('✅ Chrome found at:', chrome);
   console.log('');
   
-  // Check if VS Code extension is running
-  http.get('http://localhost:5000', () => {
-    console.log('✅ VS Code extension detected on port 5000');
-  }).on('error', () => {
-    console.log('⚠️  VS Code extension not detected on port 5000');
-    console.log('   Make sure to run the VS Code extension from your IDE');
-  });
+  // Check if VS Code extension is running. Fire-and-forget: polls in the
+  // background while Brave launches, then prints the outcome once known.
+  waitForVsCodeExtension();
   
   console.log('');
   console.log('📝 Instructions:');
@@ -160,7 +209,17 @@ function launchChrome() {
     '--no-first-run',
     '--no-default-browser-check'
   ];
-  
+
+  // Expose CDP for the dev loop's hot-reload (dev:brave sets BERGAMOT_CDP_PORT).
+  // --remote-allow-origins=* lets a local Node client open the debugger socket,
+  // which Chrome 111+ otherwise rejects on Origin grounds.
+  if (process.env.BERGAMOT_CDP_PORT) {
+    args.push(
+      `--remote-debugging-port=${process.env.BERGAMOT_CDP_PORT}`,
+      '--remote-allow-origins=*'
+    );
+  }
+
   // Add headless mode if requested
   if (process.argv.includes('--headless')) {
     args.push('--headless=new');
