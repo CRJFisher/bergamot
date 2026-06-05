@@ -27,17 +27,16 @@
 
   <section class="hero">
     <h1>🧩 VS Code Extension</h1>
-    <p class="tagline">The backend host. It activates the ingest server, durable queue, and LLM processing workflow; owns both storage backends (DuckDB + LanceDB); and spawns the MCP server. This is where capture becomes knowledge.</p>
-    <span class="pill">vscode/src · extension.ts activate() · ~60 TypeScript modules</span>
+    <p class="tagline">The backend host. It activates the ingest server, durable queue, and the deterministic zero-LLM capture pipeline; owns the DuckDB store; and spawns the MCP server. This is where a visit becomes a durable capture.</p>
+    <span class="pill">vscode/src · extension.ts activate() · TypeScript</span>
   </section>
 
   <h2><span class="num">1</span>Activation</h2>
-  <p>On activation, <code>extension.ts</code> wires the whole system together in order:</p>
+  <p>On activation, <code>extension.ts</code> wires the system together in order:</p>
   <ul class="clean">
-    <li><strong>Config</strong> — resolve the LLM provider from VS Code settings (<code>bergamot.llmProvider</code>, defaulting to the Claude subscription via the Claude Agent SDK); an OpenAI API key (<code>bergamot.openaiApiKey</code>) is optional and only used when the provider is <code>openai</code>.</li>
-    <li><strong>Databases</strong> — <code>DatabaseManager.initialize_all()</code> opens DuckDB and LanceDB (with local all-MiniLM-L6-v2 384-dim embeddings).</li>
+    <li><strong>Database</strong> — <code>DatabaseManager.initialize_all()</code> opens DuckDB (the relational + raw-capture store). No vector store is opened at ingest.</li>
     <li><strong>Ingest server</strong> — <code>ServerManager.start()</code> binds the first free port in 5000–5009 and writes it to <code>~/.bergamot/port.json</code>.</li>
-    <li><strong>Commands</strong> — <code>CommandManager.register_all()</code> registers webpage search, the hover provider, and the filter-metrics command.</li>
+    <li><strong>Commands</strong> — <code>CommandManager.register_all()</code> registers the webpage hover provider, the capture-gate metrics command, and the dev observability/replay commands.</li>
     <li><strong>MCP server</strong> — <code>MCPServerManager.start_deferred(2000)</code> spawns the standalone MCP subprocess after 2 s (non-blocking).</li>
   </ul>
 
@@ -56,42 +55,39 @@ flowchart TB
       srv --> inbox --> qp
     end
 
-    subgraph PROC["Processing — WebpageWorkflow"]
+    subgraph PROC["Capture — run_page_capture"]
       direction TB
-      extract["LLM content extraction<br/>HTML → clean Markdown"]
-      classify["classify + analyze<br/>LLM classification"]
-      filter["filter decision<br/>config: allowedTypes + minConfidence"]
-      tree["tree assignment + reanalysis<br/>webpage_tree.ts"]
-      extract --> classify --> filter --> tree
+      tree["tree assignment<br/>webpage_tree.ts (in the queue)"]
+      gate["relevance gate<br/>page_gate.ts (keep/drop, no LLM)"]
+      store["store_capture<br/>zstd + &lt;head&gt; metadata"]
+      tree --> gate --> store
     end
 
     subgraph STORE["Storage (DatabaseManager)"]
       direction LR
       duck[("DuckDB<br/>duck_db.ts")]
-      lance[("LanceDB<br/>lance_db.ts")]
     end
 
     subgraph SERVE["Serving"]
       direction TB
       mcpm["MCPServerManager<br/>spawns subprocess"]
       qapi["/query/* read API"]
-      cmds["VS Code commands<br/>search · hover · metrics"]
+      cmds["VS Code commands<br/>hover · capture metrics · replay"]
     end
 
     ext --> srv
     ext --> mcpm
     ext --> cmds
-    qp --> extract
-    tree --> duck
-    tree --> lance
+    qp --> tree
+    store --> duck
     qapi --> duck
-    mcpm --> lance
+    mcpm -- "HTTP proxy" --> qapi
 
     classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
     classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
     classDef sv fill:#2a1f3a,stroke:#bc8cff,color:#e6d9ff;
-    class srv,inbox,qp,extract,classify,filter,tree vs;
-    class duck,lance st;
+    class srv,inbox,qp,tree,gate,store vs;
+    class duck st;
     class mcpm,qapi,cmds sv;
     </pre>
   </div>
@@ -107,41 +103,35 @@ flowchart TB
     <tr><td>Cleanup</td><td>Once the visit is persisted to DuckDB, its inbox JSON file is removed. Orphans are reloaded on startup.</td></tr>
   </table>
 
-  <h2><span class="num">4</span>Processing: the WebpageWorkflow</h2>
-  <p>The core pipeline in <code>workflow/simple_workflow.ts</code> turns a raw captured page into
-  classified, stored, tree-organized knowledge.</p>
+  <h2><span class="num">4</span>Capture: <code>run_page_capture</code></h2>
+  <p>The pipeline in <code>workflow/page_capture_pipeline.ts</code> turns a captured page into a durable,
+  lossless record with no LLM call. It is a plain function over an immutable <code>CaptureDeps</code> struct
+  (no stateful class).</p>
   <div class="diagram">
-    <p class="cap">WebpageWorkflow.run() — per visit</p>
+    <p class="cap">run_page_capture(deps, inputs) — per visit</p>
     <pre class="mermaid">
 flowchart LR
-    A["raw_content<br/>(zstd-decompressed HTML)"] --> B["1 · extract features<br/>word count, links, code blocks"]
-    B --> C["2 · LLM extract<br/>CONTENT_PROCESSING_PROMPT<br/>→ clean Markdown"]
-    C --> D["3 · classify<br/>ANALYSIS_PROMPT → {title, summary, intentions}"]
-    D --> E{"4 · keep page?<br/>should_process_page()"}
-    E -- "filtered" --> X["drop · log to filter_metrics"]
-    E -- "keep" --> F["5 · tree assignment<br/>referrer → child / else new root"]
-    F --> G["6 · tree reanalysis<br/>TREE_INTENTIONS_PROMPT"]
-    G --> H["7 · persist<br/>DuckDB + LanceDB"]
+    A["raw_content<br/>(zstd-decompressed HTML) + url"] --> E{"relevance gate<br/>evaluate_page_gate()"}
+    E -- "interstitial<br/>(empty / auth / redirect)" --> X["drop · record reason<br/>gate_metrics"]
+    E -- "keep" --> S["store_capture<br/>zstd raw page + read_metadata(&lt;head&gt;)"]
+    S --> H["DuckDB webpage_capture<br/>+ record stored outcome"]
 
     classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
     classDef warn fill:#3a2a1a,stroke:#f0883e,color:#f5d9c0;
-    class A,B,C,D,F,G,H vs;
+    class A,S,H vs;
     class E,X warn;
     </pre>
   </div>
-  <p>The three LLM prompts that drive it:</p>
-  <ul class="clean">
-    <li><code>CONTENT_PROCESSING_PROMPT</code> — strip ads/nav/footers, return clean Markdown.</li>
-    <li><code>ANALYSIS_PROMPT</code> — produce <code>{ title, summary, intentions[] }</code> for a single page.</li>
-    <li><code>TREE_INTENTIONS_PROMPT</code> — re-derive per-page intentions using full navigation-tree context.</li>
-  </ul>
+  <p>No model is called, no main content is extracted, and nothing is written to a vector store. Title comes
+  from the cheap <code>&lt;head&gt;</code> metadata; summary, topics, extraction, chunking and embedding are
+  all deferred to the <a href="rag-pipeline.html">RAG-prep pipeline (task-31)</a>, which reads the stored raw
+  pages via <code>read_capture</code>.</p>
 
   <h2><span class="num">5</span>Navigation trees</h2>
-  <p>Visits are organized into <em>trees</em> — one per browsing session — using the referrer chain
-  captured by the browser extension. A page with a known referrer is attached as a child of the
-  tree containing that referrer; a page without one starts a new tree. Whenever a tree changes, its
-  intentions are recomputed with the whole tree as context, so each page's purpose is understood
-  relative to the session it belongs to.</p>
+  <p>Visits are organized into <em>trees</em> — one per browsing session — using the referrer chain captured by
+  the browser extension. A page with a known referrer is attached as a child of the tree containing that
+  referrer; a page without one starts a new tree. Tree construction runs in the visit queue, independent of the
+  capture gate: every visit gets a tree node, while the gate decides separately whether the page is captured.</p>
 
   <div class="note blue">
     <strong>Single-writer discipline.</strong> Only the extension writes to DuckDB. Every other
@@ -152,10 +142,8 @@ flowchart LR
   <h2><span class="num">6</span>Key dependencies</h2>
   <table>
     <tr><th>Package</th><th>Used for</th></tr>
-    <tr><td><code>@xenova/transformers</code></td><td>Local all-MiniLM-L6-v2 embeddings (384-dim)</td></tr>
-    <tr><td><code>openai</code></td><td>LLM extraction/analysis when <code>llmProvider</code> is <code>openai</code></td></tr>
-    <tr><td><code>@duckdb/node-api</code></td><td>Relational storage</td></tr>
-    <tr><td><code>@lancedb/lancedb</code></td><td>Vector store + semantic search</td></tr>
+    <tr><td><code>@mongodb-js/zstd</code></td><td>Compress/decompress the raw captured page</td></tr>
+    <tr><td><code>@duckdb/node-api</code></td><td>Relational + raw-capture storage</td></tr>
     <tr><td><code>@modelcontextprotocol/sdk</code></td><td>MCP server + tools</td></tr>
     <tr><td><code>express</code> · <code>cors</code></td><td>HTTP ingest + query server</td></tr>
     <tr><td><code>@mongodb-js/zstd</code></td><td>Decompress captured content</td></tr>

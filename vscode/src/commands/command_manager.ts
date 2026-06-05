@@ -2,13 +2,11 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DuckDB } from '../duck_db';
-import { LanceDBMemoryStore } from '../lance_db';
-import { register_webpage_search_commands } from '../webpage_search_commands';
 import { register_webpage_hover_provider } from '../webpage_hover_provider';
-import { global_filter_metrics } from '../workflow/filter_metrics';
+import { get_gate_metrics } from '../workflow/gate_metrics';
 import { ServerManager } from '../server/server_manager';
 import { get_recent_outcomes, show_dev_log_channel } from '../dev_log';
-import { list_captures, load_capture } from '../captures';
+import { list_replay_visits, load_replay_visit } from '../visit_replay';
 
 /**
  * Configuration for command registration.
@@ -17,15 +15,13 @@ import { list_captures, load_capture } from '../captures';
  * @interface CommandConfig
  * @property {vscode.ExtensionContext} context - VS Code extension context for registrations
  * @property {DuckDB} duck_db - Database for structured data queries
- * @property {LanceDBMemoryStore} memory_db - Vector database for semantic search
  */
 export interface CommandConfig {
   context: vscode.ExtensionContext;
   duck_db: DuckDB;
-  memory_db: LanceDBMemoryStore;
   /** Owns the live queue processor; used by the dev observability commands */
   server_manager: ServerManager;
-  /** Resolved storage base; used to locate captures + the visit inbox */
+  /** Resolved storage base; used to locate replay visits + the visit inbox */
   storage_base: string;
 }
 
@@ -38,7 +34,8 @@ export interface CommandConfig {
  * const commandManager = new CommandManager({
  *   context: extensionContext,
  *   duck_db: duckDb,
- *   memory_db: memoryDb
+ *   server_manager,
+ *   storage_base
  * });
  * 
  * // Register all commands
@@ -68,14 +65,14 @@ export class CommandManager {
    */
   register_all(): void {
     this.register_core_commands();
-    this.register_filter_commands();
+    this.register_gate_commands();
     this.register_dev_commands();
   }
 
   /**
    * Registers dev-phase observability commands: a recent-visit-outcomes view
    * (why each visit dropped, plus live queue/inbox/orphan counts) and a replay
-   * command that re-runs a persisted capture through the pipeline.
+   * command that re-runs a persisted visit through the capture pipeline.
    * @private
    */
   private register_dev_commands(): void {
@@ -112,8 +109,7 @@ export class CommandManager {
     lines.push(`=== Recent Visit Outcomes (${outcomes.length}) ===`);
     for (const o of outcomes) {
       const detail = [
-        o.page_type && `type=${o.page_type}`,
-        o.confidence !== undefined && `conf=${o.confidence}`,
+        o.byte_size !== undefined && `bytes=${o.byte_size}`,
         o.reason && `reason=${o.reason}`,
         o.error && `error=${o.error}`,
       ]
@@ -145,31 +141,30 @@ export class CommandManager {
   }
 
   /**
-   * Lets the developer pick a persisted capture and re-injects it into the
-   * queue, re-running the full classification/analysis pipeline without
-   * re-browsing the page.
+   * Lets the developer pick a persisted visit and re-injects it into the queue,
+   * re-running the capture pipeline without re-browsing the page.
    * @private
    */
   private async replay_visit(): Promise<void> {
-    const captures = list_captures(this.config.storage_base);
-    if (captures.length === 0) {
-      vscode.window.showInformationMessage('Bergamot: no captures to replay.');
+    const replay_visits = list_replay_visits(this.config.storage_base);
+    if (replay_visits.length === 0) {
+      vscode.window.showInformationMessage('Bergamot: no visits to replay.');
       return;
     }
 
     const pick = await vscode.window.showQuickPick(
-      captures.map((c) => ({
+      replay_visits.map((c) => ({
         label: c.url,
         description: `${c.visit_id} · ${c.page_loaded_at}`,
         visit_id: c.visit_id,
       })),
-      { placeHolder: 'Select a capture to replay through the pipeline' }
+      { placeHolder: 'Select a visit to replay through the pipeline' }
     );
     if (!pick) return;
 
-    const visit = load_capture(this.config.storage_base, pick.visit_id);
+    const visit = load_replay_visit(this.config.storage_base, pick.visit_id);
     if (!visit) {
-      vscode.window.showWarningMessage('Bergamot: capture was evicted before replay.');
+      vscode.window.showWarningMessage('Bergamot: visit was evicted before replay.');
       return;
     }
 
@@ -183,29 +178,24 @@ export class CommandManager {
   }
 
   /**
-   * Registers core extension commands.
-   * Includes webpage search and hover provider functionality.
+   * Registers core extension commands (the webpage hover provider).
    * @private
    */
   private register_core_commands(): void {
-    // Register webpage search and hover provider
-    register_webpage_search_commands(this.config.context, this.config.memory_db);
-    register_webpage_hover_provider(
-      this.config.context, 
-      this.config.duck_db, 
-      this.config.memory_db
-    );
+    // Hover over a webpage link shows its captured metadata (title / visited).
+    // Semantic search over page content is deferred to the RAG-prep pipeline
+    // (task-31), so no LanceDB-backed search command is registered.
+    register_webpage_hover_provider(this.config.context, this.config.duck_db);
   }
 
   /**
-   * Registers filter metrics command.
-   * Provides command to display webpage filtering statistics.
+   * Registers the capture-gate metrics command.
    * @private
    */
-  private register_filter_commands(): void {
+  private register_gate_commands(): void {
     const show_metrics_command = vscode.commands.registerCommand(
-      'bergamot.showFilterMetrics',
-      () => this.show_filter_metrics()
+      'bergamot.showCaptureMetrics',
+      () => this.show_gate_metrics()
     );
     
     this.config.context.subscriptions.push(show_metrics_command);
@@ -213,60 +203,43 @@ export class CommandManager {
   }
 
   /**
-   * Shows filter metrics in output channel.
-   * Displays comprehensive statistics about webpage filtering performance.
+   * Shows the capture-gate metrics (captured vs dropped + drop reasons) in an
+   * output channel.
    * @private
    */
-  private show_filter_metrics(): void {
-    const metrics = global_filter_metrics.get_metrics();
-    const output = vscode.window.createOutputChannel('Bergamot Filter Metrics');
-    
+  private show_gate_metrics(): void {
+    const metrics = get_gate_metrics();
+    const output = vscode.window.createOutputChannel('Bergamot Capture Gate Metrics');
+
     output.clear();
-    output.appendLine('=== Webpage Filter Metrics ===');
-    output.appendLine(`Total pages analyzed: ${metrics.total_pages}`);
+    output.appendLine('=== Capture Gate Metrics ===');
+    output.appendLine(`Total pages seen: ${metrics.total_pages}`);
     output.appendLine(
-      `Pages processed: ${metrics.processed_pages} (${this.get_percentage(
-        metrics.processed_pages,
+      `Captured: ${metrics.captured_pages} (${this.get_percentage(
+        metrics.captured_pages,
         metrics.total_pages
       )}%)`
     );
     output.appendLine(
-      `Pages filtered: ${metrics.filtered_pages} (${this.get_percentage(
-        metrics.filtered_pages,
+      `Dropped: ${metrics.dropped_pages} (${this.get_percentage(
+        metrics.dropped_pages,
         metrics.total_pages
       )}%)`
     );
-    output.appendLine(
-      `Average confidence: ${metrics.average_confidence.toFixed(2)}`
-    );
     output.appendLine('');
-    output.appendLine('Page types:');
-    
-    Object.entries(metrics.page_types)
-      .sort(([, a], [, b]) => b - a)
-      .forEach(([type, count]) => {
-        output.appendLine(
-          `  ${type}: ${count} (${this.get_percentage(
-            count,
-            metrics.total_pages
-          )}%)`
-        );
-      });
-    
-    output.appendLine('');
-    output.appendLine('Filter reasons:');
-    
-    Object.entries(metrics.filter_reasons)
+    output.appendLine('Drop reasons:');
+
+    Object.entries(metrics.drop_reasons)
       .sort(([, a], [, b]) => b - a)
       .forEach(([reason, count]) => {
         output.appendLine(
           `  ${reason}: ${count} (${this.get_percentage(
             count,
-            metrics.filtered_pages
+            metrics.dropped_pages
           )}%)`
         );
       });
-    
+
     output.show();
   }
 

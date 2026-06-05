@@ -6,8 +6,8 @@ import request from 'supertest';
 import { compress } from '@mongodb-js/zstd';
 import { ServerManager } from './server_manager';
 import { DatabaseManager } from '../database/database_manager';
-import { DuckDB, get_webpage_by_url, get_webpage_content } from '../duck_db';
-import { LanceDBMemoryStore } from '../lance_db';
+import { DuckDB, get_webpage_by_url, get_webpage_capture } from '../duck_db';
+import { read_capture } from '../workflow/store_capture';
 import { VisitQueueProcessor } from '../visit_queue_processor';
 import { md5_hash } from '../hash_utils';
 
@@ -17,35 +17,28 @@ jest.mock('vscode');
 
 /**
  * Exercises the real capture seam end to end — real Express ServerManager, real
- * DuckDB + LanceDB on temp paths, the real visit queue and workflow — with the
- * LLM and embeddings swapped to their offline fakes via BERGAMOT_LLM=fake. No
- * network, no API tokens, no native ONNX. Posts a genuine zstd visit and asserts
- * it lands in both stores.
+ * DuckDB on a temp path, the real visit queue and zero-LLM capture pipeline. No
+ * LLM, no LanceDB, no network, no API tokens. Posts a genuine zstd visit and
+ * asserts the raw page round-trips losslessly from the capture store.
  */
-describe('server pipeline integration (real DBs, fake LLM)', () => {
+describe('server pipeline integration (real DuckDB, zero-LLM capture)', () => {
   let storage_dir: string;
   let db_manager: DatabaseManager;
   let duck_db: DuckDB;
-  let memory_db: LanceDBMemoryStore;
   let server: ServerManager;
   let app: Application;
 
   beforeAll(async () => {
-    process.env.BERGAMOT_LLM = 'fake';
     storage_dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bergamot-itest-'));
 
     db_manager = new DatabaseManager();
     const dbs = await db_manager.initialize_all(storage_dir);
     duck_db = dbs.duck_db;
-    memory_db = dbs.memory_db;
 
     server = new ServerManager({
-      openai_api_key: '',
       duck_db,
-      memory_db,
       inbox_dir: path.join(storage_dir, 'visit_inbox'),
       storage_base: storage_dir,
-      llm_provider: 'claude',
     });
     // Mount routes + queue without binding a port or touching the shared port file.
     server.prepare();
@@ -55,16 +48,19 @@ describe('server pipeline integration (real DBs, fake LLM)', () => {
   afterAll(async () => {
     server?.get_queue_processor()?.stop();
     await db_manager?.close_all();
-    delete process.env.BERGAMOT_LLM;
     if (storage_dir) {
       fs.rmSync(storage_dir, { recursive: true, force: true });
     }
   });
 
-  it('ingests a posted zstd visit through to DuckDB and LanceDB', async () => {
+  it('ingests a posted zstd visit through to the DuckDB capture store', async () => {
     const url = 'https://example.com/integration';
     const page_loaded_at = '2024-01-01T00:00:00.000Z';
-    const html = '<html><body><h1>Integration</h1><p>Real pipeline content.</p></body></html>';
+    // A normal content page (not an interstitial), so the gate keeps it.
+    const html =
+      '<html><head><title>Integration</title></head><body><article><h1>Integration</h1><p>' +
+      'Real pipeline content stored losslessly by the capture pipeline. '.repeat(8) +
+      '</p></article></body></html>';
     const content = (await compress(Buffer.from(html, 'utf-8'))).toString('base64');
 
     const response = await request(app)
@@ -77,17 +73,21 @@ describe('server pipeline integration (real DBs, fake LLM)', () => {
 
     await drain_queue(server.get_queue_processor());
 
-    // DuckDB: the session row exists and is joined to the (fake) analysis title.
+    // DuckDB: the session row exists and joins to the capture title (from the
+    // cheap <head> metadata — no LLM).
     const row = await get_webpage_by_url(duck_db, url);
     expect(row).not.toBeNull();
     expect(row?.url).toBe(url);
-    expect(row?.title).toBe('Fake Title');
+    expect(row?.title).toBe('Integration');
 
-    // LanceDB: the processed content is stored under the deterministic visit id.
+    // Capture store: the raw page round-trips losslessly from webpage_capture —
+    // the durable content. Nothing is written to any vector store at ingest.
     const id = md5_hash(`${url}:${page_loaded_at}`);
-    const stored = await get_webpage_content(memory_db, id);
-    expect(stored).not.toBeNull();
-    expect(stored?.content_compressed).toContain('Fake processed content');
+    const capture_meta = await get_webpage_capture(duck_db, id);
+    expect(capture_meta).not.toBeNull();
+    expect(capture_meta?.url).toBe(url);
+    const recovered = await read_capture(duck_db, id);
+    expect(recovered?.html).toBe(html);
   }, 60000);
 });
 

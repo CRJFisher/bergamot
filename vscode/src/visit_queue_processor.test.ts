@@ -1,32 +1,27 @@
 import { VisitQueueProcessor, ExtendedPageVisit } from "./visit_queue_processor";
 import { OrphanedVisitsManager } from "./orphaned_visits";
 import { DuckDB } from "./duck_db";
-import { LanceDBMemoryStore } from "./lance_db";
-import { WebpageWorkflow } from "./workflow/simple_workflow";
-import { PageActivitySessionWithMeta } from "./reconcile_webpage_trees_workflow_models";
+import * as pipeline from "./workflow/page_capture_pipeline";
 import * as webpageTree from "./webpage_tree";
-import * as duckDbImports from "./duck_db";
 import { record_outcome } from "./dev_log";
 
 // Mock dependencies
 jest.mock("./duck_db");
-jest.mock("./lance_db");
 jest.mock("./webpage_tree");
+jest.mock("./workflow/page_capture_pipeline");
 jest.mock("./dev_log");
 
 describe("VisitQueueProcessor", () => {
   let processor: VisitQueueProcessor;
   let mockDuckDb: jest.Mocked<DuckDB>;
-  let mockMemoryDb: jest.Mocked<LanceDBMemoryStore>;
-  let mockWorkflowApp: { run: jest.Mock };
   let mockOrphanManager: jest.Mocked<OrphanedVisitsManager>;
-  
+
   // Mock functions
   const mockInsertPageActivitySession = webpageTree.insert_page_activity_session_with_tree_management as jest.MockedFunction<
     typeof webpageTree.insert_page_activity_session_with_tree_management
   >;
-  const mockGetPageSessions = duckDbImports.get_page_sessions_with_tree_id as jest.MockedFunction<
-    typeof duckDbImports.get_page_sessions_with_tree_id
+  const mockRunPageCapture = pipeline.run_page_capture as jest.MockedFunction<
+    typeof pipeline.run_page_capture
   >;
 
   beforeEach(() => {
@@ -35,8 +30,7 @@ describe("VisitQueueProcessor", () => {
 
     // Create mock instances
     mockDuckDb = {} as jest.Mocked<DuckDB>;
-    mockMemoryDb = {} as jest.Mocked<LanceDBMemoryStore>;
-    mockWorkflowApp = { run: jest.fn().mockResolvedValue(undefined) };
+    mockRunPageCapture.mockResolvedValue(undefined);
 
     mockOrphanManager = {
       add_orphan: jest.fn(),
@@ -59,13 +53,10 @@ describe("VisitQueueProcessor", () => {
       referrer_session_id: null
     });
 
-    mockGetPageSessions.mockResolvedValue([]);
-
     // Create processor with test config
     processor = new VisitQueueProcessor(
       mockDuckDb,
-      mockMemoryDb,
-      mockWorkflowApp as Partial<WebpageWorkflow> as WebpageWorkflow,
+      { duck_db: mockDuckDb },
       mockOrphanManager,
       {
         batch_size: 3,
@@ -225,28 +216,10 @@ describe("VisitQueueProcessor", () => {
         referrer_session_id: null
       });
 
-      mockGetPageSessions.mockResolvedValue([
-        {
-          id: "visit-1",
-          visit_id: "v-visit-1",
-          url: "https://example.com",
-          tree_id: "tree-123",
-          content: "<html>Test</html>",
-          referrer: null,
-          referrer_page_session_id: null,
-          page_loaded_at: "2024-01-01T12:00:00Z"
-        } as PageActivitySessionWithMeta
-      ]);
-      
       await processor.process_single_visit(visit);
-      
+
       expect(mockInsertPageActivitySession).toHaveBeenCalledWith(mockDuckDb, visit);
-      expect(mockGetPageSessions).toHaveBeenCalledWith(
-        mockDuckDb,
-        mockMemoryDb,
-        "tree-123"
-      );
-      expect(mockWorkflowApp.run).toHaveBeenCalled();
+      expect(mockRunPageCapture).toHaveBeenCalled();
       expect(mockOrphanManager.get_orphans_for_tab).toHaveBeenCalledWith(42);
     });
 
@@ -271,7 +244,7 @@ describe("VisitQueueProcessor", () => {
       await processor.process_single_visit(visit);
 
       expect(mockOrphanManager.add_orphan).toHaveBeenCalledWith(visit, 10);
-      expect(mockWorkflowApp.run).not.toHaveBeenCalled(); // Should not run workflow for orphans
+      expect(mockRunPageCapture).not.toHaveBeenCalled(); // Should not run workflow for orphans
     });
 
     it("should process orphaned children when parent is processed", async () => {
@@ -330,7 +303,7 @@ describe("VisitQueueProcessor", () => {
       await processor.process_single_visit(visit);
 
       expect(mockInsertPageActivitySession).toHaveBeenCalled();
-      expect(mockWorkflowApp.run).not.toHaveBeenCalled();
+      expect(mockRunPageCapture).not.toHaveBeenCalled();
       expect(mockOrphanManager.add_orphan).not.toHaveBeenCalled();
     });
   });
@@ -502,7 +475,7 @@ describe("VisitQueueProcessor", () => {
 
       await jest.advanceTimersByTimeAsync(1000);
 
-      expect(mockWorkflowApp.run).toHaveBeenCalled();
+      expect(mockRunPageCapture).toHaveBeenCalled();
       expect(mockOrphanManager.remove_orphan).toHaveBeenCalledWith(orphan);
       expect(mockOrphanManager.increment_retry_count).not.toHaveBeenCalled();
     });

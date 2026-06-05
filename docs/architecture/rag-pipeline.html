@@ -31,35 +31,31 @@
     <span class="pill">capture → chunk → embed → retrieve → rerank → generate</span>
   </section>
 
-  <h2><span class="num">1</span>Current baseline</h2>
-  <p>Today the pipeline is intentionally simple — a good place to measure from.</p>
+  <h2><span class="num">1</span>Starting point</h2>
+  <p>Ingestion is a zero-LLM <a href="page-processing.html">capture pipeline</a>: it stores the raw page
+  (zstd-compressed) plus cheap <code>&lt;head&gt;</code> metadata in DuckDB <code>webpage_capture</code> and
+  builds nothing else. There is no extraction, no chunking, no embedding, and no vector index — so semantic
+  search currently returns nothing. This pipeline starts from that lossless corpus of raw pages and is free to
+  re-run over all of them.</p>
   <div class="diagram">
-    <p class="cap">Baseline ingestion &amp; retrieval</p>
+    <p class="cap">The RAG pipeline reads the captured raw pages</p>
     <pre class="mermaid">
 flowchart LR
-    subgraph ING["Ingestion"]
-      a["captured HTML"] --> b["LLM extract<br/>→ Markdown"]
-      b --> c["whole page = 1 record<br/>(no chunking)"]
-      c --> d["embed<br/>all-MiniLM-L6-v2 (local, 384-dim)"]
-      d --> e[("LanceDB")]
-    end
-    subgraph RET["Retrieval"]
-      q["query"] --> f["dense similarity only<br/>(no BM25, no fusion)"]
-      f --> e
-      f --> g["top-k previews<br/>or full page"]
-    end
+    cap[("DuckDB webpage_capture<br/>raw pages (zstd) + metadata")]
+    rd["read_capture<br/>(decompress on demand)"]
+    todo["extraction · chunking · embedding ·<br/>retrieval — all built here (task-31)"]
+    cap --> rd --> todo
 
     classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
     classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
-    class a,b,c,d,f,g,q vs;
-    class e st;
+    class rd,todo vs;
+    class cap st;
     </pre>
   </div>
   <ul class="clean">
-    <li><strong>Chunking:</strong> none — one LanceDB record per page.</li>
-    <li><strong>Embedding:</strong> single dense vector (local all-MiniLM-L6-v2, 384-dim).</li>
-    <li><strong>Retrieval:</strong> pure dense similarity; no keyword search or fusion.</li>
-    <li><strong>Reranking:</strong> none. <strong>Generation:</strong> previews or full page.</li>
+    <li><strong>Input:</strong> the lossless raw pages in <code>webpage_capture</code> (re-indexable at will).</li>
+    <li><strong>Chunking / embedding / retrieval / reranking:</strong> none yet — all introduced by the phases below.</li>
+    <li><strong>Parent document:</strong> <code>read_capture(page_session_id)</code> decompresses the original page.</li>
   </ul>
 
   <h2><span class="num">2</span>Target pipeline</h2>

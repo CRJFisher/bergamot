@@ -28,15 +28,16 @@
   <section class="hero">
     <h1>Bergamot</h1>
     <p class="tagline">Transform your web browsing into a queryable knowledge base, accessible via MCP for AI-powered PKM workflows.</p>
-    <span class="pill">Browser extension → VS Code backend → DuckDB + LanceDB → MCP / HTTP query</span>
+    <span class="pill">Browser extension → VS Code backend → DuckDB → MCP / HTTP query</span>
   </section>
 
   <p class="lead">
-    Bergamot silently captures knowledge-rich pages as you browse, processes them with an LLM,
-    stores them in structured and vector backends, and exposes them to AI agents
-    through an MCP server. The system has two deployable artifacts — a <strong>Chromium browser
-    extension</strong> (capture) and a <strong>VS Code extension</strong> (process, store, serve) —
-    that communicate over a single local HTTP transport.
+    Bergamot silently captures pages as you browse, stores each one losslessly with a deterministic,
+    zero-LLM capture pipeline, and exposes them to AI agents through an MCP server. The system has two
+    deployable artifacts — a <strong>Chromium browser extension</strong> (capture) and a
+    <strong>VS Code extension</strong> (gate, store, serve) — that communicate over a single local HTTP
+    transport. Interpretation (extraction, chunking, embedding, search) belongs to the
+    <a href="rag-pipeline.html">RAG-prep pipeline (task-31)</a>, which reads the stored raw pages.
   </p>
 
   <h2><span class="num">1</span>High-level architecture</h2>
@@ -58,14 +59,13 @@ flowchart TB
       server["Express server<br/>POST /visit · GET /query/*<br/>port 5000–5009"]
       inbox["Durable visit inbox<br/>(one JSON file per visit)"]
       queue["Visit queue processor<br/>(batched, retrying)"]
-      workflow["WebpageWorkflow<br/>extract · classify · filter · tree"]
+      workflow["run_page_capture<br/>gate · store raw page + metadata"]
       server --> inbox --> queue --> workflow
     end
 
     subgraph STORES["💾 Storage"]
       direction LR
-      duck[("DuckDB<br/>relational")]
-      lance[("LanceDB<br/>vectors")]
+      duck[("DuckDB<br/>relational + raw captures")]
     end
 
     subgraph SERVE["🔌 Access layer"]
@@ -79,11 +79,8 @@ flowchart TB
     user --> content
     background -- "HTTP POST /visit" --> server
     workflow --> duck
-    workflow --> lance
-    mcp -- "vector search" --> lance
-    mcp -- "relational (proxy)" --> query
+    mcp -- "HTTP proxy" --> query
     query --> duck
-    query --> lance
     mcp --> agents
     query --> agents
 
@@ -93,7 +90,7 @@ flowchart TB
     classDef sv fill:#2a1f3a,stroke:#bc8cff,color:#e6d9ff;
     class content,background br;
     class server,inbox,queue,workflow vs;
-    class duck,lance st;
+    class duck st;
     class mcp,query sv;
     </pre>
   </div>
@@ -107,18 +104,18 @@ flowchart TB
     </div>
     <div class="card">
       <h3><a href="vscode-extension.html">🧩 VS Code Extension →</a></h3>
-      <p>The backend host. Runs the Express ingest server, durable inbox, batch processor, and the LLM-driven processing workflow that classifies pages and builds navigation trees.</p>
-      <span class="tag">extension.ts · WebpageWorkflow</span>
+      <p>The backend host. Runs the Express ingest server, durable inbox, batch processor, and the deterministic zero-LLM capture pipeline that gates and stores each page and builds navigation trees.</p>
+      <span class="tag">extension.ts · run_page_capture</span>
     </div>
     <div class="card">
       <h3><a href="storage.html">💾 Storage Layer →</a></h3>
-      <p>Two complementary stores: DuckDB for relational visit records, and LanceDB for page content + vector search.</p>
-      <span class="tag">DuckDB · LanceDB</span>
+      <p>DuckDB holds the relational tracking record and the raw captured pages (zstd). Vector search is reintroduced by the RAG-prep pipeline (task-31).</p>
+      <span class="tag">DuckDB</span>
     </div>
     <div class="card">
       <h3><a href="mcp-and-query.html">🔌 MCP &amp; Query →</a></h3>
       <p>The access layer. A standalone MCP server plus a read-only HTTP query API expose the knowledge base to AI agents and external scripts.</p>
-      <span class="tag">6 MCP tools · /query/*</span>
+      <span class="tag">5 MCP tools · /query/*</span>
     </div>
     <div class="card">
       <h3><a href="rag-pipeline.html">🔎 RAG Pipeline →</a></h3>
@@ -138,8 +135,8 @@ sequenceDiagram
     participant B as background.ts
     participant S as Express server
     participant Q as Inbox + queue
-    participant W as WebpageWorkflow
-    participant DB as DuckDB / LanceDB
+    participant W as run_page_capture
+    participant DB as DuckDB
 
     U->>C: navigates to page
     C->>C: extract HTML, compress (zstd)
@@ -148,11 +145,10 @@ sequenceDiagram
     B->>S: HTTP POST /visit (discover port 5000–5009)
     S->>Q: persist to inbox, enqueue, return 200
     Note over B,S: browser is acknowledged immediately
-    Q->>W: run(members, new_page, raw_content)
-    W->>W: LLM extract → Markdown
-    W->>W: classify + filter
-    W->>W: assign to navigation tree
-    W->>DB: write relational + vectors
+    Q->>Q: assign to navigation tree (webpage_tree)
+    Q->>W: run_page_capture(new_page, raw_content)
+    W->>W: deterministic gate (keep/drop, no LLM)
+    W->>DB: store raw page (zstd) + cheap metadata
     W-->>Q: remove inbox file (durably ingested)
     </pre>
   </div>
@@ -170,9 +166,12 @@ sequenceDiagram
     <div class="status wip"><div class="ph">Next</div><div class="nm">RAG pipeline upgrade</div><span class="badge wip">planned</span></div>
   </div>
   <div class="note">
-    <strong>Locked decisions:</strong> storage is two separate stores (DuckDB + LanceDB) — markdown is no longer a store;
-    transport is a single HTTP server on a dynamically-discovered port; the browser side is Chromium-only;
-    classification defaults to the Claude subscription (via the Claude Agent SDK), with OpenAI as an alternative provider; embeddings run locally with all-MiniLM-L6-v2; e2e tests run on Playwright against a mock capture server.
+    <strong>Locked decisions:</strong> ingestion is a deterministic, zero-LLM capture pipeline — the raw page
+    (zstd) plus cheap <code>&lt;head&gt;</code> metadata is stored in DuckDB and is the canonical record;
+    all interpretation (extraction, chunking, embedding, semantic search) is deferred to the RAG-prep pipeline
+    (task-31), which reads the stored raw pages. Storage at ingest is DuckDB only; transport is a single HTTP
+    server on a dynamically-discovered port; the browser side is Chromium-only; e2e tests run on Playwright
+    against a mock capture server. Schema changes are destructive dev-DB resets — no migrations, no shims.
   </div>
 
   <footer class="foot">

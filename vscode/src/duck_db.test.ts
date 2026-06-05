@@ -1,24 +1,17 @@
 import {
   DuckDB,
-  insert_webpage_analysis,
-  get_webpage_analysis_for_ids,
+  insert_webpage_capture,
+  get_webpage_capture,
   insert_page_activity_session,
   find_tree_containing_url,
   get_page_sessions_with_tree_id,
   insert_webpage_tree,
   update_webpage_tree_activity_time,
-  get_last_modified_trees_with_members_and_analysis,
-  insert_webpage_tree_intentions,
+  get_last_modified_trees_with_members,
   update_page_activity_session,
-  get_all_pages_for_rag,
   get_page_by_title,
-  get_webpage_content,
   get_webpage_by_url
 } from "./duck_db";
-import { LanceDBMemoryStore } from "./lance_db";
-import { 
-  PageAnalysis
-} from "./reconcile_webpage_trees_workflow_models";
 import {
   PageActivitySession,
   PageActivitySessionWithoutContent
@@ -28,7 +21,6 @@ import * as path from "path";
 
 // Mock dependencies
 jest.mock("fs");
-jest.mock("./lance_db");
 
 // Mock path.dirname separately
 jest.mock("path", () => ({
@@ -39,13 +31,24 @@ jest.mock("path", () => ({
 // Create mock implementations
 const mockFs = fs as jest.Mocked<typeof fs>;
 
-// Mock LanceDBMemoryStore
-const mockMemoryStore = {
-  get: jest.fn(),
-  batch: jest.fn(),
-};
-
-(LanceDBMemoryStore as unknown as jest.Mock).mockImplementation(() => mockMemoryStore);
+/** Builds a minimal capture record for a session id (compressed bytes unused by
+ *  the metadata-join queries under test). */
+function capture_record(page_session_id: string, title: string, url: string) {
+  return {
+    page_session_id,
+    content_compressed: new Uint8Array([1, 2, 3]),
+    content_encoding: "zstd",
+    original_byte_size: 3,
+    content_type: "text/html",
+    url,
+    title,
+    site_name: null,
+    author: null,
+    published_at: null,
+    lang: null,
+    captured_at: "2024-01-01T00:00:00Z",
+  };
+}
 
 describe("DuckDB", () => {
   let db: DuckDB;
@@ -103,9 +106,8 @@ describe("DuckDB", () => {
       // Test that all tables are created
       const tables = [
         "webpage_trees",
-        "webpage_activity_sessions", 
-        "webpage_analysis",
-        "webpage_tree_intentions"
+        "webpage_activity_sessions",
+        "webpage_capture"
       ];
       
       for (const table of tables) {
@@ -203,119 +205,35 @@ describe("DuckDB", () => {
     });
   });
 
-  describe("webpage analysis operations", () => {
-    it("should insert webpage analysis", async () => {
-      // First insert the tree and session
-      await db.exec(`INSERT INTO webpage_trees (id, first_load_time, latest_activity_time) 
-                     VALUES ('test-tree', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')`);
-      await db.exec(`INSERT INTO webpage_activity_sessions 
-                     (id, url, referrer, page_loaded_at, tree_id) 
-                     VALUES ('session-123', 'https://example.com', null, '2024-01-01T00:00:00Z', 'test-tree')`);
-      
-      const analysis: PageAnalysis = {
-        page_sesssion_id: "session-123",
-        title: "Test Page",
-        summary: "Test summary",
-        intentions: ["learn", "research"]
-      };
-      
-      await insert_webpage_analysis(db, analysis);
-      
-      // Verify insertion
-      const result = await db.query_first(
-        "SELECT * FROM webpage_analysis WHERE page_session_id = $id",
-        { id: "session-123" }
-      );
-      
-      expect(result).toBeDefined();
-    });
-
-    it("should replace existing webpage analysis", async () => {
-      // First insert the tree and session
-      await db.exec(`INSERT INTO webpage_trees (id, first_load_time, latest_activity_time) 
-                     VALUES ('test-tree', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')`);
-      await db.exec(`INSERT INTO webpage_activity_sessions 
-                     (id, url, referrer, page_loaded_at, tree_id) 
-                     VALUES ('session-123', 'https://example.com', null, '2024-01-01T00:00:00Z', 'test-tree')`);
-      
-      const analysis1: PageAnalysis = {
-        page_sesssion_id: "session-123",
-        title: "Original Title",
-        summary: "Original summary",
-        intentions: ["learn"]
-      };
-      
-      const analysis2: PageAnalysis = {
-        page_sesssion_id: "session-123",
-        title: "Updated Title",
-        summary: "Updated summary",
-        intentions: ["learn", "research"]
-      };
-      
-      await insert_webpage_analysis(db, analysis1);
-      await insert_webpage_analysis(db, analysis2);
-      
-      const result = await db.query_first<any>(
-        "SELECT title FROM webpage_analysis WHERE page_session_id = $id",
-        { id: "session-123" }
-      );
-      
-      expect(result?.title).toBe("Updated Title");
-    });
-
-    it("should retrieve webpage analysis for multiple IDs", async () => {
-      // First insert the tree
-      await db.exec(`INSERT INTO webpage_trees (id, first_load_time, latest_activity_time) 
-                     VALUES ('test-tree', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')`);
-      
-      // Insert sessions for each analysis
-      await db.exec(`INSERT INTO webpage_activity_sessions 
-                     (id, url, referrer, page_loaded_at, tree_id) 
-                     VALUES 
-                     ('session-1', 'https://example.com/1', null, '2024-01-01T00:00:00Z', 'test-tree'),
-                     ('session-2', 'https://example.com/2', null, '2024-01-01T00:00:00Z', 'test-tree'),
-                     ('session-3', 'https://example.com/3', null, '2024-01-01T00:00:00Z', 'test-tree')`);
-      
-      // Insert test data
-      const analyses: PageAnalysis[] = [
-        {
-          page_sesssion_id: "session-1",
-          title: "Page 1",
-          summary: "Summary 1",
-          intentions: ["learn"]
-        },
-        {
-          page_sesssion_id: "session-2",
-          title: "Page 2",
-          summary: "Summary 2",
-          intentions: ["research"]
-        },
-        {
-          page_sesssion_id: "session-3",
-          title: "Page 3",
-          summary: "Summary 3",
-          intentions: ["browse"]
-        }
-      ];
-      
-      for (const analysis of analyses) {
-        await insert_webpage_analysis(db, analysis);
-      }
-      
-      const results = await get_webpage_analysis_for_ids(
+  describe("webpage capture operations", () => {
+    it("should insert and read back capture metadata", async () => {
+      await insert_webpage_capture(
         db,
-        ["session-1", "session-3"]
+        capture_record("session-123", "Test Page", "https://example.com")
       );
-      
-      expect(results).toHaveLength(2);
-      expect(results.map(r => r.page_sesssion_id).sort()).toEqual(
-        ["session-1", "session-3"]
-      );
+
+      const meta = await get_webpage_capture(db, "session-123");
+      expect(meta?.title).toBe("Test Page");
+      expect(meta?.url).toBe("https://example.com");
+      expect(meta?.original_byte_size).toBe(3);
     });
 
-    it("should return empty array for empty ID list", async () => {
-      const results = await get_webpage_analysis_for_ids(db, []);
-      expect(results).toEqual([]);
+    it("should replace an existing capture (INSERT OR REPLACE)", async () => {
+      await insert_webpage_capture(
+        db,
+        capture_record("session-123", "Original Title", "https://example.com")
+      );
+      await insert_webpage_capture(
+        db,
+        capture_record("session-123", "Updated Title", "https://example.com")
+      );
+
+      const meta = await get_webpage_capture(db, "session-123");
+      expect(meta?.title).toBe("Updated Title");
+    });
+
+    it("should return null for an unknown capture id", async () => {
+      expect(await get_webpage_capture(db, "missing")).toBeNull();
     });
   });
 
@@ -418,11 +336,14 @@ describe("DuckDB", () => {
       await update_page_activity_session(db, updatedSession);
       
       // Verify update
-      const result = await db.query_first<any>(
+      const result = await db.query_first<{
+        tree_id: string;
+        referrer_page_session_id: string | null;
+      }>(
         "SELECT tree_id, referrer_page_session_id FROM webpage_activity_sessions WHERE id = $id",
         { id: "session-123" }
       );
-      
+
       expect(result?.tree_id).toBe("tree-2");
       expect(result?.referrer_page_session_id).toBe("parent-session");
     });
@@ -439,11 +360,14 @@ describe("DuckDB", () => {
         )
       ).resolves.not.toThrow();
       
-      const result = await db.query_first<any>(
+      const result = await db.query_first<{
+        first_load_time: string;
+        latest_activity_time: string;
+      }>(
         "SELECT * FROM webpage_trees WHERE id = $id",
         { id: "tree-123" }
       );
-      
+
       expect(result).toBeDefined();
       expect(result?.first_load_time).toBe("2024-01-01T12:00:00Z");
       expect(result?.latest_activity_time).toBe("2024-01-01T12:30:00Z");
@@ -463,69 +387,22 @@ describe("DuckDB", () => {
         "2024-01-01T13:00:00Z"
       );
       
-      const result = await db.query_first<any>(
+      const result = await db.query_first<{ latest_activity_time: string }>(
         "SELECT latest_activity_time FROM webpage_trees WHERE id = $id",
         { id: "tree-123" }
       );
-      
+
       expect(result?.latest_activity_time).toBe("2024-01-01T13:00:00Z");
     });
 
-    it("should insert tree intentions", async () => {
-      await insert_webpage_tree(db, "tree-123", "2024-01-01", "2024-01-01");
-      
-      // Insert sessions that the intentions reference
-      await db.exec(`INSERT INTO webpage_activity_sessions 
-                     (id, url, referrer, page_loaded_at, tree_id) 
-                     VALUES 
-                     ('session-1', 'https://example.com/1', null, '2024-01-01', 'tree-123'),
-                     ('session-2', 'https://example.com/2', null, '2024-01-01', 'tree-123')`);
-      
-      const intentions = [
-        {
-          activity_session_id: "session-1",
-          intentions: ["learn", "research"]
-        },
-        {
-          activity_session_id: "session-2",
-          intentions: ["purchase"]
-        }
-      ];
-      
-      await expect(
-        insert_webpage_tree_intentions(db, "tree-123", intentions)
-      ).resolves.not.toThrow();
-    });
-
-    it("should handle empty intentions array", async () => {
-      await expect(
-        insert_webpage_tree_intentions(db, "tree-123", [])
-      ).resolves.not.toThrow();
-    });
   });
 
   describe("complex query operations", () => {
     beforeEach(async () => {
-      // Setup test data
-      mockMemoryStore.get.mockImplementation((namespace, key) => {
-        if (key === "session-1") {
-          return Promise.resolve({ pageContent: "Content for session 1" });
-        }
-        if (key === "session-2") {
-          return Promise.resolve({ pageContent: "Content for session 2" });
-        }
-        return Promise.resolve(null);
-      });
-
-      mockMemoryStore.batch.mockResolvedValue([
-        { pageContent: "Content 1" },
-        { pageContent: "Content 2" }
-      ]);
-
       // Create trees and sessions
       await insert_webpage_tree(db, "tree-1", "2024-01-01T10:00:00Z", "2024-01-01T12:00:00Z");
       await insert_webpage_tree(db, "tree-2", "2024-01-01T11:00:00Z", "2024-01-01T13:00:00Z");
-      
+
       const sessions = [
         {
           id: "session-1",
@@ -544,156 +421,68 @@ describe("DuckDB", () => {
           tree_id: "tree-1"
         }
       ];
-      
+
       for (const session of sessions) {
         await insert_page_activity_session(db, session);
       }
-      
-      // Add analysis data
-      await insert_webpage_analysis(db, {
-        page_sesssion_id: "session-1",
-        title: "Page 1 Title",
-        summary: "Page 1 summary",
-        intentions: ["learn"]
-      });
-      
-      await insert_webpage_analysis(db, {
-        page_sesssion_id: "session-2",
-        title: "Page 2 Title",
-        summary: "Page 2 summary",
-        intentions: ["research"]
-      });
-      
-      // Add tree intentions
-      await insert_webpage_tree_intentions(db, "tree-1", [
-        { activity_session_id: "session-1", intentions: ["explore"] }
-      ]);
+
+      // Capture metadata is the canonical per-page record.
+      await insert_webpage_capture(
+        db,
+        capture_record("session-1", "Page 1 Title", "https://example.com/page1")
+      );
+      await insert_webpage_capture(
+        db,
+        capture_record("session-2", "Page 2 Title", "https://example.com/page2")
+      );
     });
 
-    it("should get page sessions with tree ID including analysis and content", async () => {
-      const results = await get_page_sessions_with_tree_id(
-        db,
-        mockMemoryStore as any,
-        "tree-1"
-      );
-      
+    it("should get page sessions with tree ID joined to capture metadata", async () => {
+      const results = await get_page_sessions_with_tree_id(db, "tree-1");
+
       expect(results).toHaveLength(2);
       expect(results[0].id).toBe("session-1");
-      expect(results[0].content).toBe("Content for session 1");
-      expect(results[0].analysis?.title).toBe("Page 1 Title");
-      expect(results[0].tree_intentions).toEqual(["explore"]);
-      
+      expect(results[0].capture?.title).toBe("Page 1 Title");
       expect(results[1].id).toBe("session-2");
-      expect(results[1].content).toBe("Content for session 2");
-      expect(results[1].analysis?.title).toBe("Page 2 Title");
+      expect(results[1].capture?.title).toBe("Page 2 Title");
     });
 
     it("should get last modified trees with members excluding specified tree", async () => {
-      const results = await get_last_modified_trees_with_members_and_analysis(
+      const results = await get_last_modified_trees_with_members(
         db,
-        mockMemoryStore as any,
         "tree-2",
         1
       );
-      
+
       expect(Object.keys(results)).toHaveLength(1);
       expect(results["tree-1"]).toBeDefined();
       expect(results["tree-1"]).toHaveLength(2);
     });
 
-    it("should get all pages for RAG with batch content retrieval", async () => {
-      const results = await get_all_pages_for_rag(
-        db,
-        mockMemoryStore as any
-      );
-      
-      expect(results).toHaveLength(2);
-      expect(results[0].title).toBe("Page 1 Title");
-      expect(results[0].content).toBe("Content 1");
-      expect(results[1].title).toBe("Page 2 Title");
-      expect(results[1].content).toBe("Content 2");
-      
-      // Verify batch operation was used for performance
-      expect(mockMemoryStore.batch).toHaveBeenCalled();
-    });
-
-    it("should get page by title", async () => {
-      mockMemoryStore.get.mockResolvedValue({ 
-        pageContent: "Specific page content" 
-      });
-      
-      const result = await get_page_by_title(
-        db,
-        mockMemoryStore as any,
-        "Page 1 Title"
-      );
-      
-      expect(result).toBeDefined();
+    it("should get a captured page by title", async () => {
+      const result = await get_page_by_title(db, "Page 1 Title");
       expect(result?.title).toBe("Page 1 Title");
-      expect(result?.content).toBe("Specific page content");
+      expect(result?.page_session_id).toBe("session-1");
     });
 
     it("should return null when page title not found", async () => {
-      const result = await get_page_by_title(
-        db,
-        mockMemoryStore as any,
-        "Nonexistent Title"
-      );
-      
-      expect(result).toBeNull();
+      expect(await get_page_by_title(db, "Nonexistent Title")).toBeNull();
     });
 
-    it("should get webpage content from LanceDB", async () => {
-      mockMemoryStore.get.mockResolvedValue({
-        pageContent: "Test webpage content"
-      });
-      
-      const result = await get_webpage_content(
-        mockMemoryStore as any,
-        "session-123"
-      );
-      
-      expect(result).toBeDefined();
-      expect(result?.content_compressed).toBe("Test webpage content");
-      expect(mockMemoryStore.get).toHaveBeenCalledWith(
-        ["webpage_content"],
-        "session-123"
-      );
-    });
-
-    it("should return null when webpage content not found", async () => {
-      mockMemoryStore.get.mockResolvedValue(null);
-      
-      const result = await get_webpage_content(
-        mockMemoryStore as any,
-        "nonexistent"
-      );
-      
-      expect(result).toBeNull();
-    });
-
-    it("should get webpage by URL", async () => {
-      // First insert a tree
-      await db.exec(`INSERT INTO webpage_trees (id, first_load_time, latest_activity_time) 
+    it("should get webpage by URL with the capture title", async () => {
+      await db.exec(`INSERT INTO webpage_trees (id, first_load_time, latest_activity_time)
                      VALUES ('url-test-tree', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')`);
-      
-      // Insert a session with a later timestamp to ensure it's the most recent
-      await db.exec(`INSERT INTO webpage_activity_sessions 
-                     (id, url, referrer, page_loaded_at, tree_id) 
-                     VALUES ('url-session-1', 'https://example.com/page1', null, '2024-01-01T23:59:59Z', 'url-test-tree')`);
-      
-      // Insert analysis for the session
-      await db.exec(`INSERT INTO webpage_analysis 
-                     (page_session_id, title, summary, intentions) 
-                     VALUES ('url-session-1', 'Test Page Title', 'Test summary', '["learn"]')`);
-      
-      const result = await get_webpage_by_url(
+      await db.exec(`INSERT INTO webpage_activity_sessions
+                     (id, url, referrer, page_loaded_at, tree_id)
+                     VALUES ('url-session-1', 'https://example.com/url-page', null, '2024-01-01T23:59:59Z', 'url-test-tree')`);
+      await insert_webpage_capture(
         db,
-        "https://example.com/page1"
+        capture_record("url-session-1", "Test Page Title", "https://example.com/url-page")
       );
-      
-      expect(result).toBeDefined();
-      expect(result?.url).toBe("https://example.com/page1");
+
+      const result = await get_webpage_by_url(db, "https://example.com/url-page");
+
+      expect(result?.url).toBe("https://example.com/url-page");
       expect(result?.title).toBe("Test Page Title");
       expect(result?.visited_at).toBe("2024-01-01T23:59:59Z");
     });
@@ -747,10 +536,9 @@ describe("DuckDB", () => {
       ).resolves.not.toThrow();
     });
 
-    it("should use batch operations for multiple retrievals", async () => {
-      // Setup multiple sessions
+    it("reads a tree's captures back through the join in one query", async () => {
       await insert_webpage_tree(db, "tree-batch", "2024-01-01", "2024-01-01");
-      
+
       for (let i = 0; i < 10; i++) {
         await insert_page_activity_session(db, {
           id: `session-batch-${i}`,
@@ -760,34 +548,19 @@ describe("DuckDB", () => {
           page_loaded_at: "2024-01-01T12:00:00Z",
           tree_id: "tree-batch"
         });
-        
-        await insert_webpage_analysis(db, {
-          page_sesssion_id: `session-batch-${i}`,
-          title: `Page ${i}`,
-          summary: `Summary ${i}`,
-          intentions: []
-        });
+        await insert_webpage_capture(
+          db,
+          capture_record(
+            `session-batch-${i}`,
+            `Page ${i}`,
+            `https://example.com/page${i}`
+          )
+        );
       }
-      
-      // Mock batch response
-      const batchResults = Array(10).fill({ pageContent: "Batch content" });
-      mockMemoryStore.batch.mockResolvedValue(batchResults);
-      
-      const results = await get_all_pages_for_rag(
-        db,
-        mockMemoryStore as any
-      );
-      
+
+      const results = await get_page_sessions_with_tree_id(db, "tree-batch");
       expect(results).toHaveLength(10);
-      expect(mockMemoryStore.batch).toHaveBeenCalledTimes(1);
-      expect(mockMemoryStore.batch).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({
-            type: "get",
-            namespace: ["webpage_content"]
-          })
-        ])
-      );
+      expect(results.every((r) => r.capture?.title?.startsWith("Page"))).toBe(true);
     });
   });
 });

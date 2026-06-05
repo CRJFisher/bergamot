@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>How zstd Compression Works &amp; Why It Matters</title>
+  <meta property="og:site_name" content="Bergamot Engineering Blog">
+  <meta name="author" content="Ada Lovelace">
+  <meta property="article:published_time" content="2026-02-14T09:30:00Z">
+  <meta property="og:title" content="How zstd Compression Works">
+</head>
+<body>
+  <header><nav><a href="/">Home</a> <a href="/blog">Blog</a></nav></header>
+  <main>
+    <article>
+      <h1>How zstd Compression Works &amp; Why It Matters</h1>
+      <p>Zstandard, usually shortened to zstd, is a lossless compression
+      algorithm designed to give a strong compression ratio while staying
+      fast enough to use on the hot path of a real system. It was created at
+      Facebook and is now used across a huge range of software, from file
+      systems to network protocols to database storage engines.</p>
+      <p>The core idea is to combine a modern entropy coder with a large
+      search window. Where older algorithms had to trade ratio for speed in
+      a fairly coarse way, zstd exposes a wide range of levels. At low levels
+      it is comparable in speed to the fastest compressors while still beating
+      them on ratio; at high levels it approaches the ratio of much slower
+      algorithms while remaining decompression-fast.</p>
+      <p>Decompression speed is roughly constant regardless of the level used
+      to compress, which is exactly what you want when data is written once
+      and read many times. This is why a capture-first pipeline can afford to
+      store the raw page compressed: the write cost is paid once and every
+      later re-index reads it back quickly.</p>
+      <p>Dictionaries are another important feature. When you have many small,
+      similar documents, training a dictionary lets the compressor reference
+      shared structure that would otherwise be invisible within a single small
+      payload. For web pages, which share a great deal of boilerplate markup,
+      this can be a substantial win.</p>
+      <p>In practice the engineering trade-off is simple. Storing a few hundred
+      kilobytes of compressed HTML per page is cheap, and it preserves the
+      ability to re-extract content with better algorithms later. Lossy
+      extraction at capture time, by contrast, throws away information that can
+      never be recovered, because a page can never be captured again.</p>
+      <p>For more detail see the <a href="https://example.com/spec">format
+      specification</a>, which documents the frame layout in full.</p>
+    </article>
+  </main>
+</body>
+</html>

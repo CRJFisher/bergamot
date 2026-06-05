@@ -11,19 +11,16 @@ import {
   get_webpage_by_url,
   get_page_by_title,
   get_page_sessions_with_tree_id,
-  get_last_modified_trees_with_members_and_analysis,
+  get_last_modified_trees_with_members,
 } from '../duck_db';
-import { LanceDBMemoryStore } from '../lance_db';
 import { OrphanedVisitsManager } from '../orphaned_visits';
 import { VisitQueueProcessor, ExtendedPageVisit } from '../visit_queue_processor';
 import { ensure_inbox, persist_visit } from '../visit_inbox';
 import { PageActivitySessionWithoutTreeOrContentSchema } from '../duck_db_models';
-import { build_workflow } from '../reconcile_webpage_trees_workflow_vanilla';
-import { WebpageWorkflow } from '../workflow/simple_workflow';
-import { get_filter_config } from '../config/filter_config';
+import { CaptureDeps } from '../workflow/page_capture_pipeline';
 import { dev_log, is_dev_log_enabled, is_browser_dev_stage } from '../dev_log';
-import { persist_capture } from '../captures';
-import { LlmProvider } from '../config/config_manager';
+import { read_capture } from '../workflow/store_capture';
+import { persist_replay_visit } from '../visit_replay';
 
 /**
  * Candidate ports the server tries to bind, in order. The browser extension
@@ -46,41 +43,31 @@ const MAX_QUERY_LIMIT = 100;
 
 /**
  * Configuration for the server manager.
- * Contains all dependencies required to run the webpage categorization server.
- * 
+ * Contains the dependencies required to run the capture server.
+ *
  * @interface ServerConfig
- * @property {string} openai_api_key - OpenAI API key for AI-powered analysis
- * @property {DuckDB} duck_db - Database for structured webpage data
- * @property {LanceDBMemoryStore} memory_db - Vector database for embeddings
+ * @property {DuckDB} duck_db - Relational + raw-page capture store
  */
 export interface ServerConfig {
-  openai_api_key: string;
   duck_db: DuckDB;
-  memory_db: LanceDBMemoryStore;
   /** Directory for the durable visit inbox (defaults off if unset) */
   inbox_dir?: string;
   /** Storage base; used to persist raw captures for replay in dev mode */
   storage_base?: string;
-  /** LLM backend for classification/analysis (defaults to Claude subscription) */
-  llm_provider?: LlmProvider;
 }
 
 /**
- * Manages the Express server for handling webpage categorization requests.
- * Provides HTTP endpoints for the browser extension to submit webpage visits
- * for AI-powered categorization and analysis.
- * 
+ * Manages the Express server for the capture pipeline. Provides HTTP endpoints
+ * for the browser extension to submit webpage visits (which are gated and stored
+ * by the zero-LLM capture pipeline) and read-only relational query endpoints.
+ *
  * @example
  * ```typescript
- * const serverManager = new ServerManager({
- *   openai_api_key: 'sk-...',
- *   duck_db: duckDb,
- *   memory_db: memoryDb
- * });
- * 
+ * const serverManager = new ServerManager({ duck_db: duckDb });
+ *
  * const port = await serverManager.start();
  * console.log(`Server running on port ${port}`);
- * 
+ *
  * // Later, during cleanup
  * await serverManager.stop();
  * ```
@@ -89,12 +76,12 @@ export class ServerManager {
   private server?: Server;
   private queue_processor?: VisitQueueProcessor;
   private app: express.Application;
-  private webpage_categoriser_app!: WebpageWorkflow;
+  private readonly capture_deps: CaptureDeps;
 
   constructor(private config: ServerConfig) {
     this.app = express();
+    this.capture_deps = { duck_db: config.duck_db };
     this.setup_middleware();
-    this.setup_workflow();
   }
 
   /**
@@ -120,22 +107,6 @@ export class ServerManager {
   }
 
   /**
-   * Sets up the workflow for webpage categorization.
-   * Initializes the AI workflow pipeline with configured databases and memory stores.
-   * @private
-   */
-  private setup_workflow(): void {
-    const filter_config = get_filter_config();
-    this.webpage_categoriser_app = build_workflow(
-      this.config.openai_api_key,
-      this.config.duck_db,
-      this.config.memory_db,
-      filter_config,
-      { provider: this.config.llm_provider }
-    );
-  }
-
-  /**
    * Sets up the queue processor for handling visits.
    * Initializes batch processing for efficient handling of multiple webpage visits.
    * @private
@@ -147,8 +118,7 @@ export class ServerManager {
     const orphan_manager = new OrphanedVisitsManager();
     this.queue_processor = new VisitQueueProcessor(
       this.config.duck_db,
-      this.config.memory_db,
-      this.webpage_categoriser_app,
+      this.capture_deps,
       orphan_manager,
       {
         batch_size: 3,
@@ -213,7 +183,7 @@ export class ServerManager {
           const decompressed_data = await decompress(compressed_data);
           if (decompressed_data.length > MAX_DECOMPRESSED_BYTES) {
             // Refuse oversized payloads rather than holding them in memory and
-            // embedding them; store nothing for this visit's content.
+            // capturing them; store nothing for this visit's content.
             dev_log('decompress_failed', {
               visit_id,
               url: req.body.url,
@@ -230,7 +200,7 @@ export class ServerManager {
             error: error instanceof Error ? error.message : String(error),
           });
           // Never fall through with the raw base64 string as page content — it
-          // would be stored verbatim and corrupt the embeddings for this page.
+          // would be captured verbatim instead of the real page.
           content = '';
         }
       }
@@ -271,7 +241,7 @@ export class ServerManager {
       // In dev, keep a bounded ring of raw captures so the page can be replayed
       // through the pipeline (bergamot.replayVisit) without re-browsing.
       if (this.config.storage_base && is_dev_log_enabled()) {
-        persist_capture(this.config.storage_base, extended_visit);
+        persist_replay_visit(this.config.storage_base, extended_visit);
       }
       const position = this.queue_processor?.enqueue(extended_visit) ?? 0;
       dev_log('queued', { visit_id, url: payload.url, position });
@@ -298,9 +268,7 @@ export class ServerManager {
         res.status(400).json({ error: 'Missing title query parameter' });
         return;
       }
-      res.json(
-        await get_page_by_title(this.config.duck_db, this.config.memory_db, title)
-      );
+      res.json(await get_page_by_title(this.config.duck_db, title));
     });
 
     this.app.get('/query/tree', async (req, res) => {
@@ -310,11 +278,7 @@ export class ServerManager {
         return;
       }
       res.json(
-        await get_page_sessions_with_tree_id(
-          this.config.duck_db,
-          this.config.memory_db,
-          tree_id
-        )
+        await get_page_sessions_with_tree_id(this.config.duck_db, tree_id)
       );
     });
 
@@ -325,12 +289,35 @@ export class ServerManager {
         MAX_QUERY_LIMIT
       );
       res.json(
-        await get_last_modified_trees_with_members_and_analysis(
+        await get_last_modified_trees_with_members(
           this.config.duck_db,
-          this.config.memory_db,
           '',
           limit
         )
+      );
+    });
+
+    // Parent-document read path: decompress the stored raw page on demand. This
+    // is the source the RAG-prep pipeline (task-31) will read; the MCP
+    // get_webpage_content tool routes here.
+    this.app.get('/query/capture_content', async (req, res) => {
+      const page_session_id = String(req.query.page_session_id ?? '');
+      if (!page_session_id) {
+        res
+          .status(400)
+          .json({ error: 'Missing page_session_id query parameter' });
+        return;
+      }
+      const recovered = await read_capture(this.config.duck_db, page_session_id);
+      res.json(
+        recovered
+          ? {
+              page_session_id,
+              url: recovered.metadata.url,
+              title: recovered.metadata.title,
+              content: recovered.html,
+            }
+          : null
       );
     });
   }

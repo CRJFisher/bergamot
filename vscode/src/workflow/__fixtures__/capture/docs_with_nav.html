@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>configure() — Bergamot API Reference</title>
+  <meta property="og:site_name" content="Bergamot Docs">
+</head>
+<body>
+  <nav class="sidebar">
+    <a href="/docs/intro">Introduction</a>
+    <a href="/docs/install">Installation</a>
+    <a href="/docs/quickstart">Quickstart</a>
+    <a href="/docs/config">Configuration</a>
+    <a href="/docs/capture">Capture</a>
+    <a href="/docs/gate">Relevance Gate</a>
+    <a href="/docs/storage">Storage</a>
+    <a href="/docs/rag">RAG Pipeline</a>
+    <a href="/docs/mcp">MCP Tools</a>
+    <a href="/docs/faq">FAQ</a>
+  </nav>
+  <main>
+    <article>
+      <h1>configure()</h1>
+      <p>The <code>configure()</code> function sets the runtime options for the
+      capture pipeline. It accepts a single options object and returns a frozen
+      configuration that the pipeline reads on every visit. Call it once during
+      activation; the returned value is immutable and safe to share.</p>
+      <h2>Parameters</h2>
+      <p>The options object supports the minimum text length below which a page
+      is dropped as too small, and the maximum link density above which a page
+      is treated as navigation chrome rather than content. Both have sensible
+      defaults tuned against a sample of real captures, so most callers do not
+      need to set them at all.</p>
+      <h2>Return value</h2>
+      <p>A frozen configuration object. Mutating it throws in strict mode. The
+      pipeline reads the thresholds on each visit, so swapping the configuration
+      atomically changes behaviour for subsequent pages without a restart.</p>
+      <h2>Examples</h2>
+      <p>The simplest call uses the defaults and is enough for the vast majority
+      of deployments. Advanced users tuning recall against a specific corpus can
+      raise or lower the thresholds and re-run the deterministic eval to confirm
+      the keep/drop labels still match their expectations.</p>
+      <p>See also the configuration guide for a walkthrough of how the gate
+      thresholds interact with the capture store and the downstream pipeline.</p>
+    </article>
+  </main>
+</body>
+</html>

@@ -139,7 +139,7 @@ export class OrphanedVisitsManager {
   }
 
   /**
-   * Removes a single orphaned visit (e.g. once it has been classified on retry).
+   * Removes a single orphaned visit (e.g. once it has been captured on retry).
    *
    * @param orphan - The exact orphan entry to remove
    */

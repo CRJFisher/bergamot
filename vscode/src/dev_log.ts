@@ -37,7 +37,7 @@ export type DevLogStage =
   | 'parse_failed'
   | 'decompress_failed'
   | 'queued'
-  | 'classify_result'
+  | 'gate_result'
   | 'content_truncated'
   | 'dropped'
   | 'workflow_failed'
@@ -71,9 +71,10 @@ export type VisitDecision =
 export interface VisitOutcome {
   visit_id: string;
   url: string;
-  page_type?: string;
-  confidence?: number;
+  /** Decompressed page size in bytes (captured pages). */
+  byte_size?: number;
   decision: VisitDecision;
+  /** Gate drop reason when dropped (e.g. `link_heavy`, `pdf`, `content_empty`). */
   reason?: string;
   error?: string;
   at: string;
@@ -179,8 +180,7 @@ export function record_outcome(outcome: Omit<VisitOutcome, 'at'>): void {
   dev_log(DECISION_TO_STAGE[outcome.decision], {
     visit_id: outcome.visit_id,
     url: outcome.url,
-    page_type: outcome.page_type,
-    confidence: outcome.confidence,
+    byte_size: outcome.byte_size,
     reason: outcome.reason,
     error: outcome.error,
   });

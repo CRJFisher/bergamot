@@ -6,6 +6,8 @@ node_modules/
 dist/
 out/
 build/
+builds/
+**/builds/
 *.vsix
 
 # Local dev storage (DuckDB/LanceDB/inbox written during F5 debugging)

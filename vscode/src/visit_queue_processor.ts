@@ -5,15 +5,17 @@
  * orphan handling, and performance optimizations.
  */
 
-import { DuckDB, get_page_sessions_with_tree_id } from "./duck_db";
-import { LanceDBMemoryStore } from "./lance_db";
-import { 
+import { DuckDB } from "./duck_db";
+import {
   PageActivitySessionWithoutTreeOrContent,
   PageActivitySession
 } from "./duck_db_models";
 import { OrphanedVisitsManager } from "./orphaned_visits";
 import { insert_page_activity_session_with_tree_management } from "./webpage_tree";
-import { WebpageWorkflow } from "./workflow/simple_workflow";
+import {
+  CaptureDeps,
+  run_page_capture,
+} from "./workflow/page_capture_pipeline";
 import { load_inbox, remove_visit } from "./visit_inbox";
 import { record_outcome } from "./dev_log";
 
@@ -100,8 +102,7 @@ export class VisitQueueProcessor {
 
   constructor(
     private readonly duck_db: DuckDB,
-    private readonly memory_db: LanceDBMemoryStore,
-    private readonly webpage_categoriser_app: WebpageWorkflow,
+    private readonly capture_deps: CaptureDeps,
     private readonly orphan_manager: OrphanedVisitsManager,
     config: QueueProcessorConfig = {}
   ) {
@@ -223,20 +224,13 @@ export class VisitQueueProcessor {
     visit: ExtendedPageVisit,
     tree_id: string
   ): Promise<void> {
-    const tree_members = await get_page_sessions_with_tree_id(
-      this.duck_db,
-      this.memory_db,
-      tree_id
-    );
-    
     const page_with_tree_id: PageActivitySession = {
       ...visit,
       tree_id,
-      content: visit.raw_content
+      content: visit.raw_content,
     };
-    
-    await this.webpage_categoriser_app.run({
-      members: tree_members,
+
+    await run_page_capture(this.capture_deps, {
       new_page: page_with_tree_id,
       raw_content: visit.raw_content,
       visit_id: visit.visit_id,
@@ -281,7 +275,7 @@ export class VisitQueueProcessor {
    * @param park_if_orphan - When true (the default), an unresolved orphan is
    *   parked in the orphan manager. Retries pass false so the caller decides
    *   whether to keep the existing orphan entry, avoiding duplicate parking.
-   * @returns true if the visit was fully classified, false if it was parked as
+   * @returns true if the visit was processed (captured/dropped), false if it was parked as
    *   an orphan or made no progress.
    */
   async process_single_visit(
@@ -333,9 +327,9 @@ export class VisitQueueProcessor {
       const batch_promises = batch.map(async (visit) => {
         try {
           const completed = await this.process_single_visit(visit);
-          // Only drop the durable copy once the visit is fully classified. A
+          // Only drop the durable copy once the visit is fully processed. A
           // visit parked as an orphan still needs to survive a restart so it can
-          // be re-linked to its parent and classified later.
+          // be re-linked to its parent and processed later.
           if (completed && this.inbox_dir) {
             remove_visit(this.inbox_dir, visit.id);
           }
@@ -399,9 +393,9 @@ export class VisitQueueProcessor {
    *
    * Each orphan is re-inserted (without re-parking): the tree-management layer
    * re-links it to its parent's tree if the parent is now present, in which case
-   * the visit is classified and the orphan removed. Otherwise its retry count
+   * the visit is processed and the orphan removed. Otherwise its retry count
    * advances and it is dropped once the ceiling is reached. Re-linking by parent
-   * is what restores classification — the previous implementation re-queued the
+   * is what restores processing — the previous implementation re-queued the
    * raw orphan, which only re-parked it because the row already existed.
    */
   private async retry_orphans(): Promise<void> {

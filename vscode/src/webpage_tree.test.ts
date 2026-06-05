@@ -1,4 +1,4 @@
-import { DuckDB, get_page_sessions_with_tree_id } from "./duck_db";
+import { DuckDB, get_page_sessions_with_tree_id, insert_webpage_capture } from "./duck_db";
 import {
   insert_page_activity_session_with_tree_management,
   get_tree_with_id,
@@ -8,8 +8,7 @@ import {
 } from "./duck_db_models";
 import {
   PageActivitySessionWithMeta
-} from "./reconcile_webpage_trees_workflow_models";
-import { LanceDBMemoryStore } from "./lance_db";
+} from "./page_capture_models";
 import * as hash_utils from "./hash_utils";
 
 jest.mock("./hash_utils");
@@ -18,7 +17,6 @@ const mock_md5_hash = jest.spyOn(hash_utils, "md5_hash");
 
 describe("Webpage Tree Management", () => {
   let db: DuckDB;
-  let memory_db: LanceDBMemoryStore; // Mock memory store
 
   beforeEach(async () => {
     db = new DuckDB({ database_path: ":memory:" });
@@ -28,13 +26,6 @@ describe("Webpage Tree Management", () => {
       // Default implementation that generates unique IDs
       return `tree-${input}-${Date.now()}-${Math.random()}`;
     });
-
-    // Create a mock memory_db
-    memory_db = {
-      get: jest.fn().mockResolvedValue(null),
-      put: jest.fn(),
-      search: jest.fn().mockResolvedValue([]),
-    } as Partial<LanceDBMemoryStore> as LanceDBMemoryStore;
   });
 
   afterEach(async () => {
@@ -281,7 +272,6 @@ describe("Webpage Tree Management", () => {
 
       const tree_members = await get_page_sessions_with_tree_id(
         db,
-        memory_db,
         "test-tree-id"
       );
       const tree = get_tree_with_id(tree_members);
@@ -339,7 +329,6 @@ describe("Webpage Tree Management", () => {
 
       const tree_members = await get_page_sessions_with_tree_id(
         db,
-        memory_db,
         "test-tree-id"
       );
       const tree = get_tree_with_id(tree_members);
@@ -384,7 +373,6 @@ describe("Webpage Tree Management", () => {
 
       const tree_members = await get_page_sessions_with_tree_id(
         db,
-        memory_db,
         "test-tree-id"
       );
       const tree = get_tree_with_id(tree_members);
@@ -427,7 +415,6 @@ describe("Webpage Tree Management", () => {
 
       const tree_members = await get_page_sessions_with_tree_id(
         db,
-        memory_db,
         "test-tree-id"
       );
 
@@ -436,10 +423,9 @@ describe("Webpage Tree Management", () => {
       );
     });
 
-    it("should build tree with metadata (analysis and intentions)", async () => {
-      // Insert session with analysis
+    it("should build tree with capture metadata", async () => {
       await db.execute(
-        `INSERT INTO webpage_activity_sessions 
+        `INSERT INTO webpage_activity_sessions
          (id, url, referrer, referrer_page_session_id, page_loaded_at, tree_id)
          VALUES ($id, $url, $referrer, $referrer_page_session_id, $page_loaded_at, $tree_id)`,
         {
@@ -452,45 +438,33 @@ describe("Webpage Tree Management", () => {
         }
       );
 
-      // Add analysis data
-      await db.execute(
-        `INSERT INTO webpage_analysis 
-         (page_session_id, title, summary, intentions)
-         VALUES ($id, $title, $summary, $intentions)`,
-        {
-          id: "session-with-meta",
-          title: "Analyzed Page",
-          summary: "This page has been analyzed",
-          intentions: JSON.stringify(["learn", "research"]),
-        }
-      );
-
-      // Add tree intentions
-      await db.execute(
-        `INSERT INTO webpage_tree_intentions 
-         (tree_id, activity_session_id, intentions)
-         VALUES ($tree_id, $session_id, $intentions)`,
-        {
-          tree_id: "test-tree-id",
-          session_id: "session-with-meta",
-          intentions: JSON.stringify(["explore"]),
-        }
-      );
+      // Capture metadata is the canonical per-page record.
+      await insert_webpage_capture(db, {
+        page_session_id: "session-with-meta",
+        content_compressed: new Uint8Array([1, 2, 3]),
+        content_encoding: "zstd",
+        original_byte_size: 3,
+        content_type: "text/html",
+        url: "https://example.com/analyzed",
+        title: "Captured Page",
+        site_name: null,
+        author: null,
+        published_at: null,
+        lang: null,
+        captured_at: "2025-01-01T00:00:00Z",
+      });
 
       const tree_members = await get_page_sessions_with_tree_id(
         db,
-        memory_db,
         "test-tree-id"
       );
       const tree = get_tree_with_id(tree_members);
 
       expect(tree.webpage_session.id).toBe("session-with-meta");
-      
-      // Cast to PageActivitySessionWithMeta to access metadata
+
       const session_with_meta = tree.webpage_session as PageActivitySessionWithMeta;
-      expect(session_with_meta.analysis?.title).toBe("Analyzed Page");
-      expect(session_with_meta.analysis?.intentions).toEqual(["learn", "research"]);
-      expect(session_with_meta.tree_intentions).toEqual(["explore"]);
+      expect(session_with_meta.capture?.title).toBe("Captured Page");
+      expect(session_with_meta.capture?.url).toBe("https://example.com/analyzed");
     });
 
     it("should handle empty tree members array", async () => {
@@ -535,7 +509,6 @@ describe("Webpage Tree Management", () => {
 
       const tree_members = await get_page_sessions_with_tree_id(
         db,
-        memory_db,
         "test-tree-id"
       );
       const tree = get_tree_with_id(tree_members);
@@ -609,7 +582,6 @@ describe("Webpage Tree Management", () => {
       const start_time = Date.now();
       const tree_members = await get_page_sessions_with_tree_id(
         db,
-        memory_db,
         "large-tree"
       );
       const tree = get_tree_with_id(tree_members);

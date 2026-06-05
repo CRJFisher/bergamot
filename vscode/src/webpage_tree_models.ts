@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PageActivitySessionWithMetaSchema } from "./reconcile_webpage_trees_workflow_models";
+import { PageActivitySessionWithMetaSchema } from "./page_capture_models";
 
 /**
  * Represents a hierarchical webpage navigation tree node.
@@ -15,7 +15,7 @@ export interface WebpageTreeNode {
  * Represents a single page visit within a navigation tree, including all child pages opened from it.
  */
 export const WebpageTreeNodeSchema: z.ZodSchema<WebpageTreeNode> = z.object({
-  /** The webpage session data including analysis and content metadata */
+  /** The webpage session data including its capture metadata */
   webpage_session: PageActivitySessionWithMetaSchema,
   /** Optional array of child nodes representing pages opened from this page */
   children: z.array(z.lazy(() => WebpageTreeNodeSchema)).optional(),

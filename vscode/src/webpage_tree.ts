@@ -7,7 +7,7 @@ import {
 } from "./duck_db";
 import { PageActivitySession } from "./duck_db_models";
 import { PageActivitySessionWithoutTreeOrContent } from "./duck_db_models";
-import { PageActivitySessionWithMeta } from "./reconcile_webpage_trees_workflow_models";
+import { PageActivitySessionWithMeta } from "./page_capture_models";
 import { md5_hash } from "./hash_utils";
 import { WebpageTreeNode } from "./webpage_tree_models";
 
@@ -86,16 +86,16 @@ export async function insert_page_activity_session_with_tree_management(
  * 
  * @example
  * ```typescript
- * const treeSessions = await get_page_sessions_with_tree_id(db, memoryDb, 'tree-123');
+ * const treeSessions = await get_page_sessions_with_tree_id(db, 'tree-123');
  * const treeStructure = get_tree_with_id(treeSessions);
- * 
+ *
  * console.log('Root page:', treeStructure.webpage_session.url);
  * console.log('Number of children:', treeStructure.children?.length || 0);
- * 
+ *
  * // Traverse the tree
  * function printTree(node: WebpageTreeNode, depth = 0) {
  *   const indent = '  '.repeat(depth);
- *   console.log(`${indent}- ${node.webpage_session.analysis?.title || 'Untitled'}`);
+ *   console.log(`${indent}- ${node.webpage_session.capture?.title || 'Untitled'}`);
  *   node.children?.forEach(child => printTree(child, depth + 1));
  * }
  * printTree(treeStructure);
@@ -193,9 +193,9 @@ async function create_new_tree_as_root(
   db: DuckDB,
   session: PageActivitySession
 ): Promise<TreeManagementResult> {
-  // Note: Aggregator filtering has been moved to the workflow phase
-  // where we have access to page content for LLM-based classification.
-  // This allows for more intelligent and flexible aggregator detection.
+  // Tree construction is independent of relevance: every visit gets a tree node
+  // (referrer/tree linking), and the capture gate decides keep/drop separately
+  // downstream. Aggregator/nav pages are no longer special-cased here.
 
   const tree_id = md5_hash(`${session.url}:${session.page_loaded_at}`);
   const session_with_tree_id = {

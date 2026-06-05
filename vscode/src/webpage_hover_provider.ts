@@ -1,59 +1,41 @@
 import * as vscode from "vscode";
-import { DuckDB } from "./duck_db";
-import { get_webpage_by_url } from "./duck_db";
-import { LanceDBMemoryStore } from "./lance_db";
-
-const WEBPAGE_CONTENT_NAMESPACE = "webpage_content";
+import { DuckDB, get_webpage_by_url } from "./duck_db";
 
 interface WebpageMetadata {
   url: string;
   title: string;
-  content: string;
   visited_at?: string;
 }
 
+/**
+ * Shows a captured page's metadata (title, URL, last visit) when hovering a link
+ * in a markdown/plaintext document. Content/preview is intentionally omitted:
+ * page-content indexing is deferred to the RAG-prep pipeline (task-31), so this
+ * reads only the cheap DuckDB capture record.
+ */
 export class WebpageHoverProvider implements vscode.HoverProvider {
   private cache: Map<string, WebpageMetadata | null> = new Map();
 
-  constructor(
-    private duck_db: DuckDB,
-    private memory_store: LanceDBMemoryStore
-  ) {}
+  constructor(private duck_db: DuckDB) {}
 
   async provideHover(
     document: vscode.TextDocument,
-    position: vscode.Position,
-    _token?: vscode.CancellationToken
+    position: vscode.Position
   ): Promise<vscode.Hover | undefined> {
-    // Extract URL at the current position
     const url = this.extract_url_at_position(document, position);
-
     if (!url) {
       return undefined;
     }
 
-    // Check cache first
     if (this.cache.has(url)) {
       const cached = this.cache.get(url);
-      if (cached === null) {
-        return undefined; // Previously not found
-      }
-      return this.create_hover(cached);
+      return cached ? this.create_hover(cached) : undefined;
     }
 
     try {
-      // Look up webpage in database
       const webpage = await this.find_webpage_by_url(url);
-
-      if (!webpage) {
-        this.cache.set(url, null);
-        return undefined;
-      }
-
-      // Cache the result
       this.cache.set(url, webpage);
-
-      return this.create_hover(webpage);
+      return webpage ? this.create_hover(webpage) : undefined;
     } catch (error) {
       console.error("Error providing hover:", error);
       return undefined;
@@ -99,34 +81,13 @@ export class WebpageHoverProvider implements vscode.HoverProvider {
     url: string
   ): Promise<WebpageMetadata | null> {
     try {
-      // First try to find in DuckDB
       const webpage = await get_webpage_by_url(this.duck_db, url);
-
-      if (webpage) {
-        // Try to get additional content from memory store
-        const memory_results = await this.memory_store.search(
-          [WEBPAGE_CONTENT_NAMESPACE],
-          { query: url, limit: 1 }
-        );
-
-        const content =
-          memory_results.length > 0
-            ? (
-                memory_results[0] as unknown as {
-                  value: { pageContent: string };
-                }
-              ).value.pageContent.substring(0, 500) + "..."
-            : "Content not available";
-
-        return {
-          url: webpage.url,
-          title: webpage.title || "Untitled",
-          content: content,
-          visited_at: webpage.visited_at,
-        };
-      }
-
-      return null;
+      if (!webpage) return null;
+      return {
+        url: webpage.url,
+        title: webpage.title || "Untitled",
+        visited_at: webpage.visited_at,
+      };
     } catch (error) {
       console.error("Error finding webpage:", error);
       return null;
@@ -135,28 +96,18 @@ export class WebpageHoverProvider implements vscode.HoverProvider {
 
   private create_hover(webpage: WebpageMetadata): vscode.Hover {
     const markdown = new vscode.MarkdownString();
-
-    // Make it look nice
     markdown.supportHtml = true;
     markdown.isTrusted = true;
 
-    // Title
     markdown.appendMarkdown(`### 📄 ${webpage.title}\n\n`);
-
-    // URL
     markdown.appendMarkdown(`**URL:** ${webpage.url}\n\n`);
 
-    // Visited date if available
     if (webpage.visited_at) {
       const date = new Date(webpage.visited_at);
       markdown.appendMarkdown(
         `**Visited:** ${date.toLocaleDateString()} ${date.toLocaleTimeString()}\n\n`
       );
     }
-
-    // Content preview
-    markdown.appendMarkdown(`**Preview:**\n\n`);
-    markdown.appendText(webpage.content);
 
     return new vscode.Hover(markdown);
   }
@@ -168,24 +119,20 @@ export class WebpageHoverProvider implements vscode.HoverProvider {
 
 export function register_webpage_hover_provider(
   context: vscode.ExtensionContext,
-  duck_db: DuckDB,
-  memory_store: LanceDBMemoryStore
+  duck_db: DuckDB
 ): void {
-  const hover_provider = new WebpageHoverProvider(duck_db, memory_store);
+  const hover_provider = new WebpageHoverProvider(duck_db);
 
-  // Register for markdown files
   const markdown_registration = vscode.languages.registerHoverProvider(
     { scheme: "file", language: "markdown" },
     hover_provider
   );
 
-  // Register for plain text files
   const text_registration = vscode.languages.registerHoverProvider(
     { scheme: "file", language: "plaintext" },
     hover_provider
   );
 
-  // Clear cache when configuration changes
   const config_change = vscode.workspace.onDidChangeConfiguration((e) => {
     if (e.affectsConfiguration("bergamot")) {
       hover_provider.clear_cache();

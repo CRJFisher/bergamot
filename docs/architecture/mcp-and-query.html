@@ -27,86 +27,87 @@
 
   <section class="hero">
     <h1>🔌 MCP &amp; Query Layer</h1>
-    <p class="tagline">How AI agents and scripts reach the knowledge base. A standalone MCP server provides six tools; a read-only HTTP API backs the relational ones while the MCP server reads vectors directly.</p>
+    <p class="tagline">How AI agents and scripts reach the knowledge base. A standalone MCP server provides five
+    deterministic tools, all backed by a read-only HTTP API over DuckDB. Semantic search is reintroduced by the
+    RAG-prep pipeline (task-31).</p>
     <span class="pill">mcp_server_standalone.ts · /query/* · stdio transport</span>
   </section>
 
   <h2><span class="num">1</span>Topology</h2>
-  <p>The MCP server runs as a <em>separate subprocess</em> spawned by the extension. Because DuckDB
-  is single-writer, the MCP server cannot open it directly — relational tools proxy over HTTP to the
-  extension's own server, while vector tools read LanceDB directly.</p>
+  <p>The MCP server runs as a <em>separate subprocess</em> spawned by the extension. Because DuckDB is
+  single-writer, the MCP server never opens it directly: every tool proxies over HTTP to the extension's own
+  server, which owns the writer. The MCP server opens no store of its own.</p>
 
   <div class="diagram">
-    <p class="cap">Access paths from an AI agent to the stores</p>
+    <p class="cap">Access paths from an AI agent to the store</p>
     <pre class="mermaid">
 flowchart TB
     agent([AI agent · Claude · script])
 
     subgraph MCP["MCP server (subprocess) — mcp_server_standalone.ts"]
-      direction TB
-      vt["Vector tools<br/>semantic_search · get_webpage_content"]
-      rt["Relational tools<br/>get_visit_by_url · search_by_title<br/>get_navigation_tree · list_recent_navigation_trees"]
+      rt["Tools (all HTTP-proxied)<br/>get_webpage_content · get_visit_by_url<br/>search_by_title · get_navigation_tree<br/>list_recent_navigation_trees"]
     end
 
     subgraph EXT["VS Code extension"]
       qapi["Express /query/* API"]
-      duck[("DuckDB")]
+      duck[("DuckDB<br/>webpage_categorizations.db")]
       qapi --> duck
     end
 
-    lance[("LanceDB<br/>webpage_memory.db")]
     portfile["~/.bergamot/port.json<br/>{ port }"]
 
     agent -- "stdio (MCP protocol)" --> MCP
-    vt -- "direct read" --> lance
     rt -- "HTTP proxy" --> qapi
     MCP -. "discover port" .-> portfile
 
     classDef sv fill:#2a1f3a,stroke:#bc8cff,color:#e6d9ff;
     classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
     classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
-    class vt,rt sv;
+    class rt sv;
     class qapi vs;
-    class duck,lance st;
+    class duck st;
     </pre>
   </div>
 
   <h2><span class="num">2</span>MCP tools</h2>
   <table>
     <tr><th>Tool</th><th>Input</th><th>Returns</th><th>Backed by</th></tr>
-    <tr><td><code>semantic_search</code></td><td>query, limit=10</td><td>[{ id, url, title, score, preview }]</td><td>LanceDB vector search</td></tr>
-    <tr><td><code>get_webpage_content</code></td><td>page_session_id</td><td>{ id, url, title, content }</td><td>LanceDB direct read</td></tr>
-    <tr><td><code>get_visit_by_url</code></td><td>url</td><td>latest visit for exact URL</td><td>HTTP <code>/query/visit_by_url</code></td></tr>
-    <tr><td><code>search_by_title</code></td><td>title</td><td>fuzzy title + content match</td><td>HTTP <code>/query/page_by_title</code></td></tr>
-    <tr><td><code>get_navigation_tree</code></td><td>tree_id</td><td>all visits + analysis in a tree</td><td>HTTP <code>/query/tree</code></td></tr>
-    <tr><td><code>list_recent_navigation_trees</code></td><td>limit=5</td><td>most recently active trees</td><td>HTTP <code>/query/recent_trees</code></td></tr>
+    <tr><td><code>get_webpage_content</code></td><td>page_session_id</td><td>{ id, url, title, content } — the decompressed raw captured page</td><td>HTTP <code>/query/capture_content</code></td></tr>
+    <tr><td><code>get_visit_by_url</code></td><td>url</td><td>latest visit for exact URL (url, title, visited_at)</td><td>HTTP <code>/query/visit_by_url</code></td></tr>
+    <tr><td><code>search_by_title</code></td><td>title</td><td>capture metadata for the exact title</td><td>HTTP <code>/query/page_by_title</code></td></tr>
+    <tr><td><code>get_navigation_tree</code></td><td>tree_id</td><td>all visits in a tree, with capture metadata</td><td>HTTP <code>/query/tree</code></td></tr>
+    <tr><td><code>list_recent_navigation_trees</code></td><td>limit=5</td><td>most recently active trees + member pages</td><td>HTTP <code>/query/recent_trees</code></td></tr>
   </table>
+  <p>There is no <code>semantic_search</code> tool: nothing is embedded at ingest, so similarity search returns
+  nothing until the <a href="rag-pipeline.html">RAG-prep pipeline (task-31)</a> builds an index. It will
+  reintroduce a semantic-search tool over that index.</p>
 
   <h2><span class="num">3</span>HTTP query API</h2>
-  <p>The same Express server that ingests visits also serves read-only queries. External scripts can
-  hit these directly — the extension acts as the gateway to DuckDB.</p>
+  <p>The same Express server that ingests visits also serves read-only queries. External scripts can hit these
+  directly — the extension is the gateway to DuckDB.</p>
   <table>
     <tr><th>Endpoint</th><th>Purpose</th></tr>
     <tr><td><code>GET /status</code></td><td>Health check + <code>{ service: "bergamot" }</code> identity marker (used by browser discovery).</td></tr>
     <tr><td><code>POST /visit</code></td><td>Ingest a captured visit (zstd content). Covered in <a href="vscode-extension.html">VS Code Extension</a>.</td></tr>
     <tr><td><code>GET /query/visit_by_url?url=</code></td><td>Exact-URL lookup of the most recent visit.</td></tr>
-    <tr><td><code>GET /query/page_by_title?title=</code></td><td>Fuzzy title + content search.</td></tr>
-    <tr><td><code>GET /query/tree?tree_id=</code></td><td>All pages in a navigation tree, with analysis.</td></tr>
-    <tr><td><code>GET /query/recent_trees?limit=</code></td><td>Most recently modified trees.</td></tr>
+    <tr><td><code>GET /query/page_by_title?title=</code></td><td>Exact-title lookup → capture metadata.</td></tr>
+    <tr><td><code>GET /query/tree?tree_id=</code></td><td>All pages in a navigation tree, with capture metadata.</td></tr>
+    <tr><td><code>GET /query/recent_trees?limit=</code></td><td>Most recently modified trees with member pages.</td></tr>
+    <tr><td><code>GET /query/capture_content?page_session_id=</code></td><td>The decompressed raw captured page (parent-document read path).</td></tr>
   </table>
 
   <h2><span class="num">4</span>Discovery &amp; security</h2>
   <ul class="clean">
-    <li>The extension writes its chosen port to <code>~/.bergamot/port.json</code>; the MCP subprocess reads it to find the relational API.</li>
+    <li>The extension writes its chosen port to <code>~/.bergamot/port.json</code>; the MCP subprocess reads it to find the query API.</li>
     <li>CORS is pinned to <code>chrome-extension://</code> origins (and origin-less callers like curl/scripts); ordinary web pages are blocked.</li>
     <li>Request body limit is 50 MB to accommodate compressed page content.</li>
-    <li>The MCP subprocess receives <code>OPENAI_API_KEY</code>, <code>STORAGE_PATH</code>, and <code>DUCK_DB_PATH</code> via environment variables.</li>
+    <li>The MCP subprocess needs no store credentials — it only needs the port file to reach the query API.</li>
   </ul>
 
   <div class="note purple">
-    <strong>Why proxy relational queries?</strong> DuckDB is embedded and single-writer. Rather than
-    risk a second process opening the database file, the MCP server asks the extension — which owns
-    the writer — over HTTP. Vector reads are safe to do directly, so those skip the hop.
+    <strong>Why proxy every query?</strong> DuckDB is embedded and single-writer. Rather than risk a second
+    process opening the database file, the MCP server asks the extension — which owns the writer — over HTTP for
+    everything, including the raw captured page.
   </div>
 
   <footer class="foot"><a href="storage.html">← Storage</a> · Next: <a href="rag-pipeline.html">RAG Pipeline →</a></footer>

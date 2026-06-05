@@ -5,21 +5,14 @@ import * as path from 'path';
 import request from 'supertest';
 import { ServerManager, ServerConfig, SERVER_PORT_RANGE } from './server_manager';
 import { DuckDB } from '../duck_db';
-import { LanceDBMemoryStore } from '../lance_db';
 import { VisitQueueProcessor } from '../visit_queue_processor';
-import { build_workflow } from '../reconcile_webpage_trees_workflow_vanilla';
 import { decompress } from '@mongodb-js/zstd';
 import { dev_log } from '../dev_log';
 
 // Mock dependencies
 jest.mock('../duck_db');
-jest.mock('../lance_db');
 jest.mock('../orphaned_visits');
 jest.mock('../visit_queue_processor');
-jest.mock('../reconcile_webpage_trees_workflow_vanilla');
-jest.mock('../config/filter_config', () => ({
-  get_filter_config: jest.fn().mockReturnValue({})
-}));
 jest.mock('@mongodb-js/zstd');
 jest.mock('fs');
 jest.mock('../hash_utils', () => ({
@@ -48,15 +41,9 @@ describe('ServerManager', () => {
 
     (VisitQueueProcessor as jest.Mock).mockImplementation(() => mock_queue_processor);
 
-    // Setup mock workflow
-    (build_workflow as jest.Mock).mockReturnValue({});
-
     // Setup mock config
     mock_config = {
-      openai_api_key: 'test-api-key',
       duck_db: {} as DuckDB,
-      memory_db: {} as LanceDBMemoryStore,
-      llm_provider: 'claude'
     };
 
     server_manager = new ServerManager(mock_config);
@@ -93,15 +80,14 @@ describe('ServerManager', () => {
       expect(mock_queue_processor.start).toHaveBeenCalled();
     });
 
-    it('should setup workflow with correct configuration', async () => {
+    it('should wire the capture pipeline deps into the queue processor', async () => {
       await server_manager.start();
 
-      expect(build_workflow).toHaveBeenCalledWith(
-        'test-api-key',
+      expect(VisitQueueProcessor).toHaveBeenCalledWith(
         mock_config.duck_db,
-        mock_config.memory_db,
-        expect.any(Object),
-        { provider: 'claude' }
+        { duck_db: mock_config.duck_db },
+        expect.anything(),
+        expect.objectContaining({ batch_size: 3 })
       );
     });
   });

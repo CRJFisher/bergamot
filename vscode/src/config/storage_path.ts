@@ -3,8 +3,7 @@ import * as fs from 'fs';
 
 /**
  * Resolves the base directory under which all persistent stores live
- * (DuckDB `webpage_categorizations.db`, LanceDB `webpage_memory.db`, the visit
- * inbox, and the dev log).
+ * (DuckDB `webpage_categorizations.db`, the visit inbox, and the dev log).
  *
  * During F5 debugging `BERGAMOT_STORAGE_PATH` points at a repo-local
  * `.dev-storage` directory so dev runs never pollute the real PKM store. In a

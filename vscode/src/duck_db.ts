@@ -2,15 +2,16 @@ import {
   DuckDBInstance,
   DuckDBConnection,
   DuckDBValue,
+  DuckDBBlobValue,
+  blobValue,
 } from "@duckdb/node-api";
 import * as path from "path";
 import * as fs from "fs";
-import { LanceDBMemoryStore, SearchItem } from "./lance_db";
 import {
-  PageAnalysis,
+  PageCapture,
   PageActivitySessionWithMeta,
   PageActivitySessionWithMetaSchema,
-} from "./reconcile_webpage_trees_workflow_models";
+} from "./page_capture_models";
 import {
   PageActivitySession,
   PageActivitySessionSchema,
@@ -28,14 +29,29 @@ export interface DuckDBConfig {
   read_only?: boolean;
 }
 
-const WEBPAGE_ANALYSIS_TABLE = "webpage_analysis";
 const WEBPAGE_ACTIVITY_SESSIONS_TABLE = "webpage_activity_sessions";
 const WEBPAGE_TREES_TABLE = "webpage_trees";
-const WEBPAGE_TREE_INTENTIONS_TABLE = "webpage_tree_intentions";
+const WEBPAGE_CAPTURE_TABLE = "webpage_capture";
 
 /**
- * DuckDB database wrapper providing webpage tracking and analysis functionality.
- * Manages tables for webpage activity sessions, trees, content, and analysis data.
+ * Capture metadata columns selected (aliased `cap_*`) when a tree query joins
+ * `webpage_capture c`. Mapped to a {@link PageCapture} by
+ * {@link row_to_page_activity_session_with_meta}.
+ */
+const CAPTURE_SELECT = [
+  "c.title as cap_title",
+  "c.site_name as cap_site_name",
+  "c.author as cap_author",
+  "c.published_at as cap_published_at",
+  "c.lang as cap_lang",
+  "c.content_type as cap_content_type",
+  "c.captured_at as cap_captured_at",
+  "c.original_byte_size as cap_original_byte_size",
+].join(",\n         ");
+
+/**
+ * DuckDB database wrapper for the capture pipeline. Manages tables for webpage
+ * activity sessions, navigation trees, and raw-page captures.
  *
  * @example
  * ```typescript
@@ -85,8 +101,7 @@ export class DuckDB {
    * Creates the following tables:
    * - webpage_trees: Navigation tree metadata
    * - webpage_activity_sessions: Individual page visit records
-   * - webpage_analysis: Page analysis and categorization data
-   * - webpage_tree_intentions: Derived intentions for navigation trees
+   * - webpage_capture: Raw captured pages (zstd) plus cheap metadata
    *
    * @returns Promise that resolves when initialization is complete
    * @throws {Error} If database connection or table creation fails
@@ -134,26 +149,26 @@ export class DuckDB {
       activity_sessions_schema
     );
 
-    // Define and create the webpage_categorizations table
-    const webpage_analysis_schema = [
-      "page_session_id TEXT PRIMARY KEY",
+    // Capture-first store: the raw page kept zstd-compressed as the durable,
+    // lossless source of truth for downstream extraction/RAG, plus cheap
+    // non-LLM metadata read from the <head>. Keyed by page_session_id but with
+    // no foreign key, so a capture can be written before (or independently of)
+    // the activity-session row.
+    const webpage_capture_schema = [
+      "page_session_id TEXT PRIMARY KEY", // hash of url + timestamp
+      "content_compressed BLOB NOT NULL", // the raw page, zstd-compressed
+      "content_encoding TEXT NOT NULL", // codec marker, e.g. 'zstd'
+      "original_byte_size INTEGER NOT NULL", // decompressed page size in bytes
+      "content_type TEXT NOT NULL", // MIME type of the captured page
+      "url TEXT NOT NULL",
       "title TEXT NOT NULL",
-      "summary TEXT NOT NULL",
-      "intentions TEXT", // JSON list of intentions
-      "FOREIGN KEY (page_session_id) REFERENCES webpage_activity_sessions(id)",
+      "site_name TEXT",
+      "author TEXT",
+      "published_at TEXT",
+      "lang TEXT",
+      "captured_at TEXT NOT NULL", // ISO timestamp when the page was captured
     ].join(", ");
-    await this.create_table(WEBPAGE_ANALYSIS_TABLE, webpage_analysis_schema);
-
-    const webpage_tree_intentions_schema = [
-      `tree_id TEXT NOT NULL REFERENCES ${WEBPAGE_TREES_TABLE}(id)`,
-      `activity_session_id TEXT NOT NULL REFERENCES ${WEBPAGE_ACTIVITY_SESSIONS_TABLE}(id)`,
-      "intentions TEXT", // JSON list of intentions derived from the tree context
-      "PRIMARY KEY (tree_id, activity_session_id)",
-    ].join(", ");
-    await this.create_table(
-      WEBPAGE_TREE_INTENTIONS_TABLE,
-      webpage_tree_intentions_schema
-    );
+    await this.create_table(WEBPAGE_CAPTURE_TABLE, webpage_capture_schema);
 
     // Performance optimization: Add database indexes for common queries
     await this.create_indexes();
@@ -189,16 +204,12 @@ export class DuckDB {
                       ON ${WEBPAGE_ACTIVITY_SESSIONS_TABLE}(page_loaded_at)`);
 
       // Index for tree activity time lookups
-      await this.exec(`CREATE INDEX IF NOT EXISTS idx_trees_latest_activity 
+      await this.exec(`CREATE INDEX IF NOT EXISTS idx_trees_latest_activity
                       ON ${WEBPAGE_TREES_TABLE}(latest_activity_time)`);
 
-      // Index for analysis title searches (used in get_page_by_title)
-      await this.exec(`CREATE INDEX IF NOT EXISTS idx_analysis_title 
-                      ON ${WEBPAGE_ANALYSIS_TABLE}(title)`);
-
-      // Composite index for tree intentions (both columns used together)
-      await this.exec(`CREATE INDEX IF NOT EXISTS idx_tree_intentions_composite 
-                      ON ${WEBPAGE_TREE_INTENTIONS_TABLE}(tree_id, activity_session_id)`);
+      // Index for capture title searches (used in get_page_by_title)
+      await this.exec(`CREATE INDEX IF NOT EXISTS idx_capture_title
+                      ON ${WEBPAGE_CAPTURE_TABLE}(title)`);
 
       console.log("✅ Database indexes created successfully");
     } catch (error) {
@@ -444,128 +455,107 @@ export class DuckDB {
 }
 
 /**
- * Inserts or updates webpage analysis data for a page session.
- *
- * @param db - DuckDB instance to insert into
- * @param analysis - Page analysis data containing title, summary, and intentions
- * @returns Promise that resolves when the analysis is stored
- * @throws {Error} If insertion fails
- *
- * @example
- * ```typescript
- * await insert_webpage_analysis(db, {
- *   page_sesssion_id: 'session-123',
- *   title: 'Example Page',
- *   summary: 'This page contains information about...',
- *   intentions: ['learn', 'research']
- * });
- * ```
+ * A row in {@link WEBPAGE_CAPTURE_TABLE}: the {@link PageCapture} metadata plus
+ * the raw page bytes. The compressed bytes are supplied by the caller
+ * (zstd-compressed); metadata is read non-LLM from the page's `<head>`.
  */
-export async function insert_webpage_analysis(
+export interface WebpageCaptureRecord extends PageCapture {
+  /** The raw page, already zstd-compressed by the caller. */
+  content_compressed: Uint8Array;
+  /** Codec marker for {@link content_compressed} (e.g. `'zstd'`). */
+  content_encoding: string;
+}
+
+/**
+ * Inserts (or replaces) a raw-page capture. The page bytes are stored exactly as
+ * supplied (zstd-compressed) so they round-trip losslessly; metadata columns
+ * carry the cheap `<head>` signals for navigation/listing without decompression.
+ */
+export async function insert_webpage_capture(
   db: DuckDB,
-  analysis: PageAnalysis
+  capture: WebpageCaptureRecord
 ): Promise<void> {
-  try {
-    // Check if analysis already exists
-    const existing = await db.query_first(
-      `SELECT page_session_id FROM ${WEBPAGE_ANALYSIS_TABLE} WHERE page_session_id = $id`,
-      { id: analysis.page_sesssion_id }
-    );
-    
-    if (existing) {
-      // Update existing analysis
-      await db.execute(
-        `UPDATE ${WEBPAGE_ANALYSIS_TABLE}
-        SET title = $title, summary = $summary, intentions = $intentions
-        WHERE page_session_id = $page_session_id`,
-        {
-          page_session_id: analysis.page_sesssion_id,
-          title: analysis.title,
-          summary: analysis.summary,
-          intentions: JSON.stringify(analysis.intentions),
-        }
-      );
-    } else {
-      // Insert new analysis
-      await db.execute(
-        `INSERT INTO ${WEBPAGE_ANALYSIS_TABLE} 
-        (page_session_id, title, summary, intentions)
-        VALUES ($page_session_id, $title, $summary, $intentions)`,
-        {
-          page_session_id: analysis.page_sesssion_id,
-          title: analysis.title,
-          summary: analysis.summary,
-          intentions: JSON.stringify(analysis.intentions),
-        }
-      );
-    }
-  } catch (error) {
-    console.error("Error inserting webpage categorization:", error);
-    throw error;
-  }
+  const params: Record<string, DuckDBValue> = {
+    page_session_id: capture.page_session_id,
+    content_compressed: blobValue(capture.content_compressed),
+    content_encoding: capture.content_encoding,
+    original_byte_size: capture.original_byte_size,
+    content_type: capture.content_type,
+    url: capture.url,
+    title: capture.title,
+    site_name: capture.site_name,
+    author: capture.author,
+    published_at: capture.published_at,
+    lang: capture.lang,
+    captured_at: capture.captured_at,
+  };
+  // Upsert: a re-captured page (deterministic id) overwrites the prior capture.
+  await db.execute(
+    `INSERT INTO ${WEBPAGE_CAPTURE_TABLE}
+      (page_session_id, content_compressed, content_encoding, original_byte_size,
+       content_type, url, title, site_name, author, published_at, lang, captured_at)
+     VALUES ($page_session_id, $content_compressed, $content_encoding, $original_byte_size,
+       $content_type, $url, $title, $site_name, $author, $published_at, $lang, $captured_at)
+     ON CONFLICT (page_session_id) DO UPDATE SET
+       content_compressed = excluded.content_compressed,
+       content_encoding = excluded.content_encoding,
+       original_byte_size = excluded.original_byte_size,
+       content_type = excluded.content_type,
+       url = excluded.url,
+       title = excluded.title,
+       site_name = excluded.site_name,
+       author = excluded.author,
+       published_at = excluded.published_at,
+       lang = excluded.lang,
+       captured_at = excluded.captured_at`,
+    params
+  );
 }
 
-function create_placeholders_and_params(
-  ids: string[],
-  prefix = "id"
-): { placeholders: string; params: Record<string, DuckDBValue> } {
-  const placeholders = ids.map((_, i) => `$${prefix}${i}`).join(", ");
-  const params: Record<string, DuckDBValue> = {};
-  ids.forEach((id, i) => {
-    params[`${prefix}${i}`] = id;
-  });
-  return { placeholders, params };
-}
-
-function map_row_to_page_analysis(
-  row: Record<string, DuckDBValue>
-): PageAnalysis {
+/** Reads the capture metadata for a page session (no raw bytes), or null. */
+export async function get_webpage_capture(
+  db: DuckDB,
+  page_session_id: string
+): Promise<PageCapture | null> {
+  const row = await db.query_first<Record<string, DuckDBValue>>(
+    `SELECT page_session_id, original_byte_size, content_type, url, title,
+            site_name, author, published_at, lang, captured_at
+     FROM ${WEBPAGE_CAPTURE_TABLE} WHERE page_session_id = $id`,
+    { id: page_session_id }
+  );
+  if (!row) return null;
   return {
-    page_sesssion_id: row.page_session_id.toString(),
+    page_session_id: row.page_session_id.toString(),
+    original_byte_size: Number(row.original_byte_size),
+    content_type: row.content_type.toString(),
+    url: row.url.toString(),
     title: row.title.toString(),
-    summary: row.summary.toString(),
-    intentions: row.intentions ? JSON.parse(row.intentions.toString()) : [],
+    site_name: row.site_name ? row.site_name.toString() : null,
+    author: row.author ? row.author.toString() : null,
+    published_at: row.published_at ? row.published_at.toString() : null,
+    lang: row.lang ? row.lang.toString() : null,
+    captured_at: row.captured_at.toString(),
   };
 }
 
 /**
- * Retrieves webpage analysis data for multiple page session IDs.
- *
- * @param db - DuckDB instance to query from
- * @param page_session_ids - Array of page session IDs to retrieve analysis for
- * @returns Promise that resolves to array of PageAnalysis objects
- * @throws {Error} If query fails
- *
- * @example
- * ```typescript
- * const analyses = await get_webpage_analysis_for_ids(db, [
- *   'session-123',
- *   'session-456'
- * ]);
- * console.log(`Retrieved analysis for ${analyses.length} pages`);
- * ```
+ * Reads the raw compressed page bytes for a page session. This is the
+ * parent-document source for the RAG-prep pipeline (task-31.3): callers
+ * decompress these bytes to recover the original page on demand.
  */
-export async function get_webpage_analysis_for_ids(
+export async function get_webpage_capture_bytes(
   db: DuckDB,
-  page_session_ids: string[]
-): Promise<PageAnalysis[]> {
-  if (page_session_ids.length === 0) return [];
-
-  try {
-    const { placeholders, params } =
-      create_placeholders_and_params(page_session_ids);
-
-    const result = await db.connection.runAndReadAll(
-      `SELECT * FROM ${WEBPAGE_ANALYSIS_TABLE} 
-       WHERE page_session_id IN (${placeholders})`,
-      params
-    );
-
-    return result.getRowObjects().map(map_row_to_page_analysis);
-  } catch (error) {
-    console.error("Error getting webpage analysis:", error);
-    throw error;
-  }
+  page_session_id: string
+): Promise<Uint8Array | null> {
+  const row = await db.query_first<{ content_compressed: DuckDBBlobValue | Uint8Array }>(
+    `SELECT content_compressed FROM ${WEBPAGE_CAPTURE_TABLE} WHERE page_session_id = $id`,
+    { id: page_session_id }
+  );
+  if (!row) return null;
+  const value = row.content_compressed;
+  // getRowObjects returns a BLOB column as a DuckDBBlobValue whose `.bytes` is
+  // the raw Uint8Array; tolerate a plain Uint8Array defensively.
+  return value instanceof Uint8Array ? value : value.bytes;
 }
 
 /**
@@ -722,50 +712,36 @@ export async function find_tree_containing_url(
 }
 
 /**
- * Retrieves all page sessions belonging to a specific navigation tree.
- * Joins with analysis and tree intentions data, and fetches content from LanceDB.
+ * Retrieves all page sessions belonging to a specific navigation tree, joined to
+ * their capture metadata (title etc.) where present.
  *
  * @param db - DuckDB instance to query from
- * @param memory_db - LanceDBMemoryStore instance for content retrieval
  * @param tree_id - ID of the navigation tree to retrieve sessions for
  * @returns Promise that resolves to array of PageActivitySessionWithMeta objects
- * @throws {Error} If query or content retrieval fails
+ * @throws {Error} If the query fails
  *
  * @example
  * ```typescript
- * const treeMembers = await get_page_sessions_with_tree_id(
- *   db,
- *   memoryDb,
- *   'tree-123'
- * );
+ * const treeMembers = await get_page_sessions_with_tree_id(db, 'tree-123');
  * console.log(`Tree has ${treeMembers.length} page sessions`);
  * ```
  */
 export async function get_page_sessions_with_tree_id(
   db: DuckDB,
-  memory_db: LanceDBMemoryStore,
   tree_id: string
 ): Promise<PageActivitySessionWithMeta[]> {
   try {
     const result = await db.connection.runAndReadAll(
-      `SELECT 
+      `SELECT
          s.*,
-         a.title as analysis_title,
-         a.summary as analysis_summary,
-         a.intentions as analysis_intentions,
-         ti.intentions as tree_intentions
+         ${CAPTURE_SELECT}
        FROM ${WEBPAGE_ACTIVITY_SESSIONS_TABLE} s
-       LEFT JOIN ${WEBPAGE_ANALYSIS_TABLE} a ON s.id = a.page_session_id
-       LEFT JOIN ${WEBPAGE_TREE_INTENTIONS_TABLE} ti ON s.tree_id = ti.tree_id AND s.id = ti.activity_session_id
+       LEFT JOIN ${WEBPAGE_CAPTURE_TABLE} c ON s.id = c.page_session_id
        WHERE s.tree_id = $tree_id`,
       { tree_id }
     );
 
-    return await Promise.all(
-      result
-        .getRowObjects()
-        .map((row) => row_to_page_activity_session_with_meta(row, memory_db))
-    );
+    return result.getRowObjects().map(row_to_page_activity_session_with_meta);
   } catch (error) {
     console.error("Error getting page sessions with tree ID:", error);
     throw error;
@@ -913,21 +889,19 @@ export async function update_webpage_tree_activity_time(
 }
 
 /**
- * Retrieves the most recently modified navigation trees with all their member sessions.
- * Excludes a specific tree ID and includes analysis and content data.
+ * Retrieves the most recently modified navigation trees with all their member
+ * sessions, joined to their capture metadata where present.
  *
  * @param db - DuckDB instance to query from
- * @param memory_db - LanceDBMemoryStore instance for content retrieval
  * @param table_id_to_exclude - Tree ID to exclude from results (usually current tree)
  * @param limit - Maximum number of trees to return (default: 5)
  * @returns Promise that resolves to mapping of tree IDs to their member sessions
- * @throws {Error} If query or content retrieval fails
+ * @throws {Error} If the query fails
  *
  * @example
  * ```typescript
- * const recentTrees = await get_last_modified_trees_with_members_and_analysis(
+ * const recentTrees = await get_last_modified_trees_with_members(
  *   db,
- *   memoryDb,
  *   'current-tree-id',
  *   3
  * );
@@ -936,40 +910,33 @@ export async function update_webpage_tree_activity_time(
  * });
  * ```
  */
-export async function get_last_modified_trees_with_members_and_analysis(
+export async function get_last_modified_trees_with_members(
   db: DuckDB,
-  memory_db: LanceDBMemoryStore,
   table_id_to_exclude: string,
   limit = 5
 ): Promise<Record<string, PageActivitySessionWithMeta[]>> {
   // N.B. this could order by recency to a given time but so far this is only used for processing the most recent trees
   try {
     const result = await db.connection.runAndReadAll(
-      `SELECT 
+      `SELECT
          s.*,
-         a.title as analysis_title,
-         a.summary as analysis_summary,
-         a.intentions as analysis_intentions,
-         ti.intentions as tree_intentions
+         ${CAPTURE_SELECT}
        FROM ${WEBPAGE_ACTIVITY_SESSIONS_TABLE} s
-       LEFT JOIN ${WEBPAGE_ANALYSIS_TABLE} a ON s.id = a.page_session_id
-       LEFT JOIN ${WEBPAGE_TREE_INTENTIONS_TABLE} ti ON s.tree_id = ti.tree_id AND s.id = ti.activity_session_id
+       LEFT JOIN ${WEBPAGE_CAPTURE_TABLE} c ON s.id = c.page_session_id
        WHERE s.tree_id IN (
-         SELECT id 
+         SELECT id
          FROM ${WEBPAGE_TREES_TABLE}
          WHERE id != $table_id_to_exclude
-         ORDER BY latest_activity_time DESC 
+         ORDER BY latest_activity_time DESC
          LIMIT $limit
        )
        ORDER BY s.tree_id, s.page_loaded_at ASC`,
       { limit, table_id_to_exclude }
     );
 
-    const all_tree_members = await Promise.all(
-      result
-        .getRowObjects()
-        .map((row) => row_to_page_activity_session_with_meta(row, memory_db))
-    );
+    const all_tree_members = result
+      .getRowObjects()
+      .map(row_to_page_activity_session_with_meta);
     return all_tree_members.reduce((acc, member) => {
       const tree_id = member.tree_id;
       if (!acc[tree_id]) {
@@ -980,88 +947,6 @@ export async function get_last_modified_trees_with_members_and_analysis(
     }, {} as Record<string, PageActivitySessionWithMeta[]>);
   } catch (error) {
     console.error("Error getting last modified trees with members:", error);
-    throw error;
-  }
-}
-
-/**
- * Represents intentions derived from webpage tree context for a specific session
- * @interface WebpageTreeIntention
- */
-export interface WebpageTreeIntention {
-  /** ID of the page activity session these intentions apply to */
-  activity_session_id: string;
-  /** Array of intention strings derived from tree context */
-  intentions: string[];
-}
-
-/**
- * Inserts tree-level intentions for multiple page sessions in a navigation tree.
- *
- * @param db - DuckDB instance to insert into
- * @param tree_id - ID of the navigation tree
- * @param intentions_records - Array of intention records for different sessions
- * @returns Promise that resolves when all intentions are inserted
- * @throws {Error} If insertion fails
- *
- * @example
- * ```typescript
- * await insert_webpage_tree_intentions(db, 'tree-123', [
- *   {
- *     activity_session_id: 'session-1',
- *     intentions: ['research', 'compare']
- *   },
- *   {
- *     activity_session_id: 'session-2',
- *     intentions: ['purchase', 'review']
- *   }
- * ]);
- * ```
- */
-export async function insert_webpage_tree_intentions(
-  db: DuckDB,
-  tree_id: string,
-  intentions_records: WebpageTreeIntention[]
-): Promise<void> {
-  if (intentions_records.length === 0) return;
-
-  try {
-    // Process each record individually to handle updates vs inserts
-    for (const record of intentions_records) {
-      const existing = await db.query_first(
-        `SELECT tree_id FROM ${WEBPAGE_TREE_INTENTIONS_TABLE} 
-        WHERE tree_id = $tree_id AND activity_session_id = $activity_session_id`,
-        { tree_id, activity_session_id: record.activity_session_id }
-      );
-      
-      if (existing) {
-        // Update existing intention
-        await db.execute(
-          `UPDATE ${WEBPAGE_TREE_INTENTIONS_TABLE}
-          SET intentions = $intentions
-          WHERE tree_id = $tree_id AND activity_session_id = $activity_session_id`,
-          {
-            tree_id,
-            activity_session_id: record.activity_session_id,
-            intentions: JSON.stringify(record.intentions),
-          }
-        );
-      } else {
-        // Insert new intention
-        await db.execute(
-          `INSERT INTO ${WEBPAGE_TREE_INTENTIONS_TABLE} 
-          (tree_id, activity_session_id, intentions)
-          VALUES ($tree_id, $activity_session_id, $intentions)`,
-          {
-            tree_id,
-            activity_session_id: record.activity_session_id,
-            intentions: JSON.stringify(record.intentions),
-          }
-        );
-      }
-    }
-  } catch (error) {
-    console.error("Error inserting webpage tree intentions:", error);
     throw error;
   }
 }
@@ -1099,213 +984,59 @@ export async function update_page_activity_session(
   );
 }
 
-async function row_to_page_activity_session_with_meta(
-  row: Record<string, DuckDBValue>,
-  memory_db: LanceDBMemoryStore
-): Promise<PageActivitySessionWithMeta> {
+function row_to_page_activity_session_with_meta(
+  row: Record<string, DuckDBValue>
+): PageActivitySessionWithMeta {
   const base_session = row_to_page_activity_session(row);
 
-  // Fetch content from LanceDB
-  const WEBPAGE_CONTENT_NAMESPACE = "webpage_content";
-  let content = "";
-  try {
-    const content_result = await memory_db.get(
-      [WEBPAGE_CONTENT_NAMESPACE],
-      base_session.id
-    );
-    content = (content_result?.pageContent as string) || "";
-  } catch (error) {
-    console.warn("Failed to fetch content from LanceDB:", error);
-  }
-
-  const analysis_exists =
-    row.analysis_title !== null && row.analysis_title !== undefined;
-  const analysis = analysis_exists
+  // A capture row is present iff its (NOT NULL) title joined through. When
+  // present, the other NOT NULL columns (content_type / captured_at /
+  // original_byte_size) are guaranteed non-null, so they are read directly.
+  const capture_exists =
+    row.cap_title !== null && row.cap_title !== undefined;
+  const capture: PageCapture | undefined = capture_exists
     ? {
-        page_sesssion_id: base_session.id,
-        title: row.analysis_title.toString(),
-        summary: row.analysis_summary.toString(),
-        intentions: row.analysis_intentions
-          ? JSON.parse(row.analysis_intentions.toString())
-          : [],
+        page_session_id: base_session.id,
+        url: base_session.url,
+        title: row.cap_title.toString(),
+        site_name: row.cap_site_name ? row.cap_site_name.toString() : null,
+        author: row.cap_author ? row.cap_author.toString() : null,
+        published_at: row.cap_published_at
+          ? row.cap_published_at.toString()
+          : null,
+        lang: row.cap_lang ? row.cap_lang.toString() : null,
+        content_type: row.cap_content_type.toString(),
+        captured_at: row.cap_captured_at.toString(),
+        original_byte_size: Number(row.cap_original_byte_size),
       }
-    : undefined;
-
-  const tree_intentions = row.tree_intentions
-    ? JSON.parse(row.tree_intentions.toString())
     : undefined;
 
   return PageActivitySessionWithMetaSchema.parse({
     ...base_session,
-    content,
-    analysis,
-    tree_intentions,
+    content: "",
+    capture,
   });
 }
 
 /**
- * Retrieves all analyzed pages with their titles and content for RAG (Retrieval Augmented Generation).
- * Combines title data from DuckDB with content from LanceDB.
+ * Retrieves a captured page by its exact title (metadata only; the raw bytes are
+ * read on demand via the capture store). Returns null if no capture matches.
  *
  * @param db - DuckDB instance to query from
- * @param memory_db - LanceDBMemoryStore instance for content retrieval
- * @returns Promise that resolves to array of page objects with title and content
- * @throws {Error} If query or content retrieval fails
- *
- * @example
- * ```typescript
- * const pages = await get_all_pages_for_rag(db, memoryDb);
- * console.log(`Retrieved ${pages.length} pages for RAG`);
- * pages.forEach(page => {
- *   console.log(`Page: ${page.title} (${page.content.length} chars)`);
- * });
- * ```
- */
-export async function get_all_pages_for_rag(
-  db: DuckDB,
-  memory_db: LanceDBMemoryStore
-): Promise<{ title: string; content: string }[]> {
-  try {
-    // Get all pages with analysis (title) from DuckDB
-    const result = await db.connection.runAndReadAll(
-      `SELECT 
-         a.page_session_id,
-         a.title
-       FROM ${WEBPAGE_ANALYSIS_TABLE} a`
-    );
-
-    const rows = result.getRowObjects();
-    const WEBPAGE_CONTENT_NAMESPACE = "webpage_content";
-
-    // Performance optimization: Batch content retrieval instead of individual gets
-    // to reduce N+1 query problem with LanceDB
-    const batch_operations = rows.map((row) => ({
-      type: "get" as const,
-      namespace: [WEBPAGE_CONTENT_NAMESPACE],
-      key: row.page_session_id.toString(),
-    }));
-
-    // Use batch operation for better performance
-    const content_results = await memory_db.batch(batch_operations);
-
-    return rows.map((row, index) => {
-      const title = row.title.toString();
-      const content_result = content_results[index] as SearchItem | null;
-      const content = (content_result?.pageContent as string) || "";
-
-      return {
-        title,
-        content,
-      };
-    });
-  } catch (error) {
-    console.error("Error getting all pages for RAG:", error);
-    throw error;
-  }
-}
-
-/**
- * Retrieves a specific page by its title, including content from LanceDB.
- *
- * @param db - DuckDB instance to query from
- * @param memory_db - LanceDBMemoryStore instance for content retrieval
  * @param title - Exact title of the page to retrieve
- * @returns Promise that resolves to page object with title and content, or null if not found
- * @throws {Error} If query or content retrieval fails
- *
- * @example
- * ```typescript
- * const page = await get_page_by_title(db, memoryDb, 'Machine Learning Guide');
- * if (page) {
- *   console.log(`Found page: ${page.title}`);
- *   console.log(`Content length: ${page.content.length} characters`);
- * }
- * ```
  */
 export async function get_page_by_title(
   db: DuckDB,
-  memory_db: LanceDBMemoryStore,
   title: string
-): Promise<{ title: string; content: string } | null> {
-  try {
-    // Get page session ID from DuckDB
-    const result = await db.connection.runAndReadAll(
-      `SELECT 
-         a.page_session_id,
-         a.title
-       FROM ${WEBPAGE_ANALYSIS_TABLE} a
-       WHERE a.title = $title
-       LIMIT 1`,
-      { title }
-    );
-
-    const rows = result.getRowObjects();
-    if (rows.length === 0) {
-      return null;
-    }
-
-    const row = rows[0];
-    const page_session_id = row.page_session_id.toString();
-
-    // Fetch content from LanceDB
-    const WEBPAGE_CONTENT_NAMESPACE = "webpage_content";
-    const content_result = await memory_db.get(
-      [WEBPAGE_CONTENT_NAMESPACE],
-      page_session_id
-    );
-    const content = (content_result?.pageContent as string) || "";
-
-    return {
-      title: row.title.toString(),
-      content,
-    };
-  } catch (error) {
-    console.error("Error getting page by title:", error);
-    throw error;
-  }
-}
-
-/**
- * Retrieves webpage content from LanceDB by page session ID.
- * Returns content in the expected compressed format (though content is actually decompressed in LanceDB).
- *
- * @param memory_db - LanceDBMemoryStore instance for content retrieval
- * @param page_session_id - Unique identifier of the page session
- * @returns Promise that resolves to content object or null if not found
- * @throws {Error} If content retrieval fails
- *
- * @example
- * ```typescript
- * const content = await get_webpage_content(memoryDb, 'session-123');
- * if (content) {
- *   console.log('Page content:', content.content_compressed);
- * }
- * ```
- */
-export async function get_webpage_content(
-  memory_db: LanceDBMemoryStore,
-  page_session_id: string
-): Promise<{ content_compressed: string } | null> {
-  try {
-    // Fetch content from LanceDB using key-based lookup
-    const WEBPAGE_CONTENT_NAMESPACE = "webpage_content";
-    const result = await memory_db.get(
-      [WEBPAGE_CONTENT_NAMESPACE],
-      page_session_id
-    );
-
-    if (!result || !result.pageContent) {
-      return null;
-    }
-
-    // Return content in the expected format (already decompressed in LanceDB)
-    return {
-      content_compressed: result.pageContent as string,
-    };
-  } catch (error) {
-    console.error("Error getting webpage content from LanceDB:", error);
-    throw error;
-  }
+): Promise<PageCapture | null> {
+  const result = await db.connection.runAndReadAll(
+    `SELECT page_session_id FROM ${WEBPAGE_CAPTURE_TABLE}
+     WHERE title = $title LIMIT 1`,
+    { title }
+  );
+  const rows = result.getRowObjects();
+  if (rows.length === 0) return null;
+  return get_webpage_capture(db, rows[0].page_session_id.toString());
 }
 
 /**
@@ -1332,12 +1063,12 @@ export async function get_webpage_by_url(
   try {
     const result = await db.connection.runAndReadAll(
       `
-      SELECT 
+      SELECT
         s.url,
-        COALESCE(a.title, '') as title,
+        COALESCE(c.title, '') as title,
         s.page_loaded_at as visited_at
       FROM ${WEBPAGE_ACTIVITY_SESSIONS_TABLE} s
-      LEFT JOIN ${WEBPAGE_ANALYSIS_TABLE} a ON s.id = a.page_session_id
+      LEFT JOIN ${WEBPAGE_CAPTURE_TABLE} c ON s.id = c.page_session_id
       WHERE s.url = $url
       ORDER BY s.page_loaded_at DESC
       LIMIT 1

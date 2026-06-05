@@ -1,21 +1,14 @@
 import * as path from 'path';
 import { DuckDB } from '../duck_db';
-import { LanceDBMemoryStore } from '../lance_db';
-import { create_embeddings, LOCAL_EMBEDDING_DIM } from '../workflow/embeddings';
-
-/** LanceDB namespace holding embedded webpage content. */
-const WEBPAGE_CONTENT_NAMESPACE = ['webpage_content'];
 
 /**
  * Result of database initialization containing all database instances.
  *
  * @interface DatabaseInstances
- * @property {DuckDB} duck_db - DuckDB instance for structured webpage data storage
- * @property {LanceDBMemoryStore} memory_db - LanceDB store for embeddings and vector search
+ * @property {DuckDB} duck_db - DuckDB instance for structured webpage data + captures
  */
 export interface DatabaseInstances {
   duck_db: DuckDB;
-  memory_db: LanceDBMemoryStore;
 }
 
 /**
@@ -39,55 +32,12 @@ export class DatabaseManager {
   private databases?: DatabaseInstances;
 
   /**
-   * Initializes the memory store with local-embedding support for semantic search.
-   *
-   * @param storage_path - Resolved storage base directory
-   * @returns Initialized LanceDB memory store
-   * @throws {Error} If LanceDB initialization fails
-   * @example
-   * ```typescript
-   * const memoryDb = await dbManager.initialize_memory_store('/path/to/storage');
-   * const results = await memoryDb.search(['webpage_content'], { query: 'query text' });
-   * ```
-   */
-  async initialize_memory_store(
-    storage_path: string
-  ): Promise<LanceDBMemoryStore> {
-    console.log('Initializing memory store...');
-
-    // The LanceDB store lives in a dedicated subdirectory of the storage path.
-    // Readers (the MCP server) resolve the same `webpage_memory.db` path, so the
-    // writer must use it too or semantic search reads an empty store.
-    const memory_db_path = path.join(storage_path, 'webpage_memory.db');
-    const memory_db = await LanceDBMemoryStore.create(memory_db_path, {
-      embeddings: create_embeddings(),
-    });
-
-    // Discard any content store written with a different embedding dimension
-    // (e.g. a pre-existing 1536-dim OpenAI store); it would be unqueryable
-    // against the 384-dim local model and is rebuilt as pages are re-ingested.
-    await memory_db.drop_table_if_vector_dim_mismatch(
-      WEBPAGE_CONTENT_NAMESPACE,
-      LOCAL_EMBEDDING_DIM
-    );
-
-    console.log('Memory store initialized successfully');
-    return memory_db;
-  }
-
-  /**
-   * Initializes all databases required by the extension: the DuckDB relational
-   * store and the LanceDB vector store.
+   * Initializes the DuckDB relational + raw-page capture store. Ingestion is
+   * DuckDB-only; vector search is reintroduced by the RAG-prep pipeline (task-31).
    *
    * @param storage_path - Resolved storage base directory (dev or global)
    * @returns Complete set of initialized databases
-   * @throws {Error} If any database initialization fails
-   * @example
-   * ```typescript
-   * const dbManager = new DatabaseManager();
-   * const databases = await dbManager.initialize_all(storage_base);
-   * // All databases are now ready to use
-   * ```
+   * @throws {Error} If initialization fails
    */
   async initialize_all(
     storage_path: string
@@ -97,9 +47,7 @@ export class DatabaseManager {
     });
     await duck_db.init();
 
-    const memory_db = await this.initialize_memory_store(storage_path);
-
-    this.databases = { duck_db, memory_db };
+    this.databases = { duck_db };
     return this.databases;
   }
 
@@ -118,9 +66,6 @@ export class DatabaseManager {
   async close_all(): Promise<void> {
     if (this.databases?.duck_db) {
       await this.databases.duck_db.close();
-    }
-    if (this.databases?.memory_db) {
-      this.databases.memory_db.stop();
     }
     console.log('All databases closed');
   }

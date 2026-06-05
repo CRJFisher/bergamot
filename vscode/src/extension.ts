@@ -17,13 +17,10 @@ let command_manager: CommandManager;
  * Activates the Bergamot VS Code extension.
  *
  * Initializes all core components:
- * - Resolves the LLM provider (Claude subscription by default; OpenAI key only
- *   required when the provider is "openai")
- * - Sets up DuckDB for structured webpage data storage
- * - Starts Express server for browser extension communication
- * - Initializes LanceDB vector store for content and local embeddings
+ * - Sets up DuckDB for the relational + raw-page capture store
+ * - Starts the Express capture server for browser extension communication
  * - Starts MCP (Model Context Protocol) server for external tool access
- * - Registers VS Code commands and providers for search and hover functionality
+ * - Registers VS Code commands and the webpage hover provider
  *
  * @param context - VS Code extension context providing access to extension resources
  * @returns Promise that resolves when activation is complete
@@ -33,18 +30,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   console.log('Starting Bergamot extension activation...');
 
   try {
-    // Step 1: Validate configuration. Classification defaults to the Claude
-    // subscription and embeddings run locally, so an OpenAI key is optional —
-    // required only when the provider is explicitly 'openai'.
-    const llm_provider = ConfigManager.get_llm_provider();
-    const openai_api_key = ConfigManager.get_openai_api_key() ?? '';
-    if (llm_provider === 'openai' && !openai_api_key) {
-      vscode.window.showErrorMessage(
-        'Bergamot: llmProvider is "openai" but no API key is set (bergamot.openaiApiKey).'
-      );
-      return;
-    }
-
     // Resolve the storage base once: dev runs (F5) point BERGAMOT_STORAGE_PATH
     // at a repo-local .dev-storage; installed extensions use globalStorageUri.
     const storage_base = get_storage_base(context);
@@ -65,12 +50,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // Step 3: Start Express server for webpage categorization
     console.log('Starting webpage categorizer service...');
     server_manager = new ServerManager({
-      openai_api_key,
       duck_db: databases.duck_db,
-      memory_db: databases.memory_db,
       inbox_dir: path.join(storage_base, 'visit_inbox'),
-      storage_base,
-      llm_provider
+      storage_base
     });
 
     const port = await server_manager.start();
@@ -81,7 +63,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     command_manager = new CommandManager({
       context,
       duck_db: databases.duck_db,
-      memory_db: databases.memory_db,
       server_manager,
       storage_base
     });

@@ -36,7 +36,7 @@ export const PageActivitySessionSchema = z.object({
 });
 /**
  * Page activity session schema without content field.
- * Used when content is stored separately (e.g., in LanceDB) to reduce data transfer.
+ * Used when the raw page is stored separately (in the webpage_capture store).
  */
 export const PageActivitySessionWithoutContentSchema =
   PageActivitySessionSchema.omit({

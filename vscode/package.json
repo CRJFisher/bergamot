@@ -28,12 +28,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "bergamot.searchWebpages",
-        "title": "Bergamot: Search Webpages"
-      },
-      {
-        "command": "bergamot.showFilterMetrics",
-        "title": "Bergamot: Show Filter Metrics"
+        "command": "bergamot.showCaptureMetrics",
+        "title": "Bergamot: Show Capture Gate Metrics"
       },
       {
         "command": "bergamot.showVisitOutcomes",
@@ -47,61 +43,10 @@
     "configuration": {
       "title": "Bergamot",
       "properties": {
-        "bergamot.openaiApiKey": {
-          "type": "string",
-          "default": "",
-          "description": "Your OpenAI API key for Bergamot (only needed when llmProvider is 'openai')",
-          "scope": "application"
-        },
-        "bergamot.llmProvider": {
-          "type": "string",
-          "enum": [
-            "claude",
-            "openai",
-            "vscode"
-          ],
-          "default": "claude",
-          "description": "Backend for classification and analysis: 'claude' (subscription, no API tokens), 'openai' (uses openaiApiKey), or 'vscode' (editor language model)."
-        },
         "bergamot.devMode": {
           "type": "boolean",
           "default": false,
           "description": "Enable dev-phase observability: the Bergamot Dev output channel and a tail-able dev-log.jsonl. Always on during F5 debugging."
-        },
-        "bergamot.webpageFilter.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable webpage filtering based on content type"
-        },
-        "bergamot.webpageFilter.allowedTypes": {
-          "type": "array",
-          "default": [
-            "knowledge"
-          ],
-          "description": "Types of pages to process",
-          "items": {
-            "type": "string",
-            "enum": [
-              "knowledge",
-              "interactive_app",
-              "aggregator",
-              "leisure",
-              "navigation",
-              "other"
-            ]
-          }
-        },
-        "bergamot.webpageFilter.minConfidence": {
-          "type": "number",
-          "default": 0.7,
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Minimum confidence threshold for page classification"
-        },
-        "bergamot.webpageFilter.logDecisions": {
-          "type": "boolean",
-          "default": true,
-          "description": "Log filtering decisions to console"
         }
       }
     }
@@ -127,14 +72,10 @@
   },
   "dependencies": {
     "@duckdb/node-api": "^1.2.2-alpha.18",
-    "@lancedb/lancedb": "^0.19.0",
     "@modelcontextprotocol/sdk": "^1.15.1",
     "@mongodb-js/zstd": "^2.0.1",
-    "@xenova/transformers": "^2.17.2",
     "cors": "^2.8.5",
     "express": "^5.1.0",
-    "openai": "^6.41.0",
-    "uuid": "^11.1.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -143,7 +84,6 @@
     "@types/jest": "^29.5.14",
     "@types/node": "20.x",
     "@types/supertest": "^6.0.3",
-    "@types/uuid": "^10.0.0",
     "@types/vscode": "^1.99.1",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
