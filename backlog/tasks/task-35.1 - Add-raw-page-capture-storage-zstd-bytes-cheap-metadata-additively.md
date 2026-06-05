@@ -4,7 +4,7 @@ title: Add raw-page capture storage (zstd bytes + cheap metadata) additively
 status: To Do
 assignee: []
 created_date: '2026-06-04 17:31'
-updated_date: '2026-06-05 08:57'
+updated_date: '2026-06-05 10:25'
 labels: []
 dependencies:
   - TASK-35.3
@@ -18,7 +18,7 @@ priority: high
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Introduce a DuckDB table webpage_capture(page_session_id TEXT PRIMARY KEY, content_compressed BLOB, content_encoding TEXT, original_byte_size INT, content_type TEXT, url TEXT, title TEXT, site_name TEXT, author TEXT, published_at TEXT, lang TEXT, captured_at TEXT) and write the raw page to it zstd-compressed (reuse the zstd codec already on the capture path — the browser zstd-compresses for transport per commit 3a38b9d; do not add a heavyweight new dep). Read cheap metadata non-LLM from the HTML <head> / Open-Graph tags (linkedom or a light parse) — NO main-content extraction. Land ADDITIVELY alongside the existing LLM pipeline (which keeps writing webpage_analysis) so e2e stays green; later subtasks delete the LLM calls and the old table. References the task-35.3 dev-DB reset procedure.
+Introduce a DuckDB table webpage_capture(page_session_id TEXT PRIMARY KEY, content_compressed BLOB, content_encoding TEXT, original_byte_size INT, content_type TEXT, url TEXT, title TEXT, site_name TEXT, author TEXT, published_at TEXT, lang TEXT, captured_at TEXT) and store the raw page zstd-compressed. Reuse @mongodb-js/zstd (already a dependency). Storage tip: server_manager.ts already decodes the incoming base64 zstd into a Buffer (server_manager.ts:212) before decompressing it for the size-guard — store THAT original compressed Buffer directly (content_encoding='zstd', original_byte_size = decompressed length) rather than re-compressing; keep the decompress only for the size guard and the cheap metadata parse. Read cheap metadata non-LLM from the HTML <head> / Open-Graph tags (linkedom or a light parse) — NO main-content extraction. Land ADDITIVELY alongside the existing LLM pipeline (which keeps writing webpage_analysis) so e2e stays green; later subtasks delete the LLM calls and the old table. References the task-35.3 dev-DB reset procedure.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

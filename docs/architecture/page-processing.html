@@ -182,11 +182,11 @@ flowchart LR
     </pre>
   </div>
   <div class="note">
-    <strong>Interim search.</strong> Today whole-page embeddings are made at ingest, so semantic search works
-    immediately. Capture-first removes that — search is produced by the RAG-prep pass. Until task-31 lands,
-    either accept that captured pages are not yet searchable, or add a thin <em>interim</em> whole-page
-    embedding at capture (local all-MiniLM, still no LLM) over cheaply tag-stripped text, to be superseded by
-    chunked embeddings. This is a flagged decision, not yet baked in.
+    <strong>Interim search (decided).</strong> Today whole-page embeddings are made at ingest, so semantic
+    search works immediately. Capture-first removes that: ingestion writes nothing to LanceDB, and semantic
+    search is produced entirely by the RAG-prep pass. <strong>Decision: no interim embedding</strong> —
+    captured pages are not searchable until task-31 builds the index. This keeps capture pure and avoids
+    throwaway code; task-31 is the next milestone.
   </div>
 
   <h2><span class="num">6</span>Default model &amp; cost</h2>

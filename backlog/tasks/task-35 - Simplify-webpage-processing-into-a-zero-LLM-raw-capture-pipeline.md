@@ -4,7 +4,7 @@ title: Simplify webpage processing into a zero-LLM raw-capture pipeline
 status: To Do
 assignee: []
 created_date: '2026-06-04 17:31'
-updated_date: '2026-06-05 08:58'
+updated_date: '2026-06-05 10:25'
 labels:
   - pipeline
   - refactor
@@ -28,7 +28,7 @@ Rationale: a page can never be re-captured, so lossy extraction at ingest is an 
 
 Honors the no-backwards-compat constitution (destructive dev-DB reset, no shims) and no-stateful-classes (WebpageWorkflow dissolves into functions). Companion: docs/architecture/page-processing.html.
 
-Open decision (flagged, not yet baked in): whether to keep a thin interim non-LLM whole-page embedding at capture so semantic search keeps working before task-31's chunked index lands.
+Decision (LOCKED): NO interim embedding — ingestion writes nothing to LanceDB; semantic search is deferred to the RAG-prep pipeline (task-31) and returns empty until that index is built. Implementation notes: zstd is @mongodb-js/zstd (already a dependency, exposes compress/decompress); the server already decodes the incoming base64 zstd into a Buffer before decompressing for the size-guard, so the raw page can be stored from that original buffer without re-compressing.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
