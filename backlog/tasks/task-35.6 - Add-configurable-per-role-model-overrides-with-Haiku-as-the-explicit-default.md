@@ -4,7 +4,7 @@ title: Add configurable per-role model overrides with Haiku as the explicit defa
 status: To Do
 assignee: []
 created_date: '2026-06-04 17:32'
-updated_date: '2026-06-04 18:02'
+updated_date: '2026-06-05 08:58'
 labels: []
 dependencies:
   - TASK-35.2
@@ -19,7 +19,7 @@ priority: medium
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Add a static ConfigManager.get_model_overrides(): Partial<Record<ModelRole, string>> (matching the existing static-method pattern on the ConfigManager class — there are no free functions in config_manager.ts) reading bergamot.models.fast. Expose ONLY the fast role for now: after task-35.2 removes the tree-intentions call, no code path consumes 'smart', so a bergamot.models.smart setting would be config surface with zero effect (YAGNI / no-surplus). Thread the override through get_llm_client into the ClaudeAgentClient / OpenAIClient constructors, which merge it over their built-in maps ({...CLAUDE_MODELS, ...overrides}); replace the hardcoded CLAUDE_MODELS[role] / OPENAI_MODELS[role] access with the merged map (no parallel fallback shim). Register bergamot.models.fast in package.json contributes.configuration. Verify BERGAMOT_LLM=fake still short-circuits before any client constructor.
+Add a static ConfigManager.get_model_overrides(): Partial<Record<ModelRole, string>> (matching the existing static-method pattern on the ConfigManager class) reading bergamot.models.fast, and thread it through get_llm_client into the ClaudeAgentClient / OpenAIClient constructors, which merge it over their built-in maps. After this epic, ingestion makes no LLM calls — this config governs the model used by the RAG-prep pipeline (task-31) and any other LLM feature, so Haiku is the explicit configurable default for the live 'fast' role. Expose only the fast role for now (the 'smart' key is reserved but has no caller — YAGNI). Register bergamot.models.fast in package.json. Verify BERGAMOT_LLM=fake still short-circuits before any client constructor.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

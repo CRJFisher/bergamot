@@ -4,7 +4,7 @@ title: LLM-gated image/diagram extraction in content processing
 status: To Do
 assignee: []
 created_date: '2026-06-02 16:51'
-updated_date: '2026-06-04 18:02'
+updated_date: '2026-06-05 08:59'
 labels: []
 dependencies: []
 ---
@@ -32,4 +32,6 @@ During webpage content extraction, let the LLM decide whether to persist images 
 RE-SCOPED by task-35. This task assumed CONTENT_PROCESSING_PROMPT exists, which task-35.4 deletes. Rewrite to layer on the new pipeline: image/diagram references come from the deterministic extractor (Defuddle exposes lead_image and inline images) plus an optional LLM keep/decorative flag, persisted on the webpage_essence row (not the deleted analysis row). Parked until task-35 lands; not a blocker.
 
 Storage note: task-35.9 provides only lead_image_url (single hero image) on webpage_essence; task-32 will add its own kept-images column (inline/flagged content images) to webpage_essence when un-parked.
+
+UPDATE (capture-first task-35): ingestion no longer extracts content or writes an essence/analysis row — webpage_capture stores raw bytes + cheap metadata only. Image/diagram extraction belongs entirely in the RAG-prep pipeline (which reads the stored raw pages); persist kept-image references on a RAG-side table, not on webpage_capture. lead_image can come from og:image at capture if wanted.
 <!-- SECTION:NOTES:END -->

@@ -4,7 +4,7 @@ title: 'Clean ingestion: heuristic main-content extraction'
 status: To Do
 assignee: []
 created_date: '2026-06-02 12:22'
-updated_date: '2026-06-04 17:33'
+updated_date: '2026-06-05 08:58'
 labels: []
 dependencies:
   - TASK-31.1
@@ -30,4 +30,6 @@ Reduce noise entering the vectors by pruning non-content HTML (nav, footer, asid
 
 <!-- SECTION:NOTES:BEGIN -->
 RE-SCOPED by task-35 (essence-capture pipeline). The core of this task — heuristic non-LLM main-content extraction — is promoted to first-class work in task-35.1 (Defuddle + linkedom). This task is superseded; its only genuinely RAG-specific AC ('neutral-or-better retrieval on the harness') should be carried as a DEFERRED post-harness verification under task-31.1, not a blocker for landing the extractor. Remove the inverted dependency on task-31.1. Recommend archiving once task-35.1 lands.
+
+UPDATE (capture-first redesign of task-35): extraction is NO LONGER pulled forward into ingestion. task-35 now stores the raw page losslessly and makes zero LLM calls at ingest; non-LLM main-content extraction (Defuddle + linkedom) STAYS here as a RAG-prep step that reads stored raw pages (webpage_capture.content_compressed) and feeds chunking (task-31.3). This task is no longer 'absorbed' by task-35 — it remains the extraction step of the RAG pipeline. Its dependency on task-31.1 (eval harness) is appropriate again.
 <!-- SECTION:NOTES:END -->

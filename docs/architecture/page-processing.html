@@ -26,49 +26,58 @@
 <div class="wrap">
 
   <section class="hero">
-    <h1>📝 Page Processing</h1>
-    <p class="tagline">How a captured page becomes a stored record. Moving from an LLM categoriser that
-    runs up to four model calls per page to a deterministic essence-capture pipeline with a single cheap
-    Haiku call — usage-agnostic by design.</p>
-    <span class="pill">capture → extract (non-LLM) → gate → summarize (1× Haiku) → store essence</span>
+    <h1>📥 Page Processing</h1>
+    <p class="tagline">How a captured page becomes a stored record. Ingestion is now <strong>pure, lossless
+    capture with zero LLM calls</strong> — the raw page is stored compressed alongside cheap metadata, and all
+    interpretation (extraction, chunking, embedding, summarisation) moves to the RAG-prep pipeline.</p>
+    <span class="pill">capture → deterministic gate → store raw page + metadata &nbsp;·&nbsp; (no LLM)</span>
   </section>
 
   <p class="lead">
     Page processing is the stage inside the VS Code extension that turns a captured page into a durable
-    record. The redesign has one organising idea: <strong>capture the essence of a page deterministically,
-    and store it in a form that is agnostic to how it will later be used.</strong> Classification work
-    shrinks to a single deterministic gate, content extraction moves off the LLM entirely, and exactly one
-    cheap model call writes a short summary. <em>This page describes the target design (task-35); the
+    record. The organising idea: <strong>separate capture from interpretation.</strong> Capture is dumb,
+    deterministic, and lossless — it persists the raw page bytes (compressed) and a little cheap metadata,
+    and makes <em>no LLM calls at all</em>. Everything intelligent — isolating the article, chunking,
+    embedding, summarising — is the job of the <a href="rag-pipeline.html">RAG-prep pipeline</a>, which reads
+    the stored raw pages on its own schedule. <em>This page describes the target design (task-35); the
     "before" is shown for contrast only.</em>
   </p>
+
+  <div class="note">
+    <strong>Why store the whole page?</strong> A page can never be re-captured — once you've left it, lossy
+    extraction at ingest is an irreversible loss. Storing the raw page (zstd-compressed, a few hundred KB) is
+    cheap and means the RAG pipeline can re-extract and re-chunk the entire corpus with better algorithms at
+    any time. Capture preserves; the pipeline interprets.
+  </div>
 
   <h2><span class="num">1</span>Before → after at a glance</h2>
   <table>
     <tr><th>Dimension</th><th>Today</th><th>Target</th></tr>
-    <tr><td>LLM calls / stored page</td><td>up to <strong>4</strong> (classify · content · analysis · tree-intentions)</td><td><strong>1</strong> (summary + topics)</td></tr>
-    <tr><td>LLM calls / dropped page</td><td>1–2 (classify, sometimes content)</td><td><strong>0</strong></td></tr>
-    <tr><td>Main-content extraction</td><td>LLM (up to 100k chars → Haiku)</td><td>non-LLM (Defuddle + linkedom)</td></tr>
-    <tr><td>Relevance gate</td><td>LLM 6-way taxonomy, <code>knowledge</code>-only ≥ 0.7</td><td>deterministic word-count / link-density</td></tr>
-    <tr><td>Most expensive call</td><td>tree-intentions on <strong>sonnet</strong></td><td>removed</td></tr>
-    <tr><td>Stored record</td><td><code>webpage_analysis</code> {title, summary, intentions}</td><td><code>PageEssence</code> {title, excerpt, summary, topics, markdown, metadata}</td></tr>
-    <tr><td>Storage philosophy</td><td>usage-specific (<em>why</em> the user looked)</td><td>usage-agnostic (<em>what</em> is on the page)</td></tr>
+    <tr><td>LLM calls / page at ingest</td><td>up to <strong>4</strong> (classify · content · analysis · tree-intentions)</td><td><strong>0</strong> — ingestion is LLM-free</td></tr>
+    <tr><td>What ingestion produces</td><td>lossy extracted markdown + summary + intentions</td><td>the <strong>raw page</strong> (compressed) + cheap metadata</td></tr>
+    <tr><td>Main-content extraction</td><td>LLM, at ingest (lossy, one-shot)</td><td>non-LLM, in the RAG pipeline (re-runnable over raw pages)</td></tr>
+    <tr><td>Relevance gate</td><td>LLM 6-way taxonomy, <code>knowledge</code>-only ≥ 0.7</td><td>deterministic (content size / link-density / type)</td></tr>
+    <tr><td>Summary / topics</td><td>LLM, at ingest</td><td>deferred to the RAG pipeline / query time (or dropped)</td></tr>
+    <tr><td>Embedding</td><td>whole-page, at ingest</td><td>chunked, in the RAG pipeline (<a href="rag-pipeline.html">task-31.3</a>)</td></tr>
+    <tr><td>Stored record</td><td><code>webpage_analysis</code> {title, summary, intentions}</td><td><code>PageCapture</code> {raw bytes + metadata}</td></tr>
+    <tr><td>Failure surface at ingest</td><td>LLM auth / non-JSON / prompt-length</td><td>none — deterministic, offline</td></tr>
   </table>
 
   <h2><span class="num">2</span>Today's pipeline</h2>
   <p>The current workflow (<code>vscode/src/workflow/simple_workflow.ts</code>, class <code>WebpageWorkflow</code>)
-  fires up to four LLM calls over largely overlapping inputs, and the only non-LLM step is crude noise removal.</p>
+  fires up to four LLM calls per page and discards the raw HTML after extraction.</p>
   <div class="diagram">
-    <p class="cap">Current — LLM-heavy categoriser</p>
+    <p class="cap">Current — LLM-heavy categoriser, raw page discarded</p>
     <pre class="mermaid">
 flowchart TB
     raw["captured body HTML (≤ 2 MB)"]
     c1["1 · classify_webpage<br/>PAGE_FILTER_PROMPT · Haiku<br/>first 2000 chars → 6-way type + confidence"]
     gate{"type = knowledge<br/>&amp; confidence ≥ 0.7?"}
     drop1["drop (no store)"]
-    red["reduce_html_for_llm (non-LLM)<br/>regex strip scripts/styles/svg · 100k cap<br/>(noise only — keeps nav/footer/ads)"]
+    red["reduce_html_for_llm (non-LLM)<br/>regex strip scripts/styles/svg · 100k cap"]
     c2["2 · content-processing<br/>CONTENT_PROCESSING_PROMPT · Haiku<br/>HTML → markdown"]
     c3["3 · analysis<br/>ANALYSIS_PROMPT · Haiku<br/>{title, summary, intentions}"]
-    store["DuckDB webpage_analysis + LanceDB content"]
+    store["DuckDB webpage_analysis + LanceDB content<br/>(markdown only — raw HTML thrown away)"]
     c4["4 · tree-intentions<br/>TREE_INTENTIONS_PROMPT · SONNET<br/>(only if tree &gt; 1 page)"]
 
     raw --> c1 --> gate
@@ -83,138 +92,154 @@ flowchart TB
     class store st;
     </pre>
   </div>
-  <ul class="clean">
-    <li><strong>Overlapping work:</strong> classify, content-processing and analysis all re-read the same page from scratch.</li>
-    <li><strong>No real extraction:</strong> <code>reduce_html_for_llm</code> only strips obvious noise; it never isolates the article, so the LLM does the extraction over up to 100k chars — the dominant token cost.</li>
-    <li><strong>Usage-specific storage:</strong> <code>intentions</code> / <code>tree_intentions</code> guess <em>why</em> the user viewed a page — an interpretation baked into the capture record.</li>
-    <li><strong>The one expensive call:</strong> tree-intentions runs on sonnet and re-derives intentions across the whole visit tree.</li>
-  </ul>
 
   <h2><span class="num">3</span>Target pipeline</h2>
-  <p>Deterministic extraction is the core. A real content extractor isolates the article and hands back
-  clean markdown <em>plus</em> title, excerpt, author, site, published date, word-count, language and lead
-  image — for free, with no model call. A deterministic gate decides keep/drop from those signals. Only
-  kept pages pay for a single Haiku call that writes a short summary and topic labels.</p>
+  <p>Capture is a short, fully deterministic path. It decides keep/drop on cheap signals, pulls a little
+  metadata straight from the HTML <code>&lt;head&gt;</code> (no main-content extraction), and persists the raw
+  page compressed. No model is ever called.</p>
   <div class="diagram">
-    <p class="cap">Target — deterministic essence capture, one cheap call</p>
+    <p class="cap">Target — deterministic capture, zero LLM</p>
     <pre class="mermaid">
 flowchart TB
-    raw["captured body HTML + url"]
-    ex["extract_essence (NON-LLM)<br/>Defuddle + linkedom<br/>→ markdown · title · excerpt · author · site<br/>· published_at · word_count · lang · lead_image"]
-    gate{"relevance_gate (NON-LLM)<br/>word_count / link-density<br/>/ empty-content"}
-    drop["drop · record reason<br/>(0 LLM calls)"]
-    sum["summarize_essence (1× HAIKU)<br/>{summary, topics}<br/>excerpt = deterministic fallback"]
-    store["store_essence<br/>DuckDB webpage_essence<br/>+ LanceDB content (markdown)"]
-    tree["link_tree (NON-LLM)<br/>structural relations only<br/>referrer / tree_id"]
+    raw["captured page HTML + url"]
+    gate{"relevance_gate (NON-LLM)<br/>content size / link-density<br/>/ empty / content-type"}
+    drop["drop · record reason"]
+    meta["read cheap metadata (NON-LLM)<br/>title · site · author · published · lang<br/>from &lt;head&gt; / og: tags — no article extraction"]
+    comp["zstd-compress raw page"]
+    store["store_capture<br/>DuckDB webpage_capture<br/>(raw bytes BLOB + metadata)"]
+    tree["link_tree (NON-LLM)<br/>structural relations only"]
 
-    raw --> ex --> gate
+    raw --> gate
     gate -- "no article" --> drop
-    gate -- keep --> sum --> store --> tree
+    gate -- keep --> meta --> comp --> store --> tree
 
-    classDef llm fill:#3a2a1a,stroke:#f0883e,color:#f5d9c0;
     classDef det fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
     classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
-    class sum llm;
-    class ex,gate,raw,tree det;
+    class raw,gate,meta,comp,tree det;
     class store st;
     </pre>
   </div>
   <div class="cards">
-    <div class="card"><h3>Non-LLM extraction</h3><p>Defuddle (via <code>defuddle/node</code>) with linkedom as the DOM provider isolates the main article and emits markdown + rich metadata. Readability + turndown is the all-CJS fallback if the ESM-in-CJS integration proves fragile.</p></div>
-    <div class="card"><h3>Deterministic gate</h3><p>No taxonomy, no model. The extractor's "no article found" signal — empty body, low word-count, high link-density — decides keep/drop. Dropped pages cost zero LLM calls. PDFs / non-HTML get a dedicated drop reason.</p></div>
-    <div class="card"><h3>One Haiku call</h3><p>Over already-clean text, a single call returns <code>{summary, topics}</code>. On failure or non-JSON it falls back to the extractor's free excerpt and records the stage + a snippet — it never crashes the workflow.</p></div>
-    <div class="card"><h3>Structural tree only</h3><p>Navigation trees are built from referrer / <code>tree_id</code> relations — independent of intentions. They keep working with the intention fields gone.</p></div>
+    <div class="card"><h3>Lossless capture</h3><p>The raw page is stored zstd-compressed in DuckDB. Nothing is interpreted or thrown away, so the RAG pipeline can re-extract and re-chunk the whole corpus later with better algorithms.</p></div>
+    <div class="card"><h3>Cheap metadata only</h3><p>Title, site, author, published date and language come straight from the HTML <code>&lt;head&gt;</code> / Open-Graph tags — a trivial parse, not main-content extraction. Enough to browse and build the navigation tree.</p></div>
+    <div class="card"><h3>Deterministic gate</h3><p>No taxonomy, no model. Cheap signals — body size, link-density, empty/error pages, content-type — decide keep/drop. PDFs and non-HTML get a dedicated drop reason. Fully offline, fully testable.</p></div>
+    <div class="card"><h3>Zero LLM, zero failure surface</h3><p>Ingestion makes no network call and cannot fail on auth, prompt-length, or non-JSON. It is the cheapest, most robust path; all model cost moves to the RAG pipeline where it is gated.</p></div>
   </div>
 
-  <h2><span class="num">4</span>The stored record — <code>PageEssence</code></h2>
-  <p>One canonical, usage-agnostic record replaces <code>webpage_analysis</code>. It describes <em>what is on
-  the page</em>, not what the page was for — so any downstream consumer (browsing, RAG, future query-time
-  intent derivation) reads the same shape. The full markdown is stored <strong>durably in DuckDB</strong>
-  (<code>webpage_essence.markdown</code>), keyed by <code>page_session_id</code> — so when RAG chunking
-  (<a href="rag-pipeline.html">task-31.3</a>) later replaces the whole-page LanceDB record with chunk
-  records, parent-document retrieval still has a durable full-page source and a stable chunk↔page id.</p>
+  <h2><span class="num">4</span>The stored record — <code>PageCapture</code></h2>
+  <p>One canonical record replaces <code>webpage_analysis</code>. It is the lossless capture plus the cheap
+  metadata, keyed by <code>page_session_id</code> — the stable id the RAG pipeline's chunks will foreign-key
+  to. The raw page <em>is</em> the durable source of truth for everything downstream.</p>
   <div class="diagram">
-    <p class="cap">PageEssence — DuckDB <code>webpage_essence</code> is the durable source of truth; LanceDB <code>webpage_content</code> is the embedding copy</p>
+    <p class="cap">PageCapture — written to DuckDB <code>webpage_capture</code></p>
     <pre class="mermaid">
 classDiagram
-    class PageEssence {
-      +string page_session_id  «PK · stable chunk↔page id»
-      +string markdown  «extractor — canonical content, durable in DuckDB»
-      +string title
-      +string summary   «1× Haiku, excerpt fallback»
-      +string[] topics  «1× Haiku»
-      +string excerpt   «extractor — transient fallback, NOT stored»
-      +string author
+    class PageCapture {
+      +string page_session_id   «PK · stable id»
+      +blob   content_compressed «zstd raw page — source of truth»
+      +string content_encoding   «'zstd'»
+      +int    original_byte_size
+      +string content_type       «text/html, application/pdf, …»
+      +string url
+      +string title              «cheap, from &lt;head&gt;»
       +string site_name
+      +string author
       +string published_at
       +string lang
-      +int word_count
-      +string lead_image_url
+      +string captured_at
     }
-    note for PageEssence "No intentions.\nNo page_type.\nUsage-agnostic."
+    note for PageCapture "No LLM fields.\nNo extraction, no summary, no intentions.\nLossless + usage-agnostic."
     </pre>
   </div>
   <ul class="clean">
-    <li><strong>DuckDB</strong> <code>webpage_essence</code> (source of truth): <code>page_session_id</code> (PK) · <strong>markdown</strong> · title · summary · topics(JSON) · author · site_name · published_at · word_count · lang · lead_image_url. <em>(replaces <code>webpage_analysis</code>; the <code>intentions</code> column and the misspelled <code>page_sesssion_id</code> are gone.)</em></li>
-    <li><strong>LanceDB</strong> <code>webpage_content</code> (embedding copy): {page_session_id, pageContent: markdown, url, title, summary, topics, word_count} — embedded with local all-MiniLM-L6-v2 (384-dim). <code>page_session_id</code> + <code>word_count</code> ride along so citations and the task-31.8 small-corpus budget need no extra DuckDB round-trip.</li>
+    <li><strong>DuckDB</strong> <code>webpage_capture</code> (source of truth): <code>page_session_id</code> (PK) · <strong>content_compressed</strong> (zstd BLOB) · content_encoding · original_byte_size · content_type · url · title · site_name · author · published_at · lang · captured_at. <em>(replaces <code>webpage_analysis</code>; the <code>intentions</code>/<code>summary</code> columns and the misspelled <code>page_sesssion_id</code> are gone.)</em></li>
+    <li><strong>LanceDB</strong>: nothing is written at capture. Embeddings are produced by the RAG-prep pipeline (see §5).</li>
     <li><strong>Removed:</strong> the <code>webpage_tree_intentions</code> table and the entire tree-intentions step.</li>
   </ul>
 
-  <h2><span class="num">5</span>Default model &amp; cost</h2>
-  <p>Haiku is already what most calls use today (Claude provider, <code>fast</code> role). The redesign makes
-  it the <strong>explicit, configurable</strong> default and deletes the only sonnet call, so per-page cost
-  collapses to one small call over clean text.</p>
-  <div class="cards">
-    <div class="card"><h3>Configurable default</h3><p><code>bergamot.models.fast</code> / <code>bergamot.models.smart</code> override the built-in role→model maps. Unset = byte-identical to today (<code>fast → haiku</code>). The <code>smart</code> role is retained but currently has no caller.</p></div>
-    <div class="card"><h3>Cost shape</h3><p>Stored page: <strong>4 → 1</strong> calls, and the survivor runs over a few KB of clean markdown rather than up to 100k chars of raw HTML. Dropped page: <strong>→ 0</strong> calls. The sonnet spend is gone entirely.</p></div>
-    <div class="card"><h3>Proven, not assumed</h3><p>A light ~20–30 page golden set asserts extraction coverage and Haiku summary acceptability (deterministic keyword-overlap) and records a before/after tokens-per-page figure — without building a heavyweight F1 / RAGAS harness.</p></div>
+  <h2><span class="num">5</span>Where intelligence lives now — the RAG-prep pipeline</h2>
+  <p>Everything the old ingestion did with an LLM moves to the <a href="rag-pipeline.html">RAG-prep pipeline
+  (task-31)</a>, which reads stored raw pages and is free to re-run over the whole corpus. This is the clean
+  home for it: extraction quality, chunk strategy, and embeddings should be tuned against the retrieval
+  harness, not baked irreversibly into capture.</p>
+  <div class="diagram">
+    <p class="cap">Capture feeds the RAG-prep pipeline; retrieval is built there</p>
+    <pre class="mermaid">
+flowchart LR
+    cap[("webpage_capture<br/>raw pages + metadata")]
+    ex["non-LLM main-content extraction<br/>Defuddle + linkedom &nbsp;[task-31.5]"]
+    ch["structure-aware chunking +<br/>contextual situating text &nbsp;[task-31.3]"]
+    em["embed chunks → LanceDB &nbsp;[task-31.3]"]
+    link["DuckDB chunk ↔ page linkage<br/>(page_session_id)"]
+    cap --> ex --> ch --> em
+    ch --> link
+    link -. "parent-document<br/>= decompress raw page" .-> cap
+
+    classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
+    classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
+    class cap st;
+    class ex,ch,em,link vs;
+    </pre>
+  </div>
+  <div class="note">
+    <strong>Interim search.</strong> Today whole-page embeddings are made at ingest, so semantic search works
+    immediately. Capture-first removes that — search is produced by the RAG-prep pass. Until task-31 lands,
+    either accept that captured pages are not yet searchable, or add a thin <em>interim</em> whole-page
+    embedding at capture (local all-MiniLM, still no LLM) over cheaply tag-stripped text, to be superseded by
+    chunked embeddings. This is a flagged decision, not yet baked in.
   </div>
 
-  <h2><span class="num">6</span>Information-architecture remodel</h2>
-  <p>With classification shrunk and "capture the essence" as the core, the modules are renamed to say what
-  they are, and the stateless <code>WebpageWorkflow</code> class dissolves into composable functions (the
-  repo forbids stateful classes). Pure renames land as a final, rename-only PR for reviewability.</p>
+  <h2><span class="num">6</span>Default model &amp; cost</h2>
+  <div class="cards">
+    <div class="card"><h3>Ingest cost: zero</h3><p>No LLM tokens, no network, no per-page model cost at capture. Down from up to four calls (including a sonnet call) per page.</p></div>
+    <div class="card"><h3>Model cost moves to RAG</h3><p>The only model spend is the RAG pipeline's contextual-retrieval step (task-31.3), run deliberately over the corpus and measured on the harness — not silently on every page view.</p></div>
+    <div class="card"><h3>Haiku, configurable</h3><p>When the pipeline does call a model, Haiku is the explicit configurable default via <code>bergamot.models.fast</code>; the <code>smart</code> role key is reserved but not user-exposed until a caller needs it.</p></div>
+  </div>
+
+  <h2><span class="num">7</span>Information-architecture remodel</h2>
+  <p>With interpretation gone, ingestion shrinks to a capture path, and the stateless <code>WebpageWorkflow</code>
+  class dissolves into composable functions (the repo forbids stateful classes). Pure renames land as a final,
+  rename-only PR.</p>
   <table>
     <tr><th>Today</th><th>Target</th></tr>
-    <tr><td><code>simple_workflow.ts</code> · class <code>WebpageWorkflow</code></td><td><code>page_ingest_pipeline.ts</code> · <code>run_page_ingest()</code> + named stage modules (<code>extract_essence</code> / <code>summarize_essence</code> / <code>store_essence</code> / <code>link_tree</code>)</td></tr>
+    <tr><td><code>simple_workflow.ts</code> · class <code>WebpageWorkflow</code></td><td><code>page_capture_pipeline.ts</code> · <code>run_page_capture()</code> + stage fns (<code>page_gate</code> / <code>read_metadata</code> / <code>store_capture</code> / <code>link_tree</code>)</td></tr>
     <tr><td><code>webpage_filter.ts</code> · <code>PageClassification</code></td><td><code>page_gate.ts</code> · <code>GateDecision {keep, reason}</code></td></tr>
-    <tr><td><code>html_reduce.ts</code></td><td><code>html_prepass.ts</code> (parser input-sanitizer / hard-cap fallback)</td></tr>
-    <tr><td><code>reconcile_webpage_trees_workflow_models.ts</code></td><td><code>page_essence_models.ts</code></td></tr>
-    <tr><td><code>PageAnalysis</code> · <code>insert_webpage_analysis</code></td><td><code>PageEssence</code> · <code>insert_page_essence</code></td></tr>
-    <tr><td><code>build_workflow()</code> factory (<code>…_vanilla.ts</code>) · <code>server_manager.ts</code> field <code>webpage_categoriser_app</code></td><td>direct <code>run_page_ingest()</code> call — factory + seam removed, no <code>WebpageWorkflow</code> symbol remains</td></tr>
+    <tr><td><code>reconcile_webpage_trees_workflow_models.ts</code></td><td><code>page_capture_models.ts</code> · <code>PageCapture</code></td></tr>
+    <tr><td><code>webpage_analysis</code> · <code>insert_webpage_analysis</code></td><td><code>webpage_capture</code> · <code>insert_page_capture</code></td></tr>
+    <tr><td><code>build_workflow()</code> · <code>server_manager.ts</code> <code>webpage_categoriser_app</code></td><td>direct <code>run_page_capture()</code> call — factory + seam removed</td></tr>
+    <tr><td>content-processing / analysis prompts · Defuddle extraction</td><td>moved to the RAG-prep pipeline (<a href="rag-pipeline.html">task-31.5 / 31.3</a>)</td></tr>
   </table>
 
-  <h2><span class="num">7</span>Build order</h2>
+  <h2><span class="num">8</span>Build order</h2>
   <div class="diagram">
     <p class="cap">Sub-task dependency graph (task-35.x) — every intermediate commit stays green</p>
     <pre class="mermaid">
 flowchart LR
-    t1["35.1 · extractor<br/>(additive)"]
-    t2["35.2 · remove<br/>tree_intentions"]
-    t4["35.4 · drop content<br/>LLM call"]
-    t5["35.5 · drop per-page<br/>intentions"]
-    t6["35.6 · model<br/>overrides"]
-    t7["35.7 · 1× Haiku<br/>summary+topics"]
-    t8["35.8 · deterministic<br/>gate (last)"]
-    t9["35.9 · PageEssence<br/>record"]
-    t10["35.10 · golden-set<br/>eval"]
-    t11["35.11 · IA rename<br/>(rename-only)"]
     t3["35.3 · dev-DB<br/>reset doc"]
+    t2["35.2 · remove<br/>tree_intentions"]
+    t5["35.5 · remove<br/>intentions"]
+    t4["35.4 · stop sending<br/>content to any LLM"]
+    t7["35.7 · remove summary/<br/>analysis LLM call"]
+    t1["35.1 · store raw page<br/>+ cheap metadata"]
+    t8["35.8 · deterministic<br/>gate (last)"]
+    t9["35.9 · PageCapture<br/>record"]
+    t6["35.6 · model config<br/>(for RAG)"]
+    t10["35.10 · capture eval<br/>(round-trip + meta)"]
+    t11["35.11 · IA rename"]
 
-    t3 --> t2
+    t3 --> t1
     t1 --> t4
+    t3 --> t2
     t2 --> t5
-    t2 --> t6
-    t4 --> t7
+    t1 --> t7
     t5 --> t7
-    t7 --> t8
-    t8 --> t9
+    t1 --> t8
     t7 --> t9
-    t8 --> t10
-    t7 --> t10
+    t8 --> t9
+    t2 --> t6
     t9 --> t11
-    t4 --> t11
-    t5 --> t11
+    t1 --> t10
+    t8 --> t10
 
     classDef a fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
     classDef b fill:#2a1f3a,stroke:#bc8cff,color:#e6d9ff;
@@ -225,23 +250,23 @@ flowchart LR
     </pre>
   </div>
 
-  <h2><span class="num">8</span>Re-scoped neighbours</h2>
+  <h2><span class="num">9</span>Re-scoped neighbours</h2>
   <div class="status-grid">
-    <div class="status done"><div class="ph">task-31.5</div><div class="nm">Heuristic extraction</div><span class="badge done">absorbed → 35.1</span></div>
-    <div class="status wip"><div class="ph">task-32</div><div class="nm">Image extraction</div><span class="badge wip">re-scoped</span></div>
-    <div class="status wip"><div class="ph">task-34</div><div class="nm">Empty/degraded content</div><span class="badge wip">folded in</span></div>
+    <div class="status wip"><div class="ph">task-31.5</div><div class="nm">Heuristic extraction</div><span class="badge wip">stays in RAG prep</span></div>
+    <div class="status wip"><div class="ph">task-32</div><div class="nm">Image extraction</div><span class="badge wip">RAG-time</span></div>
+    <div class="status wip"><div class="ph">task-34</div><div class="nm">Empty/degraded content</div><span class="badge wip">folded into gate</span></div>
     <div class="status wip"><div class="ph">task-22</div><div class="nm">Categorisation eval</div><span class="badge wip">obviated</span></div>
-    <div class="status done"><div class="ph">task-31.3</div><div class="nm">RAG chunking</div><span class="badge done">stays deferred</span></div>
+    <div class="status done"><div class="ph">task-31.3</div><div class="nm">Chunking + embed</div><span class="badge done">unblocked by raw store</span></div>
   </div>
   <div class="note">
-    <strong>Locked decisions:</strong> full usage-agnostic density gate (no topic classification at ingest);
-    exactly one Haiku call for {summary, topics} with the extractor excerpt as fallback; Defuddle + linkedom
-    as the extractor (Readability + turndown documented fallback); full IA remodel with pure renames isolated
-    into the final PR. Schema changes are destructive dev-DB resets — no migration shims, no backwards
-    compatibility.
+    <strong>Locked decisions:</strong> ingestion makes <strong>zero LLM calls</strong> and stores the raw page
+    (zstd) plus cheap <code>&lt;head&gt;</code> metadata; all extraction / chunking / embedding / summarisation
+    moves to the RAG-prep pipeline (task-31); a deterministic gate decides keep/drop; full IA remodel with
+    renames isolated into the final PR. Schema changes are destructive dev-DB resets — no migration shims, no
+    backwards compatibility.
   </div>
 
-  <footer class="foot"><a href="vscode-extension.html">← VS Code Extension</a> · <a href="storage.html">Storage →</a> · <a href="index.html">Back to overview</a></footer>
+  <footer class="foot"><a href="vscode-extension.html">← VS Code Extension</a> · <a href="rag-pipeline.html">RAG Pipeline →</a> · <a href="index.html">Back to overview</a></footer>
 </div>
 
 <script type="module">
