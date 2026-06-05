@@ -17,7 +17,7 @@ import {
   run_page_capture,
 } from "./workflow/page_capture_pipeline";
 import { load_inbox, remove_visit } from "./visit_inbox";
-import { record_outcome } from "./dev_log";
+import { record_outcome, format_error_detail } from "./dev_log";
 
 /**
  * Extended visit type that includes raw content and tab metadata
@@ -338,7 +338,7 @@ export class VisitQueueProcessor {
             visit_id: visit.visit_id,
             url: visit.url,
             decision: 'failed',
-            error: error instanceof Error ? error.message : String(error),
+            error: format_error_detail(error),
           });
           // Leave the visit in the durable inbox so it is retried on restart.
         }

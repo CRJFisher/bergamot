@@ -9,7 +9,13 @@ import { record_outcome } from "./dev_log";
 jest.mock("./duck_db");
 jest.mock("./webpage_tree");
 jest.mock("./workflow/page_capture_pipeline");
-jest.mock("./dev_log");
+// Keep the real dev_log module (so format_error_detail renders actual stacks)
+// and stub only the side-effecting outcome recorder we assert against. The real
+// dev_log() is a no-op here because logging is never enabled in the test.
+jest.mock("./dev_log", () => ({
+  ...jest.requireActual("./dev_log"),
+  record_outcome: jest.fn(),
+}));
 
 describe("VisitQueueProcessor", () => {
   let processor: VisitQueueProcessor;
@@ -378,11 +384,13 @@ describe("VisitQueueProcessor", () => {
 
       // The failed visit is recorded as a 'failed' outcome but does not stop
       // the batch — the other visits still process.
+      // The recorded error carries full context: the message plus the stack
+      // trace (so post-mortem log analysis can locate the throwing frame).
       expect(record_outcome).toHaveBeenCalledWith(
         expect.objectContaining({
           visit_id: "v-bad-1",
           decision: "failed",
-          error: "Database error"
+          error: expect.stringMatching(/^Error: Database error\n\s+at /)
         })
       );
     });
