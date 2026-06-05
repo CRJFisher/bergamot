@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Time-aware retrieval (recency prior + relevance floor) · RAG Explainers</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    /* demo-specific layout only */
+    .ta-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    .ta-col h4 {
+      margin: 0 0 9px; font-family: var(--mono); font-size: 11.5px;
+      text-transform: uppercase; letter-spacing: .6px; color: var(--muted);
+    }
+    .ta-col.fused h4 { color: var(--accent); }
+    .ta-col .row { font-size: 12.5px; padding: 8px 10px; }
+    .ta-col .row .body { font-size: 12.5px; }
+    .ta-col .row.dropped { opacity: .38; text-decoration: line-through; }
+    .ta-col .row .why { display: block; font-family: var(--mono); font-size: 10px; color: var(--faint); text-decoration: none; margin-top: 3px; }
+    .annot {
+      margin-top: 10px; font-size: 12.5px; color: var(--muted);
+      background: var(--bg); border: 1px solid var(--border-soft);
+      border-left: 3px solid var(--good); border-radius: 8px; padding: 10px 12px;
+    }
+    .annot b { color: var(--good); }
+    .composite-note { border-left: 3px solid var(--violet); }
+    @media (max-width: 680px) { .ta-cols { grid-template-columns: 1fr; } }
+
+    /* inline flow diagram (SVG) */
+    .flow-fig { margin: 18px 0 4px; }
+    .flow-fig svg { width: 100%; height: auto; max-width: 560px; display: block; margin: 0 auto;
+      font-family: var(--mono); }
+    .flow-fig figcaption { margin-top: 8px; text-align: center; font-size: 12px;
+      color: var(--muted); line-height: 1.5; }
+    .ta-node rect { fill: var(--bg-3); stroke: var(--border); stroke-width: 1.2; }
+    .ta-node.ta-accent rect { stroke: var(--accent); }
+    .ta-node.ta-good rect { stroke: var(--good); fill: color-mix(in srgb, var(--good) 9%, var(--bg-3)); }
+    .ta-t { fill: var(--text); font-size: 11px; text-anchor: middle; }
+    .ta-sub { fill: var(--muted); font-size: 10px; text-anchor: middle; }
+    .ta-edge line { stroke: var(--muted); stroke-width: 1.4; }
+    .ta-arrhead { fill: var(--muted); }
+    .ta-bypass { stroke: var(--accent-2); stroke-width: 1.4; stroke-dasharray: 4 3; }
+    .ta-arrhead2 { fill: var(--accent-2); }
+    .ta-note { fill: var(--accent-2); font-size: 10.5px; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+
+    <header class="page-head">
+      <span class="tag">Phase I · task-31.11 · Time-aware</span>
+      <h1>Time-aware retrieval: the recency signal Bergamot already captures</h1>
+      <p class="lede">
+        A browsing corpus is intrinsically temporal — every page you visit is timestamped. Yet semantic
+        (and even hybrid) search is blind to <em>when</em> you saw something, so "what was I reading
+        <em>last month</em> about X" and "the <em>latest</em> thing I saw on Y" both fail. Time-aware
+        retrieval makes recency a first-class signal — carefully, so it lifts the relevant-and-recent
+        page without letting freshness drown relevance.
+      </p>
+      <div class="note composite-note">
+        <span class="callout-title">A note on the name</span>
+        <p>
+          The prompt for this work was <em>"Temporal Cluster RAG"</em> — but that is not an established
+          technique (it traces to a single uncited blog post). It is an informal <strong>composite</strong>
+          of two separable capabilities: <strong>time-aware retrieval</strong> (this page — cheap, proven,
+          shipping as task-31.11) and <strong>temporal topic clustering</strong> (Topic Detection &amp;
+          Tracking — heavier and speculative, deliberately <a href="09-deferred-architectures.html">deferred</a>).
+          We adopt the named, cited halves, not the coinage.
+        </p>
+      </div>
+    </header>
+
+    <!-- (b) THE PROBLEM -->
+    <section class="block">
+      <h2><span class="num">01</span> The problem</h2>
+      <p>
+        Bergamot's retriever ranks captured pages by <strong>cosine similarity</strong> to the query —
+        and after task-31.2, by a hybrid of dense + BM25. Both score <em>aboutness</em> and nothing else.
+        A page you visited this morning and one you visited eight months ago compete on identical footing.
+        For a personal knowledge manager built on a <em>browsing timeline</em>, that throws away the
+        signal users reach for most often: <strong>time</strong>.
+      </p>
+      <div class="bad-box">
+        <span class="callout-title">Failure mode — and the trap on the other side</span>
+        <p>
+          <strong>Time-blind retrieval can't answer time-intent queries.</strong> "The article I read
+          <em>last week</em> about async runtimes" returns the most <em>topically</em> similar page even if
+          it's a year old; "the <em>latest</em> benchmarks" can't prefer the newest of several relevant
+          hits. In one study a cosine-only ranker scored <strong>0.00</strong> on "latest"-style tasks.
+        </p>
+        <p>
+          <strong>But a naive recency boost is worse.</strong> Multiply every score by "newness" and you
+          surface whatever you happened to browse recently — the espresso-machine review you read at lunch
+          outranks the relevant article from last month. Push the recency weight too high and accuracy
+          collapses (to ~<strong>0.667</strong> in the same study). Crank time-decay hard enough and a
+          durable reference page becomes <em>unretrievable</em> past an age horizon no matter how relevant —
+          the <strong>event-horizon</strong> problem.
+        </p>
+        <p>The signal is real; the danger is letting it overpower relevance. The fix is to add time
+          <em>conditionally</em> and <em>bounded</em>, never as a blanket multiplier.</p>
+      </div>
+    </section>
+
+    <!-- (c) HOW IT WORKS -->
+    <section class="block">
+      <h2><span class="num">02</span> How it works</h2>
+
+      <h3>Step 1 — detect time intent, then pre-filter</h3>
+      <p>
+        Most queries have <em>no</em> time intent ("how does TCP backoff work?") — leave those alone.
+        When a query carries an explicit or relative time expression — <em>"last month"</em>,
+        <em>"recently"</em>, a date range — <strong>anchor it to a reference "now"</strong> and convert it
+        to a concrete timestamp window, then apply a <strong>hard pre-filter</strong> (<code>WHERE</code>
+        on the visit time) <em>before</em> semantic ranking. A pre-filter is a precise binary gate: it is
+        cheaper and less error-prone than trying to express "only last month" as a soft score, and it
+        cannot accidentally surface an out-of-window page.
+      </p>
+
+      <h3>Step 2 — an optional, bounded recency rerank</h3>
+      <p>
+        When recency should <em>influence</em> order rather than gate it, rerank the candidates with a
+        <strong>convex combination</strong> of relevance and an exponential decay on page age:
+      </p>
+      <pre><span class="c"># Convex combination — relevance and recency on one [0,1] scale</span>
+score(d) = <span class="hl">&alpha;</span> &middot; cos(d)  +  (1 &minus; <span class="hl">&alpha;</span>) &middot; <span class="k">0.5</span><sup>(age_days(d) / half_life)</sup>
+
+<span class="c"># cos(d)      relevance, already in [0,1]</span>
+<span class="c"># 0.5^(age/H) recency: 1.0 today, 0.5 at one half-life H, 0.25 at 2H ...</span>
+<span class="c"># &alpha; &asymp; 0.70   weight on relevance (tune on the harness)</span>
+<span class="c"># both terms bounded => recency can nudge, never dominate outright</span></pre>
+      <p>
+        Because both terms live on the same <code>[0,1]</code> scale and are <em>added</em> (not
+        multiplied), recency lifts a page's score but can never zero it out — that is what sidesteps the
+        event-horizon trap a pure multiplicative decay falls into.
+      </p>
+
+      <h3>Step 3 — gate the boost behind a relevance floor</h3>
+      <p>
+        The one rule that keeps recency honest: apply a <strong>raw-cosine relevance floor</strong>. A
+        page whose cosine is below the floor (≈ <strong>0.35–0.50</strong> for dense embeddings, calibrated
+        on your own model) is <em>never</em> eligible for a recency boost — so a fresh-but-off-topic page
+        cannot climb. Recency reorders the relevant set; it does not admit the irrelevant.
+      </p>
+
+      <figure class="flow-fig">
+        <svg viewBox="0 0 640 536" role="img" aria-label="Time-aware retrieval flow: query, intent detector, optional time pre-filter (bypassed when there is no time intent), hybrid retrieve, recency rerank, relevance floor, time-aware results." xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="ta-arr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" class="ta-arrhead"/>
+            </marker>
+            <marker id="ta-arr2" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" class="ta-arrhead2"/>
+            </marker>
+          </defs>
+
+          <!-- main-flow connectors -->
+          <g class="ta-edge">
+            <line x1="250" y1="62"  x2="250" y2="89"  marker-end="url(#ta-arr)"/>
+            <line x1="250" y1="138" x2="250" y2="165" marker-end="url(#ta-arr)"/>
+            <line x1="250" y1="214" x2="250" y2="241" marker-end="url(#ta-arr)"/>
+            <line x1="250" y1="290" x2="250" y2="317" marker-end="url(#ta-arr)"/>
+            <line x1="250" y1="366" x2="250" y2="393" marker-end="url(#ta-arr)"/>
+            <line x1="250" y1="442" x2="250" y2="469" marker-end="url(#ta-arr)"/>
+          </g>
+
+          <!-- bypass: no time intent -> skip the pre-filter -->
+          <path class="ta-bypass" d="M400,115 H548 V267 H402" fill="none" marker-end="url(#ta-arr2)"/>
+          <text class="ta-note" x="476" y="172" text-anchor="middle">no time intent</text>
+          <text class="ta-note" x="476" y="187" text-anchor="middle">&rarr; skip pre-filter</text>
+
+          <!-- nodes -->
+          <g class="ta-node">
+            <rect x="100" y="16"  width="300" height="46" rx="9"/>
+            <text class="ta-t" x="250" y="44">query: "rust async runtime" (+ time?)</text>
+          </g>
+          <g class="ta-node">
+            <rect x="100" y="92"  width="300" height="46" rx="9"/>
+            <text class="ta-t" x="250" y="120">intent detector &middot; explicit / relative / none</text>
+          </g>
+          <g class="ta-node ta-accent">
+            <rect x="100" y="168" width="300" height="46" rx="9"/>
+            <text class="ta-t" x="250" y="187">time pre-filter &mdash; WHERE on page_loaded_at</text>
+            <text class="ta-sub" x="250" y="203">keep only visits in the window</text>
+          </g>
+          <g class="ta-node">
+            <rect x="100" y="244" width="300" height="46" rx="9"/>
+            <text class="ta-t" x="250" y="272">hybrid retrieve &mdash; dense + BM25 &rarr; cos(d)</text>
+          </g>
+          <g class="ta-node ta-accent">
+            <rect x="100" y="320" width="300" height="46" rx="9"/>
+            <text class="ta-t" x="250" y="348">recency rerank &mdash; &alpha;&middot;cos + (1&minus;&alpha;)&middot;0.5^(age/H)</text>
+          </g>
+          <g class="ta-node ta-accent">
+            <rect x="100" y="396" width="300" height="46" rx="9"/>
+            <text class="ta-t" x="250" y="424">relevance floor &mdash; drop cos &lt; floor</text>
+          </g>
+          <g class="ta-node ta-good">
+            <rect x="100" y="472" width="300" height="46" rx="9"/>
+            <text class="ta-t" x="250" y="500">time-aware ranked results</text>
+          </g>
+        </svg>
+        <figcaption>Time intent gates the pre-filter; the recency rerank and relevance floor are bounded so freshness reorders the relevant set without admitting the irrelevant.</figcaption>
+      </figure>
+      <p>
+        None of this needs new infrastructure. Bergamot already stores <code>page_loaded_at</code> and
+        <code>captured_at</code> per visit and <strong>already has an index on <code>page_loaded_at</code></strong>,
+        so the pre-filter is cheap and the decay is a few lines over data that is already there.
+      </p>
+    </section>
+
+    <!-- (d) TRY IT -->
+    <section class="block">
+      <h2><span class="num">03</span> Try it</h2>
+      <p>
+        Seven mock browsing visits for the query <strong>"rust async runtime"</strong>, each with a visit
+        date and a fixed cosine score. Watch three rankings: <strong>pure cosine</strong> (relevance only),
+        <strong>recency only</strong> (newest first), and the <strong>time-aware</strong> fusion. Change the
+        query's time intent, drag <code>&alpha;</code>, the half-life, and the relevance floor, and watch
+        which page wins.
+      </p>
+
+      <div class="demo" id="ta-demo">
+        <div class="demo-head">
+          <span class="spark"></span>
+          <span class="demo-title"><b>Time-aware ranking</b> · relevance + recency, floored</span>
+        </div>
+        <div class="demo-body">
+          <div class="controls">
+            <div class="control">
+              <label for="ta-intent">Query time intent</label>
+              <select id="ta-intent">
+                <option value="none">Timeless lookup — no time intent</option>
+                <option value="latest" selected>"latest …" — recency matters</option>
+                <option value="month">"… last month" — windowed</option>
+              </select>
+            </div>
+            <div class="control">
+              <label for="ta-alpha">&alpha; (relevance weight) = <span id="ta-alpha-val">0.70</span></label>
+              <input type="range" id="ta-alpha" min="0" max="1" step="0.05" value="0.7">
+            </div>
+            <div class="control">
+              <label for="ta-half">Half-life = <span id="ta-half-val">30</span> days</label>
+              <input type="range" id="ta-half" min="5" max="120" step="5" value="30">
+            </div>
+            <div class="control">
+              <label for="ta-floor">Relevance floor = <span id="ta-floor-val">0.35</span></label>
+              <input type="range" id="ta-floor" min="0" max="0.8" step="0.05" value="0.35">
+            </div>
+          </div>
+
+          <div class="ta-cols">
+            <div class="ta-col">
+              <h4>Pure cosine</h4>
+              <div class="rows" id="ta-cos"></div>
+            </div>
+            <div class="ta-col">
+              <h4>Recency only</h4>
+              <div class="rows" id="ta-rec"></div>
+            </div>
+            <div class="ta-col fused">
+              <h4>Time-aware</h4>
+              <div class="rows" id="ta-fused"></div>
+            </div>
+          </div>
+
+          <div class="annot" id="ta-annot"></div>
+
+          <p class="demo-hint">
+            // intent "none" disables time entirely (time-aware = pure cosine). Push &alpha; to 1 and the
+            old-but-relevant page wins (freshness lost); drop &alpha; toward 0 and the recent-off-topic page
+            tries to win — until the relevance floor stops it.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- (e) DECISION LENS -->
+    <section class="block">
+      <h2><span class="num">04</span> Decision lens</h2>
+      <div class="decision">
+        <span class="callout-title">When to reach for time-aware retrieval</span>
+        <div class="decision-grid">
+          <div class="cell use">
+            <h4>✓ Reach for it when</h4>
+            <ul>
+              <li>Your content has a strong <strong>time dimension</strong> and users ask relative-time
+                questions — a personal browsing KM is the canonical case.</li>
+              <li>You <strong>already store timestamps</strong> (Bergamot does), so it is a scoring change,
+                not new infrastructure.</li>
+              <li>You can <strong>detect intent</strong> and gate the recency boost — apply it
+                conditionally, never globally.</li>
+            </ul>
+          </div>
+          <div class="cell skip">
+            <h4>✕ Skip / overkill when</h4>
+            <ul>
+              <li>Queries are <strong>timeless reference lookups</strong> ("how does X work") — recency is
+                noise there, so leave those untouched.</li>
+              <li>You'd apply a <strong>fixed global decay</strong> with no relevance floor — that
+                regresses quality by surfacing fresh-but-irrelevant pages.</li>
+              <li>You're tempted by <strong>learned</strong> per-query gating or embedding-level time
+                fusion before measuring — that's the deferred ceiling, not the baseline.</li>
+            </ul>
+          </div>
+        </div>
+        <p style="margin-bottom:0; margin-top:12px; font-size:13.5px; color:var(--muted)">
+          <strong>Tradeoff:</strong> the pre-filter is a precise binary gate (loses fine ordering inside the
+          window); the decay is a smooth gradient (needs an <code>&alpha;</code> / half-life tune). Both are
+          cheap and run over an index that already exists — which is why this is sequenced as a high-ROI add
+          once hybrid search and the harness are in place. Heavier variants — learned gating
+          (<strong>Re3</strong>), embedding-level timestamp fusion (<strong>TempRetriever</strong>), and
+          temporal-knowledge-graph RAG (<strong>TG-RAG</strong>) — are deferred until a measurement asks for
+          them.
+        </p>
+      </div>
+    </section>
+
+    <!-- (f) IN BERGAMOT -->
+    <section class="block">
+      <h2><span class="num">05</span> In Bergamot</h2>
+      <p><strong>task-31.11</strong> adds the time signal on top of the hybrid pipeline (task-31.2), over
+        data Bergamot already captures — <strong>no schema change</strong>:</p>
+      <ul>
+        <li><code>semantic_search</code> gains an optional <strong><code>time_range</code></strong>, applied
+          as a <strong>pre-filter on <code>page_loaded_at</code></strong> (using the existing index) before
+          semantic ranking.</li>
+        <li>Relative expressions ("last month", "recently") are <strong>anchored to a reference now</strong>
+          and converted to a concrete timestamp range.</li>
+        <li>An optional <strong>recency rerank</strong> blends cosine with a configurable
+          <code>&alpha;</code> and half-life, <strong>gated by a raw-cosine relevance floor</strong>
+          calibrated to Bergamot's embedding model.</li>
+        <li>Time weighting fires <strong>only on detected intent</strong>, never as a fixed global decay;
+          missing/garbled timestamps degrade gracefully to "no time signal".</li>
+        <li>On the <strong>task-31.1</strong> harness, time-intent queries improve over the hybrid baseline
+          with <strong>no regression</strong> on timeless queries — the gain is measured, not assumed.</li>
+      </ul>
+      <p>
+        This is the cheap, proven half of the original "time + topic clusters over time" idea. Its sibling —
+        <strong>temporal topic clustering</strong> (an offline job that clusters stored vectors over
+        Bergamot's navigation-tree / activity-session windows and tracks evolving themes) — is genuinely
+        useful but needs new batch infrastructure and has unproven value at personal scale, so it is recorded
+        as a <a href="09-deferred-architectures.html">deferred architecture</a> with a concrete revisit
+        trigger rather than built now.
+      </p>
+    </section>
+
+    <footer class="foot">
+      <div class="sources">
+        <h3>Sources</h3>
+        <ul>
+          <li><a href="https://arxiv.org/abs/2509.19376">Grofsky (2025) — Solving Freshness in RAG: A Simple Recency Prior and the Limits of Heuristic Trend Detection (arxiv.org/abs/2509.19376)</a></li>
+          <li><a href="https://js.langchain.com/docs/how_to/time_weighted_vectorstore/">LangChain — TimeWeightedVectorStoreRetriever (recency-decay reference design)</a></li>
+          <li><a href="https://arxiv.org/html/2509.01306v1">Re3 — Learning to Balance Relevance &amp; Recency for Temporal Information Retrieval</a></li>
+          <li><a href="https://arxiv.org/html/2505.20243v1">It's High Time — A Survey of Temporal Information Retrieval and QA</a></li>
+          <li><a href="https://docs.lancedb.com/search/filtering">LanceDB — Metadata filtering (timestamp pre-filter, pre-filter by default)</a></li>
+        </ul>
+      </div>
+      <div class="prevnext" data-prevnext></div>
+    </footer>
+
+  </main>
+
+  <script src="shared.js"></script>
+  <script>
+    (function () {
+      // Fixed "now" so ages are deterministic for teaching (matches the doc's reference date).
+      var NOW = new Date("2026-06-05T12:00:00Z").getTime();
+      var DAY = 86400000;
+
+      // 7 mock browsing visits for query "rust async runtime".
+      // Designed so three pages tell the story:
+      //   - d_old  : highly relevant, but old   -> wins pure cosine, loses recency
+      //   - d_offtopic: very recent, off-topic  -> wins recency, killed by the relevance floor
+      //   - d_rescue: recent AND relevant        -> wins the floored fusion that neither extreme picks
+      var DOCS = [
+        { id: "d_old",      title: "Tokio tutorial: async runtimes in Rust", cos: 0.82, date: "2025-12-10" },
+        { id: "d_pin",      title: "Async Rust: pinning and futures explained", cos: 0.78, date: "2026-01-15" },
+        { id: "d_select",   title: "Understanding the tokio::select! macro", cos: 0.68, date: "2025-11-20" },
+        { id: "d_fw",       title: "Choosing a web framework: Axum vs Actix", cos: 0.55, date: "2026-05-20" },
+        { id: "d_rescue",   title: "Rust async runtime benchmarks, 2026", cos: 0.74, date: "2026-05-28" },
+        { id: "d_offtopic", title: "Best espresso machines 2026 — review", cos: 0.12, date: "2026-06-02" },
+        { id: "d_css",      title: "CSS grid layout: a practical cheat sheet", cos: 0.05, date: "2026-03-01" }
+      ];
+      DOCS.forEach(function (d) {
+        d.age = Math.max(0, Math.round((NOW - new Date(d.date + "T12:00:00Z").getTime()) / DAY));
+      });
+
+      var $intent = document.getElementById("ta-intent");
+      var $alpha = document.getElementById("ta-alpha");
+      var $half = document.getElementById("ta-half");
+      var $floor = document.getElementById("ta-floor");
+      var $aVal = document.getElementById("ta-alpha-val");
+      var $hVal = document.getElementById("ta-half-val");
+      var $fVal = document.getElementById("ta-floor-val");
+      var $cos = document.getElementById("ta-cos");
+      var $rec = document.getElementById("ta-rec");
+      var $fused = document.getElementById("ta-fused");
+      var $annot = document.getElementById("ta-annot");
+
+      var WINDOW_DAYS = 30; // "last month"
+
+      function decay(age, half) { return Math.pow(0.5, age / half); }
+
+      function rankBy(list, scoreFn) {
+        var arr = list.map(function (d) { return { id: d.id, score: scoreFn(d) }; });
+        arr.sort(function (a, b) { return b.score - a.score; });
+        arr.forEach(function (r, i) { r.rank = i + 1; });
+        return arr;
+      }
+
+      function docById(id) {
+        for (var i = 0; i < DOCS.length; i++) { if (DOCS[i].id === id) return DOCS[i]; }
+        return null;
+      }
+
+      function renderList(host, ranked, opts) {
+        host.innerHTML = "";
+        ranked.forEach(function (r) {
+          var d = docById(r.id);
+          var div = document.createElement("div");
+          var dropped = r.dropped;
+          div.className = "row" + (r.id === "d_rescue" && !dropped ? " hit" : "") + (dropped ? " dropped" : "");
+          var why = r.why ? '<span class="why">' + r.why + '</span>' : "";
+          div.innerHTML =
+            '<span class="rank">' + (dropped ? "—" : r.rank) + '</span>' +
+            '<span class="body">' + d.title + why + '</span>' +
+            '<span class="score">' + opts.fmt(r, d) + '</span>';
+          host.appendChild(div);
+        });
+      }
+
+      function ageLabel(d) { return d.age + "d"; }
+
+      function render() {
+        var intent = $intent.value;
+        var alpha = parseFloat($alpha.value);
+        var half = parseInt($half.value, 10);
+        var floor = parseFloat($floor.value);
+        $aVal.textContent = alpha.toFixed(2);
+        $hVal.textContent = half;
+        $fVal.textContent = floor.toFixed(2);
+
+        // Column 1: pure cosine (always full corpus).
+        var cosRanked = rankBy(DOCS, function (d) { return d.cos; });
+        renderList($cos, cosRanked, { fmt: function (r, d) { return d.cos.toFixed(2); } });
+
+        // Column 2: recency only (always full corpus).
+        var recRanked = rankBy(DOCS, function (d) { return decay(d.age, half); });
+        renderList($rec, recRanked, { fmt: function (r, d) { return ageLabel(d); } });
+
+        // Column 3: time-aware fusion, governed by intent.
+        var fused;
+        if (intent === "none") {
+          // No time intent -> don't touch the ranking. Time-aware == pure cosine.
+          fused = rankBy(DOCS, function (d) { return d.cos; }).map(function (r) {
+            return { id: r.id, score: docById(r.id).cos, label: r.score.toFixed(2) };
+          });
+        } else {
+          // Optional hard pre-filter for the windowed "last month" intent.
+          var inWindow = DOCS.filter(function (d) {
+            return intent === "month" ? d.age <= WINDOW_DAYS : true;
+          });
+          var survivors = [], droppedRows = [];
+          inWindow.forEach(function (d) {
+            if (d.cos < floor) {
+              droppedRows.push({ id: d.id, dropped: true, why: "below floor (" + d.cos.toFixed(2) + ")" });
+            } else {
+              survivors.push(d);
+            }
+          });
+          // Pages excluded by the time window (only in "month" mode).
+          var windowedOut = DOCS.filter(function (d) { return intent === "month" && d.age > WINDOW_DAYS; })
+            .map(function (d) { return { id: d.id, dropped: true, why: "outside window (" + d.age + "d)" }; });
+
+          var ranked = rankBy(survivors, function (d) {
+            return alpha * d.cos + (1 - alpha) * decay(d.age, half);
+          }).map(function (r) { return { id: r.id, score: r.score, rank: r.rank, label: r.score.toFixed(3) }; });
+
+          fused = ranked.concat(droppedRows).concat(windowedOut);
+        }
+        renderList($fused, fused, { fmt: function (r) { return r.dropped ? "" : (r.label || r.score.toFixed(3)); } });
+
+        // Annotation: explain the outcome relative to the rescue page.
+        var rescueInFused = null;
+        for (var i = 0; i < fused.length; i++) { if (fused[i].id === "d_rescue") { rescueInFused = fused[i]; break; } }
+        var winner = fused[0] && !fused[0].dropped ? docById(fused[0].id) : null;
+        var msg;
+        if (intent === "none") {
+          msg = '<b>No time intent → time stays out.</b> The time-aware column is identical to pure cosine: ' +
+            'the old-but-relevant <em>Tokio tutorial</em> wins on aboutness alone. Recency is noise for a ' +
+            'timeless lookup, so we never apply it.';
+        } else if (alpha >= 0.95) {
+          msg = '<b>&alpha; ≈ 1 → relevance only.</b> Recency is switched off in all but name; the oldest ' +
+            'highly-relevant page wins and "latest" intent is lost. Slide &alpha; down to let recency speak.';
+        } else if (rescueInFused && !rescueInFused.dropped && rescueInFused.rank === 1) {
+          msg = '<b>Balanced &alpha; + relevance floor surfaces "Rust async runtime benchmarks, 2026".</b> ' +
+            'It leads <em>neither</em> extreme — the old <em>Tokio tutorial</em> wins pure cosine, the ' +
+            'recent <em>espresso review</em> wins recency — but it is the only page that is recent <em>and</em> ' +
+            'relevant, and the floor removes the off-topic fresh page. Fusion picks what neither column does.';
+        } else if (winner && winner.id === "d_offtopic") {
+          msg = '<b>Recency is drowning relevance.</b> &alpha; is low enough that the very recent but ' +
+            'off-topic <em>espresso review</em> outranks relevant pages. Raise the <b>relevance floor</b> ' +
+            'above its cosine (0.12) to evict it — then the recent-and-relevant page wins.';
+        } else {
+          msg = '<b>Recency reorders the relevant set.</b> The floor (' + floor.toFixed(2) + ') keeps ' +
+            'off-topic-but-fresh pages out; &alpha; trades relevance against newness among what remains' +
+            (intent === "month" ? '; the "last month" window has hard-filtered older visits.' : '.');
+        }
+        $annot.innerHTML = msg;
+      }
+
+      $intent.addEventListener("change", render);
+      $alpha.addEventListener("input", render);
+      $half.addEventListener("input", render);
+      $floor.addEventListener("input", render);
+      render();
+    })();
+  </script>
+</body>
+</html>

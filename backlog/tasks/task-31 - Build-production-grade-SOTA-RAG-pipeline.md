@@ -26,6 +26,7 @@ Upgrade Bergamot's MCP RAG from a naive whole-page, pure-dense baseline to a mea
 - [ ] #2 The shipped pipeline reaches clean ingestion + contextual chunking + hybrid retrieval (dense + BM25 fused via RRF) + reranking on the existing LanceDB + DuckDB store
 - [ ] #3 The embedding model is selected by measured retrieval quality on Bergamot's own golden dataset rather than headline MTEB averages
 - [ ] #4 MCP tool results return citations/attribution and the retrieval configuration is exposed/configurable
-- [ ] #5 Advanced architectures (GraphRAG / Agentic / Self-RAG / CRAG) are deferred via a decision record rather than silently dropped
+- [ ] #5 Advanced architectures (GraphRAG / Agentic / Self-RAG / CRAG / temporal topic clustering) are deferred via a decision record rather than silently dropped
 - [ ] #6 backlog/docs/rag-pipeline-upgrade-plan.md remains the canonical reference and stays in sync with what ships
+- [ ] #7 Time is a first-class retrieval signal — time-intent queries are served by a relative-time pre-filter + recency rerank over the existing visit timestamps, measured on the harness
 <!-- AC:END -->

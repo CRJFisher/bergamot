@@ -15,6 +15,7 @@
     { file: "06-embedding-selection.html",   short: "Embeddings", phase: "G",  title: "Embedding model selection" },
     { file: "07-query-transformation.html",  short: "Query",      phase: "F",  title: "Query transformation (HyDE)" },
     { file: "08-mcp-generation-surface.html",short: "Generation", phase: "H",  title: "Generation surface" },
+    { file: "10-time-aware-retrieval.html",  short: "Time",       phase: "I",  title: "Time-aware retrieval" },
     { file: "09-deferred-architectures.html",short: "Advanced",   phase: "—",  title: "Deferred architectures" }
   ];
 

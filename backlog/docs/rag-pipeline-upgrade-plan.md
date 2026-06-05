@@ -77,6 +77,15 @@ No single embedding model dominates all MTEB task categories; a top _overall_ mo
 
 Combat _lost-in-the-middle_ by ordering the most relevant context at the edges; return **citations/attribution** (source URL + chunk) in MCP results; use structured outputs. Short-circuit per Anthropic's guidance: for a knowledge base under **~200K tokens (~500 pages)**, skip retrieval and put the whole corpus in the prompt — Bergamot should detect small corpora and offer a whole-corpus path.
 
+### I. Time-aware retrieval — recency as a first-class signal
+
+A browsing corpus is intrinsically temporal: every visit is timestamped (`page_loaded_at`, `captured_at`) and grouped into navigation trees (`first_load_time` / `latest_activity_time`), with an existing index on `page_loaded_at`. Pure semantic — and even hybrid — retrieval is blind to this, so "what was I reading _last month_ about X" and "the _latest_ thing I saw on Y" both fail. The fix is layered on top of hybrid search and needs no schema change:
+
+1. **Detect time intent**, then for explicit/relative expressions ("last month", a date range) anchor them to a reference "now" and apply a **hard timestamp pre-filter** (`WHERE` on the visit-time range) _before_ semantic ranking — more precise than soft decay.
+2. **Optional recency rerank** by a convex combination `score = α·cos + (1−α)·0.5^(age_days / half_life)` (α and half-life configurable, default α ≈ 0.7), **gated behind a raw-cosine relevance floor** so a fresh-but-off-topic page cannot be boosted.
+
+Apply time weighting **conditionally on detected intent**, never as a fixed global decay. The evidence: a simple recency prior scored 1.00 on freshness tasks, while a clustering heuristic for trend detection failed at 0.08 F1 (Grofsky 2025) — and a naive global decay collapses accuracy by surfacing recently-visited-but-irrelevant pages. This is the cheap, proven half of "find time+topic clusters over time"; the speculative topic-clustering half is deferred (below). _"Temporal Cluster RAG" is not an established technique — it is an informal composite of time-aware retrieval (this phase) + Topic Detection and Tracking; we adopt the named, cited halves, not the coinage._
+
 ## Explicitly deferred (YAGNI for a baseline PKM)
 
 These are well-documented but solve specialised problems and carry real cost/complexity. Captured here so they are _deferred deliberately_, not forgotten — revisit only when a concrete need appears.
@@ -85,6 +94,7 @@ These are well-documented but solve specialised problems and carry real cost/com
 - **Agentic RAG** — autonomous agents (reflection/planning/tool-use) for multi-step reasoning over the KB. Revisit if multi-hop reasoning becomes core.
 - **Self-RAG** — a model trained with reflection tokens to retrieve adaptively. Requires custom model training; out of scope.
 - **CRAG (Corrective RAG)** — confidence-scored retrieval evaluator with web-search fallback. Plug-and-play; revisit if retrieval-quality failures persist _after_ the baseline upgrades above.
+- **Temporal topic clustering (TDT)** — an offline batch job that clusters the dense vectors Bergamot already stores over its navigation-tree / activity-session time windows (HDBSCAN over UMAP, or BERTopic), then tracks clusters across windows by centroid similarity to surface evolving and recurring browsing themes, labeled deterministically (no LLM, per task-35) and surfaced via a new `list_topic_clusters(time_range)` MCP tool. This is the ambitious half of "time+topic clusters over time" — the cheap retrieval half ships as time-aware retrieval (Phase I, task-31.11). Deferred because it needs new batch infrastructure, persisted cluster tables, and a new MCP surface, and its value at personal scale is unproven. Frame as Topic Detection and Tracking / cluster-then-track (BERTrend, time-aware TDT) or bin-then-reweight (BERTopic dynamic topic modeling) — _not_ as a coined "Temporal Cluster RAG". Revisit when both (a) time-aware retrieval + hybrid are shipped and the harness still shows "theme over time" queries underperforming, and (b) there is a concrete, repeated user request to browse/summarise evolving themes. Online stream clustering (DenStream) and temporal-knowledge-graph RAG (TG-RAG / STAR-RAG / T-GRAG) are further-deferred higher-cost ceilings.
 
 ## ROI ordering (what to build, in order)
 
@@ -95,8 +105,9 @@ These are well-documented but solve specialised problems and carry real cost/com
 5. **Clean ingestion** (B) — quality of inputs; can land in parallel with C.
 6. **Embedding model selection** (G) — once the harness can adjudicate candidates.
 7. **Query transformation** (F) — marginal, optional.
-8. **MCP generation-time polish** (H) — citations, ordering, small-corpus short-circuit.
-9. **Advanced architectures** — deferred; decision record only.
+8. **Time-aware retrieval** (I) — cheap recency signal over the timestamps Bergamot already indexes; lands once hybrid (D) and the harness (A) exist.
+9. **MCP generation-time polish** (H) — citations, ordering, small-corpus short-circuit.
+10. **Advanced architectures** — deferred; decision record only.
 
 ## Sources (fact-checked, 2024–2026)
 
@@ -112,5 +123,18 @@ These are well-documented but solve specialised problems and carry real cost/com
 - Self-RAG (ICLR 2024): https://arxiv.org/abs/2310.11511
 - CRAG / Corrective RAG (ICML 2024): https://arxiv.org/abs/2401.15884
 - HyDE (ACL 2023): https://arxiv.org/abs/2212.10496
+- Time-aware retrieval — Grofsky (2025), _Solving Freshness in RAG: A Simple Recency Prior and the Limits of Heuristic Trend Detection_: https://arxiv.org/abs/2509.19376
+- LangChain — _TimeWeightedVectorStoreRetriever_ (recency-decay reference design): https://js.langchain.com/docs/how_to/time_weighted_vectorstore/
+- Re3 — _Learning to Balance Relevance & Recency for Temporal Information Retrieval_: https://arxiv.org/html/2509.01306v1
+- TempRetriever — _Fusion-based Temporal Dense Passage Retrieval_ (embedding-level fusion; deferred): https://arxiv.org/abs/2502.21024
+- _It's High Time: A Survey of Temporal Information Retrieval and QA_: https://arxiv.org/html/2505.20243v1
+- Temporal topic clustering — _Topic Detection and Tracking with Time-Aware Document Embeddings_ (LREC-COLING 2024): https://aclanthology.org/2024.lrec-main.1416/
+- BERTopic — _Dynamic Topic Modeling (topics over time)_: https://maartengr.github.io/BERTopic/getting_started/topicsovertime/topicsovertime.html
+- BERTrend — _Neural Topic Modeling for Emerging Trends Detection_: https://arxiv.org/html/2411.05930v1
+- Chrome Journeys — Chromium `history_clusters` clusterer (browsing-history clustering in the wild): https://chromium.googlesource.com/chromium/src/+/refs/heads/main/components/history_clusters/core/clusterer.cc
+- Zep — _A Temporal Knowledge Graph Architecture for Agent Memory_ (event-time vs ingestion-time): https://arxiv.org/html/2501.13956v1
+- LanceDB — _Metadata filtering_ (timestamp pre-filter): https://docs.lancedb.com/search/filtering
+- DuckDB — _Stream Windowing Functions_ (gap-based sessionization): https://duckdb.org/2025/05/02/stream-windowing-functions
+- TG-RAG — _RAG Meets Temporal Graphs_ (deferred higher-cost ceiling): https://arxiv.org/abs/2510.13590
 
 _Caveat: all retrieval-improvement percentages are Anthropic's own benchmarks on their own technique and embedding models — accurate as reported but best-case and not independently reproduced. The 200K-token threshold tracks Claude's then-default context window. This is exactly why Phase A (the harness) measures every change on Bergamot's own corpus._

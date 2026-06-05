@@ -35,11 +35,11 @@
   <header class="hero page-head">
     <span class="tag"><span class="mono">task-31</span> · interactive coursebook</span>
     <h1>Building a production RAG pipeline</h1>
-    <p class="lede">Nine hands-on explainers — one per implementation phase — covering how each retrieval technique works and, more importantly, <em>how to decide when to reach for it</em>.</p>
+    <p class="lede">Ten hands-on explainers — one per implementation phase — covering how each retrieval technique works and, more importantly, <em>how to decide when to reach for it</em>.</p>
   </header>
 
   <section class="block">
-    <p>These pages are the learning companion to <code>backlog/docs/rag-pipeline-upgrade-plan.md</code> and tasks <code>task-31.1</code>–<code>task-31.9</code>. Each one is self-contained and interactive: open it and play with the demo. Every page ends with a <strong>Decision lens</strong> — the when-to-use-vs-skip reasoning that separates copying a tutorial from engineering a system.</p>
+    <p>These pages are the learning companion to <code>backlog/docs/rag-pipeline-upgrade-plan.md</code> and tasks <code>task-31.1</code>–<code>task-31.9</code> plus <code>task-31.11</code> (time-aware retrieval). Each one is self-contained and interactive: open it and play with the demo. Every page ends with a <strong>Decision lens</strong> — the when-to-use-vs-skip reasoning that separates copying a tutorial from engineering a system.</p>
     <div class="note">
       <span class="callout-title">The one idea to take away</span>
       <p>Sophistication is not the goal — <strong>measured fitness for your corpus</strong> is. The plan is ordered by return on effort: measure first, then the cheap high-impact retrieval upgrades, and only reach for advanced architectures when a measured problem demands them. Most teams never need the last page.</p>
@@ -60,6 +60,7 @@
    ▼  <span style="color:var(--accent-2)">Phase F</span>  optional query transform (HyDE / multi-query / route)
    ▼  <span style="color:var(--accent)">Phase D</span>  hybrid retrieve: dense + BM25, fused by RRF      ← cheapest win
    ▼  <span style="color:var(--accent)">Phase E</span>  rerank the top-N shortlist (cross-encoder)      ← biggest cumulative gain
+   ▼  <span style="color:var(--accent)">Phase I</span>  time-aware: relative-time pre-filter + recency rerank (on intent)
    ▼  <span style="color:var(--accent-2)">Phase H</span>  order context to the edges + attach citations → MCP result
    ·
 [<span style="color:var(--good)">Phase A</span>  every change measured against the evaluation harness]</div>
@@ -132,10 +133,17 @@
         <span class="roi">▸ trust & polish — last in the chain</span>
       </a>
 
+      <a class="card" href="10-time-aware-retrieval.html">
+        <span class="ph">PHASE I · task-31.11</span>
+        <span class="ct">Time-aware retrieval</span>
+        <span class="cd">Browsing is timestamped, but retrieval is time-blind. Add a relative-time pre-filter + a recency rerank — bounded by a relevance floor so freshness never drowns relevance.</span>
+        <span class="roi">▸ cheap recency signal over timestamps you already index</span>
+      </a>
+
       <a class="card defer" href="09-deferred-architectures.html">
         <span class="ph">task-31.9 · DEFERRED</span>
         <span class="ct">Advanced architectures</span>
-        <span class="cd">GraphRAG, Agentic RAG, Self-RAG, CRAG — what each solves, why they're deliberately deferred, and the concrete trigger to revisit each.</span>
+        <span class="cd">GraphRAG, Agentic RAG, Self-RAG, CRAG, and temporal topic clustering (TDT) — what each solves, why they're deliberately deferred, and the concrete trigger to revisit each.</span>
         <span class="roi">▸ knowing what NOT to build is the lesson</span>
       </a>
 
