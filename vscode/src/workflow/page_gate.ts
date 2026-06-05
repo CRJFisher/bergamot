@@ -1,23 +1,22 @@
 /**
- * Deterministic, offline relevance gate. Decides keep/drop with NO LLM call and
- * NO main-content extraction.
- *
- * The gate is deliberately permissive: capture stores the raw page losslessly
- * and cheaply, and all quality/topic filtering belongs to the RAG-prep pipeline
- * (task-31). So it keeps essentially everything and drops only clearly-transient
- * interstitials — empty pages, auth/login pages, and redirect stubs — which
- * carry no durable content worth capturing.
+ * The capture gate: a fast, deterministic decision on whether a page is worth
+ * storing. It is deliberately permissive — capture stores the raw page
+ * losslessly and cheaply, and quality/topic filtering belongs to the RAG-prep
+ * pipeline (task-31). So it keeps essentially everything and drops only
+ * clearly-transient interstitials — empty pages, auth/login pages, and redirect
+ * stubs — which carry no durable content worth capturing.
  */
 
-/** Outcome of the relevance gate for a single captured page. */
+/** The cause a page is dropped by the capture gate. */
+export type DropReason = "content_empty" | "auth" | "redirect";
+
+/**
+ * The capture gate's decision for a single page. A kept page carries no reason;
+ * a dropped page carries the {@link DropReason} that caused the drop.
+ */
 export interface GateDecision {
-  /** Whether the page is kept (captured) or dropped. */
   keep: boolean;
-  /**
-   * Machine-readable outcome reason. `kept` when kept; otherwise the drop
-   * cause: `content_empty`, `auth`, or `redirect`.
-   */
-  reason: string;
+  reason?: DropReason;
 }
 
 /** Host/path patterns of common auth / sign-in interstitials. */
@@ -74,8 +73,8 @@ function is_redirect_stub(raw_page: string, text_length: number): boolean {
 }
 
 /**
- * Evaluates the permissive relevance gate. Keeps the page unless it is empty or
- * a transient interstitial (auth / redirect). Never throws on unusual input.
+ * Evaluates the capture gate. Keeps the page unless it is empty or a transient
+ * interstitial (auth / redirect). Never throws on unusual input.
  *
  * @param raw_page - The raw captured page
  * @param url - The page URL (used for auth-host/path detection)
@@ -94,5 +93,5 @@ export function evaluate_page_gate(raw_page: string, url: string): GateDecision 
   ) {
     return { keep: false, reason: "auth" };
   }
-  return { keep: true, reason: "kept" };
+  return { keep: true };
 }

@@ -3,8 +3,8 @@
 /**
  * Headless entrypoint for the capture server, mirroring `mcp_server_standalone`.
  *
- * Runs the real `ServerManager` (Express + visit queue + zero-LLM capture
- * pipeline + DuckDB) outside the VS Code extension host, so the full-pipeline
+ * Runs the real `ServerManager` (Express + visit queue + capture pipeline
+ * + DuckDB) outside the VS Code extension host, so the full-pipeline
  * E2E harness can exercise the live seam (browser → discovery → server → DB)
  * without launching the editor.
  *

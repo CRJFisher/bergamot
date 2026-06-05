@@ -3,7 +3,7 @@ import { store_capture, read_capture } from "./store_capture";
 
 /**
  * Verifies capture storage: the raw page round-trips losslessly through
- * zstd+DuckDB, and cheap <head> metadata is read non-LLM. Uses a real in-memory
+ * zstd+DuckDB, and cheap <head> metadata is read. Uses a real in-memory
  * DuckDB so the BLOB column behaviour is exercised for real.
  */
 describe("store_capture", () => {
@@ -58,7 +58,7 @@ describe("store_capture", () => {
     expect(meta.original_byte_size).toBe(Buffer.byteLength(RICH_HTML, "utf-8"));
   });
 
-  it("reads cheap metadata from the <head> with no LLM", async () => {
+  it("reads cheap metadata from the <head>", async () => {
     const meta = await store_capture(db, {
       page_session_id: "p3",
       url: "https://example.com/c",

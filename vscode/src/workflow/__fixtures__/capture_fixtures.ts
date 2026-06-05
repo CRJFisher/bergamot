@@ -6,7 +6,7 @@ import { GateDecision } from "../page_gate";
 /**
  * A committed raw-page fixture with its expected cheap metadata and gate label.
  * Shared by the gate unit tests (task-35.8) and the deterministic capture eval
- * (task-35.10). Fully offline — no LLM, no network.
+ * (task-35.10). Fully deterministic and offline.
  */
 export interface CaptureFixture {
   name: string;
@@ -37,7 +37,7 @@ export const CAPTURE_FIXTURES: CaptureFixture[] = [
       published_at: "2026-02-14T09:30:00Z",
       lang: "en",
     },
-    expected_gate: { keep: true, reason: "kept" },
+    expected_gate: { keep: true },
   },
   {
     name: "docs_with_nav",
@@ -51,7 +51,7 @@ export const CAPTURE_FIXTURES: CaptureFixture[] = [
       published_at: null,
       lang: "en",
     },
-    expected_gate: { keep: true, reason: "kept" },
+    expected_gate: { keep: true },
   },
   {
     name: "nav_heavy",
@@ -66,7 +66,7 @@ export const CAPTURE_FIXTURES: CaptureFixture[] = [
       lang: "en",
     },
     // Permissive gate: a nav/sitemap page is real content worth capturing.
-    expected_gate: { keep: true, reason: "kept" },
+    expected_gate: { keep: true },
   },
   {
     name: "aggregator",
@@ -81,7 +81,7 @@ export const CAPTURE_FIXTURES: CaptureFixture[] = [
       lang: "en",
     },
     // Permissive gate: a link aggregator is kept; quality filtering is task-31's.
-    expected_gate: { keep: true, reason: "kept" },
+    expected_gate: { keep: true },
   },
   {
     name: "empty",

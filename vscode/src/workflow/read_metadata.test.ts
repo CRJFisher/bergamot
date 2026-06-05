@@ -1,6 +1,6 @@
 import { read_metadata } from "./read_metadata";
 
-/** Cheap, deterministic <head> metadata extraction — no LLM, no DOM library. */
+/** Cheap, deterministic <head> metadata extraction — regex scan, no DOM library. */
 describe("read_metadata", () => {
   it("reads title, site, author, date and lang from the head", () => {
     const html = `<html lang="fr">

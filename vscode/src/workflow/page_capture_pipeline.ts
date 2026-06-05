@@ -20,14 +20,13 @@ export interface CaptureInputs {
 }
 
 /**
- * The zero-LLM capture pipeline. For each visit it runs the deterministic
- * relevance gate (`page_gate`), and for kept pages stores the raw page
- * zstd-compressed via `store_capture` (which also reads cheap `<head>` metadata
- * with `read_metadata`) in DuckDB. No model is called, no content is extracted,
- * and nothing is written to any vector store at ingest — all interpretation
- * (extraction, chunking, embedding, summarisation) is deferred to the RAG-prep
- * pipeline (task-31), which reads the stored raw page on demand. Tree linking
- * happens upstream in the visit queue (`webpage_tree`) before this runs.
+ * The capture pipeline. For each visit it runs the capture gate (`page_gate`),
+ * and for kept pages stores the raw page zstd-compressed via `store_capture`
+ * (which also reads cheap `<head>` metadata with `read_metadata`) in DuckDB.
+ * Interpretation — main-content extraction, chunking, embedding, summarisation —
+ * is handled by the RAG-prep pipeline (task-31), which reads the stored raw page
+ * on demand. Tree linking happens upstream in the visit queue (`webpage_tree`)
+ * before this runs.
  */
 export async function run_page_capture(
   deps: CaptureDeps,
@@ -35,16 +34,15 @@ export async function run_page_capture(
 ): Promise<void> {
   const visit_id = inputs.visit_id ?? inputs.new_page.id;
 
-  // Permissive deterministic gate: keep everything except transient
-  // interstitials (empty / auth / redirect). No LLM, no extraction.
+  // Capture gate: keep everything except transient interstitials
+  // (empty / auth / redirect).
   const gate = evaluate_page_gate(inputs.raw_content, inputs.new_page.url);
   dev_log("gate_result", {
     visit_id,
     url: inputs.new_page.url,
     keep: gate.keep,
-    reason: gate.reason,
   });
-  record_gate_decision(gate.keep, gate.keep ? undefined : gate.reason);
+  record_gate_decision(gate);
 
   if (!gate.keep) {
     record_outcome({

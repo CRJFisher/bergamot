@@ -1,14 +1,14 @@
 /**
- * Cheap, deterministic, non-LLM metadata extraction from a captured HTML page.
+ * Cheap, deterministic metadata extraction from a captured HTML page.
  *
  * Reads only the document `<head>` signals — `<title>`, Open-Graph / `<meta>`
- * tags, and the `<html lang>` attribute. It performs NO main-content
- * extraction: that (and any summarisation) is deferred to the RAG-prep pipeline
- * which reads the stored raw page on demand. The parse is a light regex scan so
- * capture pulls in no heavyweight HTML/DOM dependency.
+ * tags, and the `<html lang>` attribute. Main-content extraction and
+ * summarisation are handled by the RAG-prep pipeline, which reads the stored
+ * raw page on demand. The parse is a light regex scan so capture pulls in no
+ * heavyweight HTML/DOM dependency.
  */
 
-/** Metadata read non-LLM from a page's `<head>` / Open-Graph tags. */
+/** Metadata read from a page's `<head>` / Open-Graph tags. */
 export interface PageMetadata {
   /** Page title — `<title>`, falling back to `og:title`, then the URL. Always set. */
   title: string;

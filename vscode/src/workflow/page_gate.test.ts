@@ -2,9 +2,9 @@ import { evaluate_page_gate } from "./page_gate";
 import { CAPTURE_FIXTURES } from "./__fixtures__/capture_fixtures";
 
 /**
- * The permissive deterministic gate: keep everything except transient
- * interstitials (empty / auth / redirect). No LLM, no content-quality
- * thresholds. Exercised over committed fixtures plus targeted cases.
+ * The capture gate: keep everything except transient interstitials
+ * (empty / auth / redirect). Content-quality filtering is deferred to the
+ * RAG-prep pipeline. Exercised over committed fixtures plus targeted cases.
  */
 describe("evaluate_page_gate", () => {
   it.each(CAPTURE_FIXTURES.map((f) => [f.name, f] as const))(
@@ -26,28 +26,35 @@ describe("evaluate_page_gate", () => {
   it("drops a login page (password input) as auth", () => {
     const html =
       "<html><body><form><input type='password' name='pw'></form></body></html>";
-    expect(evaluate_page_gate(html, "https://x.test/account").reason).toBe(
-      "auth"
-    );
+    expect(evaluate_page_gate(html, "https://x.test/account")).toEqual({
+      keep: false,
+      reason: "auth",
+    });
   });
 
   it("drops an auth URL even without a password field (multi-step sign-in)", () => {
     const html = "<html><body><h1>Choose an account</h1></body></html>";
     expect(
-      evaluate_page_gate(html, "https://accounts.google.com/o/oauth2/v2/auth").reason
-    ).toBe("auth");
+      evaluate_page_gate(html, "https://accounts.google.com/o/oauth2/v2/auth")
+    ).toEqual({ keep: false, reason: "auth" });
   });
 
   it("drops a meta-refresh redirect stub", () => {
     const html =
       '<html><head><meta http-equiv="refresh" content="0; url=/next"></head><body>Redirecting</body></html>';
-    expect(evaluate_page_gate(html, "https://x.test/r").reason).toBe("redirect");
+    expect(evaluate_page_gate(html, "https://x.test/r")).toEqual({
+      keep: false,
+      reason: "redirect",
+    });
   });
 
   it("drops a tiny JS location-change stub as redirect", () => {
     const html =
       "<html><body><script>location.replace('/next')</script></body></html>";
-    expect(evaluate_page_gate(html, "https://x.test/r").reason).toBe("redirect");
+    expect(evaluate_page_gate(html, "https://x.test/r")).toEqual({
+      keep: false,
+      reason: "redirect",
+    });
   });
 
   it("keeps a normal content page", () => {
@@ -55,7 +62,6 @@ describe("evaluate_page_gate", () => {
       "<html><body><article><p>Plenty of real prose here.</p></article></body></html>";
     expect(evaluate_page_gate(html, "https://x.test/post")).toEqual({
       keep: true,
-      reason: "kept",
     });
   });
 

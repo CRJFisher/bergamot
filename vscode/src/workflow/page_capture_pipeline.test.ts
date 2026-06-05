@@ -7,10 +7,10 @@ import { PageActivitySessionWithoutContent } from "../duck_db_models";
 
 // duck_db is auto-mocked, so insert_webpage_capture is a jest.fn(); store_capture
 // itself runs for real (real zstd compress + metadata parse over the mocked
-// insert). The pipeline makes no LLM calls and touches no vector store.
+// insert).
 jest.mock("../duck_db");
 
-describe("run_page_capture (zero-LLM capture pipeline)", () => {
+describe("run_page_capture (capture pipeline)", () => {
   const deps: CaptureDeps = { duck_db: {} as DuckDB };
 
   const article_html = `<html><head><title>T</title></head><body><article><p>${"Real standalone content. ".repeat(
@@ -34,10 +34,10 @@ describe("run_page_capture (zero-LLM capture pipeline)", () => {
     jest.spyOn(gateMetrics, "record_gate_decision").mockImplementation(() => {});
   });
 
-  it("captures a kept page (no LLM, no vector store)", async () => {
+  it("captures a kept page", async () => {
     await run_page_capture(deps, inputs);
 
-    expect(gateMetrics.record_gate_decision).toHaveBeenCalledWith(true, undefined);
+    expect(gateMetrics.record_gate_decision).toHaveBeenCalledWith({ keep: true });
     expect(duckDbQueries.insert_webpage_capture).toHaveBeenCalled();
   });
 
@@ -48,17 +48,20 @@ describe("run_page_capture (zero-LLM capture pipeline)", () => {
 
     await run_page_capture(deps, inputs);
 
-    expect(gateMetrics.record_gate_decision).toHaveBeenCalledWith(false, "auth");
+    expect(gateMetrics.record_gate_decision).toHaveBeenCalledWith({
+      keep: false,
+      reason: "auth",
+    });
     expect(duckDbQueries.insert_webpage_capture).not.toHaveBeenCalled();
   });
 
   it("drops an empty page as content_empty", async () => {
     await run_page_capture(deps, { ...inputs, raw_content: "   \n  " });
 
-    expect(gateMetrics.record_gate_decision).toHaveBeenCalledWith(
-      false,
-      "content_empty"
-    );
+    expect(gateMetrics.record_gate_decision).toHaveBeenCalledWith({
+      keep: false,
+      reason: "content_empty",
+    });
     expect(duckDbQueries.insert_webpage_capture).not.toHaveBeenCalled();
   });
 

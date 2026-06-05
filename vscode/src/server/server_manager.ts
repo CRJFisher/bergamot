@@ -18,7 +18,7 @@ import { VisitQueueProcessor, ExtendedPageVisit } from '../visit_queue_processor
 import { ensure_inbox, persist_visit } from '../visit_inbox';
 import { PageActivitySessionWithoutTreeOrContentSchema } from '../duck_db_models';
 import { CaptureDeps } from '../workflow/page_capture_pipeline';
-import { dev_log, is_dev_log_enabled, is_browser_dev_stage } from '../dev_log';
+import { dev_log, is_dev_log_enabled, is_browser_dev_stage, format_error_detail } from '../dev_log';
 import { read_capture } from '../workflow/store_capture';
 import { persist_replay_visit } from '../visit_replay';
 
@@ -59,7 +59,7 @@ export interface ServerConfig {
 /**
  * Manages the Express server for the capture pipeline. Provides HTTP endpoints
  * for the browser extension to submit webpage visits (which are gated and stored
- * by the zero-LLM capture pipeline) and read-only relational query endpoints.
+ * by the capture pipeline) and read-only relational query endpoints.
  *
  * @example
  * ```typescript
@@ -197,7 +197,7 @@ export class ServerManager {
           dev_log('decompress_failed', {
             visit_id,
             url: req.body.url,
-            error: error instanceof Error ? error.message : String(error),
+            error: format_error_detail(error),
           });
           // Never fall through with the raw base64 string as page content — it
           // would be captured verbatim instead of the real page.
@@ -407,9 +407,8 @@ export class ServerManager {
 
     throw new Error(
       `Could not bind any port in range ${SERVER_PORT_RANGE[0]}-` +
-        `${SERVER_PORT_RANGE[SERVER_PORT_RANGE.length - 1]}: ${
-          last_error instanceof Error ? last_error.message : String(last_error)
-        }`
+        `${SERVER_PORT_RANGE[SERVER_PORT_RANGE.length - 1]}`,
+      { cause: last_error }
     );
   }
 

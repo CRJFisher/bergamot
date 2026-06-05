@@ -74,7 +74,7 @@ export interface VisitOutcome {
   /** Decompressed page size in bytes (captured pages). */
   byte_size?: number;
   decision: VisitDecision;
-  /** Gate drop reason when dropped (e.g. `link_heavy`, `pdf`, `content_empty`). */
+  /** Gate drop cause when dropped (`content_empty`, `auth`, or `redirect`). */
   reason?: string;
   error?: string;
   at: string;
@@ -164,6 +164,24 @@ export function dev_log(stage: DevLogStage, fields: Record<string, unknown>): vo
       rotate_if_needed();
     }
   }
+}
+
+/**
+ * Renders an unknown thrown value into a single log string that preserves as
+ * much context as possible: the message, the full stack trace, and any nested
+ * `cause` chain. Native `Error.stack` already begins with the message, so it is
+ * preferred over `message` alone when present.
+ */
+export function format_error_detail(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const parts: string[] = [error.stack ?? `${error.name}: ${error.message}`];
+  let cause: unknown = (error as { cause?: unknown }).cause;
+  while (cause instanceof Error) {
+    parts.push(`Caused by: ${cause.stack ?? `${cause.name}: ${cause.message}`}`);
+    cause = (cause as { cause?: unknown }).cause;
+  }
+  if (cause !== undefined) parts.push(`Caused by: ${String(cause)}`);
+  return parts.join('\n');
 }
 
 /**

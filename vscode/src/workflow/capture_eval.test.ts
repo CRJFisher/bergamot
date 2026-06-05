@@ -8,9 +8,9 @@ import { CAPTURE_FIXTURES } from "./__fixtures__/capture_fixtures";
  * Light capture eval (task-35.10): over a committed fixture set of raw pages,
  * asserts (1) the raw page round-trips losslessly through the capture store,
  * (2) cheap <head> metadata is extracted correctly, and (3) the deterministic
- * gate's keep/drop matches the labels. Fully deterministic and offline — no LLM,
- * no network. Extraction / summary / retrieval quality are NOT evaluated here;
- * those belong to task-31's RAG harness.
+ * gate's keep/drop matches the labels. Fully deterministic and offline.
+ * Extraction / summary / retrieval quality are evaluated by task-31's RAG
+ * harness, not here.
  */
 describe("capture eval (deterministic, offline)", () => {
   let db: DuckDB;
@@ -67,11 +67,10 @@ describe("capture eval (deterministic, offline)", () => {
     );
   });
 
-  it("runs with no LLM and no network (capture is fully deterministic)", () => {
+  it("runs offline with no network (capture is fully deterministic)", () => {
     // The whole suite imports only read_metadata / evaluate_page_gate /
-    // store_capture (zstd) / DuckDB — no LLM client, no fetch. This test
-    // documents the before/after: ingestion dropped from up-to-4 LLM calls
-    // (classify + content-processing + analysis + tree-intentions) to 0.
+    // store_capture (zstd) / DuckDB — no network access. Capture is a pure
+    // function of the raw page bytes.
     expect(typeof read_metadata).toBe("function");
     expect(typeof evaluate_page_gate).toBe("function");
   });

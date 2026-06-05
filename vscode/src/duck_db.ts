@@ -151,7 +151,7 @@ export class DuckDB {
 
     // Capture-first store: the raw page kept zstd-compressed as the durable,
     // lossless source of truth for downstream extraction/RAG, plus cheap
-    // non-LLM metadata read from the <head>. Keyed by page_session_id but with
+    // metadata read from the <head>. Keyed by page_session_id but with
     // no foreign key, so a capture can be written before (or independently of)
     // the activity-session row.
     const webpage_capture_schema = [
@@ -457,7 +457,7 @@ export class DuckDB {
 /**
  * A row in {@link WEBPAGE_CAPTURE_TABLE}: the {@link PageCapture} metadata plus
  * the raw page bytes. The compressed bytes are supplied by the caller
- * (zstd-compressed); metadata is read non-LLM from the page's `<head>`.
+ * (zstd-compressed); metadata is read from the page's `<head>`.
  */
 export interface WebpageCaptureRecord extends PageCapture {
   /** The raw page, already zstd-compressed by the caller. */

@@ -17,11 +17,11 @@ jest.mock('vscode');
 
 /**
  * Exercises the real capture seam end to end — real Express ServerManager, real
- * DuckDB on a temp path, the real visit queue and zero-LLM capture pipeline. No
- * LLM, no LanceDB, no network, no API tokens. Posts a genuine zstd visit and
- * asserts the raw page round-trips losslessly from the capture store.
+ * DuckDB on a temp path, the real visit queue and capture pipeline. Posts a
+ * genuine zstd visit and asserts the raw page round-trips losslessly from the
+ * capture store.
  */
-describe('server pipeline integration (real DuckDB, zero-LLM capture)', () => {
+describe('server pipeline integration (real DuckDB, capture pipeline)', () => {
   let storage_dir: string;
   let db_manager: DatabaseManager;
   let duck_db: DuckDB;
@@ -74,7 +74,7 @@ describe('server pipeline integration (real DuckDB, zero-LLM capture)', () => {
     await drain_queue(server.get_queue_processor());
 
     // DuckDB: the session row exists and joins to the capture title (from the
-    // cheap <head> metadata — no LLM).
+    // cheap <head> metadata).
     const row = await get_webpage_by_url(duck_db, url);
     expect(row).not.toBeNull();
     expect(row?.url).toBe(url);

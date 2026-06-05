@@ -27,14 +27,14 @@ Bergamot automatically captures knowledge-rich webpages as you browse, stores th
 
 ### 🌐 Capture
 
-- Automatically captures knowledge-rich webpages as you browse
-- AI-powered filtering to focus on tutorials, documentation, and articles
+- Automatically captures webpages as you browse
+- Skips only transient interstitials — login, redirect, and empty pages
 - Preserves full navigation context and referrer chains
 
 ### 💾 Store
 
-- Persists each visit to DuckDB (relational visit record) and LanceDB (page content + vectors)
-- An LLM extracts the main content of each page during ingestion
+- Persists each visit to DuckDB: a relational visit record plus the raw page, stored losslessly (zstd-compressed) as the durable source of truth
+- Reads cheap `<head>` metadata (title, author, publication) at capture time
 
 ### 🔍 Query
 
@@ -64,17 +64,15 @@ Bergamot automatically captures knowledge-rich webpages as you browse, stores th
    - Or build from source (see Development section)
 
 3. **No API key required**
-   - Classification and content analysis use your Claude subscription via the Claude Agent SDK (no API tokens).
-   - Embeddings run locally on your machine (zero-token).
-   - An OpenAI API key is only needed if you set `bergamot.llmProvider` to `openai`.
+   - Capture runs locally and deterministically; no API tokens are needed.
 
 ## Usage
 
 ### Building Your Knowledge Base
 
 1. Install the browser extension
-2. Browse normally - Bergamot automatically captures knowledge-rich pages
-3. Pages are processed, embedded, and stored for future retrieval
+2. Browse normally — Bergamot automatically captures the pages you visit
+3. Each page's raw HTML is stored losslessly for future retrieval
 
 ### Accessing Your Knowledge via MCP
 
@@ -206,20 +204,15 @@ npm run chrome:debug  # Launches Chrome with extension loaded
 
 ### VS Code Settings
 
-| Setting                                | Description                                                          | Default         |
-| -------------------------------------- | -------------------------------------------------------------------- | --------------- |
-| `bergamot.llmProvider`                 | LLM backend for classification: `claude`, `openai`, or `vscode`      | `claude`        |
-| `bergamot.openaiApiKey`                | OpenAI API key (only required when `llmProvider` is `openai`)        | -               |
-| `bergamot.devMode`                     | Enable dev-phase observability (Bergamot Dev output + dev-log.jsonl) | `false`         |
-| `bergamot.webpageFilter.enabled`       | Enable AI filtering                                                  | `true`          |
-| `bergamot.webpageFilter.allowedTypes`  | Page types to capture                                                | `["knowledge"]` |
-| `bergamot.webpageFilter.minConfidence` | Min confidence for classification                                    | `0.7`           |
-| `bergamot.webpageFilter.logDecisions`  | Log filter decisions                                                 | `true`          |
+| Setting            | Description                                                          | Default |
+| ------------------ | -------------------------------------------------------------------- | ------- |
+| `bergamot.devMode` | Enable dev-phase observability (Bergamot Dev output + dev-log.jsonl) | `false` |
 
 ## Architecture
 
-- **Storage**: DuckDB for structured data, LanceDB for vector embeddings
-- **AI**: Claude subscription (via the Claude Agent SDK) for content analysis by default; embeddings run locally with all-MiniLM-L6-v2
+- **Capture**: deterministic and local — the raw page is stored losslessly with no model calls at ingest
+- **Storage**: DuckDB for structured data and raw-page captures; LanceDB for vector embeddings
+- **AI**: embeddings run locally (all-MiniLM-L6-v2) for retrieval over the stored raw page
 - **Communication**: HTTP API between browser and VS Code
 - **Protocols**: MCP for AI agent integration
 
@@ -239,6 +232,5 @@ MIT © Bergamot Team
 
 ## Acknowledgments
 
-- Built with [OpenAI](https://openai.com)
 - Uses [DuckDB](https://duckdb.org) and [LanceDB](https://lancedb.com)
 - MCP integration via [Model Context Protocol](https://modelcontextprotocol.io)

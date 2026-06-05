@@ -2,7 +2,7 @@ import { z } from "zod";
 import { PageActivitySessionSchema } from "./duck_db_models";
 
 /**
- * The canonical per-page record: cheap, non-LLM metadata read from the page's
+ * The canonical per-page record: cheap metadata read from the page's
  * <head> alongside the stored raw page. The compressed bytes live in DuckDB
  * `webpage_capture`; this is the metadata view read for navigation/listing
  * without decompression.

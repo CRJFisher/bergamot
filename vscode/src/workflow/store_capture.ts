@@ -1,9 +1,9 @@
 /**
  * Capture-first storage: persist the raw page losslessly (zstd-compressed) as
- * the durable source of truth, alongside cheap non-LLM `<head>` metadata. No
- * main-content extraction, chunking, embedding or summarisation happens here —
- * all interpretation is deferred to the RAG-prep pipeline (task-31), which reads
- * the stored raw page on demand via {@link read_capture}.
+ * the durable source of truth, alongside cheap `<head>` metadata. Interpretation
+ * — main-content extraction, chunking, embedding, summarisation — is handled by
+ * the RAG-prep pipeline (task-31), which reads the stored raw page on demand via
+ * {@link read_capture}.
  */
 
 import { compress, decompress } from "@mongodb-js/zstd";

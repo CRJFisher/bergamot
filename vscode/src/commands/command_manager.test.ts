@@ -51,9 +51,9 @@ describe('CommandManager', () => {
       captured_pages: 80,
       dropped_pages: 20,
       drop_reasons: {
-        'link_heavy': 10,
-        'content_too_small': 5,
-        'pdf': 5
+        'auth': 10,
+        'redirect': 6,
+        'content_empty': 4
       }
     });
 
@@ -149,11 +149,11 @@ describe('CommandManager', () => {
 
       const calls: string[] = mock_output_channel.appendLine.mock.calls
         .map((call) => call[0] as string)
-        .filter((line) => /link_heavy|content_too_small|pdf/.test(line));
+        .filter((line) => /auth|redirect|content_empty/.test(line));
 
-      expect(calls[0]).toContain('link_heavy: 10');
-      expect(calls[1]).toContain('content_too_small: 5');
-      expect(calls[2]).toContain('pdf: 5');
+      expect(calls[0]).toContain('auth: 10');
+      expect(calls[1]).toContain('redirect: 6');
+      expect(calls[2]).toContain('content_empty: 4');
     });
 
     it('should handle zero total pages gracefully', () => {

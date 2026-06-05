@@ -1,12 +1,13 @@
 /**
- * Process-wide counters for the deterministic capture gate: how many pages were
- * captured vs dropped, and a tally of drop reasons. Surfaced by the
- * `bergamot.showCaptureMetrics` command. No page-type/confidence tracking — the
- * gate is usage-agnostic and makes no LLM classification.
+ * Process-wide counters for the capture gate: how many pages were captured vs
+ * dropped, and a tally of drop causes. Surfaced by the
+ * `bergamot.showCaptureMetrics` command.
  *
  * Modelled as a module-level accumulator with functions (not a stateful class),
  * per the project's no-stateful-classes rule.
  */
+import { GateDecision } from "./page_gate";
+
 export interface GateMetrics {
   total_pages: number;
   captured_pages: number;
@@ -25,16 +26,15 @@ function empty_metrics(): GateMetrics {
   };
 }
 
-/** Records a single gate decision. `reason` is the drop cause when dropped. */
-export function record_gate_decision(captured: boolean, reason?: string): void {
+/** Records a single capture-gate decision. */
+export function record_gate_decision(decision: GateDecision): void {
   metrics.total_pages++;
-  if (captured) {
+  if (decision.keep) {
     metrics.captured_pages++;
   } else {
     metrics.dropped_pages++;
-    if (reason) {
-      metrics.drop_reasons[reason] = (metrics.drop_reasons[reason] || 0) + 1;
-    }
+    metrics.drop_reasons[decision.reason] =
+      (metrics.drop_reasons[decision.reason] || 0) + 1;
   }
 }
 
