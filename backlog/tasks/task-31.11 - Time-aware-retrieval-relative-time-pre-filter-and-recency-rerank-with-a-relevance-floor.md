@@ -29,7 +29,7 @@ Make time a first-class retrieval signal on top of the hybrid dense+BM25 pipelin
 
 - [ ] #1 semantic_search accepts an optional time_range and applies it as a pre-filter on the visit timestamp (page_loaded_at) before semantic ranking
 - [ ] #2 Relative-time expressions ("last month", "recently") are anchored to a reference now and converted to a concrete timestamp range
-- [ ] #3 An optional recency rerank blends cosine with an exponential half-life decay on page age, with alpha and half-life configurable
+- [ ] #3 An optional recency rerank blends cosine with an exponential half-life decay on page age, with alpha and half-life configurable, exposed as a time_reranked toggle on the semantic_search MCP tool alongside time_range
 - [ ] #4 A raw-cosine relevance floor gates the recency boost so fresh-but-off-topic pages are not surfaced
 - [ ] #5 Time weighting is applied conditionally on detected time intent, not as a fixed global decay
 - [ ] #6 On the task-31.1 eval harness, time-intent queries improve vs the hybrid baseline with no regression on non-temporal queries
