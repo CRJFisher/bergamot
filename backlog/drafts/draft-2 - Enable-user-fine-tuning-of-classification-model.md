@@ -13,6 +13,8 @@ dependencies:
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
 
+> **Privacy-model reconciliation (canonical).** This draft inherits draft-1's rescope. "The user's data" here means **re-downloaded public content and its metadata** (obtained during post-processing on Node/desktop), never capture-time browser page content — capture is metadata-only. Fine-tuning and training-data collection run over that re-downloaded/metadata corpus on Node/desktop, not in the capture-time browser context. If draft-1's classification purpose was **ingestion-time sensitivity gating**, that purpose is **moot** (the login-wall-at-re-download filter supersedes it), and this draft is **correspondingly moot**. It survives only insofar as draft-1 survives — i.e. as user fine-tuning of RAG-prep page-type classification over already-public re-downloaded content.
+
 Phase 2: Allow users to fine-tune the local classification model to their preferences. This includes adding new classification categories, refining existing ones, and personalizing the model based on their content organization needs. The system should provide an intuitive interface for users to train the model with their own labeled examples.
 
 The tricky, subjective category that we need to focus on is the 'knowledge' category.

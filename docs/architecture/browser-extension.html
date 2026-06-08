@@ -27,7 +27,7 @@
 
   <section class="hero">
     <h1>🌐 Browser Extension</h1>
-    <p class="tagline">A lightweight Chromium MV3 capture layer. It records page content and the cross-tab navigation graph, then posts visits to the VS Code backend over HTTP. All intelligence lives downstream.</p>
+    <p class="tagline">A lightweight Chromium MV3 capture layer. It records browsing metadata only — the visit's title/URL/timestamp and the cross-tab navigation graph — then posts metadata-only visits to the VS Code backend over HTTP. No page content is captured; all intelligence lives downstream.</p>
     <span class="pill">browser/src · esbuild bundles · Manifest V3 service worker</span>
   </section>
 
@@ -37,10 +37,8 @@
     <pre class="mermaid">
 flowchart LR
     subgraph CS["Content script — content.ts"]
-      cap["extract_page_content()<br/>HTML, capped 2 MB"]
-      zstd["compress_content()<br/>zstd → base64"]
+      cap["read visit metadata<br/>title · URL · load timestamp"]
       spa["SPA nav detection<br/>pushState / popstate"]
-      cap --> zstd
     end
 
     subgraph SW["Service worker — background.ts"]
@@ -61,23 +59,23 @@ flowchart LR
 
     backend([VS Code server<br/>POST /visit])
 
-    zstd -- "runtime.sendMessage" --> router
+    cap -- "runtime.sendMessage" --> router
     spa -- "runtime.sendMessage" --> router
     router --> disc --> api --> backend
     conf -.-> disc
 
     classDef a fill:#3a2a1a,stroke:#f0883e,color:#f5d9c0;
     classDef b fill:#1c2330,stroke:#2b3442,color:#d7dde5;
-    class cap,zstd,spa a;
+    class cap,spa a;
     class router,store,persist,nav,disc,api,conf b;
     </pre>
   </div>
 
   <table>
     <tr><th>Module</th><th>Responsibility</th></tr>
-    <tr><td><code>content.ts</code></td><td>Injected into every page at <code>document_end</code>. Extracts page HTML, compresses it, and reports the visit on load and on SPA navigation. Retries on a cold service worker.</td></tr>
+    <tr><td><code>content.ts</code></td><td>Injected into every page at <code>document_end</code>. Reads the visit's title and URL, and reports the visit metadata on load and on SPA navigation. Retries on a cold service worker.</td></tr>
     <tr><td><code>background.ts</code></td><td>The session authority. Owns the tab-history store; listens to all <code>tabs</code> / <code>webNavigation</code> events; serializes mutations through an operation chain; routes messages.</td></tr>
-    <tr><td><code>core/data_collector.ts</code></td><td>Pure functions: <code>extract_page_content()</code>, <code>compress_content()</code> (zstd), <code>create_visit_data()</code>.</td></tr>
+    <tr><td><code>core/data_collector.ts</code></td><td>Pure functions that build the visit metadata: <code>create_visit_data()</code>.</td></tr>
     <tr><td><code>core/tab_history_manager.ts</code></td><td>Functional store of <code>Map&lt;tab_id, TabHistory&gt;</code>; mints <code>group_id</code> session IDs; tracks referrer chains.</td></tr>
     <tr><td><code>core/tab_history_persistence.ts</code></td><td>Persists the store to <code>chrome.storage.session</code> so it survives MV3 service-worker restarts.</td></tr>
     <tr><td><code>core/message_router.ts</code></td><td>Dispatches <code>getReferrer</code> and <code>sendToPKMServer</code>; attaches session metadata to outgoing visits.</td></tr>
@@ -129,15 +127,15 @@ flowchart TB
     <tr><th>Aspect</th><th>Detail</th></tr>
     <tr><td>Endpoint</td><td><code>POST /visit</code> (and <code>GET /status</code> for discovery)</td></tr>
     <tr><td>Discovery</td><td>Probe ports <code>5000–5009</code>; accept the one whose <code>/status</code> returns service <code>"bergamot"</code>; cache it.</td></tr>
-    <tr><td>Body</td><td><code>{ url, page_loaded_at, referrer, referrer_timestamp, content, tab_id, group_id, opener_tab_id }</code></td></tr>
-    <tr><td>Content</td><td>Page HTML, zstd-compressed and base64-encoded, capped at 2 MB.</td></tr>
+    <tr><td>Body</td><td><code>{ url, title, page_loaded_at, referrer, referrer_timestamp, tab_id, group_id, opener_tab_id }</code> — metadata only, no page content.</td></tr>
     <tr><td>Reliability</td><td>Content script retries up to 20× (100 ms apart) to wake a cold MV3 service worker.</td></tr>
     <tr><td>Permissions</td><td>Trimmed manifest: <code>tabs</code>, <code>activeTab</code>, <code>storage</code>, <code>webNavigation</code>.</td></tr>
   </table>
 
   <div class="note">
-    <strong>No ML in the extension.</strong> The browser side is purely capture + enrichment. All
-    classification, content extraction, and storage happen in the
+    <strong>No ML, no content in the extension.</strong> The browser side captures metadata only —
+    title/URL/timestamp plus the session graph. It never reads or transmits page content. Content acquisition
+    (re-download), classification, and storage happen in the
     <a href="vscode-extension.html">VS Code backend</a>. This keeps the extension fast and its
     permission surface minimal.
   </div>

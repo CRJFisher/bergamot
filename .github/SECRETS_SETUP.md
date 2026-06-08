@@ -6,28 +6,21 @@ This guide helps you configure GitHub Secrets required for automated browser ext
 
 ### Chrome Web Store Secrets
 
-| Secret Name | Description | How to Obtain |
-|------------|-------------|---------------|
-| `CHROME_CLIENT_ID` | OAuth2 Client ID | Google Cloud Console > APIs & Services > Credentials |
-| `CHROME_CLIENT_SECRET` | OAuth2 Client Secret | Same as above, from OAuth2 credentials |
-| `CHROME_REFRESH_TOKEN` | OAuth2 Refresh Token | Use OAuth2 playground or script below |
-| `CHROME_EXTENSION_ID` | Extension ID | Chrome Web Store Developer Dashboard |
-
-### Firefox Add-ons Secrets
-
-| Secret Name | Description | How to Obtain |
-|------------|-------------|---------------|
-| `FIREFOX_API_KEY` | JWT Issuer | addons.mozilla.org > Tools > Manage API Keys |
-| `FIREFOX_API_SECRET` | JWT Secret | Same page, generated with API key |
+| Secret Name            | Description          | How to Obtain                                        |
+| ---------------------- | -------------------- | ---------------------------------------------------- |
+| `CHROME_CLIENT_ID`     | OAuth2 Client ID     | Google Cloud Console > APIs & Services > Credentials |
+| `CHROME_CLIENT_SECRET` | OAuth2 Client Secret | Same as above, from OAuth2 credentials               |
+| `CHROME_REFRESH_TOKEN` | OAuth2 Refresh Token | Use OAuth2 playground or script below                |
+| `CHROME_EXTENSION_ID`  | Extension ID         | Chrome Web Store Developer Dashboard                 |
 
 ### Edge Add-ons Secrets
 
-| Secret Name | Description | How to Obtain |
-|------------|-------------|---------------|
-| `EDGE_CLIENT_ID` | Azure AD App ID | Azure Portal > App registrations |
-| `EDGE_CLIENT_SECRET` | Azure AD Secret | Azure Portal > Certificates & secrets |
-| `EDGE_PRODUCT_ID` | Extension Product ID | Partner Center > Extension overview |
-| `EDGE_ACCESS_TOKEN_URL` | Token endpoint (optional) | Usually default value works |
+| Secret Name             | Description               | How to Obtain                         |
+| ----------------------- | ------------------------- | ------------------------------------- |
+| `EDGE_CLIENT_ID`        | Azure AD App ID           | Azure Portal > App registrations      |
+| `EDGE_CLIENT_SECRET`    | Azure AD Secret           | Azure Portal > Certificates & secrets |
+| `EDGE_PRODUCT_ID`       | Extension Product ID      | Partner Center > Extension overview   |
+| `EDGE_ACCESS_TOKEN_URL` | Token endpoint (optional) | Usually default value works           |
 
 ## Setting Secrets in GitHub
 
@@ -55,9 +48,6 @@ gh secret set CHROME_CLIENT_SECRET
 gh secret set CHROME_REFRESH_TOKEN
 gh secret set CHROME_EXTENSION_ID
 
-gh secret set FIREFOX_API_KEY
-gh secret set FIREFOX_API_SECRET
-
 gh secret set EDGE_CLIENT_ID
 gh secret set EDGE_CLIENT_SECRET
 gh secret set EDGE_PRODUCT_ID
@@ -83,37 +73,37 @@ gh secret set EDGE_PRODUCT_ID
 Create a file `get-chrome-token.js`:
 
 ```javascript
-const { OAuth2Client } = require('google-auth-library');
-const http = require('http');
-const url = require('url');
-const open = require('open');
+const { OAuth2Client } = require("google-auth-library");
+const http = require("http");
+const url = require("url");
+const open = require("open");
 
 const client = new OAuth2Client(
-  'YOUR_CLIENT_ID',
-  'YOUR_CLIENT_SECRET',
-  'http://localhost:3000/oauth2callback'
+  "YOUR_CLIENT_ID",
+  "YOUR_CLIENT_SECRET",
+  "http://localhost:3000/oauth2callback",
 );
 
 const authUrl = client.generateAuthUrl({
-  access_type: 'offline',
-  scope: ['https://www.googleapis.com/auth/chromewebstore'],
+  access_type: "offline",
+  scope: ["https://www.googleapis.com/auth/chromewebstore"],
 });
 
 const server = http.createServer(async (req, res) => {
-  if (req.url.indexOf('/oauth2callback') > -1) {
-    const qs = new url.URL(req.url, 'http://localhost:3000').searchParams;
-    const code = qs.get('code');
-    
+  if (req.url.indexOf("/oauth2callback") > -1) {
+    const qs = new url.URL(req.url, "http://localhost:3000").searchParams;
+    const code = qs.get("code");
+
     const { tokens } = await client.getToken(code);
-    console.log('Refresh Token:', tokens.refresh_token);
-    
-    res.end('Authentication successful! Check console for token.');
+    console.log("Refresh Token:", tokens.refresh_token);
+
+    res.end("Authentication successful! Check console for token.");
     server.close();
   }
 });
 
 server.listen(3000, () => {
-  console.log('Opening browser for authentication...');
+  console.log("Opening browser for authentication...");
   open(authUrl);
 });
 ```
@@ -121,14 +111,16 @@ server.listen(3000, () => {
 ## Getting Edge/Azure AD Credentials
 
 1. **Register App in Azure**:
+
    ```bash
    # Using Azure CLI
-   az ad app create --display-name "PKM Extension Publisher"
-   
+   az ad app create --display-name "Bergamot Extension Publisher"
+
    # Note the appId (CLIENT_ID)
    ```
 
 2. **Create Client Secret**:
+
    ```bash
    az ad app credential reset --id <APP_ID>
    # Note the password (CLIENT_SECRET)
@@ -142,6 +134,7 @@ server.listen(3000, () => {
 ## Security Best Practices
 
 ### Do's
+
 - ✅ Use GitHub's encrypted secrets
 - ✅ Rotate credentials periodically
 - ✅ Use separate credentials for dev/prod
@@ -149,6 +142,7 @@ server.listen(3000, () => {
 - ✅ Audit secret access regularly
 
 ### Don'ts
+
 - ❌ Never commit secrets to code
 - ❌ Don't share credentials
 - ❌ Avoid storing secrets locally
@@ -175,15 +169,7 @@ jobs:
           else
             echo "❌ CHROME_CLIENT_ID is missing"
           fi
-          
-      - name: Check Firefox Secrets
-        run: |
-          if [ -n "${{ secrets.FIREFOX_API_KEY }}" ]; then
-            echo "✅ FIREFOX_API_KEY is set"
-          else
-            echo "❌ FIREFOX_API_KEY is missing"
-          fi
-          
+
       - name: Check Edge Secrets
         run: |
           if [ -n "${{ secrets.EDGE_CLIENT_ID }}" ]; then
@@ -216,11 +202,11 @@ jobs:
 ```
 # Development
 DEV_CHROME_CLIENT_ID
-DEV_FIREFOX_API_KEY
+DEV_EDGE_CLIENT_ID
 
 # Production
 PROD_CHROME_CLIENT_ID
-PROD_FIREFOX_API_KEY
+PROD_EDGE_CLIENT_ID
 ```
 
 ## Troubleshooting
@@ -234,13 +220,11 @@ PROD_FIREFOX_API_KEY
 ### Authentication Failures
 
 1. Chrome: Refresh token may expire after 6 months
-2. Firefox: API keys don't expire but can be revoked
-3. Edge: Check Azure AD app permissions
+2. Edge: Check Azure AD app permissions
 
 ### Rate Limiting
 
 - Chrome Web Store API: 200 requests per day
-- Firefox: No strict limits
 - Edge: Standard Azure AD limits apply
 
 ## Local Development
@@ -254,23 +238,20 @@ CHROME_CLIENT_SECRET=your-secret
 CHROME_REFRESH_TOKEN=your-token
 CHROME_EXTENSION_ID=your-extension-id
 
-FIREFOX_API_KEY=your-key
-FIREFOX_API_SECRET=your-secret
-
 EDGE_CLIENT_ID=your-id
 EDGE_CLIENT_SECRET=your-secret
 EDGE_PRODUCT_ID=your-product-id
 ```
 
 Load in scripts:
+
 ```javascript
-import dotenv from 'dotenv';
-dotenv.config({ path: '.env.local' });
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
 ```
 
 ## Support
 
 - [GitHub Secrets Documentation](https://docs.github.com/en/actions/security-guides/encrypted-secrets)
 - [Chrome Web Store API](https://developer.chrome.com/docs/webstore/using_webstore_api/)
-- [Firefox Add-ons API](https://extensionworkshop.com/documentation/develop/web-ext-command-reference/)
 - [Edge Add-ons API](https://docs.microsoft.com/en-us/microsoft-edge/extensions-chromium/publish/api/using-addons-api)

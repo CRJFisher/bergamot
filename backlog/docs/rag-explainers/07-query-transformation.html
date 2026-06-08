@@ -132,7 +132,7 @@
         decide <em>whether retrieval is even needed</em>. A general-knowledge or arithmetic question —
         "what is 2+2", "who wrote Hamlet" — has its answer in the model's own weights and
         <strong>should not hit the knowledge base</strong>; retrieving for it only adds latency and the
-        risk of injecting irrelevant passages. A question about the user's own captured content —
+        risk of injecting irrelevant passages. A question about the user's own browsed pages —
         "summarize the article I read about hooks" — clearly <em>should</em> retrieve. The router sends
         each query down the right path.
       </p>
@@ -235,7 +235,7 @@
           </div>
           <p class="demo-hint">
             A general-knowledge or arithmetic question skips the knowledge base; a question about your
-            own captured content routes to retrieval.
+            own browsed pages routes to retrieval.
           </p>
         </div>
       </div>
@@ -412,7 +412,7 @@
 
       /* ---------- WIDGET 3: Router ---------- */
       // Cheap keyword rule: arithmetic or general-knowledge -> answer directly.
-      // References to the user's own captured content -> retrieve.
+      // References to the user's own browsed pages -> retrieve.
       var RETRIEVE_HINTS = ["my notes", "the article", "i read", "i saved", "i captured", "summarize", "my "];
       var SKIP_HINTS = ["what is", "who wrote", "who is", "capital of", "how many", "when was"];
       var ARITHMETIC = /\d\s*[\+\-\*\/x]\s*\d/;
@@ -424,7 +424,7 @@
         }
         for (var i = 0; i < RETRIEVE_HINTS.length; i++) {
           if (t.indexOf(RETRIEVE_HINTS[i]) !== -1) {
-            return { retrieve: true, why: "References the user's own captured content — hit the knowledge base." };
+            return { retrieve: true, why: "References the user's own browsed pages — hit the knowledge base." };
           }
         }
         for (var j = 0; j < SKIP_HINTS.length; j++) {

@@ -21,19 +21,21 @@ The extension follows a functional programming paradigm with immutable data stru
 **Module**: [`src/core/tab_history_manager.ts`](../../referrer_tracker_extension/src/core/tab_history_manager.ts)
 
 **Key Functions**:
+
 - `create_tab_history()`: Creates new tab history entries
 - `update_tab_history()`: Updates existing tab history
 - `get_tab_history()`: Retrieves history for a specific tab
 - `cleanup_tab_history()`: Removes history for closed tabs
 
 **Data Structure**:
+
 ```typescript
 class TabHistory {
-  previous_url?: string
-  current_url?: string
-  timestamp: number
-  previous_url_timestamp?: number
-  opener_tab_id?: number
+  previous_url?: string;
+  current_url?: string;
+  timestamp: number;
+  previous_url_timestamp?: number;
+  opener_tab_id?: number;
 }
 ```
 
@@ -44,6 +46,7 @@ class TabHistory {
 **Module**: [`src/core/navigation_detector.ts`](../../referrer_tracker_extension/src/core/navigation_detector.ts)
 
 **Key Functions**:
+
 - `create_navigation_state()`: Initializes navigation tracking state
 - `should_handle_navigation()`: Determines if navigation should be processed
 - `create_push_state_handler()`: Factory for pushState event handler
@@ -51,32 +54,33 @@ class TabHistory {
 - `create_popstate_handler()`: Factory for popstate event handler
 
 **Features**:
+
 - Ignores duplicate navigations to same URL
 - Tracks visited URLs to avoid duplicate processing
 - Normalizes URLs by removing tracking parameters
 
 ### 3. Data Collection
 
-**Purpose**: Collects page content and compresses it for storage.
+**Purpose**: Assembles visit metadata for transmission. Capture is metadata-only — the extension never reads, extracts, or compresses page content.
 
 **Module**: [`src/core/data_collector.ts`](../../referrer_tracker_extension/src/core/data_collector.ts)
 
 **Key Functions**:
-- `extract_page_content()`: Extracts HTML from current page
-- `compress_content()`: Compresses content using zstd
-- `create_visit_data()`: Creates complete visit data object
-- `uint8_array_to_base64()`: Converts compressed data to base64
+
+- `create_visit_data()`: Assembles the metadata visit object (url, title, referrer, timestamps) directly from the tab
 
 **Data Structure**:
+
 ```typescript
 class VisitData {
-  url: string
-  referrer: string
-  referrer_timestamp?: number
-  content: string
-  page_loaded_at: string
+  url: string;
+  referrer: string;
+  referrer_timestamp?: number;
+  page_loaded_at: string;
 }
 ```
+
+Page content (HTML/text) is never part of `VisitData`. URL, title, and load timestamp are taken directly from the tab; content is obtained later by re-downloading the public URL during post-processing.
 
 ### 4. Message Routing
 
@@ -85,12 +89,14 @@ class VisitData {
 **Module**: [`src/core/message_router.ts`](../../referrer_tracker_extension/src/core/message_router.ts)
 
 **Key Functions**:
+
 - `handle_get_referrer()`: Provides referrer information for tabs
 - `handle_spa_navigation()`: Processes SPA navigation events
 - `handle_server_request()`: Forwards data to PKM server
 - `create_message_handler()`: Creates unified message handler
 
 **Message Types**:
+
 - `getReferrerInfo`: Request referrer data for current tab
 - `spaNavigation`: Notify of SPA navigation event
 - `forwardToServer`: Send data to PKM server
@@ -102,11 +108,13 @@ class VisitData {
 **Module**: [`src/core/configuration_manager.ts`](../../referrer_tracker_extension/src/core/configuration_manager.ts)
 
 **Key Functions**:
+
 - `get_server_config()`: Retrieves server configuration
 - `update_server_config()`: Updates configuration settings
 - `get_default_config()`: Provides default configuration
 
 **Configuration Structure**:
+
 ```typescript
 class ServerConfig {
   base_url: string = "http://localhost:5000"
@@ -123,9 +131,11 @@ class ServerConfig {
 **Module**: [`src/core/api_client.ts`](../../referrer_tracker_extension/src/core/api_client.ts)
 
 **Key Functions**:
+
 - `send_to_server()`: Sends data to server endpoint
 
 **Features**:
+
 - POST requests with JSON payloads
 - Error handling and logging
 - Configurable base URL and endpoints
@@ -137,9 +147,11 @@ class ServerConfig {
 **Module**: [`src/utils/url_cleaning.ts`](../../referrer_tracker_extension/src/utils/url_cleaning.ts)
 
 **Key Functions**:
+
 - `normalize_url_for_navigation()`: Normalizes URLs by removing tracking params
 
 **Tracked Parameters**:
+
 - Google Analytics: `utm_*`, `gclid`, etc.
 - Facebook: `fbclid`, `fb_*`
 - Microsoft: `msclkid`, `mc_*`
@@ -149,7 +161,7 @@ class ServerConfig {
 
 1. **Page Load/Navigation**:
    - Content script detects navigation via history API or page load
-   - Extracts and compresses page content
+   - Reads the tab's URL, title, and load timestamp (metadata only)
    - Requests referrer info from background script
 
 2. **Background Processing**:
@@ -158,8 +170,8 @@ class ServerConfig {
    - Handles tab lifecycle events (create, update, close)
 
 3. **Data Transmission**:
-   - Content script sends visit data to PKM server
-   - Includes URL, referrer, timestamp, and compressed content
+   - Content script sends visit metadata to PKM server
+   - Includes URL, title, referrer, and timestamp — never page content
 
 ## Testing
 
@@ -203,21 +215,21 @@ collect_and_send_visit_data(): Promise<void>
 ```typescript
 // Get referrer info
 { type: "getReferrerInfo" }
-// Response: { 
-//   referrer: string, 
-//   referrer_timestamp?: number 
+// Response: {
+//   referrer: string,
+//   referrer_timestamp?: number
 // }
 
 // SPA navigation
-{ 
-  type: "spaNavigation", 
-  url: string 
+{
+  type: "spaNavigation",
+  url: string
 }
 
 // Forward to server
-{ 
-  type: "forwardToServer", 
-  endpoint: string, 
-  data: any 
+{
+  type: "forwardToServer",
+  endpoint: string,
+  data: any
 }
 ```

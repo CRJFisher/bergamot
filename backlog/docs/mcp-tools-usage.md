@@ -60,7 +60,7 @@ Performs vector similarity search on the user's browsing history to find relevan
 
 ### get_webpage_content
 
-Retrieves the full content of a specific webpage using its session ID.
+Retrieves the full content of a specific webpage using its session ID. The content is the **re-downloaded public page** (fetched from the stored URL during post-processing), not a capture-time snapshot. Only pages that re-download successfully have content; pages behind a login wall or that have since died are excluded and return a content-unavailable result.
 
 **Input Schema:**
 
@@ -80,9 +80,25 @@ Retrieves the full content of a specific webpage using its session ID.
   "id": "page-session-id",
   "url": "https://example.com/page",
   "title": "Page Title",
-  "content": "Full markdown content of the webpage..."
+  "content": "Full markdown content of the re-downloaded public page..."
 }
 ```
+
+**Content-unavailable result:**
+
+When the page's content was not retrievable on re-download, the tool returns the metadata it does have plus a reason instead of content:
+
+```json
+{
+  "id": "page-session-id",
+  "url": "https://example.com/page",
+  "title": "Page Title",
+  "content": null,
+  "content_unavailable": "required authentication"
+}
+```
+
+`content_unavailable` reasons include `"required authentication"` (login wall / paywall) and `"dead link"` (the URL no longer resolves). The visit still exists as metadata; only its content is excluded.
 
 **Example Usage:**
 
@@ -159,12 +175,12 @@ Use the tools to answer questions based on previously visited webpages:
 ### Content Retrieval Fails
 
 1. Verify the page_session_id is correct
-2. Check if the page has been processed and stored
-3. Look for decompression errors in the logs
+2. Check if the page has been re-downloaded and stored
+3. If the result is `content_unavailable`, the page required authentication or is a dead link — it is metadata-only by design and has no content to return
 
 ## Technical Details
 
 - Search uses local embeddings (all-MiniLM-L6-v2, 384-dim, via `@xenova/transformers`)
-- Content is stored compressed using zstd compression
-- The memory store uses LanceDB for vector similarity search
-- Both tools operate on the same webpage dataset
+- Content is the re-downloaded public page, obtained during post-processing — never captured at browse time
+- The memory store uses LanceDB for vector similarity search over the re-downloadable public subset
+- Both tools operate on the same re-downloaded webpage dataset; auth-walled and dead pages are excluded

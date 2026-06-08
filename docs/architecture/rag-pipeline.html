@@ -27,36 +27,45 @@
 
   <section class="hero">
     <h1>🔎 RAG Pipeline</h1>
-    <p class="tagline">How captured pages become retrievable answers — the current baseline and the phased upgrade toward hybrid search, contextual chunking, and reranking, all measured against an evaluation harness.</p>
-    <span class="pill">capture → chunk → embed → retrieve → rerank → generate</span>
+    <p class="tagline">How re-downloaded public pages become retrievable answers — running after Temporal Topic Detection, the phased upgrade toward hybrid search, contextual chunking, and reranking, all measured against an evaluation harness.</p>
+    <span class="pill">re-download → TDT → chunk → embed → retrieve → rerank → generate</span>
   </section>
 
   <h2><span class="num">1</span>Starting point</h2>
-  <p>Ingestion is a zero-LLM <a href="page-processing.html">capture pipeline</a>: it stores the raw page
-  (zstd-compressed) plus cheap <code>&lt;head&gt;</code> metadata in DuckDB <code>webpage_capture</code> and
-  builds nothing else. There is no extraction, no chunking, no embedding, and no vector index — so semantic
-  search currently returns nothing. This pipeline starts from that lossless corpus of raw pages and is free to
-  re-run over all of them.</p>
+  <p>Capture is a zero-LLM <a href="page-processing.html">metadata-only pipeline</a>: it stores visit metadata
+  (URL, title, timestamp, navigation graph) in DuckDB <code>webpage_capture</code> and reads no page content.
+  Content is acquired downstream by <strong>re-downloading the stored public URL</strong>; pages behind a login
+  wall fail to re-download and are excluded automatically. <strong>Temporal Topic Detection (TDT) runs first</strong>
+  over the re-downloaded public corpus (embed → cluster); the RAG research tools come after. This pipeline
+  starts from that re-downloaded public corpus and is free to re-run over all of it.</p>
   <div class="diagram">
-    <p class="cap">The RAG pipeline reads the captured raw pages</p>
+    <p class="cap">The RAG pipeline reads the re-downloaded public pages, after TDT</p>
     <pre class="mermaid">
 flowchart LR
-    cap[("DuckDB webpage_capture<br/>raw pages (zstd) + metadata")]
-    rd["read_capture<br/>(decompress on demand)"]
-    todo["extraction · chunking · embedding ·<br/>retrieval — all built here (task-31)"]
-    cap --> rd --> todo
+    cap[("DuckDB webpage_capture<br/>metadata + stored URLs")]
+    rd["re-download public URL<br/>(login wall excludes private)"]
+    tdt["Temporal Topic Detection<br/>embed → cluster (first)"]
+    todo["chunking · embedding ·<br/>retrieval — all built here (task-31)"]
+    cap --> rd --> tdt --> todo
 
     classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
     classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
-    class rd,todo vs;
+    class rd,tdt,todo vs;
     class cap st;
     </pre>
   </div>
   <ul class="clean">
-    <li><strong>Input:</strong> the lossless raw pages in <code>webpage_capture</code> (re-indexable at will).</li>
+    <li><strong>Input:</strong> the re-downloadable public subset — visits whose pages fail to re-download (auth-walled, dead) are excluded from clustering and retrieval and remain as trail/metadata only.</li>
+    <li><strong>Ordering:</strong> TDT first, then RAG; both run over the same re-downloaded public corpus and share one local embedding model.</li>
     <li><strong>Chunking / embedding / retrieval / reranking:</strong> none yet — all introduced by the phases below.</li>
-    <li><strong>Parent document:</strong> <code>read_capture(page_session_id)</code> decompresses the original page.</li>
+    <li><strong>Parent document:</strong> the re-downloaded page content (a separate encrypted on-demand tier), keyed by <code>page_session_id</code>; may be unavailable for login-walled or dead pages.</li>
   </ul>
+  <div class="note">
+    <strong>Re-download fidelity caveat.</strong> A re-downloaded page is not guaranteed to equal the page as
+    viewed — dynamic/JS-rendered content, dead links, paywall/consent drift, A/B variants, and edits over time
+    all diverge. Citations reference the URL and metadata, not a byte-for-byte snapshot; drift is surfaced via
+    <code>fetched_at</code> + content hash + HTTP status.
+  </div>
 
   <h2><span class="num">2</span>Target pipeline</h2>
   <p>The upgrade adds structure-aware chunking with contextual situating text, hybrid (dense + BM25)
@@ -69,7 +78,7 @@ flowchart LR
 flowchart TB
     subgraph INGEST["Ingestion"]
       direction TB
-      i1["captured page"]
+      i1["re-downloaded public page"]
       i2["main-content extraction<br/>prune nav/footer/ads &nbsp;[B]"]
       i3["structure-aware chunking +<br/>contextual situating text &nbsp;[C]"]
       i4["embed → LanceDB &nbsp;[G]"]

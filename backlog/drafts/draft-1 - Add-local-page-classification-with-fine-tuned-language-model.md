@@ -12,7 +12,12 @@ dependencies: []
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
 
-Implement fully local page classification functionality using a fine-tuned language model. Options include using transformers.js with models like SmolLM v2 (e.g., SmolLM2-135M-Instruct) or MobileBERT. This will enable offline, privacy-preserving content classification without requiring external API calls. The system should support custom classification models that users can train or fine-tune based on their specific needs and preferences.
+> **Privacy-model reconciliation (canonical).** Bergamot captures **metadata only — never page content** at capture time. Page content exists only as **re-downloaded public pages obtained during post-processing** (Node/desktop), where the login wall is the privacy filter: authenticated/paywalled pages fail to re-download and are excluded, with no ingestion-time content heuristic. Two consequences for this draft:
+>
+> 1. **Scope.** Any page classification here runs over **re-downloaded content during post-processing on Node/desktop**, never over capture-time browser page content. There is no page content in the browser/extension to classify; AC #3's "browser extension vs VSCode/Node" question is therefore resolved toward Node/desktop, and the offscreen-document browser-inference pattern below does not apply to capture-time content.
+> 2. **Purpose moot if it was sensitivity gating.** If the original intent was an **ingestion-time sensitivity/"is this private?" gate** on captured content, that purpose is **moot**: the login-wall-at-re-download filter supersedes it. No content sensitivity heuristic is needed or trusted at ingestion. Any surviving classification is RAG-prep page-type tagging (e.g. SERP / feed / aggregator) over already-public re-downloaded content, not a privacy gate.
+
+Implement fully local page classification functionality using a fine-tuned language model. Options include using transformers.js with models like SmolLM v2 (e.g., SmolLM2-135M-Instruct) or MobileBERT. This enables offline, local content classification without external API calls, running over re-downloaded public content during post-processing. The system should support custom classification models that users can train or fine-tune based on their specific needs and preferences.
 
 <!-- SECTION:DESCRIPTION:END -->
 

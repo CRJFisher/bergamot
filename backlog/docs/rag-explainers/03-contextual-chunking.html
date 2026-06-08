@@ -31,7 +31,7 @@
     <!-- (b) THE PROBLEM -->
     <section class="block">
       <h2><span class="num">01</span> The problem</h2>
-      <p>Bergamot's baseline retrieval embeds each captured web page as <strong>one vector</strong>. A whole page — sometimes thousands of words — is compressed into a single point in embedding space. <em>Embedding</em> means turning text into a fixed-length list of numbers (a vector) whose direction encodes meaning, so that similar texts land near each other. <em>Retrieval</em> is the step that, given a query vector, returns the stored vectors closest to it.</p>
+      <p>Bergamot's baseline retrieval embeds each re-downloaded public page as <strong>one vector</strong>. A whole page — sometimes thousands of words — is compressed into a single point in embedding space. <em>Embedding</em> means turning text into a fixed-length list of numbers (a vector) whose direction encodes meaning, so that similar texts land near each other. <em>Retrieval</em> is the step that, given a query vector, returns the stored vectors closest to it.</p>
 
       <div class="bad-box">
         <span class="callout-title">Failure mode</span>
@@ -161,7 +161,7 @@
       <h2><span class="num">05</span> In Bergamot</h2>
       <p><strong>task-31.3</strong> ships the full stack:</p>
       <ul>
-        <li>Pages are split into <strong>structure-aware chunks</strong> instead of being stored whole.</li>
+        <li>Re-downloaded public pages are split into <strong>structure-aware chunks</strong> instead of being embedded whole.</li>
         <li>Each chunk is <strong>embedded and BM25-indexed</strong> with a 50–100 token LLM <strong>situating context</strong> prepended.</li>
         <li><strong>DuckDB</strong> stores the chunk→page linkage, so a hit returns its <strong>parent page</strong> for complete context.</li>
         <li>The corpus is <strong>re-embedded</strong>, and the retrieval-failure reduction versus the whole-page baseline is <strong>measured on the harness</strong>.</li>

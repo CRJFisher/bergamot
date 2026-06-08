@@ -27,17 +27,20 @@
 
   <section class="hero">
     <h1>Bergamot</h1>
-    <p class="tagline">Transform your web browsing into a queryable knowledge base, accessible via MCP for AI-powered PKM workflows.</p>
-    <span class="pill">Browser extension → VS Code backend → DuckDB → MCP / HTTP query</span>
+    <p class="tagline">Capture browsing metadata as you browse, re-download the public pages later, and expose the result to AI agents via MCP for PKM workflows.</p>
+    <span class="pill">Browser extension → VS Code backend → DuckDB (metadata) → re-download → TDT → RAG / MCP</span>
   </section>
 
   <p class="lead">
-    Bergamot silently captures pages as you browse, stores each one losslessly with a deterministic,
-    zero-LLM capture pipeline, and exposes them to AI agents through an MCP server. The system has two
+    Bergamot captures browsing <strong>metadata only</strong> as you browse — visit id, URL,
+    page-load timestamp, title, and the navigation/session graph — never page content. That metadata is
+    the durable source of truth, recorded by a deterministic, zero-LLM capture pipeline. Page
+    content is obtained later by <strong>re-downloading the public URL</strong> during post-processing;
+    pages behind a login wall fail to re-download and are excluded automatically. The system has two
     deployable artifacts — a <strong>Chromium browser extension</strong> (capture) and a
-    <strong>VS Code extension</strong> (gate, store, serve) — that communicate over a single local HTTP
-    transport. Interpretation (extraction, chunking, embedding, search) belongs to the
-    <a href="rag-pipeline.html">RAG-prep pipeline (task-31)</a>, which reads the stored raw pages.
+    <strong>VS Code extension</strong> (gate, store, serve, re-download) — that communicate over a single
+    local HTTP transport. Over the re-downloaded public corpus,
+    <a href="rag-pipeline.html">Temporal Topic Detection runs first, then the RAG-prep pipeline (task-31)</a>.
   </p>
 
   <h2><span class="num">1</span>High-level architecture</h2>
@@ -49,9 +52,9 @@ flowchart TB
 
     subgraph BROWSER["🌐 Browser Extension &nbsp;(Chromium, MV3)"]
       direction TB
-      content["content.ts<br/>capture page HTML · detect SPA nav"]
+      content["content.ts<br/>read title/URL · detect SPA nav"]
       background["background.ts<br/>session graph · referrer chains · group_id"]
-      content -- "visit + zstd content" --> background
+      content -- "visit metadata" --> background
     end
 
     subgraph VSCODE["🧩 VS Code Extension &nbsp;(backend host)"]
@@ -59,13 +62,21 @@ flowchart TB
       server["Express server<br/>POST /visit · GET /query/*<br/>port 5000–5009"]
       inbox["Durable visit inbox<br/>(one JSON file per visit)"]
       queue["Visit queue processor<br/>(batched, retrying)"]
-      workflow["run_page_capture<br/>gate · store raw page + metadata"]
+      workflow["run_page_capture<br/>gate · store visit metadata"]
       server --> inbox --> queue --> workflow
     end
 
     subgraph STORES["💾 Storage"]
       direction LR
-      duck[("DuckDB<br/>relational + raw captures")]
+      duck[("DuckDB<br/>metadata source of truth")]
+    end
+
+    subgraph POST["🔁 Post-processing"]
+      direction TB
+      redl["re-download public URL<br/>(login wall excludes private)"]
+      tdt["Temporal Topic Detection<br/>(embed → cluster, first)"]
+      rag["RAG-prep pipeline (task-31)"]
+      redl --> tdt --> rag
     end
 
     subgraph SERVE["🔌 Access layer"]
@@ -77,8 +88,9 @@ flowchart TB
     agents([AI agents · Claude · scripts])
 
     user --> content
-    background -- "HTTP POST /visit" --> server
+    background -- "HTTP POST /visit (metadata)" --> server
     workflow --> duck
+    duck --> redl
     mcp -- "HTTP proxy" --> query
     query --> duck
     mcp --> agents
@@ -91,6 +103,7 @@ flowchart TB
     class content,background br;
     class server,inbox,queue,workflow vs;
     class duck st;
+    class redl,tdt,rag vs;
     class mcp,query sv;
     </pre>
   </div>
@@ -99,17 +112,17 @@ flowchart TB
   <div class="cards">
     <div class="card">
       <h3><a href="browser-extension.html">🌐 Browser Extension →</a></h3>
-      <p>Chromium MV3 extension. Captures page HTML, compresses it, and maintains the cross-tab navigation session graph before posting visits to the backend over HTTP.</p>
+      <p>Chromium MV3 extension. Reads the visit's title/URL/timestamp and maintains the cross-tab navigation session graph, then posts metadata-only visits to the backend over HTTP. No page content is captured.</p>
       <span class="tag">content.ts · background.ts</span>
     </div>
     <div class="card">
       <h3><a href="vscode-extension.html">🧩 VS Code Extension →</a></h3>
-      <p>The backend host. Runs the Express ingest server, durable inbox, batch processor, and the deterministic zero-LLM capture pipeline that gates and stores each page and builds navigation trees.</p>
+      <p>The backend host. Runs the Express ingest server, durable inbox, batch processor, and the deterministic zero-LLM capture pipeline that gates and stores each visit's metadata and builds navigation trees, plus the re-download/post-processing subsystem.</p>
       <span class="tag">extension.ts · run_page_capture</span>
     </div>
     <div class="card">
       <h3><a href="storage.html">💾 Storage Layer →</a></h3>
-      <p>DuckDB holds the relational tracking record and the raw captured pages (zstd). Vector search is reintroduced by the RAG-prep pipeline (task-31).</p>
+      <p>DuckDB holds the metadata record — the durable source of truth. Any re-downloaded content is a separate, encrypted, on-demand tier. Vector search is reintroduced by the RAG-prep pipeline (task-31).</p>
       <span class="tag">DuckDB</span>
     </div>
     <div class="card">
@@ -119,14 +132,14 @@ flowchart TB
     </div>
     <div class="card">
       <h3><a href="rag-pipeline.html">🔎 RAG Pipeline →</a></h3>
-      <p>Current baseline and the phased upgrade plan: hybrid search, contextual chunking, reranking, and an evaluation harness to measure each step.</p>
-      <span class="tag">capture → chunk → embed → retrieve → rerank</span>
+      <p>Runs over the re-downloaded public corpus, after Temporal Topic Detection: the phased upgrade plan of hybrid search, contextual chunking, reranking, and an evaluation harness to measure each step.</p>
+      <span class="tag">re-download → chunk → embed → retrieve → rerank</span>
     </div>
   </div>
 
   <h2><span class="num">3</span>End-to-end request flow</h2>
   <div class="diagram">
-    <p class="cap">Sequence — a single page visit, from browse to stored</p>
+    <p class="cap">Sequence — a single page visit, from browse to stored metadata, then re-download</p>
     <pre class="mermaid">
 sequenceDiagram
     autonumber
@@ -137,19 +150,22 @@ sequenceDiagram
     participant Q as Inbox + queue
     participant W as run_page_capture
     participant DB as DuckDB
+    participant R as re-download / post-processing
 
     U->>C: navigates to page
-    C->>C: extract HTML, compress (zstd)
-    C->>B: sendMessage(visit)
+    C->>C: read title / URL / load timestamp from the tab
+    C->>B: sendMessage(visit metadata)
     B->>B: enrich with referrer, group_id, opener
     B->>S: HTTP POST /visit (discover port 5000–5009)
     S->>Q: persist to inbox, enqueue, return 200
     Note over B,S: browser is acknowledged immediately
     Q->>Q: assign to navigation tree (webpage_tree)
-    Q->>W: run_page_capture(new_page, raw_content)
+    Q->>W: run_page_capture(visit metadata)
     W->>W: deterministic gate (keep/drop, no LLM)
-    W->>DB: store raw page (zstd) + cheap metadata
+    W->>DB: store visit metadata (source of truth)
     W-->>Q: remove inbox file (durably ingested)
+    R->>DB: read stored URLs
+    R->>R: re-download public page (login wall excludes private) → TDT → RAG
     </pre>
   </div>
 
@@ -166,12 +182,14 @@ sequenceDiagram
     <div class="status wip"><div class="ph">Next</div><div class="nm">RAG pipeline upgrade</div><span class="badge wip">planned</span></div>
   </div>
   <div class="note">
-    <strong>Locked decisions:</strong> ingestion is a deterministic, zero-LLM capture pipeline — the raw page
-    (zstd) plus cheap <code>&lt;head&gt;</code> metadata is stored in DuckDB and is the canonical record;
-    all interpretation (extraction, chunking, embedding, semantic search) is deferred to the RAG-prep pipeline
-    (task-31), which reads the stored raw pages. Storage at ingest is DuckDB only; transport is a single HTTP
-    server on a dynamically-discovered port; the browser side is Chromium-only; e2e tests run on Playwright
-    against a mock capture server. Schema changes are destructive dev-DB resets — no migrations, no shims.
+    <strong>Locked decisions:</strong> ingestion is a deterministic, zero-LLM capture pipeline — it stores
+    browsing <em>metadata only</em> (visit id, URL, page-load timestamp, title, navigation/session graph) in
+    DuckDB, which is the canonical source of truth; page content is never captured. Content is obtained later
+    by re-downloading the public URL, where the login wall excludes private pages; Temporal Topic Detection
+    runs first over that public corpus, then the RAG-prep pipeline (task-31). Storage at ingest is DuckDB only;
+    transport is a single HTTP server on a dynamically-discovered port; the browser side is Chromium-only; e2e
+    tests run on Playwright against a mock capture server. Schema changes are destructive dev-DB resets — no
+    migrations, no shims.
   </div>
 
   <footer class="foot">

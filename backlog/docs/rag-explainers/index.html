@@ -48,7 +48,9 @@
 
   <section class="block">
     <h2><span class="num">01</span> The pipeline, end to end</h2>
-    <div class="diagram">[captured web page]
+    <div class="diagram">[captured metadata: URL, title, timestamp, session graph]
+   │
+   ▼  <span style="color:var(--accent-2)">re-download</span>  fetch the public URL in post-processing (login-walled / dead excluded)
    │
    ▼  <span style="color:var(--accent)">Phase B</span>  clean ingestion — prune nav/ads/footers (heuristic extraction)
    ▼  <span style="color:var(--accent)">Phase C</span>  chunk + prepend LLM situating context  ──┐ highest-ROI

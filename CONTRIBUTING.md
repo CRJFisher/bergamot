@@ -9,6 +9,7 @@ Please be respectful and constructive in all interactions. We're building a welc
 ## Getting Started
 
 1. **Fork and Clone**
+
    ```bash
    git clone https://github.com/bergamot/bergamot.git
    cd bergamot
@@ -16,6 +17,7 @@ Please be respectful and constructive in all interactions. We're building a welc
    ```
 
 2. **Build Everything**
+
    ```bash
    npm run build
    ```
@@ -30,11 +32,12 @@ Please be respectful and constructive in all interactions. We're building a welc
 ### Working on the VS Code Extension
 
 ```bash
-cd packages/vscode
+cd vscode
 npm run watch  # Compile in watch mode
 ```
 
 To test:
+
 1. Open VS Code
 2. Run "Launch Extension" from the debug panel (F5)
 3. Test in the new VS Code window
@@ -42,7 +45,7 @@ To test:
 ### Working on the Browser Extension
 
 ```bash
-cd packages/browser
+cd browser
 npm run watch  # Build in watch mode
 npm run chrome:debug  # Launch Chrome with extension
 ```
@@ -108,7 +111,7 @@ npm test -w @bergamot/vscode
 ### E2E Tests (Browser Extension)
 
 ```bash
-cd packages/browser
+cd browser
 npm run test:cdp
 ```
 
@@ -123,7 +126,7 @@ npm run test:cdp
 ### VS Code Extension
 
 1. Use the VS Code debugger (F5)
-2. Check Output > PKM Assistant for logs
+2. Check Output > Bergamot for logs
 3. Use Developer Tools (Help > Toggle Developer Tools)
 
 ### Browser Extension

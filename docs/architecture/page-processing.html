@@ -27,44 +27,49 @@
 
   <section class="hero">
     <h1>📥 Page Processing</h1>
-    <p class="tagline">How a captured page becomes a stored record. Ingestion is <strong>pure, lossless
-    capture with zero LLM calls</strong>: the raw page is stored compressed alongside cheap metadata, and all
-    interpretation (extraction, chunking, embedding, summarisation) belongs to the RAG-prep pipeline.</p>
-    <span class="pill">visit → deterministic gate → store raw page + metadata &nbsp;·&nbsp; (no LLM, no network)</span>
+    <p class="tagline">How a captured visit becomes a stored record. Ingestion is <strong>pure, lossless
+    metadata capture with zero LLM calls</strong>: visit metadata is stored, and page content is acquired
+    separately by re-downloading the public URL during post-processing.</p>
+    <span class="pill">visit → deterministic gate → store metadata &nbsp;·&nbsp; (no LLM, no network)</span>
   </section>
 
   <p class="lead">
-    Page processing is the stage inside the VS Code extension that turns a captured page into a durable
-    record. The organising idea is to <strong>separate capture from interpretation.</strong> Capture is
-    deterministic and lossless — it persists the raw page bytes (zstd-compressed) and a little cheap metadata
-    read from the document <code>&lt;head&gt;</code>, and makes <em>no LLM calls at all</em>. Everything
-    interpretive — isolating the article, chunking, embedding, summarising — is the job of the
-    <a href="rag-pipeline.html">RAG-prep pipeline (task-31)</a>, which reads the stored raw pages on its own
-    schedule and can re-run over the whole corpus with better algorithms.
+    Page processing is the stage inside the VS Code extension that turns a captured visit into a durable
+    record. The organising idea is to <strong>separate capture from content acquisition.</strong> Capture is
+    deterministic and lossless — it persists <em>browsing metadata only</em> (visit id, URL, page-load
+    timestamp, title from the tab, and the navigation/session graph) and makes <em>no LLM calls at all</em>.
+    Page content is never captured. It is obtained later, during post-processing, by
+    <strong>re-downloading the page from its stored public URL</strong>; everything interpretive — isolating
+    the article, chunking, embedding, summarising — is the job of the
+    <a href="rag-pipeline.html">RAG-prep pipeline (task-31)</a>, which reads the re-downloaded public pages on
+    its own schedule and can re-run over the whole corpus with better algorithms.
   </p>
 
   <div class="note">
-    <strong>Why store the whole page?</strong> A page can never be re-captured — once you have left it, lossy
-    extraction at ingest is an irreversible loss. Storing the raw page (zstd-compressed, a few hundred KB) is
-    cheap and lets the RAG pipeline re-extract and re-chunk the entire corpus at any time. Capture preserves;
-    the pipeline interprets.
+    <strong>Why metadata, not the page?</strong> Capture is separated from content acquisition. Metadata is
+    the durable source of truth; content comes from re-downloading the public URL on demand. The login wall is
+    the privacy filter — pages behind authentication fail to re-download and are excluded automatically, so no
+    sensitive page bytes are ever stored at capture. <strong>Re-download fidelity caveat:</strong> a
+    re-downloaded page is not guaranteed to equal the page as viewed — dynamic/JS-rendered content, dead links,
+    paywall/consent drift, A/B variants, and edits over time all diverge. Citations reference the URL and
+    metadata, not a byte-for-byte snapshot.
   </div>
 
   <h2><span class="num">1</span>The capture pipeline</h2>
   <p>Capture is a short, fully deterministic path orchestrated by
   <code>run_page_capture(deps, inputs)</code> in <code>vscode/src/workflow/page_capture_pipeline.ts</code> — a
   plain function over an immutable <code>CaptureDeps</code> struct, not a stateful class. For each visit it
-  runs the relevance gate; for kept pages it stores the raw page compressed together with cheap
-  <code>&lt;head&gt;</code> metadata. No model is ever called and nothing is written to a vector store.</p>
+  runs the relevance gate; for kept visits it stores the visit metadata (URL, title, timestamp). No page
+  content is read, no model is ever called, and nothing is written to a vector store.</p>
   <div class="diagram">
-    <p class="cap">Deterministic capture — zero LLM</p>
+    <p class="cap">Deterministic capture — zero LLM, metadata only</p>
     <pre class="mermaid">
 flowchart TB
-    raw["captured page HTML + url"]
-    gate{"evaluate_page_gate (NON-LLM)<br/>empty? · auth? · redirect?"}
-    drop["drop · record reason<br/>(content_empty / auth / redirect)"]
-    store["store_capture (NON-LLM)<br/>zstd-compress raw page +<br/>read_metadata from &lt;head&gt;"]
-    db[("DuckDB webpage_capture<br/>raw bytes BLOB + metadata")]
+    raw["visit metadata<br/>(url, title, load timestamp)"]
+    gate{"evaluate_page_gate (NON-LLM)<br/>incognito refused upstream"}
+    drop["drop · record reason"]
+    store["store_capture (NON-LLM)<br/>persist visit metadata"]
+    db[("DuckDB webpage_capture<br/>metadata only")]
 
     raw --> gate
     gate -- "interstitial" --> drop
@@ -80,105 +85,98 @@ flowchart TB
   (<code>webpage_tree.ts</code>) before the pipeline runs, and is independent of the keep/drop decision — every
   visit gets a tree node; only the capture is gated.</p>
   <div class="cards">
-    <div class="card"><h3>Lossless capture</h3><p>The raw page is stored zstd-compressed in DuckDB. Nothing is interpreted or thrown away, so the RAG pipeline can re-extract and re-chunk the whole corpus later with better algorithms.</p></div>
-    <div class="card"><h3>Cheap metadata only</h3><p>Title, site, author, published date and language come straight from the HTML <code>&lt;head&gt;</code> / Open-Graph tags — a trivial regex parse (<code>read_metadata.ts</code>), not main-content extraction. Enough to browse and to title navigation-tree nodes.</p></div>
+    <div class="card"><h3>Metadata source of truth</h3><p>Visit metadata (URL, title, timestamp, navigation graph) is stored losslessly in DuckDB and is the durable source of truth. Page content is acquired later by re-downloading the public URL.</p></div>
+    <div class="card"><h3>Title from the tab</h3><p>Title and URL are read directly from the tab at capture — no page body needed. The <code>&lt;meta&gt;</code>-derived fields (site, author, published, language) are parsed later from the re-downloaded page.</p></div>
     <div class="card"><h3>Zero LLM, zero failure surface</h3><p>Ingestion makes no network call and cannot fail on auth, prompt-length, or non-JSON. It is the cheapest, most robust path; all model cost lives in the RAG pipeline where it is gated.</p></div>
   </div>
 
-  <h2><span class="num">2</span>The relevance gate</h2>
-  <p><code>evaluate_page_gate(raw_page, url)</code> (<code>vscode/src/workflow/page_gate.ts</code>) returns a
-  <code>GateDecision {keep, reason}</code> from cheap, deterministic signals — no LLM, no topic taxonomy, no
-  main-content extraction. It is deliberately <strong>permissive</strong>: capture is cheap and lossless, and
-  quality/topic filtering belongs to the RAG-prep pipeline, so the gate keeps essentially everything and drops
-  only transient interstitials that carry no durable content.</p>
-  <table>
-    <tr><th>reason</th><th>dropped when</th></tr>
-    <tr><td><code>content_empty</code></td><td>the page is empty / whitespace only</td></tr>
-    <tr><td><code>auth</code></td><td>the URL is an auth host/path (whole-segment match, e.g. <code>accounts.google.com</code>, <code>/login</code>, <code>/oauth2</code>) <em>or</em> a content-light page contains a password field</td></tr>
-    <tr><td><code>redirect</code></td><td>a content-light page whose only job is a meta-refresh or a client-side <code>location</code> change</td></tr>
-    <tr><td><code>kept</code></td><td><strong>everything else</strong> — articles, docs, nav/aggregator lists, even non-HTML — is captured</td></tr>
-  </table>
-  <p>The auth and redirect checks only fire on content-light pages, so a real article whose chrome embeds a
-  login or newsletter form, or that carries an auto-refresh, is kept. The gate never throws on unusual input.
-  Per-decision counts (captured vs dropped, by reason) accumulate in <code>gate_metrics.ts</code> and are
-  surfaced by the <code>bergamot.showCaptureMetrics</code> command.</p>
+  <h2><span class="num">2</span>The capture gate</h2>
+  <p><code>evaluate_page_gate(visit)</code> (<code>vscode/src/workflow/page_gate.ts</code>) returns a
+  <code>GateDecision {keep, reason}</code> from cheap, deterministic signals over metadata — no LLM, no topic
+  taxonomy, no content inspection (there is no content to inspect). Incognito tabs are refused before any
+  capture request is made. The gate is deliberately <strong>permissive</strong>: it keeps the visit and records
+  its metadata. There is no ingestion-time sensitivity heuristic and no content denylist — the privacy
+  exclusion is enforced by the login wall at re-download time.</p>
+  <p>Empty, auth, and redirect interstitials cannot be judged at capture, because there is no content to
+  inspect. Dropping them moves to <strong>re-download time</strong>: a fetch that yields a login wall, redirect
+  stub, or empty body is discarded there, and the auth-walled visit remains as trail/metadata only. An optional
+  URL-pattern skip may avoid re-downloading obvious auth/redirect hosts. The gate never throws on unusual input.
+  Per-decision counts accumulate in <code>gate_metrics.ts</code> and are surfaced by the
+  <code>bergamot.showCaptureMetrics</code> command.</p>
 
   <h2><span class="num">3</span>The stored record — <code>PageCapture</code></h2>
-  <p><code>webpage_capture</code> is the single canonical per-page record: the lossless raw page plus cheap
-  metadata, keyed by <code>page_session_id</code> (the stable id the RAG pipeline's chunks foreign-key to). The
-  raw page <em>is</em> the durable source of truth for everything downstream.</p>
+  <p><code>webpage_capture</code> is the single canonical per-page metadata record, keyed by
+  <code>page_session_id</code> (the stable id the RAG pipeline's chunks foreign-key to). It holds
+  <em>metadata only</em> and <em>is</em> the durable source of truth for everything downstream. Page content
+  is re-downloaded from the URL on demand.</p>
   <div class="diagram">
     <p class="cap">PageCapture — written to DuckDB <code>webpage_capture</code></p>
     <pre class="mermaid">
 classDiagram
     class PageCapture {
       +string page_session_id   «PK · stable id»
-      +blob   content_compressed «zstd raw page — source of truth»
-      +string content_encoding   «'zstd'»
-      +int    original_byte_size
-      +string content_type
-      +string url
-      +string title              «cheap, from &lt;head&gt;»
-      +string site_name
-      +string author
-      +string published_at
-      +string lang
+      +string url               «source of truth»
+      +string title             «from the tab»
+      +string site_name         «re-download &lt;meta&gt;»
+      +string author            «re-download &lt;meta&gt;»
+      +string published_at      «re-download &lt;meta&gt;»
+      +string lang              «re-download &lt;meta&gt;»
       +string captured_at
     }
-    note for PageCapture "No LLM fields.\nNo extraction, no summary, no intentions.\nLossless + usage-agnostic."
+    note for PageCapture "Metadata only — no page content.\nNo LLM fields, no extraction, no summary.\nContent is re-downloaded on demand."
     </pre>
   </div>
   <ul class="clean">
-    <li><strong>Write</strong>: <code>store_capture()</code> compresses the page (zstd, <code>@mongodb-js/zstd</code>), reads <code>&lt;head&gt;</code> metadata, and upserts via <code>insert_webpage_capture()</code> (<code>ON CONFLICT (page_session_id) DO UPDATE</code>, so a re-capture overwrites cleanly). The metadata view is <code>PageCapture</code> (<code>page_capture_models.ts</code>); navigation-tree queries read the title from <code>webpage_capture</code>.</li>
-    <li><strong>Read (parent document)</strong>: <code>read_capture(db, page_session_id)</code> decompresses <code>content_compressed</code> back to the original HTML. This is the read path the RAG-prep pipeline uses; it is exposed over HTTP as <code>/query/capture_content</code> and surfaced by the MCP <code>get_webpage_content</code> tool.</li>
-    <li><strong>Round-trip</strong>: compress → store → decompress is byte-identical (asserted in <code>store_capture.test.ts</code> and the deterministic <code>capture_eval.test.ts</code> over committed fixtures).</li>
+    <li><strong>Write</strong>: <code>store_capture()</code> persists the visit metadata (URL, title, timestamp) and upserts via <code>insert_webpage_capture()</code> (<code>ON CONFLICT (page_session_id) DO UPDATE</code>, so a re-capture overwrites cleanly). The <code>&lt;meta&gt;</code>-derived fields are filled in later from the re-downloaded page. The metadata view is <code>PageCapture</code> (<code>page_capture_models.ts</code>); navigation-tree queries read the title from <code>webpage_capture</code>.</li>
+    <li><strong>Read (content)</strong>: page content is acquired by re-downloading the stored URL during post-processing. Cached re-downloaded content (a separate encrypted tier) is the read path the RAG-prep pipeline uses; it is exposed over HTTP as <code>/query/capture_content</code> and surfaced by the MCP <code>get_webpage_content</code> tool, and may be unavailable for login-walled or dead pages.</li>
   </ul>
 
   <h2><span class="num">4</span>What ingest does <em>not</em> do</h2>
-  <p>Ingestion writes only to DuckDB <code>webpage_capture</code>. There is no main-content extraction, no
-  chunking, no embedding, no summarisation, and <strong>nothing is written to any vector store</strong>.
-  LanceDB is fully decoupled from the capture and query flow; semantic search returns nothing until the
-  RAG-prep pipeline builds its index. All of that interpretive work lives in the
-  <a href="rag-pipeline.html">RAG-prep pipeline (task-31)</a>, which reads stored raw pages and is free to
-  re-run over the whole corpus and be tuned against a retrieval harness rather than baked irreversibly into
-  capture.</p>
+  <p>Ingestion writes only metadata to DuckDB <code>webpage_capture</code>. It reads no page content, performs
+  no re-download, no main-content extraction, no chunking, no embedding, no summarisation, and
+  <strong>nothing is written to any vector store</strong>. Content acquisition (re-download), Temporal Topic
+  Detection, and the <a href="rag-pipeline.html">RAG-prep pipeline (task-31)</a> all run downstream over the
+  re-downloaded public corpus, on their own schedule, tuned against a retrieval harness rather than baked
+  irreversibly into capture.</p>
   <div class="diagram">
-    <p class="cap">Capture feeds the RAG-prep pipeline; retrieval is built there</p>
+    <p class="cap">Metadata capture feeds re-download → TDT → RAG-prep</p>
     <pre class="mermaid">
 flowchart LR
-    cap[("webpage_capture<br/>raw pages + metadata")]
-    ex["non-LLM main-content extraction&nbsp;[task-31.5]"]
+    cap[("webpage_capture<br/>metadata + stored URLs")]
+    redl["re-download public URL<br/>(login wall excludes private)"]
+    tdt["Temporal Topic Detection<br/>embed → cluster (first)"]
     ch["structure-aware chunking +<br/>contextual situating text&nbsp;[task-31.3]"]
     em["embed chunks → vector store&nbsp;[task-31.3]"]
     link["DuckDB chunk ↔ page linkage<br/>(page_session_id)"]
-    cap --> ex --> ch --> em
+    cap --> redl --> tdt --> ch --> em
     ch --> link
-    link -. "parent-document<br/>= read_capture (decompress)" .-> cap
+    link -. "parent-document<br/>= re-downloaded content" .-> redl
 
     classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
     classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
     class cap st;
-    class ex,ch,em,link vs;
+    class redl,tdt,ch,em,link vs;
     </pre>
   </div>
   <div class="note">
-    <strong>No interim embedding.</strong> Ingestion writes nothing to a vector store, so captured pages are
-    not semantically searchable until task-31 builds the index. This keeps capture pure and avoids throwaway
-    code. The LLM client abstraction and any model configuration are reintroduced by task-31 when the pipeline
-    actually calls a model; capture itself needs neither.
+    <strong>No interim embedding.</strong> Ingestion writes nothing to a vector store; the clusterable and
+    searchable corpus is the re-downloadable public subset, not visited at capture time. Visits whose pages
+    fail to re-download (auth-walled, dead) remain as trail/metadata only and are excluded from clustering and
+    retrieval. The LLM client abstraction and any model configuration are reintroduced by task-31 when the
+    pipeline actually calls a model; capture itself needs neither.
   </div>
 
   <h2><span class="num">5</span>Module map</h2>
   <p>Capture is a small set of single-purpose modules under <code>vscode/src/</code>:</p>
   <table>
     <tr><th>Module</th><th>Responsibility</th></tr>
-    <tr><td><code>workflow/page_capture_pipeline.ts</code></td><td><code>run_page_capture(deps, inputs)</code> — orchestrates gate → store → record outcome</td></tr>
-    <tr><td><code>workflow/page_gate.ts</code></td><td><code>evaluate_page_gate(raw_page, url) → GateDecision</code> — the deterministic relevance gate</td></tr>
-    <tr><td><code>workflow/read_metadata.ts</code></td><td><code>read_metadata(html, url) → PageMetadata</code> — cheap <code>&lt;head&gt;</code> parse</td></tr>
-    <tr><td><code>workflow/store_capture.ts</code></td><td><code>store_capture()</code> / <code>read_capture()</code> — zstd compress/decompress + DuckDB</td></tr>
+    <tr><td><code>workflow/page_capture_pipeline.ts</code></td><td><code>run_page_capture(deps, inputs)</code> — orchestrates gate → store metadata → record outcome</td></tr>
+    <tr><td><code>workflow/page_gate.ts</code></td><td><code>evaluate_page_gate(visit) → GateDecision</code> — the deterministic capture gate over metadata</td></tr>
+    <tr><td><code>workflow/read_metadata.ts</code></td><td><code>read_metadata(html, url) → PageMetadata</code> — cheap <code>&lt;meta&gt;</code> parse over re-downloaded content</td></tr>
+    <tr><td><code>workflow/store_capture.ts</code></td><td><code>store_capture()</code> — persist visit metadata to DuckDB</td></tr>
     <tr><td><code>workflow/gate_metrics.ts</code></td><td>process-wide captured/dropped counters (module accumulator, not a class)</td></tr>
     <tr><td><code>page_capture_models.ts</code></td><td><code>PageCapture</code> / <code>PageActivitySessionWithMeta</code> schemas</td></tr>
-    <tr><td><code>duck_db.ts</code></td><td><code>webpage_capture</code> table + <code>insert_webpage_capture</code> / <code>get_webpage_capture</code> / <code>get_webpage_capture_bytes</code> + tree queries</td></tr>
+    <tr><td><code>duck_db.ts</code></td><td><code>webpage_capture</code> table + <code>insert_webpage_capture</code> / <code>get_webpage_capture</code> + tree queries</td></tr>
   </table>
   <p>The visit queue (<code>visit_queue_processor.ts</code>) holds the <code>CaptureDeps</code> and calls
   <code>run_page_capture</code>; the server (<code>server/server_manager.ts</code>) builds the deps from its
@@ -186,17 +184,17 @@ flowchart LR
 
   <h2><span class="num">6</span>Cost</h2>
   <div class="cards">
-    <div class="card"><h3>Ingest cost: zero</h3><p>No LLM tokens, no network, no per-page model cost at capture — down from up to four LLM calls per page (classify · content-processing · analysis · tree-intentions) in the previous categoriser.</p></div>
-    <div class="card"><h3>Storage cost: a few hundred KB / page</h3><p>The raw page is stored zstd-compressed. Cheap, and the price of being able to re-index the whole corpus at will.</p></div>
-    <div class="card"><h3>Model cost lives in RAG</h3><p>The only model spend is the RAG-prep pipeline (task-31), run deliberately over the corpus and measured on a harness — not silently on every page view.</p></div>
+    <div class="card"><h3>Ingest cost: zero</h3><p>No LLM tokens, no network, no per-page model cost at capture. Capture reads only the tab's metadata.</p></div>
+    <div class="card"><h3>Storage cost: a few bytes / visit</h3><p>Only visit metadata is stored — URL, title, timestamps. No page bytes at rest in the metadata store.</p></div>
+    <div class="card"><h3>Model cost lives in RAG</h3><p>The only model spend is the RAG-prep pipeline (task-31), run deliberately over the re-downloaded corpus and measured on a harness — not silently on every page view.</p></div>
   </div>
 
   <div class="note">
-    <strong>Invariants.</strong> Ingestion makes zero LLM calls and is fully deterministic and offline. The
-    raw page (zstd) plus cheap <code>&lt;head&gt;</code> metadata is the canonical record; there is no
-    LLM-derived analysis, summary, or intentions, and no vector write at capture. Schema changes are applied by
-    a destructive dev-DB reset (see <code>backlog/docs/dev-db-reset.md</code>) — no migrations, no
-    backwards-compatibility shims.
+    <strong>Invariants.</strong> Ingestion makes zero LLM calls, captures browsing metadata only, and is fully
+    deterministic and offline. The visit metadata is the canonical source of truth; no page content is stored
+    at capture, and there is no LLM-derived analysis, summary, or vector write at capture. Content is
+    re-downloaded from the public URL on demand. Schema changes are applied by a destructive dev-DB reset (see
+    <code>backlog/docs/dev-db-reset.md</code>) — no migrations, no backwards-compatibility shims.
   </div>
 
   <footer class="foot"><a href="vscode-extension.html">← VS Code Extension</a> · <a href="storage.html">Storage →</a> · <a href="index.html">Back to overview</a></footer>

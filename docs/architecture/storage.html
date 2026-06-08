@@ -27,24 +27,32 @@
 
   <section class="hero">
     <h1>💾 Storage Layer</h1>
-    <p class="tagline">Ingestion uses one store: DuckDB. It holds the relational tracking record and the raw
-    captured pages. Vector search is reintroduced by the RAG-prep pipeline (task-31).</p>
+    <p class="tagline">Ingestion uses one store: DuckDB. It holds the browsing-metadata record — the durable
+    source of truth. Any re-downloaded content is a separate encrypted on-demand tier; vector search is
+    reintroduced by the RAG-prep pipeline (task-31).</p>
     <span class="pill">duck_db.ts · webpage_categorizations.db</span>
   </section>
 
   <h2><span class="num">1</span>One store at ingest</h2>
-  <p>Capture is DuckDB-only. DuckDB is the authoritative record of what was visited, how visits relate, and the
-  lossless raw page bytes. It is single-writer (the VS Code extension owns the connection); other processes
-  read through the server's HTTP query endpoints (see <a href="mcp-and-query.html">MCP &amp; Query</a>).</p>
+  <p>Capture is DuckDB-only. DuckDB is the authoritative metadata record of what was visited and how visits
+  relate — the durable source of truth. It stores <strong>no page content</strong>: only visit metadata (URL,
+  title, page-load timestamp) and the navigation/session graph. It is single-writer (the VS Code extension
+  owns the connection); other processes read through the server's HTTP query endpoints (see
+  <a href="mcp-and-query.html">MCP &amp; Query</a>).</p>
   <div class="cards">
     <div class="card">
-      <h3>DuckDB — relational + capture</h3>
-      <p>Visits, navigation trees, and the raw captured pages (zstd-compressed BLOB) plus cheap metadata. Fast analytical queries; single-writer.</p>
+      <h3>DuckDB — metadata source of truth</h3>
+      <p>Visits, navigation trees, and per-visit metadata (URL, title, timestamps). No page bytes. Fast analytical queries; single-writer.</p>
       <span class="tag">webpage_categorizations.db</span>
     </div>
     <div class="card">
+      <h3>Content cache — separate encrypted tier</h3>
+      <p>Content is obtained later by re-downloading the public URL. Any cached re-downloaded content lives in a separate, encrypted, on-demand, deletable tier — never the source of truth, and never inside the metadata store.</p>
+      <span class="tag">on-demand · encrypted</span>
+    </div>
+    <div class="card">
       <h3>Vector search — deferred</h3>
-      <p>Semantic search over page content is the job of the <a href="rag-pipeline.html">RAG-prep pipeline (task-31)</a>: it extracts, chunks and embeds the stored raw pages into a vector index on its own schedule. Ingestion writes no embeddings.</p>
+      <p>Semantic search is the job of the <a href="rag-pipeline.html">RAG-prep pipeline (task-31)</a>: it chunks and embeds the <em>re-downloaded</em> public pages into a vector index on its own schedule. Ingestion writes no embeddings.</p>
       <span class="tag">task-31</span>
     </div>
   </div>
@@ -59,12 +67,12 @@ flowchart TB
     subgraph DUCK["DuckDB — webpage_categorizations.db"]
       t1["webpage_trees"]
       t2["webpage_activity_sessions"]
-      t3["webpage_capture<br/>raw bytes (zstd) + metadata"]
+      t3["webpage_capture<br/>visit metadata"]
     end
 
     wf -- "tree structure (upstream, in the visit queue)" --> t1
     wf -- "one row / visit" --> t2
-    wf -- "kept pages: raw bytes + cheap metadata" --> t3
+    wf -- "kept visits: metadata only" --> t3
 
     classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
     classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
@@ -97,16 +105,12 @@ erDiagram
     }
     webpage_capture {
         text page_session_id PK
-        blob content_compressed "zstd raw page"
-        text content_encoding "'zstd'"
-        int  original_byte_size
-        text content_type
         text url
-        text title "cheap, from &lt;head&gt;"
-        text site_name
-        text author
-        text published_at
-        text lang
+        text title "from the tab"
+        text site_name "re-download &lt;meta&gt;"
+        text author "re-download &lt;meta&gt;"
+        text published_at "re-download &lt;meta&gt;"
+        text lang "re-download &lt;meta&gt;"
         text captured_at
     }
     </pre>
@@ -116,17 +120,20 @@ erDiagram
     <tr><th>Table</th><th>Grain</th><th>Holds</th></tr>
     <tr><td><code>webpage_trees</code></td><td>1 row / browsing session</td><td>Tree id + first/last activity timestamps.</td></tr>
     <tr><td><code>webpage_activity_sessions</code></td><td>1 row / page visit</td><td>URL, referrer + referrer session id, load time, owning tree.</td></tr>
-    <tr><td><code>webpage_capture</code></td><td>1 row / kept visit</td><td>The lossless raw page (zstd BLOB) + cheap non-LLM <code>&lt;head&gt;</code> metadata. The canonical per-page record.</td></tr>
+    <tr><td><code>webpage_capture</code></td><td>1 row / kept visit</td><td>Per-visit metadata: URL and title (captured directly from the tab) plus <code>&lt;meta&gt;</code>-derived fields (site, author, published, lang) filled in from re-download. No page content. The canonical per-page metadata record.</td></tr>
   </table>
   <p><code>webpage_capture</code> has no foreign key on <code>page_session_id</code>, so a capture can be written
   before (or independently of) its activity-session row. Tree queries <code>LEFT JOIN webpage_capture</code> to
-  read a page's title; <code>read_capture()</code> decompresses <code>content_compressed</code> for the
-  RAG-prep parent-document read path.</p>
+  read a page's title. The title and URL are captured directly from the tab; the
+  <code>&lt;meta&gt;</code>-derived fields (site, author, published, lang) are populated later when the public
+  page is re-downloaded.</p>
 
   <div class="note green">
-    <strong>Canonical record:</strong> <code>webpage_capture</code> is the single per-page record — the raw page
-    plus cheap, non-LLM metadata. Schema changes are applied by a destructive dev-DB reset
-    (<code>backlog/docs/dev-db-reset.md</code>) — no migrations, no backwards-compatibility shims.
+    <strong>Canonical record:</strong> <code>webpage_capture</code> is the single per-page <em>metadata</em>
+    record — URL, title, timestamps, and <code>&lt;meta&gt;</code>-derived fields. It holds no page content;
+    content is re-downloaded on demand and any cache is a separate encrypted tier. Schema changes are applied by
+    a destructive dev-DB reset (<code>backlog/docs/dev-db-reset.md</code>) — no migrations, no
+    backwards-compatibility shims.
   </div>
 
   <footer class="foot"><a href="vscode-extension.html">← VS Code Extension</a> · Next: <a href="mcp-and-query.html">MCP &amp; Query →</a></footer>

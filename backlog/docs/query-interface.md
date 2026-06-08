@@ -9,8 +9,8 @@ access** (when the extension is not running).
 
 The VS Code extension owns the data under its global storage directory:
 
-- **DuckDB** — `webpage_categorizations.db`: the canonical relational record.
-- **LanceDB** — `webpage_memory.db/`: page text + embeddings for semantic search.
+- **DuckDB** — `webpage_categorizations.db`: the canonical relational metadata record and the durable source of truth (visit id, URL, page-load timestamp, title, navigation/session graph). No page content is captured here.
+- **LanceDB** — `webpage_memory.db/`: page text + embeddings for semantic search, **derived** from re-downloading public URLs during post-processing — a cache, not a source of truth.
 
 DuckDB is single-writer: while the extension is running it holds the connection,
 so other processes query through the HTTP API / MCP rather than opening the file.
@@ -44,8 +44,10 @@ webpage_tree_intentions       -- derived intentions per (tree, visit)
   PRIMARY KEY (tree_id, activity_session_id)
 ```
 
-Page **content** and **embeddings** live in LanceDB (`webpage_content`), keyed by
-`page_session_id`, alongside a duplicate of `url`/`title`.
+Re-downloaded page **content** and **embeddings** live in LanceDB (`webpage_content`), keyed by
+`page_session_id`, alongside a duplicate of `url`/`title`. This content is obtained by
+re-downloading the public URL in post-processing — pages behind a login wall fail to re-download
+and are excluded, so they appear in the DuckDB metadata record but not here.
 
 ## MCP tools
 

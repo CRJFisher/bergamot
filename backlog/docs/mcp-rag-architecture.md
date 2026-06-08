@@ -4,22 +4,23 @@ This document describes the architecture for exposing webpage browsing history t
 
 ## Storage Architecture
 
-The system stores webpage content using a `LanceDBMemoryStore`, which provides the foundation for RAG capabilities. Relational visit metadata is stored separately in DuckDB.
+Browsing **metadata** is the durable source of truth, held in DuckDB (visit id, URL, page-load timestamp, title, navigation/session graph). Page content is never captured. It is obtained later by **re-downloading the public URL during post-processing**; the resulting vectors and any cached content live in a `LanceDBMemoryStore` that is a **derived cache** over the re-downloaded public content, not a source of truth.
 
 ## Core Components
 
 The system is composed of the following components:
 
-- **Data Source:** The user's browsing history, captured as a series of webpage visits.
-- **Content Processing:** An LLM extracts the main content from a webpage and converts it to Markdown.
-- **Storage:** A `LanceDBMemoryStore` instance that stores the processed webpage content and associated metadata, alongside DuckDB for relational visit records.
-- **MCP Server:** An MCP server that exposes tools for searching and retrieving webpage content.
+- **Data Source:** The user's browsing metadata, captured as a series of webpage visits — never page content.
+- **Content Acquisition:** A post-processing fetcher re-downloads each stored public URL. Authenticated and paywalled pages fail to re-download (login redirect / 403 / paywall) and are excluded automatically — the login wall is the privacy filter.
+- **Content Processing:** An LLM extracts the main content from the re-downloaded page and converts it to Markdown.
+- **Storage:** DuckDB holds the metadata record (source of truth). A `LanceDBMemoryStore` instance holds the derived vectors and any cached re-downloaded content. Cached content is encrypted at rest, scoped, and deletable.
+- **MCP Server:** An MCP server that exposes tools for searching and retrieving the re-downloaded public content.
 
 ## Implementation
 
-When a new webpage visit is processed, its raw HTML content is processed by an LLM to extract the main content in Markdown format. This processed content, along with metadata such as the URL and title, is stored in a `LanceDBMemoryStore`.
+During post-processing, the fetcher re-downloads each stored public URL. Pages that fail to re-download (auth-walled, paywalled, dead) remain as trail/metadata only and are **excluded from clustering and retrieval**. For pages that re-download successfully, the raw HTML is processed by an LLM to extract the main content in Markdown format. This processed content, along with metadata such as the URL and title, is stored in the derived `LanceDBMemoryStore`.
 
-The `LanceDBMemoryStore` uses a LanceDB table to store the documents. Vector embeddings are generated locally with the all-MiniLM-L6-v2 model (384-dim, via `@xenova/transformers`), enabling semantic search capabilities with zero API tokens.
+The `LanceDBMemoryStore` uses a LanceDB table to store the documents. Vector embeddings are generated locally with the all-MiniLM-L6-v2 model (384-dim, via `@xenova/transformers`), enabling semantic search capabilities with zero API tokens. The clusterable/searchable corpus is the re-downloadable public subset; Temporal Topic Detection runs first over that corpus, and RAG-based retrieval comes after.
 
 ## MCP Integration
 

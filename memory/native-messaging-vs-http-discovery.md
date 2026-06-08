@@ -13,4 +13,4 @@ Decision (2026-06): **remove native messaging, use HTTP port-range probing inste
 
 Native messaging would only be genuinely required to launch a process from the browser, talk to a non-HTTP endpoint, or avoid binding any localhost port — none apply here.
 
-See [[overhaul-roadmap]] Phase 2. Security boundary is loopback bind + CORS pinned to the extension origin (a token can't be auto-delivered to a filesystem-less extension).
+Security boundary is loopback bind + CORS pinned to the extension origin (a token can't be auto-delivered to a filesystem-less extension).

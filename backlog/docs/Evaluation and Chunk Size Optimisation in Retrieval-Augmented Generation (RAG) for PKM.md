@@ -2,6 +2,8 @@
 
 ## Introduction
 
+> Note: in Bergamot the "cached web pages" referenced throughout are a re-download of the public pages from their stored URLs (login-walled and dead pages are excluded), not page content captured at browse time.
+
 Personal Knowledge Management (PKM) systems increasingly use Retrieval-Augmented Generation (RAG) to help users by fetching relevant information (e.g. cached web pages or fragments) and feeding it into a language model for context-aware responses. Evaluating the effectiveness of such a system requires assessing both the retrieval component (are we fetching the right passages?) and the generation component (is the LLM using that information to produce high-quality, accurate assistance?). Another key factor is document chunking – how we split web pages into retrievable pieces. Chunk size and strategy impact retrieval accuracy and how efficiently the LLM can consume context without confusion or truncation. This report presents model-agnostic best practices (2023–2025) for evaluating RAG systems and optimising chunk size, with an emphasis on dynamic, noisy web content in a real-world PKM setting. We cover quantitative metrics (precision, recall, MRR, nDCG, etc.), qualitative/user-centric evaluation (usefulness, trust, cognitive load), and practical tips for tuning chunking to balance retrieval recall and LLM context effectiveness.
 
 ## Evaluating Retrieval Effectiveness in RAG

@@ -1,8 +1,9 @@
 # Browser Extension Publishing Guide
 
-This guide covers the complete process of publishing the Bergamot Navigation Tracker browser extension to various browser stores.
+This guide covers the complete process of publishing the Bergamot browser extension to Chromium-based browser stores. Bergamot is Chromium-only (Chrome, Edge, Brave, Opera); Firefox is not supported.
 
 ## Table of Contents
+
 - [Prerequisites](#prerequisites)
 - [Store Account Setup](#store-account-setup)
 - [API Credentials](#api-credentials)
@@ -15,18 +16,15 @@ This guide covers the complete process of publishing the Bergamot Navigation Tra
 
 1. **Developer Accounts** on target platforms:
    - Chrome Web Store ($5 one-time fee)
-   - Firefox Add-ons (free)
    - Edge Add-ons (free)
    - Opera Add-ons (free)
 
 2. **Required Tools**:
+
    ```bash
    # Install dependencies
    cd browser
    npm install
-   
-   # Install global tools (optional, for manual publishing)
-   npm install -g web-ext  # For Firefox
    ```
 
 3. **Extension Assets**:
@@ -42,12 +40,6 @@ This guide covers the complete process of publishing the Bergamot Navigation Tra
 2. Pay the one-time $5 developer fee
 3. Complete account verification
 4. Create a new item and note the Extension ID
-
-### Firefox Add-ons
-
-1. Create account at [Firefox Add-ons Developer Hub](https://addons.mozilla.org/developers/)
-2. No payment required
-3. Complete email verification
 
 ### Edge Add-ons
 
@@ -78,6 +70,7 @@ This guide covers the complete process of publishing the Bergamot Navigation Tra
    - Download credentials JSON
 
 3. **Get Refresh Token**:
+
    ```bash
    # Use OAuth playground or custom script
    # Scopes needed: https://www.googleapis.com/auth/chromewebstore
@@ -88,17 +81,6 @@ This guide covers the complete process of publishing the Bergamot Navigation Tra
    - `CHROME_CLIENT_SECRET`
    - `CHROME_REFRESH_TOKEN`
    - `CHROME_EXTENSION_ID`
-
-### Firefox Add-ons
-
-1. **Generate API Credentials**:
-   - Go to [API Key Management](https://addons.mozilla.org/en-US/developers/addon/api/key/)
-   - Generate new credentials
-   - Save JWT issuer (API Key) and JWT secret
-
-2. **Set GitHub Secrets**:
-   - `FIREFOX_API_KEY` (JWT issuer)
-   - `FIREFOX_API_SECRET` (JWT secret)
 
 ### Edge Add-ons
 
@@ -126,21 +108,23 @@ This guide covers the complete process of publishing the Bergamot Navigation Tra
 ## Build Process
 
 ### Development Build
+
 ```bash
 npm run build          # Standard build
 npm run build:test     # Build with test flags
 ```
 
 ### Production Build
+
 ```bash
 npm run build:production  # Minified production build
 # Creates:
 # - builds/v{version}/chrome-extension.zip
-# - builds/v{version}/firefox-extension.zip
 # - builds/v{version}/edge-extension.zip
 ```
 
 ### Version Management
+
 ```bash
 npm run version:patch   # 1.0.0 -> 1.0.1
 npm run version:minor   # 1.0.0 -> 1.1.0
@@ -152,11 +136,13 @@ npm run version:major   # 1.0.0 -> 2.0.0
 ### Automated Publishing (GitHub Actions)
 
 1. **Update Version**:
+
    ```bash
    npm run version:patch  # or minor/major
    ```
 
 2. **Commit and Tag**:
+
    ```bash
    git add -A
    git commit -m "chore: bump version to x.y.z"
@@ -174,6 +160,7 @@ npm run version:major   # 1.0.0 -> 2.0.0
 ### Manual Publishing
 
 #### Chrome Web Store
+
 ```bash
 # Build and publish
 npm run build:production
@@ -183,20 +170,8 @@ npm run publish:chrome
 node scripts/publish-chrome.js builds/v1.0.0/chrome-extension.zip
 ```
 
-#### Firefox Add-ons
-```bash
-# Build and publish
-npm run build:production
-npm run publish:firefox
-
-# Or using web-ext directly
-web-ext sign \
-  --source-dir=firefox \
-  --api-key=$FIREFOX_API_KEY \
-  --api-secret=$FIREFOX_API_SECRET
-```
-
 #### Edge Add-ons
+
 ```bash
 # Build and publish
 npm run build:production
@@ -215,15 +190,6 @@ node scripts/publish-edge.js builds/v1.0.0/edge-extension.zip
 3. Click "Package" > "Upload new package"
 4. Upload `chrome-extension.zip`
 5. Update store listing if needed
-6. Submit for review
-
-### Firefox Add-ons (Manual)
-
-1. Go to [Developer Hub](https://addons.mozilla.org/developers/)
-2. Click "Submit a New Add-on"
-3. Upload `firefox-extension.zip`
-4. Choose distribution method (listed/unlisted)
-5. Complete submission form
 6. Submit for review
 
 ### Edge Add-ons (Manual)
@@ -246,7 +212,6 @@ node scripts/publish-edge.js builds/v1.0.0/edge-extension.zip
 ## Store Review Times
 
 - **Chrome Web Store**: 1-3 business days
-- **Firefox Add-ons**: 1-5 hours (automated + manual)
 - **Edge Add-ons**: 1-7 business days
 - **Opera Add-ons**: 1-14 days
 
@@ -255,6 +220,7 @@ node scripts/publish-edge.js builds/v1.0.0/edge-extension.zip
 ### Common Issues
 
 #### Build Failures
+
 ```bash
 # Clean and rebuild
 rm -rf dist/ builds/
@@ -262,16 +228,13 @@ npm run build:production
 ```
 
 #### Chrome Publishing Error
+
 - Ensure OAuth token is fresh
 - Check API quotas in Google Cloud Console
 - Verify extension ID matches
 
-#### Firefox Signing Error
-- Check version number is incremented
-- Ensure manifest is valid
-- Verify API credentials are active
-
 #### Edge Certification Failure
+
 - Review certification report
 - Common issues: permissions, security, performance
 - Test in Edge before submission
@@ -279,9 +242,6 @@ npm run build:production
 ### Validation Tools
 
 ```bash
-# Validate manifest
-npx web-ext lint --source-dir=firefox
-
 # Test in browser
 npm run chrome:debug
 ```
@@ -296,7 +256,7 @@ npm run chrome:debug
 2. **Testing**:
    - Run full test suite before publishing
    - Test on multiple OS/browser combinations
-   - Verify native messaging if applicable
+   - Verify the local HTTP transport to the VS Code backend works
 
 3. **Store Listings**:
    - Keep descriptions updated
@@ -319,20 +279,16 @@ Required secrets for automated publishing:
 
 ```yaml
 # Chrome Web Store
-CHROME_CLIENT_ID: 'your-client-id'
-CHROME_CLIENT_SECRET: 'your-client-secret'
-CHROME_REFRESH_TOKEN: 'your-refresh-token'
-CHROME_EXTENSION_ID: 'your-extension-id'
-
-# Firefox Add-ons
-FIREFOX_API_KEY: 'your-jwt-issuer'
-FIREFOX_API_SECRET: 'your-jwt-secret'
+CHROME_CLIENT_ID: "your-client-id"
+CHROME_CLIENT_SECRET: "your-client-secret"
+CHROME_REFRESH_TOKEN: "your-refresh-token"
+CHROME_EXTENSION_ID: "your-extension-id"
 
 # Edge Add-ons
-EDGE_CLIENT_ID: 'your-client-id'
-EDGE_CLIENT_SECRET: 'your-client-secret'
-EDGE_PRODUCT_ID: 'your-product-id'
-EDGE_ACCESS_TOKEN_URL: 'your-token-url'  # Optional
+EDGE_CLIENT_ID: "your-client-id"
+EDGE_CLIENT_SECRET: "your-client-secret"
+EDGE_PRODUCT_ID: "your-product-id"
+EDGE_ACCESS_TOKEN_URL: "your-token-url" # Optional
 ```
 
 ## Support
@@ -341,6 +297,5 @@ EDGE_ACCESS_TOKEN_URL: 'your-token-url'  # Optional
 - Documentation: [Full docs](../README.md)
 - Store Dashboards:
   - [Chrome](https://chrome.google.com/webstore/devconsole)
-  - [Firefox](https://addons.mozilla.org/developers/)
   - [Edge](https://partner.microsoft.com/dashboard)
   - [Opera](https://addons.opera.com/developer/)

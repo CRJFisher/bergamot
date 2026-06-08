@@ -30,15 +30,14 @@
 **Lines of Code**: 392
 **Primary Responsibilities**:
 
-- Page content extraction and compression
-- Visit data collection
+- Visit metadata collection (url, title, timestamp)
 - SPA navigation detection
 - API communication coordination
 
 **Key Features**:
 
 - Dynamic port configuration for testing
-- Zstandard compression for content
+- Metadata-only capture (no page content read or compressed)
 - Multiple SPA detection mechanisms
 - Duplicate visit prevention
 
@@ -46,7 +45,6 @@
 
 - `send_visit_data()`: Initial page visit tracking
 - `track_spa_navigation()`: Monitors history API and DOM changes
-- `get_content()`: Extracts and compresses page body
 - `get_true_referrer()`: Requests referrer from background script
 
 ### 3. URL Cleaning Module (`url_cleaning.ts`)
@@ -132,9 +130,8 @@
    - Error handling and retries
 
 4. **DataCollector**
-   - Content extraction
-   - Compression utilities
-   - Visit data assembly
+   - Visit metadata assembly (url, title, timestamp, referrer)
+   - Metadata-only — no content extraction or compression
 
 5. **APIClient**
    - Server communication

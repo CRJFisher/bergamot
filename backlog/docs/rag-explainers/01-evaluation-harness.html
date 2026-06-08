@@ -38,7 +38,7 @@
     <section class="block">
       <h2><span class="num">01</span> The problem</h2>
       <p>
-        Bergamot's retrieval baseline is deliberately minimal. Every captured web page is embedded as
+        Bergamot's retrieval baseline is deliberately minimal. Every re-downloaded public page is embedded as
         <strong>one whole-page vector</strong> using OpenAI's <code>text-embedding-3-small</code> model and stored in
         <strong>LanceDB</strong>. At query time the system embeds the query and returns the pages whose vectors are
         closest by <em>dense cosine similarity</em> — the angle between two embedding vectors, where closer means more
@@ -73,7 +73,8 @@
       <p>
         A <strong>golden dataset</strong> is a fixed list of queries, each paired with the set of pages (or chunks) that
         are <em>known to be relevant</em> — the ground truth. For Bergamot the golden set is drawn from the
-        <strong>user's own captured corpus</strong>, so the queries and relevant answers reflect the real content the
+        <strong>re-downloadable public corpus</strong> — the public pages re-downloaded from the user's visited URLs —
+        so the queries and relevant answers reflect the real content the
         system actually serves, not a generic benchmark. Because the golden set is committed and frozen, every run is
         measured against the same ruler.
       </p>
@@ -133,10 +134,10 @@
 
       <div class="diagram">corpus ──▶ golden set ──▶ run pipeline ──▶ score ──▶ report
  │            │              │            │          │
- user's     queries +     dense /       retrieval   delta vs
- captured   known-good    hybrid /      + RAGAS      committed
- pages      relevant      reranked      metrics      baseline
-            pages</div>
+ re-down-   queries +     dense /       retrieval   delta vs
+ loaded     known-good    hybrid /      + RAGAS      committed
+ public     relevant      reranked      metrics      baseline
+ pages      pages</div>
     </section>
 
     <!-- (d) TRY IT -->
@@ -237,7 +238,7 @@
       <h2><span class="num">05</span> In Bergamot</h2>
       <p><strong>task-31.1</strong> ships the harness and supersedes the older, broader task-30. Concretely it delivers:</p>
       <ul>
-        <li>A <strong>golden dataset</strong> built from Bergamot's own captured corpus, stored in-repo so it is versioned and frozen.</li>
+        <li>A <strong>golden dataset</strong> built from Bergamot's own re-downloadable public corpus, stored in-repo so it is versioned and frozen.</li>
         <li>A <strong>runnable harness</strong> computing the retrieval metrics — Recall@k, MRR, and nDCG@k — over that golden set.</li>
         <li><strong>RAGAS-style generation metrics</strong> (context precision, context recall, faithfulness, answer relevance) scored via an LLM-as-judge.</li>
         <li>A <strong>committed baseline report</strong> for the current whole-page, pure-dense pipeline — the number every future phase must beat.</li>

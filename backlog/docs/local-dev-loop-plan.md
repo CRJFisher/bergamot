@@ -13,7 +13,7 @@ A tight local iteration loop with four properties:
 
 ## Architecture Recap
 
-The capture pipeline is: browser extension captures a page → POSTs to the local Express server `/visit` (port discovery over 5000–5009) → visit queue → classification workflow → DuckDB (relational) + LanceDB (vectors) → MCP server exposes it for query.
+The capture pipeline is: browser extension captures a page's **metadata** (url, title, timestamp, session graph — never content) → POSTs to the local Express server `/visit` (port discovery over 5000–5009) → visit queue → DuckDB (relational metadata, the source of truth). A separate post-processing stage **re-downloads** each stored public URL (login-walled / dead pages excluded) → classification/extraction workflow → LanceDB (derived vectors) → MCP server exposes it for query.
 
 - Browser extension: `browser/`, esbuild bundles, Chromium manifest in `browser/chrome/`, dev loader `browser/scripts/load-extension.js`.
 - VS Code extension: `vscode/`, Express server (`vscode/src/server/server_manager.ts`), DuckDB + LanceDB (`vscode/src/database/database_manager.ts`), MCP server.
@@ -49,8 +49,8 @@ Run in parallel with A/B. `npm run dev:brave` builds → watches → launches Br
 
 Observability (the crucial part — do it here, not last):
 
-- **Correlation `visit_id`**: generate in browser (`browser/src/core/data_collector.ts`), include in the POST body (`browser/src/content.ts`), have `/visit` trust-or-recompute and echo it back (`server_manager.ts` currently computes `md5(url+page_loaded_at)` but never returns it), thread into every log line both sides. **[M]**
-- **`vscode/src/dev_log.ts`** (new): one `createOutputChannel('Bergamot Dev')` + append to `<storage-base>/dev-log.jsonl`. Replace scattered `console.*` across `server_manager.ts`, `visit_queue_processor.ts`, `simple_workflow.ts`, `orphaned_visits.ts`. Stages: `http_received, parse_failed, decompress_failed, queued, classify_result, dropped(reason), workflow_failed, stored, orphan_parked, orphan_dropped`. Use async append so the `/visit` 200 is not blocked. **[M]**
+- **Correlation `visit_id`**: generate in browser (`browser/src/core/data_collector.ts`), include in the metadata POST body (`browser/src/content.ts`), have `/visit` trust-or-recompute and echo it back (`server_manager.ts` currently computes `md5(url+page_loaded_at)` but never returns it), thread into every log line both sides. **[M]**
+- **`vscode/src/dev_log.ts`** (new): one `createOutputChannel('Bergamot Dev')` + append to `<storage-base>/dev-log.jsonl`. Replace scattered `console.*` across `server_manager.ts`, `visit_queue_processor.ts`, `simple_workflow.ts`, `orphaned_visits.ts`. Stages: `http_received, parse_failed, queued, redownload_ok, redownload_blocked, redownload_404, classify_result, dropped(reason), workflow_failed, stored, orphan_parked, orphan_dropped`. Use async append so the `/visit` 200 is not blocked. **[M]**
 - **Per-visit outcome record**: append `{visit_id, url, page_type, confidence, decision, reason, error?}` at the drop/store/fail points (the drop reason is computed in `simple_workflow.ts` then discarded). Add a `bergamot.showVisitOutcomes` command listing recent visits with why each dropped, plus live queue/inbox/orphan counts from the existing `VisitQueueProcessor.get_stats()` and `OrphanedVisitsManager.get_stats()`. **[M]**
 - **Browser badge on POST failure**: in `browser/src/core/message_router.ts` set a red `!` `chrome.action` badge on final failure, clear on next success (verify the `action` key exists in the manifest first). **[S]**
 - **Replay**: persist last N raw captures + a `bergamot.replayVisit` command to re-run `WebpageWorkflow.run()` without re-browsing. Essential for iterating on prompts and validating the Claude swap. **[M]**
@@ -71,7 +71,7 @@ Classification (and the other LLM calls) run on the user's Claude subscription w
 A developer-runnable test exercising the real seam (real extension → discovery → server → DBs → MCP), offline and free.
 
 - Add an LLM injection seam (env `BERGAMOT_LLM=fake` or DI into `build_workflow`/`WebpageWorkflow`) — prerequisite for offline full-pipeline tests, and the same injection point the Claude move uses. **[M]**
-- Server-side integration test: real `ServerManager` + real DuckDB/LanceDB on temp paths + fake LLM, POST a real zstd visit, drain the queue, assert DuckDB + LanceDB retrieval (`vscode/src/server/server_pipeline.integration.test.ts`). **[M]**
+- Server-side integration test: real `ServerManager` + real DuckDB/LanceDB on temp paths + fake LLM, POST a real **metadata** visit, drain the queue and assert the DuckDB metadata row, then run post-processing against a **mocked re-download** (stubbed fetcher returning canned HTML for a public URL and a login-wall/404 for excluded URLs) and assert LanceDB retrieval of the re-downloaded content (`vscode/src/server/server_pipeline.integration.test.ts`). **[M]**
 - Headless standalone server entrypoint `vscode/src/server/server_standalone.ts` (mirrors `mcp_server_standalone.ts`) so the harness can run the server outside the extension host. **[M]**
 - On-demand full-pipeline harness `scripts/run-pipeline-e2e.mjs` + `browser/e2e/full_pipeline.spec.ts` reusing `fixtures.ts` minus `MOCK_PKM_PORT`/mock server; promote the `DEBUG_E2E` SW console hook to an always-on error collector that fails the run. **[L]**
 
@@ -103,7 +103,7 @@ The loop is implemented. Day-to-day:
 - **Debug the VS Code extension**: press F5 ("Run Extension") in Cursor. This compiles `vscode/` in watch mode, opens `/Users/chuck/workspace/pkm` as the dev host, and writes all stores to repo-local `.dev-storage` (via `BERGAMOT_STORAGE_PATH`). Source maps bind breakpoints.
 - **Deploy the browser extension into Brave**: `cd browser && npm run dev:brave`. This bundles straight into `browser/chrome/dist`, starts an esbuild watch, and launches Brave with its own persistent profile (`~/.bergamot-brave-debug-profile`). After editing, reload the unpacked extension's service worker (MV3 does not hot-reload).
 - **Watch the pipeline**: dev logging is on automatically under F5. Run "Bergamot: Show Visit Outcomes" to see recent visits (why each dropped, plus live queue/inbox/orphan counts), tail `<storage>/dev-log.jsonl` for the correlated `visit_id` stages, and use "Bergamot: Replay Visit" to re-run a captured page through the pipeline without re-browsing. A red `!` badge on the toolbar icon means the last POST failed.
-- **Run the offline pipeline test**: `cd vscode && npx jest server_pipeline.integration` exercises the real server + DuckDB + LanceDB with the fake LLM/embeddings.
+- **Run the offline pipeline test**: `cd vscode && npx jest server_pipeline.integration` exercises the real server + DuckDB + LanceDB with the fake LLM/embeddings and a mocked re-download fetcher (posts metadata, then re-downloads stubbed public HTML).
 - **Run the full real-browser E2E**: `npm run test:e2e:pipeline` (from the repo root) builds the extension plainly, starts the headless capture server with the fake LLM/embeddings, and drives a real Chromium through discovery → server → stores.
 
 ### Configuration

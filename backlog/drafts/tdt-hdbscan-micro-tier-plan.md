@@ -24,10 +24,12 @@ Two axes are kept strictly separate, exactly as the product vision requires:
   fused into the embedding.
 
 TDT stands fairly separate from the rest of bergamot. It is a modular, offline/batch
-subsystem that READS the captured pages from DuckDB (raw HTML + metadata, task-35),
-**embeds them itself**, writes its OWN cluster tables, and exposes a new read-only MCP
-surface. It is **independent of the RAG pipeline (task-31)** — see §4. It adds no LLM to
-the ingest path; capture stays zero-LLM (task-35).
+subsystem that reads the captured **metadata** from DuckDB (URL, title, timestamp,
+session graph — task-35), obtains page content by **re-downloading the public URL during
+post-processing**, **embeds that re-downloaded content itself**, writes its OWN cluster
+tables, and exposes a new read-only MCP surface. TDT is the **first consumer of the
+re-download corpus**; RAG (task-31) comes after — see §4. It adds no LLM to the ingest
+path; capture stays zero-LLM and metadata-only (task-35).
 
 The deliverable answers one question for the user: _"What projects have I been working
 on, and which pages belong to each?"_
@@ -39,8 +41,8 @@ on, and which pages belong to each?"_
 ### In scope (build now)
 
 - Deterministic **per-window HDBSCAN** clustering of **page-level** vectors.
-- A **page vector** TDT computes itself by embedding each captured page (independent of
-  the RAG pipeline).
+- A **page vector** TDT computes itself by embedding each **re-downloaded public page**
+  (independent of the RAG pipeline).
 - **Calendar-month windows** with a hard sample-count guard and deterministic
   subdivision when a window is too large for HDBSCAN.
 - **Cosine via `metric='precomputed'`** (a dense `(n,n)` cosine-distance matrix).
@@ -93,7 +95,7 @@ tdt/
     ports.ts              # injected contracts: RelationalReader, EmbedFn, VectorStore, ClusterSink
     config.ts             # DEFAULT_WINDOW_CONFIG, DEFAULT_HDBSCAN_CONFIG
     windowing.ts          # page_loaded_at -> windows + count-guarded subdivision
-    page_vectors.ts       # captured page -> page-level text -> EmbedFn -> one page vector (cached)
+    page_vectors.ts       # re-downloaded page -> page-level text -> EmbedFn -> one page vector (cached)
     cluster_window.ts     # precomputed cosine-distance matrix -> HDBSCAN.fit (the ONLY library call)
     representations.ts    # exemplar/medoid representative + frozen representative vector
     labeling/
@@ -129,10 +131,10 @@ TDT honors this with an **asymmetric data-access** design:
   the extension command; HTTP `/query/*` when TDT runs as the batch CLI). TDT never opens
   the capture DuckDB file directly. Getting this wrong is an **availability** failure
   (the file open is refused), not corruption — but it still breaks the batch job.
-- **Page vectors are TDT's own** (it embeds pages itself; §4), cached in a TDT-owned
-  `topic_page_vector` table in the **same DuckDB file**. There is no second vector store and
-  no LanceDB dependency; the cache is read and written on the same DuckDB path as everything
-  else (through the extension's writer), not via a separate handle.
+- **Page vectors are TDT's own** (it embeds re-downloaded content itself; §4), cached in a
+  TDT-owned `topic_page_vector` table in the **same DuckDB file**. There is no second vector
+  store and no LanceDB dependency; the cache is read and written on the same DuckDB path as
+  everything else (through the extension's writer), not via a separate handle.
 - **Cluster writes** go through a `ClusterSink` port. The write path is owned by the
   extension's single writer — TDT's compute hands results back, and the extension persists
   them in one short transaction. The batch CLI does read+compute only; it does not write.
@@ -157,9 +159,9 @@ DuckDB (capture)  │                                                           
    tables  ──────────►  fetch_visits  ──(stable ORDER BY page_loaded_at, page_session_id)─► │
         ▲          │        │                                                               │
         │ (writer  │        ▼                                                               │
-        │  owns    │  page_vectors: read raw capture, build page text, EmbedFn(local model) │
+        │  owns    │  page_vectors: re-download URL, build page text, EmbedFn(local model) │
         │  file)   │  cache in topic_page_vector ──────────► one L2-normalized vec / page    │
-        │          │        │  (TDT embeds pages itself — no RAG / LanceDB dependency)      │
+        │          │        │  (TDT embeds re-downloaded content — no RAG / LanceDB dep)    │
         │          │        ▼                                                               │
         │          │  build (n,n) cosine DISTANCE matrix  D = clamp(1 - dot, 0, 2)          │
         │          │        │  metric='precomputed';  n = PAGES, guarded <= ~4000           │
@@ -185,14 +187,17 @@ DuckDB (capture)  │                                                           
 
 ### The page-vector problem (TDT owns vectorisation)
 
-bergamot's capture pipeline (task-35) stores raw page HTML + cheap `<head>` metadata, but
-**no embeddings** — vectorisation is TDT's own responsibility. There is **no page vector to
-cluster until TDT builds one**, and TDT builds it by embedding the page itself.
+bergamot's capture pipeline (task-35) stores browsing **metadata only** (URL, title,
+timestamp, session graph) — **no page content and no embeddings**. Content is obtained later
+by **re-downloading the public URL during post-processing**, and vectorisation is TDT's own
+responsibility. There is **no page vector to cluster until TDT builds one**, and TDT builds it
+by embedding the re-downloaded content itself.
 
-**TDT is independent of the RAG pipeline (task-31).** RAG chunks pages for _retrieval_; TDT
-embeds whole pages for _clustering_. The only nominal overlap is "both embed text," and even
-that differs (chunk vs page granularity, potentially different models). TDT reads the same
-captured pages RAG does, but needs none of RAG's chunking, contextual-retrieval prefixes,
+**TDT is independent of the RAG pipeline (task-31), and is the first consumer of the
+re-download corpus.** Both RAG and TDT operate over the same re-downloaded public content, but
+RAG chunks pages for _retrieval_ while TDT embeds whole pages for _clustering_. The only
+nominal overlap is "both embed text," and even that differs (chunk vs page granularity,
+potentially different models). TDT needs none of RAG's chunking, contextual-retrieval prefixes,
 hybrid/BM25 indexing, or reranking — and never waits on it.
 
 **Output contract (fixed):** the clustering unit is the **page visit**. `n` = page count,
@@ -212,13 +217,14 @@ export type PageRepr = "title_plus_lead" | "main_content_extract";
  * (a throwaway internal split; NOT RAG chunking — no contextual prefixes, no persistence).
  */
 export async function build_page_vector(
-  raw_page: RawCapture, // zstd-decompressed HTML + <head> metadata (task-35)
+  fetched_page: FetchedPage, // re-downloaded public HTML + parsed <meta> fields
   embed: EmbedFn, // TDT's own local embedding model (injected)
   repr: PageRepr = "title_plus_lead",
 ): Promise<Float32Array>;
 ```
 
-- **Default representation = title + lead/main-content extract**, truncated to the embedder's
+- **Default representation = title + lead/main-content extract** of the re-downloaded page,
+  truncated to the embedder's
   token budget, embedded by TDT's own model, then **L2-normalized** (mandatory: it makes the
   page→page `1 - dot` a valid cosine distance and is the boundary contract for a later
   Euclidean consumer like the SOM tier; it is a no-op for the cosine matrix itself, which is
@@ -231,8 +237,12 @@ export async function build_page_vector(
   segment** rather than a mean that lands in dead space between sub-topics.
 - **Degenerate guard (built now):** if the pooled vector norm `< ε`, fall back to the
   dominant segment rather than dividing by ≈0 to produce an arbitrary direction.
-- **No-text exclusion (built now):** a page with no extractable text (binary, failed capture,
-  empty) has **no embedding**. Exclude it from clustering; never feed a zero vector into `D`.
+- **No-text / failed-re-download exclusion (built now):** a page that fails to re-download
+  (login redirect, 403, paywall, dead link) or yields no extractable text (binary, empty body)
+  has **no embedding**. The login wall is the privacy filter — auth-walled pages fall out here
+  automatically, with no ingestion-time content heuristic. Exclude all such pages from
+  clustering; never feed a zero vector into `D`. The clusterable corpus is therefore the
+  **re-downloadable public subset**; auth-walled/failed visits remain trail/metadata only.
 - **Cache:** store each page vector in a TDT-owned `topic_page_vector(page_session_id,
 embedding_model_id, vector)` table so re-runs reuse it and a model change invalidates it.
 
@@ -242,16 +252,24 @@ right unit (`n` = page count). A whole-page embedding is coarse by design — a 
 for a multi-topic page can blur, which is exactly why the dispersion guard above exists.
 ("Page vs navigation-tree" is the next granularity question, not assumed final here.)
 
-**Determinism.** A page vector is a pure function of (captured bytes, page-representation
+**Determinism.** A page vector is a pure function of (re-downloaded bytes, page-representation
 rule, embedding model). TDT **persists its embedding model identity + representation-rule
 version on the run**; changing either triggers a full re-cluster. "Deterministic" means
-_given fixed captures and a pinned model_ — which TDT fully controls, since it owns its
-embedder. There is no external contextualizer coupling.
+_given a fixed re-downloaded snapshot and a pinned model_ — which TDT fully controls, since it
+owns its embedder. There is no external contextualizer coupling.
+
+**Re-download fidelity caveat.** Unlike a captured snapshot, the re-downloaded bytes are not
+guaranteed to equal the page as viewed: dynamic/JS-rendered content, dead links,
+paywall/consent drift, A/B variants, and edits over time all diverge, and a page may
+re-download successfully on one run and fail on the next. Page vectors are therefore stable
+only relative to a given re-download; the run records the fetch fidelity metadata
+(`fetched_at`, `http_status`, content hash) so drift and changes in corpus membership are
+visible across re-clusters.
 
 ### Cold start & the one deferred cross-feature seam
 
-Cold start is a non-issue: TDT embeds whatever captured pages it has not embedded yet, on its
-own schedule, via its `EmbedFn`. It never waits on the RAG pipeline.
+Cold start is a non-issue: TDT re-downloads and embeds whatever metadata rows it has not
+embedded yet, on its own schedule, via its `EmbedFn`. It never waits on the RAG pipeline.
 
 **The one deferred seam (an option, not a dependency).** If cross-feature work is ever wanted
 — grouping RAG search hits by project cluster, or the later macro→micro LLM linkage reasoning
@@ -401,11 +419,12 @@ near-identical repeat visits to the same URL within a tree (a cheap, determinist
 
 **Stage 2 — `resolve_page_vectors(visits)`** (TDT-owned embedding + cache). The only stage
 that touches vectors. For each page, return the cached `topic_page_vector` if present for the
-current `embedding_model_id`; otherwise read the raw capture, build the page text, embed via
-`EmbedFn`, L2-normalize, and cache it (§4). When a long page is split into segments, accumulate
-the segment mean in **fixed (segment) order with a float64 accumulator** — float32 addition is
-non-associative, and unstable order would produce bitwise-different page vectors and flip MST
-ties. Drop no-text pages.
+current `embedding_model_id`; otherwise re-download the public URL, build the page text from
+the fetched content, embed via `EmbedFn`, L2-normalize, and cache it (§4). When a long page is
+split into segments, accumulate the segment mean in **fixed (segment) order with a float64
+accumulator** — float32 addition is non-associative, and unstable order would produce
+bitwise-different page vectors and flip MST ties. Drop pages that fail to re-download (the
+login wall excludes auth-walled pages here) and no-text pages.
 
 **Stage 3 — `reduce_dimensions` (OFF in v1, typed identity pass-through).** No reducer in
 v1. The constitution rules out **UMAP** (non-deterministic SGD/numba, left external by the
@@ -585,7 +604,7 @@ export interface ClusterLabel {
   (titles + site/author), NOT a window-relative c-TF-IDF pass in v1. The review showed
   c-TF-IDF is the one leg that is corpus-relative (the _same_ enduring project gets
   _different_ keyphrases as its window neighbors change — directly hostile to the cross-window
-  label stability the tracking slice will need), requires zstd-decompress + HTML-strip +
+  label stability the tracking slice will need), requires re-download + HTML-strip +
   tokenize every run, and needs word-level embeddings the pipeline does not produce. It is
   **deferred** as the LLM namer's job. The v1 keyphrases field is populated from titles;
   a typed `keyphrases` field + `representation_version` are the seam for a later, page-level,
@@ -834,11 +853,13 @@ A phased, testable delivery sequence for THIS module. Each phase is independentl
    default and confirm the `~5k` ceiling reality. Implement `windowing.ts` (calendar +
    count-guard + gap/calendar subdivision) against fixtures. _Verify:_ window boundaries are
    a pure function of timestamps; oversized windows subdivide deterministically.
-3. **Page vectorisation (TDT-owned).** Implement `build_page_vector` (read raw capture, build
-   page text, embed via the injected local `EmbedFn`, L2-normalize, cache in
-   `topic_page_vector`), the dispersion/degenerate/no-text guards, dedupe, and fixed-order
-   float64 segment accumulation. _Verify:_ determinism test (same capture + pinned model →
-   identical page vector) and cache hit / invalidation on model change.
+3. **Page vectorisation (TDT-owned).** Implement `build_page_vector` (re-download the public
+   URL, build page text from the fetched content, embed via the injected local `EmbedFn`,
+   L2-normalize, cache in `topic_page_vector`), the re-download outcome classification, the
+   dispersion/degenerate/no-text/failed-re-download guards, dedupe, and fixed-order
+   float64 segment accumulation. _Verify:_ determinism test (same re-download + pinned model →
+   identical page vector), auth-walled pages excluded, and cache hit / invalidation on model
+   change.
 4. **Distance + HDBSCAN integration.** `build_cosine_distance_matrix` (clamp/diag/symmetrize)
    - the isolated `cluster_window.ts` call. _Verify:_ bitwise reproducibility test (same
      window twice → identical `labels_` and `probabilities_`); pinned tf backend.

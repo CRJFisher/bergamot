@@ -74,7 +74,7 @@
     <section class="block">
       <h2><span class="num">01</span> The problem</h2>
       <p>
-        Bergamot's retriever ranks captured pages by <strong>cosine similarity</strong> to the query —
+        Bergamot's retriever ranks visited pages (whose content is re-downloaded) by <strong>cosine similarity</strong> to the query —
         and after task-31.2, by a hybrid of dense + BM25. Both score <em>aboutness</em> and nothing else.
         A page you visited this morning and one you visited eight months ago compete on identical footing.
         For a personal knowledge manager built on a <em>browsing timeline</em>, that throws away the
@@ -202,9 +202,10 @@ score(d) = <span class="hl">&alpha;</span> &middot; cos(d)  +  (1 &minus; <span 
         <figcaption>Time intent gates the pre-filter; the recency rerank and relevance floor are bounded so freshness reorders the relevant set without admitting the irrelevant.</figcaption>
       </figure>
       <p>
-        None of this needs new infrastructure. Bergamot already stores <code>page_loaded_at</code> and
-        <code>captured_at</code> per visit and <strong>already has an index on <code>page_loaded_at</code></strong>,
-        so the pre-filter is cheap and the decay is a few lines over data that is already there.
+        None of this needs new infrastructure. Timestamps are <strong>captured metadata</strong> — Bergamot stores
+        <code>page_loaded_at</code> and <code>captured_at</code> per visit (never page content) and <strong>already has an
+        index on <code>page_loaded_at</code></strong>, so the pre-filter is cheap and the decay is a few lines over the
+        metadata that is already there.
       </p>
     </section>
 

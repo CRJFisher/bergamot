@@ -41,7 +41,7 @@
     <section class="block">
       <h2><span class="num">01</span> The problem</h2>
       <p>
-        Today, Bergamot's baseline retriever embeds each captured page as a <strong>single dense
+        Today, Bergamot's baseline retriever embeds each re-downloaded public page as a <strong>single dense
         vector</strong> — one embedding for the whole page — and stores it in <strong>LanceDB</strong>.
         At query time it embeds the query and ranks pages by <strong>cosine similarity</strong> against
         those vectors. That is the entire retrieval path: <strong>pure dense, no keyword search</strong>.

@@ -1,6 +1,6 @@
 # State-of-the-Art RAG Pipeline: Architecture & Upgrade Plan
 
-This document defines the target retrieval-augmented generation (RAG) architecture for Bergamot and the phased plan to reach it. It synthesises fact-checked 2024–2026 research (sources at the end) and maps each technique onto Bergamot's stack: a TypeScript/Node pipeline that ingests noisy web pages into **DuckDB** (relational visit records) + **LanceDB** (vectors), exposed through an **MCP server**.
+This document defines the target retrieval-augmented generation (RAG) architecture for Bergamot and the phased plan to reach it. It synthesises fact-checked 2024–2026 research (sources at the end) and maps each technique onto Bergamot's stack: capture records browsing **metadata only** into **DuckDB** (the durable source of truth); a post-processing stage **re-downloads the public URL** to obtain page content; that content is ingested into **LanceDB** (derived vectors) and exposed through an **MCP server**. Pages behind a login wall fail to re-download and are excluded — the corpus is the re-downloadable public subset.
 
 The goal is a _measured, production-grade_ RAG pipeline — the kind whose quality is proven by metrics, not asserted.
 
@@ -8,24 +8,26 @@ The goal is a _measured, production-grade_ RAG pipeline — the kind whose quali
 
 ## Current pipeline (baseline)
 
-| Stage              | Current implementation                                                               |
-| ------------------ | ------------------------------------------------------------------------------------ |
-| Ingestion          | LLM extracts main content → stored in DuckDB + LanceDB (`simple_workflow.ts`)        |
-| Chunking           | **None** — each whole page is stored as a single LanceDB record                      |
-| Embedding          | OpenAI `text-embedding-3-small`, single dense vector (`workflow/embeddings.ts`)      |
-| Index              | LanceDB vector search (IVF family)                                                   |
-| Retrieval          | **Pure dense** similarity; no keyword/BM25, no fusion (`mcp_server.ts`)              |
-| Reranking          | None                                                                                 |
-| Query handling     | Query embedded verbatim; no transformation                                           |
-| Generation surface | `semantic_search` returns 200-char previews; `get_webpage_content` returns full page |
-| Evaluation         | **None** (only a chunk-size research note exists)                                    |
+| Stage               | Current implementation                                                                                                  |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Content acquisition | Post-processing re-downloads the stored public URL; auth-walled/dead pages excluded                                     |
+| Ingestion           | LLM extracts main content from the re-downloaded page → stored in LanceDB; DuckDB holds metadata (`simple_workflow.ts`) |
+| Chunking            | **None** — each whole page is stored as a single LanceDB record                                                         |
+| Embedding           | OpenAI `text-embedding-3-small`, single dense vector (`workflow/embeddings.ts`)                                         |
+| Index               | LanceDB vector search (IVF family)                                                                                      |
+| Retrieval           | **Pure dense** similarity; no keyword/BM25, no fusion (`mcp_server.ts`)                                                 |
+| Reranking           | None                                                                                                                    |
+| Query handling      | Query embedded verbatim; no transformation                                                                              |
+| Generation surface  | `semantic_search` returns 200-char previews; `get_webpage_content` returns full page                                    |
+| Evaluation          | **None** (only a chunk-size research note exists)                                                                       |
 
 Every modern technique below is an _additive_ improvement over this baseline.
 
 ## Target architecture
 
 ```
-[captured page]
+[captured metadata: visit id, URL, timestamp, title, session graph]
+  → re-download the public URL in post-processing (login-walled / dead excluded)  [head]
   → main-content extraction (heuristic prune of nav/footer/aside/ads)        [Phase B]
   → structure-aware chunking + LLM-prepended contextual situating text       [Phase C]
   → embed (model chosen by measured retrieval quality) → LanceDB             [Phase G]
@@ -47,11 +49,11 @@ Each decision below is tagged with the verified research finding that justifies 
 
 ### A. Evaluation harness first (the spine)
 
-"Production RAG" means _measured_ RAG. Before changing retrieval we build a golden dataset (queries → known-relevant captured pages, drawn from the user's own corpus) and a metrics suite: retrieval metrics (Recall@k, MRR, nDCG) and generation metrics (context precision/recall, faithfulness, answer relevance) scored with an LLM-as-judge in the RAGAS style. Every later phase reports a delta against this baseline. This is also the portfolio centrepiece.
+"Production RAG" means _measured_ RAG. Before changing retrieval we build a golden dataset (queries → known-relevant pages, drawn from the user's own re-downloaded public corpus) and a metrics suite: retrieval metrics (Recall@k, MRR, nDCG) and generation metrics (context precision/recall, faithfulness, answer relevance) scored with an LLM-as-judge in the RAGAS style. Every later phase reports a delta against this baseline. This is also the portfolio centrepiece.
 
 ### B. Clean ingestion — heuristic main-content extraction
 
-Noisy web HTML carries nav bars, footers, asides, ad containers, and social widgets that pollute embeddings. Heuristic (non-ML) extractors (Trafilatura-style: tree-pruning + link-density analysis) recover main article text and are competitive with neural extractors. We prune before the existing LLM content step so the model — and the vectors — see clean text. _(Do not cite specific F1 leaderboard numbers — that specific claim was refuted in research.)_
+The re-downloaded HTML carries nav bars, footers, asides, ad containers, and social widgets that pollute embeddings. Heuristic (non-ML) extractors (Trafilatura-style: tree-pruning + link-density analysis) recover main article text and are competitive with neural extractors. We prune before the existing LLM content step so the model — and the vectors — see clean text. _(Do not cite specific F1 leaderboard numbers — that specific claim was refuted in research.)_
 
 ### C. Chunking + Contextual Retrieval (highest single-technique ROI)
 
@@ -94,7 +96,7 @@ These are well-documented but solve specialised problems and carry real cost/com
 - **Agentic RAG** — autonomous agents (reflection/planning/tool-use) for multi-step reasoning over the KB. Revisit if multi-hop reasoning becomes core.
 - **Self-RAG** — a model trained with reflection tokens to retrieve adaptively. Requires custom model training; out of scope.
 - **CRAG (Corrective RAG)** — confidence-scored retrieval evaluator with web-search fallback. Plug-and-play; revisit if retrieval-quality failures persist _after_ the baseline upgrades above.
-- **Temporal topic clustering (TDT)** — an offline batch job that clusters the dense vectors Bergamot already stores over its navigation-tree / activity-session time windows (HDBSCAN over UMAP, or BERTopic), then tracks clusters across windows by centroid similarity to surface evolving and recurring browsing themes, labeled deterministically (no LLM, per task-35) and surfaced via a new `list_topic_clusters(time_range)` MCP tool. This is the ambitious half of "time+topic clusters over time" — the cheap retrieval half ships as time-aware retrieval (Phase I, task-31.11). Deferred because it needs new batch infrastructure, persisted cluster tables, and a new MCP surface, and its value at personal scale is unproven. Frame as Topic Detection and Tracking / cluster-then-track (BERTrend, time-aware TDT) or bin-then-reweight (BERTopic dynamic topic modeling) — _not_ as a coined "Temporal Cluster RAG". Revisit when both (a) time-aware retrieval + hybrid are shipped and the harness still shows "theme over time" queries underperforming, and (b) there is a concrete, repeated user request to browse/summarise evolving themes. Online stream clustering (DenStream) and temporal-knowledge-graph RAG (TG-RAG / STAR-RAG / T-GRAG) are further-deferred higher-cost ceilings.
+- **Higher-cost temporal architectures** — online stream clustering (DenStream) and temporal-knowledge-graph RAG (TG-RAG / STAR-RAG / T-GRAG) are deferred higher-cost ceilings, revisited only when a measured gap demands them. _(Temporal Topic Detection itself is **not** deferred: it is the hero-loop critical path and runs **first**, before RAG, over the re-downloaded public corpus — an offline batch job that embeds and clusters the re-downloaded public content over navigation-tree / activity-session time windows (HDBSCAN over UMAP, or BERTopic), tracks clusters across windows by centroid similarity, labels deterministically (no LLM, per task-35), and surfaces via `list_topic_clusters(time_range)`. It is framed as Topic Detection and Tracking / cluster-then-track (BERTrend, time-aware TDT) or bin-then-reweight (BERTopic dynamic topic modeling), not as a coined "Temporal Cluster RAG". The cheap retrieval complement ships as time-aware retrieval, Phase I, task-31.11.)_
 
 ## ROI ordering (what to build, in order)
 

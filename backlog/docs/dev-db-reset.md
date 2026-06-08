@@ -8,8 +8,8 @@ Because the project follows the no-backwards-compatibility constitution and all 
 
 Run this after any change that alters a persisted schema:
 
-- a DuckDB `CREATE TABLE` column add/remove/rename (e.g. `webpage_capture`, `webpage_analysis`, `webpage_tree_intentions`),
-- a reshape of the LanceDB `webpage_content` record, even when the embedding dimension is unchanged (no auto-drop fires, so stale rows would otherwise drift against the new shape).
+- a DuckDB `CREATE TABLE` column add/remove/rename (e.g. `webpage_capture`, `webpage_analysis`, `webpage_tree_intentions`). `webpage_capture` holds **metadata only** (visit id, URL, page-load timestamp, title, navigation/session graph); no captured page content is stored at capture, so there is no `content_compressed`/`content_encoding`/`original_byte_size` column.
+- a reshape of the LanceDB `webpage_content` record, even when the embedding dimension is unchanged (no auto-drop fires, so stale rows would otherwise drift against the new shape). This record is a **derived re-download cache** — vectors and any cached content built from re-downloading public URLs in post-processing, not a capture-time store.
 
 ## The stores
 

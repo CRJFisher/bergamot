@@ -45,7 +45,7 @@ flowchart TB
     agent([AI agent · Claude · script])
 
     subgraph MCP["MCP server (subprocess) — mcp_server_standalone.ts"]
-      rt["Tools (all HTTP-proxied)<br/>get_webpage_content · get_visit_by_url<br/>search_by_title · get_navigation_tree<br/>list_recent_navigation_trees"]
+      rt["Tools (all HTTP-proxied)<br/>get_webpage_content (re-downloaded) · get_visit_by_url<br/>search_by_title · get_navigation_tree<br/>list_recent_navigation_trees"]
     end
 
     subgraph EXT["VS Code extension"]
@@ -72,7 +72,7 @@ flowchart TB
   <h2><span class="num">2</span>MCP tools</h2>
   <table>
     <tr><th>Tool</th><th>Input</th><th>Returns</th><th>Backed by</th></tr>
-    <tr><td><code>get_webpage_content</code></td><td>page_session_id</td><td>{ id, url, title, content } — the decompressed raw captured page</td><td>HTTP <code>/query/capture_content</code></td></tr>
+    <tr><td><code>get_webpage_content</code></td><td>page_session_id</td><td>{ id, url, title, content } — the re-downloaded (possibly cached) page content; unavailable for login-walled or dead pages</td><td>HTTP <code>/query/capture_content</code></td></tr>
     <tr><td><code>get_visit_by_url</code></td><td>url</td><td>latest visit for exact URL (url, title, visited_at)</td><td>HTTP <code>/query/visit_by_url</code></td></tr>
     <tr><td><code>search_by_title</code></td><td>title</td><td>capture metadata for the exact title</td><td>HTTP <code>/query/page_by_title</code></td></tr>
     <tr><td><code>get_navigation_tree</code></td><td>tree_id</td><td>all visits in a tree, with capture metadata</td><td>HTTP <code>/query/tree</code></td></tr>
@@ -88,26 +88,26 @@ flowchart TB
   <table>
     <tr><th>Endpoint</th><th>Purpose</th></tr>
     <tr><td><code>GET /status</code></td><td>Health check + <code>{ service: "bergamot" }</code> identity marker (used by browser discovery).</td></tr>
-    <tr><td><code>POST /visit</code></td><td>Ingest a captured visit (zstd content). Covered in <a href="vscode-extension.html">VS Code Extension</a>.</td></tr>
+    <tr><td><code>POST /visit</code></td><td>Ingest a captured visit (metadata only — no page content). Covered in <a href="vscode-extension.html">VS Code Extension</a>.</td></tr>
     <tr><td><code>GET /query/visit_by_url?url=</code></td><td>Exact-URL lookup of the most recent visit.</td></tr>
     <tr><td><code>GET /query/page_by_title?title=</code></td><td>Exact-title lookup → capture metadata.</td></tr>
     <tr><td><code>GET /query/tree?tree_id=</code></td><td>All pages in a navigation tree, with capture metadata.</td></tr>
     <tr><td><code>GET /query/recent_trees?limit=</code></td><td>Most recently modified trees with member pages.</td></tr>
-    <tr><td><code>GET /query/capture_content?page_session_id=</code></td><td>The decompressed raw captured page (parent-document read path).</td></tr>
+    <tr><td><code>GET /query/capture_content?page_session_id=</code></td><td>The re-downloaded (possibly cached) page content; unavailable for login-walled or dead pages.</td></tr>
   </table>
 
   <h2><span class="num">4</span>Discovery &amp; security</h2>
   <ul class="clean">
     <li>The extension writes its chosen port to <code>~/.bergamot/port.json</code>; the MCP subprocess reads it to find the query API.</li>
     <li>CORS is pinned to <code>chrome-extension://</code> origins (and origin-less callers like curl/scripts); ordinary web pages are blocked.</li>
-    <li>Request body limit is 50 MB to accommodate compressed page content.</li>
+    <li><code>POST /visit</code> carries a small metadata JSON body — no compressed page content — so the request stays lightweight.</li>
     <li>The MCP subprocess needs no store credentials — it only needs the port file to reach the query API.</li>
   </ul>
 
   <div class="note purple">
     <strong>Why proxy every query?</strong> DuckDB is embedded and single-writer. Rather than risk a second
     process opening the database file, the MCP server asks the extension — which owns the writer — over HTTP for
-    everything, including the raw captured page.
+    everything, including the re-downloaded page content.
   </div>
 
   <footer class="foot"><a href="storage.html">← Storage</a> · Next: <a href="rag-pipeline.html">RAG Pipeline →</a></footer>

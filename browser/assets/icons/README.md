@@ -5,21 +5,19 @@ This directory contains icon files for the browser extension in various sizes.
 ## Required Icons
 
 ### Chrome Web Store
+
 - 128x128 pixels (PNG) - Main extension icon
-- 48x48 pixels (PNG) - Toolbar icon  
+- 48x48 pixels (PNG) - Toolbar icon
 - 16x16 pixels (PNG) - Favicon
 
-### Firefox Add-ons
-- 128x128 pixels (PNG or SVG) - Main icon
-- 48x48 pixels (PNG or SVG) - Toolbar icon
-- 96x96 pixels (PNG or SVG) - Optional larger icon
-
 ### Edge Add-ons
+
 - Same as Chrome requirements
 
 ### Store Promotional Images
+
 - 440x280 pixels - Small promo tile (Chrome)
-- 920x680 pixels - Large promo tile (Chrome) 
+- 920x680 pixels - Large promo tile (Chrome)
 - 1280x800 pixels - Marquee promo (Chrome)
 - Screenshots: 1280x800 or 640x400 pixels
 

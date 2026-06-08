@@ -27,16 +27,17 @@
 
   <section class="hero">
     <h1>🧩 VS Code Extension</h1>
-    <p class="tagline">The backend host. It activates the ingest server, durable queue, and the deterministic zero-LLM capture pipeline; owns the DuckDB store; and spawns the MCP server. This is where a visit becomes a durable capture.</p>
+    <p class="tagline">The backend host. It activates the ingest server, durable queue, and the deterministic zero-LLM metadata-capture pipeline; owns the DuckDB metadata store; runs the re-download/post-processing subsystem; and spawns the MCP server. This is where a visit becomes a durable metadata record.</p>
     <span class="pill">vscode/src · extension.ts activate() · TypeScript</span>
   </section>
 
   <h2><span class="num">1</span>Activation</h2>
   <p>On activation, <code>extension.ts</code> wires the system together in order:</p>
   <ul class="clean">
-    <li><strong>Database</strong> — <code>DatabaseManager.initialize_all()</code> opens DuckDB (the relational + raw-capture store). No vector store is opened at ingest.</li>
+    <li><strong>Database</strong> — <code>DatabaseManager.initialize_all()</code> opens DuckDB (the metadata store — the durable source of truth). No vector store is opened at ingest.</li>
     <li><strong>Ingest server</strong> — <code>ServerManager.start()</code> binds the first free port in 5000–5009 and writes it to <code>~/.bergamot/port.json</code>.</li>
     <li><strong>Commands</strong> — <code>CommandManager.register_all()</code> registers the webpage hover provider, the capture-gate metrics command, and the dev observability/replay commands.</li>
+    <li><strong>Re-download / post-processing</strong> — the content subsystem reads stored URLs, re-downloads the public pages (login-walled pages fail and are excluded), and feeds Temporal Topic Detection then the RAG-prep pipeline.</li>
     <li><strong>MCP server</strong> — <code>MCPServerManager.start_deferred(2000)</code> spawns the standalone MCP subprocess after 2 s (non-blocking).</li>
   </ul>
 
@@ -58,14 +59,21 @@ flowchart TB
     subgraph PROC["Capture — run_page_capture"]
       direction TB
       tree["tree assignment<br/>webpage_tree.ts (in the queue)"]
-      gate["relevance gate<br/>page_gate.ts (keep/drop, no LLM)"]
-      store["store_capture<br/>zstd + &lt;head&gt; metadata"]
+      gate["capture gate<br/>page_gate.ts (keep/drop, no LLM)"]
+      store["store_capture<br/>visit metadata"]
       tree --> gate --> store
+    end
+
+    subgraph POST["Post-processing"]
+      direction TB
+      redl["re-download public URL<br/>(login wall excludes private)"]
+      tdt["Temporal Topic Detection → RAG-prep"]
+      redl --> tdt
     end
 
     subgraph STORE["Storage (DatabaseManager)"]
       direction LR
-      duck[("DuckDB<br/>duck_db.ts")]
+      duck[("DuckDB<br/>duck_db.ts (metadata)")]
     end
 
     subgraph SERVE["Serving"]
@@ -80,6 +88,7 @@ flowchart TB
     ext --> cmds
     qp --> tree
     store --> duck
+    duck --> redl
     qapi --> duck
     mcpm -- "HTTP proxy" --> qapi
 
@@ -87,6 +96,7 @@ flowchart TB
     classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
     classDef sv fill:#2a1f3a,stroke:#bc8cff,color:#e6d9ff;
     class srv,inbox,qp,tree,gate,store vs;
+    class redl,tdt vs;
     class duck st;
     class mcpm,qapi,cmds sv;
     </pre>
@@ -97,23 +107,23 @@ flowchart TB
   lost on restart.</p>
   <table>
     <tr><th>Stage</th><th>What happens</th></tr>
-    <tr><td><code>POST /visit</code></td><td>Hash <code>url:page_loaded_at</code> → session ID; decompress zstd; validate against a Zod schema.</td></tr>
+    <tr><td><code>POST /visit</code></td><td>Hash <code>url:page_loaded_at</code> → session ID; validate the metadata payload against a Zod schema.</td></tr>
     <tr><td>Inbox</td><td>Write the visit to <code>{globalStorage}/visit_inbox/{id}.json</code> (durable) before returning 200.</td></tr>
     <tr><td>Queue</td><td><code>VisitQueueProcessor</code> drains the inbox in batches (size 3 or 1 s timeout) with retry.</td></tr>
     <tr><td>Cleanup</td><td>Once the visit is persisted to DuckDB, its inbox JSON file is removed. Orphans are reloaded on startup.</td></tr>
   </table>
 
   <h2><span class="num">4</span>Capture: <code>run_page_capture</code></h2>
-  <p>The pipeline in <code>workflow/page_capture_pipeline.ts</code> turns a captured page into a durable,
-  lossless record with no LLM call. It is a plain function over an immutable <code>CaptureDeps</code> struct
-  (no stateful class).</p>
+  <p>The pipeline in <code>workflow/page_capture_pipeline.ts</code> turns a captured visit into a durable,
+  lossless metadata record with no LLM call. It is a plain function over an immutable <code>CaptureDeps</code>
+  struct (no stateful class).</p>
   <div class="diagram">
     <p class="cap">run_page_capture(deps, inputs) — per visit</p>
     <pre class="mermaid">
 flowchart LR
-    A["raw_content<br/>(zstd-decompressed HTML) + url"] --> E{"relevance gate<br/>evaluate_page_gate()"}
-    E -- "interstitial<br/>(empty / auth / redirect)" --> X["drop · record reason<br/>gate_metrics"]
-    E -- "keep" --> S["store_capture<br/>zstd raw page + read_metadata(&lt;head&gt;)"]
+    A["visit metadata<br/>(url, title, load timestamp)"] --> E{"capture gate<br/>evaluate_page_gate()"}
+    E -- "interstitial" --> X["drop · record reason<br/>gate_metrics"]
+    E -- "keep" --> S["store_capture<br/>persist visit metadata"]
     S --> H["DuckDB webpage_capture<br/>+ record stored outcome"]
 
     classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
@@ -122,10 +132,11 @@ flowchart LR
     class E,X warn;
     </pre>
   </div>
-  <p>No model is called, no main content is extracted, and nothing is written to a vector store. Title comes
-  from the cheap <code>&lt;head&gt;</code> metadata; summary, topics, extraction, chunking and embedding are
-  all deferred to the <a href="rag-pipeline.html">RAG-prep pipeline (task-31)</a>, which reads the stored raw
-  pages via <code>read_capture</code>.</p>
+  <p>No page content is read, no model is called, and nothing is written to a vector store. Title and URL come
+  directly from the tab. Page content is acquired downstream by re-downloading the public URL; the
+  <code>&lt;meta&gt;</code>-derived fields, summary, topics, chunking and embedding are all handled by the
+  re-download subsystem and the <a href="rag-pipeline.html">RAG-prep pipeline (task-31)</a>, which run over the
+  re-downloaded public corpus.</p>
 
   <h2><span class="num">5</span>Navigation trees</h2>
   <p>Visits are organized into <em>trees</em> — one per browsing session — using the referrer chain captured by
@@ -142,11 +153,9 @@ flowchart LR
   <h2><span class="num">6</span>Key dependencies</h2>
   <table>
     <tr><th>Package</th><th>Used for</th></tr>
-    <tr><td><code>@mongodb-js/zstd</code></td><td>Compress/decompress the raw captured page</td></tr>
-    <tr><td><code>@duckdb/node-api</code></td><td>Relational + raw-capture storage</td></tr>
+    <tr><td><code>@duckdb/node-api</code></td><td>Metadata storage (the source of truth)</td></tr>
     <tr><td><code>@modelcontextprotocol/sdk</code></td><td>MCP server + tools</td></tr>
     <tr><td><code>express</code> · <code>cors</code></td><td>HTTP ingest + query server</td></tr>
-    <tr><td><code>@mongodb-js/zstd</code></td><td>Decompress captured content</td></tr>
     <tr><td><code>zod</code></td><td>Schema validation of payloads</td></tr>
   </table>
 

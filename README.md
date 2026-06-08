@@ -1,44 +1,52 @@
 # Bergamot
 
-> Transform your web browsing into a queryable knowledge base accessible via MCP for AI-powered PKM workflows
+> Privacy-first: turn your web browsing into a queryable knowledge base — capturing **metadata only, never page content** — accessible via MCP for AI-powered PKM workflows
 
 ## Why Bergamot?
 
-Every day, you browse dozens of valuable webpages - documentation, tutorials, articles, and research. But this knowledge gets lost in browser history. Bergamot solves this by:
+Every day, you browse dozens of valuable webpages - documentation, tutorials, articles, and research. But this knowledge gets lost in browser history. Bergamot surfaces it without ever recording what's on your private pages:
 
-1. **Automatic Capture**: Silently captures knowledge-rich pages as you browse
-2. **Intelligent Storage**: Stores content in both structured and vector databases
-3. **MCP Access**: Exposes your knowledge to AI agents for powerful PKM workflows
+1. **Metadata-Only Capture**: Records the trail of pages you visit (URL, title, timestamp, navigation graph) — never the page content
+2. **Re-Download to Understand**: Re-fetches public pages later from their URLs; pages behind a login wall fail to fetch and are excluded automatically
+3. **MCP Access**: Exposes the surfaced knowledge to AI agents for powerful PKM workflows
 4. **Semantic Search**: Find information using natural language, not just keywords
 
-The result? Your browsing becomes a permanent, searchable knowledge base that AI assistants can query to help with research, writing, learning, and problem-solving.
+The result? Your browsing becomes a searchable, local-only knowledge base that AI assistants can query — built from public pages you can actually re-fetch, with your private pages never stored.
 
 ## Overview
 
-Bergamot automatically captures knowledge-rich webpages as you browse, stores them in a searchable database, and exposes them through an MCP server for AI-powered knowledge management tasks. It transforms your browsing history into a queryable knowledge base that you can access programmatically or through intuitive interfaces.
+Bergamot captures the metadata of the pages you visit, stores that metadata locally as the durable source of truth, re-downloads the public pages during post-processing to understand them, and exposes the result through an MCP server for AI-powered knowledge management. Your private, logged-in pages are never recorded — the login wall is the filter.
 
 ### Core Components
 
-- **Browser Extension** (`@bergamot/browser-extension`) - Captures and filters webpages you visit, focusing on knowledge-rich content
-- **VS Code Extension** (`@bergamot/vscode`) - Provides search, management, and MCP server for accessing your knowledge base
-- **MCP Server** - Exposes your browsing knowledge to AI agents for RAG queries and PKM workflows
+- **Browser Extension** (`@bergamot/browser-extension`) - Captures the metadata and navigation graph of the pages you visit (never page content)
+- **VS Code Extension** (`@bergamot/vscode`) - Re-downloads public pages, provides search, management, and the MCP server
+- **MCP Server** - Exposes your surfaced browsing knowledge to AI agents for RAG queries and PKM workflows
 
 ## Key Features
 
-### 🌐 Capture
+### 🌐 Capture (metadata only)
 
-- Automatically captures webpages as you browse
-- Skips only transient interstitials — login, redirect, and empty pages
-- Preserves full navigation context and referrer chains
+- Records the trail of pages you visit: visit id, URL, title, page-load timestamp
+- Preserves full navigation context and referrer chains (the session graph)
+- **Never stores page content at capture** — title and URL come straight from the tab
+- Never touches incognito/private tabs
+
+### 🔒 Privacy
+
+- **Page content is never captured.** Content is re-downloaded later from the public URL during post-processing
+- **The login wall is the privacy filter**: authenticated and paywalled pages fail to re-download and are excluded automatically — no heuristic guessing
+- **Local-only by default**; metadata syncs (if you enable it) only over your own devices, never a developer server
+- **Right-to-forget**: delete by URL, origin, or time-range — cascading across metadata, caches, vectors, and clusters
 
 ### 💾 Store
 
-- Persists each visit to DuckDB: a relational visit record plus the raw page, stored losslessly (zstd-compressed) as the durable source of truth
-- Reads cheap `<head>` metadata (title, author, publication) at capture time
+- Persists each visit's **metadata** to DuckDB as the durable source of truth (there is no raw-content capture row)
+- Any content cached after re-download is a separate, on-demand, encrypted, deletable tier
 
 ### 🔍 Query
 
-- **MCP server** for AI agents — `semantic_search` and `get_webpage_content`, plus relational tools
+- **MCP server** for AI agents — `semantic_search` and `get_webpage_content` (over re-downloaded public content), plus relational tools
 - **HTTP query API** for scripts
 - **Direct read-only DuckDB access** when the extension is not running
 
@@ -71,8 +79,8 @@ Bergamot automatically captures knowledge-rich webpages as you browse, stores th
 ### Building Your Knowledge Base
 
 1. Install the browser extension
-2. Browse normally — Bergamot automatically captures the pages you visit
-3. Each page's raw HTML is stored losslessly for future retrieval
+2. Browse normally — Bergamot automatically captures the metadata of the pages you visit
+3. Public pages are re-downloaded from their URLs during post-processing; pages behind a login wall are skipped, and their content is never stored
 
 ### Accessing Your Knowledge via MCP
 
@@ -117,13 +125,13 @@ Search through your browsing history using natural language queries. Returns rel
 
 #### `get_webpage_content`
 
-Retrieve the full markdown content of a specific webpage from your knowledge base.
+Retrieve the markdown content of a specific webpage, re-downloaded from its URL. Available only for public pages; content for login-walled, paywalled, or dead pages is unavailable by design, and a re-downloaded page may differ from the page as originally viewed.
 
 **Parameters:**
 
 - `page_session_id` (string): The unique ID of the webpage session
 
-**Returns:** Full markdown content of the webpage
+**Returns:** Markdown content of the re-downloaded webpage, or unavailable if the page could not be fetched
 
 ### Use Cases
 
@@ -210,9 +218,10 @@ npm run chrome:debug  # Launches Chrome with extension loaded
 
 ## Architecture
 
-- **Capture**: deterministic and local — the raw page is stored losslessly with no model calls at ingest
-- **Storage**: DuckDB for structured data and raw-page captures; LanceDB for vector embeddings
-- **AI**: embeddings run locally (all-MiniLM-L6-v2) for retrieval over the stored raw page
+- **Capture**: deterministic and local — metadata only, no page content and no model calls at ingest
+- **Re-download**: public pages are re-fetched from their URLs during post-processing; the login wall filters out private pages
+- **Storage**: DuckDB for the metadata store (the source of truth); LanceDB for vector embeddings over re-downloaded public content; any content cache is encrypted and deletable
+- **AI**: embeddings run locally (all-MiniLM-L6-v2) for retrieval over re-downloaded public content
 - **Communication**: HTTP API between browser and VS Code
 - **Protocols**: MCP for AI agent integration
 

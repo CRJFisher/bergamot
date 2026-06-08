@@ -2,6 +2,12 @@
 
 High-level design for surfacing evolving and recurring topics from a browsing timeline of timestamped, embedded page visits. Clustering runs on the embedding vectors (doc↔doc cosine); time is a separate axis used for windowing and tracking.
 
+> **Content source.** The embedded content is **re-downloaded public page content**, obtained
+> during post-processing from each visit's stored URL — never page content captured at browse
+> time. TDT is the **first consumer of the re-download corpus**; RAG comes after. The
+> clusterable corpus is the re-downloadable public subset; auth-walled or failed-to-re-download
+> visits remain trail/metadata only and are excluded from clustering.
+>
 > **Detailed plan for the first slice:** the micro tier below is fully scoped in
 > [tdt-hdbscan-micro-tier-plan.md](tdt-hdbscan-micro-tier-plan.md) — windowed HDBSCAN
 > project detection, the consumer-side architecture in bergamot.
