@@ -14,6 +14,8 @@ dependencies: []
 <!-- SECTION:DESCRIPTION:BEGIN -->
 Upgrade Bergamot's MCP RAG from a naive whole-page, pure-dense baseline to a measured, state-of-the-art retrieval pipeline, so the project stands as portfolio-grade proof of production RAG engineering. The plan is grounded in fact-checked 2024-2026 research (Anthropic Contextual Retrieval, LanceDB-native hybrid search, reranking, MTEB-driven embedding selection, RAGAS-style evaluation) and is fully specified in backlog/docs/rag-pipeline-upgrade-plan.md. This supersedes the broad scope of task-30 by turning it into an ordered, measured, phased implementation. Each phase is an atomic, testable PR delivered as a sub-task.
 
+RAG operates over the re-downloaded public corpus (pages re-downloaded during post-processing, task-39.2), with TDT (task-36) running first; auth-walled / failed-re-download visits remain trail/metadata only and are excluded.
+
 **Learning companion:** [backlog/docs/rag-explainers/index.html](index.html) — interactive explainer of the concepts and the decision logic for this phase.
 <!-- SECTION:DESCRIPTION:END -->
 

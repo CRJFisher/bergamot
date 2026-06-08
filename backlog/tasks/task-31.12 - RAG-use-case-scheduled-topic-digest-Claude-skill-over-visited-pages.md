@@ -15,7 +15,7 @@ parent_task_id: TASK-31
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
 
-Prove the RAG pipeline end-to-end with a real downstream consumer: a custom Claude skill that, run on a schedule, surfaces the relevant webpages the user has visited in a given topic over a recent time window and produces a digest.
+Prove the RAG pipeline end-to-end with a real downstream consumer: a custom Claude skill that, run on a schedule, surfaces the relevant webpages the user has visited in a given topic over a recent time window and produces a digest. The digest covers the re-downloadable public subset (pages re-downloaded during post-processing, task-39.2); auth-walled / failed-re-download visits appear only as trail/metadata and are not surfaced as digest entries. Citations are URL-based (source URL + chunk), referencing the page rather than a stored snapshot.
 
 The skill is a thin orchestrator over the MCP retrieval surface built in the earlier sub-tasks — it does no retrieval of its own. Given a topic (or a small watchlist of topics) and a time window, it calls the single `semantic_search` MCP tool with the topic as the query, an optional `time_range` (e.g. the last week, anchored to "now"), and `time_reranked` enabled so recently-visited pages on-topic rise to the top. It then renders the top hits — with their citations (source URL + chunk) returned by task-31.8 — into a short markdown digest ("This week in <topic>: pages you visited, summarised, with links"). The same skill, invoked without a `time_range`, exercises the non-time-based path for an all-time "what have I read about X" query.
 

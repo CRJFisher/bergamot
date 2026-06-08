@@ -25,7 +25,7 @@ priority: medium
 
 Provide the sync transport that moves captured visits from a capture client (the mobile apps, task-38; optionally a second desktop) to the user's own storage — privacy-first, with NO developer-controlled server by default. This replaces the earlier "cloud backend as hard prerequisite" framing: data syncs device-to-device under the user's control, and a developer relay is demoted to an optional fallback.
 
-Governed by the privacy model (task-39): metadata syncs by default; page content syncs only if the user enabled on-demand archiving, and only encrypted. Full model: backlog/drafts/privacy-preserving-capture-model.md. Mobile context: backlog/drafts/mobile-port-research-and-architecture.md.
+Governed by the privacy model (task-39): metadata syncs by default; page content is re-downloaded (and optionally cached) during post-processing per task-39, and any cached content syncs only if the user enabled it, and only encrypted. Full model: backlog/drafts/privacy-preserving-capture-model.md. Mobile context: backlog/drafts/mobile-port-research-and-architecture.md.
 
 KEY ARCHITECTURAL INSIGHT — reuse the existing file inbox: the desktop server already persists visits to a file-based inbox directory before acknowledging, and its VisitQueueProcessor ingests from there. So a capture client does not need to POST to any server — the shared capture core writes visit files locally, and a user-owned sync replicates them into the desktop's existing inbox, where the existing pipeline (decompression, validation, queue, DuckDB storage) consumes them unchanged. This largely removes the need for a new ingestion server.
 
@@ -46,7 +46,7 @@ OUT OF SCOPE: the mobile apps (task-38) and the capture/storage policy itself (t
 <!-- AC:BEGIN -->
 
 - [ ] #1 A user-owned sync path moves captured visits from a mobile client to the user's desktop with no developer-controlled server: the client writes visit files that replicate (P2P / synced folder) into the existing desktop inbox directory, and the existing VisitQueueProcessor ingests them unchanged
-- [ ] #2 Only metadata is synced by default; page content is synced only when the user has enabled on-demand archiving (per task-39), and content is encrypted in transit and at the destination
+- [ ] #2 Only metadata is synced by default; page content is re-downloaded (and optionally cached) during post-processing per task-39, and any cached content is synced only when the user has enabled it, encrypted in transit and at the destination
 - [ ] #3 An iOS transport works within iOS background-execution limits (user's own iCloud / CloudKit private database, or background URLSession), and the chosen approach is recorded
 - [ ] #4 Sync is eventually-consistent and resilient to the desktop/peer being offline — visits queue locally and sync when a peer is reachable, with no data loss across app or device restart
 - [ ] #5 Ingestion is idempotent: visit files are unique per visit-id, so replication never produces duplicate or conflicting visits

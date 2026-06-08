@@ -6,13 +6,14 @@ assignee: []
 created_date: '2026-06-02 16:51'
 updated_date: '2026-06-05 08:59'
 labels: []
-dependencies: []
+dependencies:
+  - TASK-39.2
 ---
 
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-During webpage content extraction, let the LLM decide whether to persist images that carry essential information (architecture diagrams, charts, figures) rather than discarding all images. Today the content-processing prompt only preserves inline image markdown; there is no path to save or reference the underlying image bytes/URL for later retrieval. This makes the captured knowledge incomplete for visually-dense pages and weakens downstream RAG.
+During post-processing of RE-DOWNLOADED public content (the task-39.2 fetcher), let the LLM decide whether to persist images that carry essential information (architecture diagrams, charts, figures) rather than discarding all images. Images and og:image are NOT available at capture — capture stores browsing metadata only and persists no HTML; all image/diagram material comes from the re-downloaded page. Images behind the login wall are not re-downloadable and are therefore excluded by the privacy filter. Today the content-processing prompt only preserves inline image markdown; there is no path to save or reference the underlying image bytes/URL for later retrieval. This makes the captured knowledge incomplete for visually-dense pages and weakens downstream RAG.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -23,7 +24,7 @@ During webpage content extraction, let the LLM decide whether to persist images 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Extend CONTENT_PROCESSING_PROMPT (vscode/src/workflow/prompts.ts) to classify images as essential vs decorative\n2. Capture image URLs from raw HTML during processing in simple_workflow.ts\n3. Record kept-image references on the DuckDB analysis row (extend schema in duck_db / duck_db_models)\n4. Surface image references through the query/RAG path\n5. Coordinate scope with task-31.5 (main-content extraction)\n6. Add tests
+1. Extend CONTENT_PROCESSING_PROMPT (vscode/src/workflow/prompts.ts) to classify images as essential vs decorative\n2. Parse image URLs from the re-downloaded public HTML during post-processing (task-39.2 content path)\n3. Record kept-image references on the DuckDB analysis row (extend schema in duck_db / duck_db_models)\n4. Surface image references through the query/RAG path\n5. Coordinate scope with task-31.5 (main-content extraction)\n6. Add tests
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -33,5 +34,5 @@ RE-SCOPED by task-35. This task assumed CONTENT_PROCESSING_PROMPT exists, which 
 
 Storage note: task-35.9 provides only lead_image_url (single hero image) on webpage_essence; task-32 will add its own kept-images column (inline/flagged content images) to webpage_essence when un-parked.
 
-UPDATE (capture-first task-35): ingestion no longer extracts content or writes an essence/analysis row — webpage_capture stores raw bytes + cheap metadata only. Image/diagram extraction belongs entirely in the RAG-prep pipeline (which reads the stored raw pages); persist kept-image references on a RAG-side table, not on webpage_capture. lead_image can come from og:image at capture if wanted.
+UPDATE (privacy-core reorientation, task-39): capture stores browsing metadata only — no HTML and no images at capture, so there is no og:image at capture time. Image/diagram extraction belongs entirely in post-processing over RE-DOWNLOADED public content (the task-39.2 fetcher); both lead_image and inline content images are parsed from the re-downloaded page. Persist kept-image references on a RAG-side table, not on the metadata store. Auth-gated images are excluded because the page does not re-download.
 <!-- SECTION:NOTES:END -->
