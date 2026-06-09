@@ -5,15 +5,12 @@ import * as path from 'path';
 /**
  * Configuration for MCP server.
  * Contains dependencies required to run the Model Context Protocol server.
- * 
+ *
  * @interface MCPServerConfig
  * @property {vscode.ExtensionContext} context - VS Code extension context for paths and storage
- * @property {string} storage_base - Resolved storage base (dev or global) shared with the writer.
- *   The child process opens its own read-only stores from this path.
  */
 export interface MCPServerConfig {
   context: vscode.ExtensionContext;
-  storage_base: string;
 }
 
 /**
@@ -23,10 +20,7 @@ export interface MCPServerConfig {
  * 
  * @example
  * ```typescript
- * const mcpManager = new MCPServerManager({
- *   context: extensionContext,
- *   storage_base: '/path/to/storage'
- * });
+ * const mcpManager = new MCPServerManager({ context: extensionContext });
  * 
  * // Start immediately
  * await mcpManager.start();
@@ -75,11 +69,10 @@ export class MCPServerManager {
           'mcp_server_standalone.js'
         );
 
+        // The MCP child holds no store of its own: it serves queries over the
+        // extension server's HTTP endpoints (discovered via ~/.bergamot/port.json),
+        // so it needs no storage path and never touches the encrypted DB file.
         this.mcp_process = child_process.spawn('node', [mcp_script_path], {
-          env: {
-            ...process.env,
-            STORAGE_PATH: this.config.storage_base,
-          },
           stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
         });
 

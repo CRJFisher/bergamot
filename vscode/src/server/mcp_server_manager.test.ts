@@ -43,8 +43,7 @@ describe('MCPServerManager', () => {
       context: {
         extensionPath: '/test/extension',
         globalStorageUri: { fsPath: '/test/storage' }
-      } as Partial<vscode.ExtensionContext> as vscode.ExtensionContext,
-      storage_base: '/test/storage'
+      } as Partial<vscode.ExtensionContext> as vscode.ExtensionContext
     };
 
     mcp_manager = new MCPServerManager(mock_config);
@@ -63,13 +62,12 @@ describe('MCPServerManager', () => {
       
       await start_promise;
 
+      // No env is passed: the MCP child serves queries over the extension
+      // server's HTTP endpoints and holds no store of its own.
       expect(child_process.spawn).toHaveBeenCalledWith(
         'node',
         ['/test/extension/out/mcp_server_standalone.js'],
         {
-          env: expect.objectContaining({
-            STORAGE_PATH: '/test/storage'
-          }),
           stdio: ['pipe', 'pipe', 'pipe', 'ipc']
         }
       );

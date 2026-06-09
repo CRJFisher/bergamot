@@ -125,6 +125,14 @@ export class DuckDB {
         "A file-backed DuckDB store requires an encryption_key — it is only ever created encrypted (no plaintext fallback)"
       );
     }
+    // Hex-only keys make the ATTACH statement structurally inert (a malformed
+    // key cannot produce a parser error that echoes key material into logs)
+    // and reject weak operator-supplied keys on the env-sourced path.
+    if (!/^[0-9a-f]{64}$/.test(config.encryption_key)) {
+      throw new Error(
+        "encryption_key must be 64 lowercase hex characters (32 random bytes)"
+      );
+    }
     this.target = {
       in_memory: false,
       database_path: config.database_path,
@@ -149,7 +157,10 @@ export class DuckDB {
    *
    * @example
    * ```typescript
-   * const db = new DuckDB({ database_path: './webpages.db' });
+   * const db = new DuckDB({
+   *   database_path: './webpages.db',
+   *   encryption_key: key_from_secret_storage,
+   * });
    * await db.init();
    * // Database is now ready for use
    * ```
@@ -162,15 +173,50 @@ export class DuckDB {
     this.db = await DuckDBInstance.create(":memory:");
     this.connection = await this.db.connect();
 
-    const target = this.target;
-    if (target.in_memory === false) {
-      await this.connection.run(
-        `ATTACH ${sql_string_literal(target.database_path)}
-         AS ${METADATA_STORE_ALIAS}
-         (ENCRYPTION_KEY ${sql_string_literal(target.encryption_key)})`
-      );
-      await this.connection.run(`USE ${METADATA_STORE_ALIAS}`);
+    try {
+      await this.open_target_store();
+      await this.create_schema();
+    } catch (error) {
+      // A half-open instance (e.g. wrong key at ATTACH) would otherwise leak
+      // native resources for the life of the host process.
+      await this.close();
+      throw error;
     }
+  }
+
+  /**
+   * Attaches the encrypted file store (no-op for `:memory:`). The attach is
+   * the only path that touches disk, and it always carries the encryption
+   * key. Temp-file settings close the remaining plaintext spill channel:
+   * DuckDB encrypts the database file and WAL of an encrypted database, but
+   * memory-pressure spill files are encrypted only when
+   * `temp_file_encryption` is on, and they default to a cwd-relative `.tmp`
+   * directory — both are pinned here so no store data can reach disk
+   * unencrypted or outside the store's own directory.
+   */
+  private async open_target_store(): Promise<void> {
+    const target = this.target;
+    if (target.in_memory === true) {
+      return;
+    }
+    // The key is validated hex and the path is escaped; nothing logs this
+    // statement. Embedding the key in SQL text is the only mechanism ATTACH
+    // offers (options take no bound parameters) and is accepted under the
+    // threat model (a process that can read our SQL can read the keystore).
+    await this.connection.run(
+      `ATTACH ${sql_string_literal(target.database_path)}
+       AS ${METADATA_STORE_ALIAS}
+       (ENCRYPTION_KEY ${sql_string_literal(target.encryption_key)})`
+    );
+    await this.connection.run(`USE ${METADATA_STORE_ALIAS}`);
+    await this.connection.run(`SET temp_file_encryption = true`);
+    await this.connection.run(
+      `SET temp_directory = ${sql_string_literal(`${target.database_path}.tmp`)}`
+    );
+  }
+
+  /** Creates the metadata tables and indexes (idempotent). */
+  private async create_schema(): Promise<void> {
 
     const webpage_trees_schema = [
       "id TEXT PRIMARY KEY", // hash of the root page session ID + its load time
@@ -376,10 +422,12 @@ export class DuckDB {
   }
 
   /**
-   * Closes the database connection and releases resources.
-   * Should be called when the database is no longer needed.
+   * Closes the connection and the instance, checkpointing the attached store
+   * (the WAL is folded into the encrypted database file). Safe to call on an
+   * uninitialized or partially-initialized wrapper (no-op for what never
+   * opened).
    *
-   * @returns Promise that resolves when connection is closed
+   * @returns Promise that resolves when the database is closed
    *
    * @example
    * ```typescript
@@ -387,7 +435,12 @@ export class DuckDB {
    * ```
    */
   async close(): Promise<void> {
-    this.connection.disconnectSync();
+    if (this.connection) {
+      this.connection.disconnectSync();
+    }
+    if (this.db) {
+      this.db.closeSync();
+    }
   }
 
   /**

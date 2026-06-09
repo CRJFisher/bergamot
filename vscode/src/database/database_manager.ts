@@ -1,6 +1,9 @@
 import * as path from 'path';
 import { DuckDB } from '../duck_db';
 
+/** Filename of the encrypted DuckDB metadata store under the storage base. */
+export const METADATA_DB_FILENAME = 'webpage_categorizations.db';
+
 /**
  * Result of database initialization containing all database instances.
  *
@@ -18,14 +21,14 @@ export interface DatabaseInstances {
  *
  * @example
  * ```typescript
- * const dbManager = new DatabaseManager();
- * const databases = await dbManager.initialize_all(storage_base);
+ * const db_manager = new DatabaseManager();
+ * const databases = await db_manager.initialize_all(storage_base, encryption_key);
  *
  * // Use databases
  * await databases.duck_db.query('SELECT * FROM pages');
  *
  * // Cleanup when done
- * await dbManager.close_all();
+ * await db_manager.close_all();
  * ```
  */
 export class DatabaseManager {
@@ -48,7 +51,7 @@ export class DatabaseManager {
     encryption_key: string
   ): Promise<DatabaseInstances> {
     const duck_db = new DuckDB({
-      database_path: path.join(storage_path, 'webpage_categorizations.db'),
+      database_path: path.join(storage_path, METADATA_DB_FILENAME),
       encryption_key,
     });
     await duck_db.init();

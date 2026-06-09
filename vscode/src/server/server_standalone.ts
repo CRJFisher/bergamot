@@ -11,8 +11,11 @@
  * Environment:
  *  - STORAGE_PATH            (required) base dir for DuckDB + the visit inbox
  *  - STORAGE_ENCRYPTION_KEY  (required) at-rest encryption key for the DuckDB
- *    store. Headless runs have no VS Code SecretStorage, so the harness that
- *    spawns this process supplies a (typically per-run, throwaway) key.
+ *    store: 64 lowercase hex chars (32 random bytes). Headless runs have no
+ *    VS Code SecretStorage, so the harness that spawns this process generates
+ *    a per-run throwaway key. The extension's own store can never be opened
+ *    here — its key lives in SecretStorage and is not exportable — so this
+ *    entrypoint only ever serves per-run, throwaway stores.
  */
 
 import { DatabaseManager } from '../database/database_manager';

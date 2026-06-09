@@ -9,10 +9,11 @@ Bergamot serves a **single trusted user** on a **possibly-shared or possibly-com
 ## Assets
 
 1. **The metadata store** — the DuckDB file (`webpage_categorizations.db`): visit ids, URLs, titles, timestamps, and the navigation/session graph. This is the durable source of truth. URLs are themselves sensitive metadata: query strings, tokens, identifiers, and the bare fact of a visit can each leak information (principle 3, residual surface).
-2. **The data-encryption key** for the metadata store, held in the OS keystore (macOS Keychain / libsecret / DPAPI) via VS Code `SecretStorage`.
-3. **The re-downloaded content cache** (task-39.3) — on-demand, encrypted, quarantined page content fetched from stored public URLs.
-4. **Derived stores** — embedding vectors and cluster tables built from re-downloaded content; they encode content and are bound to the right-to-forget cascade (principle 4).
-5. **The user's PKM repo** — user-authored notes; holds only explicitly-promoted artifacts, never captured data (principle 6).
+2. **The data-encryption key** for the metadata store, persisted by VS Code `SecretStorage` encrypted under a wrapping key held in the OS keystore (macOS Keychain / libsecret / DPAPI).
+3. **The visit inbox** (`<storage_base>/visit_inbox/`) — per-visit JSON files (URL, referrer, timestamps) buffered between HTTP accept and the DuckDB write.
+4. **The re-downloaded content cache** (task-39.3, not yet built) — on-demand, encrypted, quarantined page content fetched from stored public URLs.
+5. **Derived stores** (task-36/31, not yet built) — embedding vectors and cluster tables built from re-downloaded content; they encode content and are bound to the right-to-forget cascade (principle 4).
+6. **The user's PKM repo** — user-authored notes; holds only explicitly-promoted artifacts, never captured data (principle 6).
 
 ## Adversaries and what defends against them
 
@@ -20,9 +21,13 @@ Bergamot serves a **single trusted user** on a **possibly-shared or possibly-com
 
 Stolen or discarded disk, machine backups, a shared machine's other (non-root) accounts, file-grabbing malware that exfiltrates files without code execution in the user's session, cloud-synced directories that accidentally include storage paths.
 
-**Defense: at-rest encryption.** The metadata store is DuckDB-native encrypted (AES, DuckDB ≥ 1.4) and is **only ever created encrypted** — the data layer refuses to open or create a plaintext file store, so no plaintext copy of the metadata ever exists on disk. The content cache tier carries the same property (task-39.3). The on-disk files are ciphertext; without the key they disclose nothing but their size and existence.
+**Defense: at-rest encryption.** The metadata store is DuckDB-native encrypted (AES, DuckDB ≥ 1.4) and is **only ever created encrypted** — the data layer refuses to open or create a plaintext file store; the database file, its WAL, and its temp spill files (`temp_file_encryption`, pinned to the store's own `.tmp` directory) are all ciphertext. Without the key they disclose their size, existence, and that they are DuckDB files — nothing of their contents. The content cache tier (task-39.3, not yet built) is committed to the same property.
 
-**Key handling.** The data-encryption key is 32 random bytes generated on first run and stored only in the OS keystore via `SecretStorage`. It is never written to a file, never logged, and never leaves the machine. There is **no key escrow, no recovery path, and no plaintext fallback: losing the key is losing the store.** That is accepted data loss — the record rebuilds only by future browsing.
+**Plaintext side-channels, named honestly.** Two paths still put metadata on disk unencrypted and are open gaps against this adversary, not covered by store encryption: the **visit inbox** holds each visit as a plaintext JSON file between HTTP accept and the DuckDB write (deleted after ingest, forensically recoverable, persistent if ingest fails), and **dev-mode logging** writes visit URLs to `dev-log.jsonl` when `bergamot.devMode` or F5 debugging is on. Closing the inbox gap is tracked follow-up work under task-39.
+
+**Key handling.** The data-encryption key is 32 random bytes generated on first run, held via `SecretStorage`, never logged, and never leaves the machine. `SecretStorage` persists the key encrypted under a wrapping key in the OS keystore — on macOS and Windows that wrapping key is keystore-protected; on Linux without a functioning keyring, Electron's `safeStorage` degrades to a hardcoded-key scheme and the at-rest defense weakens to obfuscation against offline file access. A fresh key is minted only when no store file exists; if the store exists and the keystore returns nothing, activation fails loudly rather than silently re-keying (a transient keystore failure must not destroy the only copy of the real key). There is **no key escrow, no recovery path, and no plaintext fallback: losing the key is losing the store.** That is accepted data loss — the record rebuilds only by future browsing.
+
+One exception to keystore sourcing: the headless E2E server has no `SecretStorage`, so the harness that spawns it supplies a per-run random key via the `STORAGE_ENCRYPTION_KEY` environment variable; the store it encrypts is itself per-run and discarded, and the extension's own store can never be opened that way (its key is not exportable).
 
 ### B. A hostile process running as the user, while the session is unlocked
 
@@ -47,7 +52,7 @@ Re-download is the system's one routine egress surface: it re-fetches stored URL
 
 ### E. Other people using the same browser profile or editor
 
-**Defense: capture visibility and refusal.** Private-browsing windows are never captured (`"incognito": "not_allowed"`, principle 2); the capture indicator and one-click pause (principle 5) make recording visible and stoppable. Someone with the user's unlocked session is indistinguishable from the user — that is outside the model, consistent with B.
+**Defense: capture visibility and refusal.** Private-browsing windows are never captured (`"incognito": "not_allowed"`, principle 2). The capture indicator and one-click pause (principle 5, Scope-Now, not yet implemented) will make recording visible and stoppable; today the only visible surface is a capture-failure badge. Someone with the user's unlocked session is indistinguishable from the user — that is outside the model, consistent with B.
 
 ## Non-goals
 

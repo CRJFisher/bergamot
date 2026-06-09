@@ -14,19 +14,16 @@ import {
 } from "./duck_db";
 import { PageActivitySession } from "./duck_db_models";
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 
-// Mock dependencies
-jest.mock("fs");
+/** A production-shaped key: 64 lowercase hex chars (32 bytes). */
+const TEST_KEY = "0123456789abcdef".repeat(4);
 
-// Mock path.dirname separately
-jest.mock("path", () => ({
-  ...jest.requireActual("path"),
-  dirname: jest.fn().mockReturnValue("/test/dir")
-}));
-
-// Create mock implementations
-const mockFs = fs as jest.Mocked<typeof fs>;
+/** Creates a fresh real temp directory for file-backed store tests. */
+function make_temp_dir(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "bergamot-duckdb-test-"));
+}
 
 /** Builds a minimal metadata-only capture record for a session id. */
 function capture_record(page_session_id: string, title: string, url: string) {
@@ -41,19 +38,10 @@ function capture_record(page_session_id: string, title: string, url: string) {
 
 describe("DuckDB", () => {
   let db: DuckDB;
-  const testDbPath = ":memory:"; // Use in-memory database for tests
-  
+
   beforeEach(async () => {
-    jest.clearAllMocks();
-    
-    // Mock filesystem operations
-    mockFs.existsSync.mockReturnValue(false);
-    mockFs.mkdirSync.mockImplementation();
-    mockFs.unlinkSync.mockImplementation();
-    // path.dirname is already mocked in the module mock
-    
-    // Create a new database instance for each test
-    db = new DuckDB({ database_path: testDbPath });
+    // In-memory database: schema/query tests need no file and no key.
+    db = new DuckDB({ database_path: ":memory:" });
     await db.init();
   });
 
@@ -64,43 +52,85 @@ describe("DuckDB", () => {
   });
 
   describe("constructor and initialization", () => {
-    it("should create database with correct configuration", () => {
-      const config = { database_path: "/test/db.db", encryption_key: "k" };
-      const testDb = new DuckDB(config);
+    let temp_dir: string;
 
-      expect(path.dirname).toHaveBeenCalledWith("/test/db.db");
-      expect(testDb).toBeDefined();
+    beforeEach(() => {
+      temp_dir = make_temp_dir();
     });
 
-    it("should preserve an existing database file instead of deleting it", () => {
-      mockFs.existsSync.mockReturnValue(true); // Parent directory exists
+    afterEach(() => {
+      fs.rmSync(temp_dir, { recursive: true, force: true });
+    });
 
-      new DuckDB({ database_path: "/test/db.db", encryption_key: "k" });
+    it("creates the parent directory if it doesn't exist", () => {
+      const nested_dir = path.join(temp_dir, "nested", "deeper");
+
+      new DuckDB({
+        database_path: path.join(nested_dir, "db.db"),
+        encryption_key: TEST_KEY,
+      });
+
+      expect(fs.existsSync(nested_dir)).toBe(true);
+    });
+
+    it("preserves an existing database file instead of deleting it", async () => {
+      const db_path = path.join(temp_dir, "existing.db");
+      const writer = new DuckDB({
+        database_path: db_path,
+        encryption_key: TEST_KEY,
+      });
+      await writer.init();
+      await writer.close();
+      const size_before = fs.statSync(db_path).size;
 
       // The database must be durable: constructing the wrapper never deletes
-      // the backing file. Data is opened in place, not recreated.
-      expect(mockFs.unlinkSync).not.toHaveBeenCalled();
-    });
+      // or truncates the backing file. Data is opened in place, not recreated.
+      new DuckDB({ database_path: db_path, encryption_key: TEST_KEY });
 
-    it("should create directory if it doesn't exist", () => {
-      mockFs.existsSync.mockReturnValue(false);
-
-      new DuckDB({ database_path: "/test/dir/db.db", encryption_key: "k" });
-
-      expect(mockFs.mkdirSync).toHaveBeenCalledWith("/test/dir", { recursive: true });
+      expect(fs.existsSync(db_path)).toBe(true);
+      expect(fs.statSync(db_path).size).toBe(size_before);
     });
 
     it("rejects a file-backed store without an encryption key", () => {
       // A file store is only ever created encrypted — no plaintext fallback.
-      expect(() => new DuckDB({ database_path: "/test/db.db" })).toThrow(
-        /encryption_key/
-      );
+      expect(
+        () => new DuckDB({ database_path: path.join(temp_dir, "db.db") })
+      ).toThrow(/encryption_key/);
+    });
+
+    it("rejects an empty-string encryption key for a file-backed store", () => {
+      expect(
+        () =>
+          new DuckDB({
+            database_path: path.join(temp_dir, "db.db"),
+            encryption_key: "",
+          })
+      ).toThrow(/encryption_key/);
+    });
+
+    it("rejects a key that is not 64 lowercase hex characters", () => {
+      expect(
+        () =>
+          new DuckDB({
+            database_path: path.join(temp_dir, "db.db"),
+            encryption_key: "too-short-and-not-hex",
+          })
+      ).toThrow(/64 lowercase hex/);
     });
 
     it("rejects an encryption key for an in-memory database", () => {
       expect(
-        () => new DuckDB({ database_path: ":memory:", encryption_key: "k" })
+        () => new DuckDB({ database_path: ":memory:", encryption_key: TEST_KEY })
       ).toThrow(/in-memory/i);
+    });
+
+    it("close() before init() is a no-op", async () => {
+      const uninitialized = new DuckDB({
+        database_path: path.join(temp_dir, "db.db"),
+        encryption_key: TEST_KEY,
+      });
+
+      await expect(uninitialized.close()).resolves.toBeUndefined();
     });
 
     it("should initialize all required tables", async () => {
@@ -489,15 +519,22 @@ describe("DuckDB", () => {
   });
 
   describe("error handling", () => {
-    it("should handle database connection errors", async () => {
-      const badDb = new DuckDB({
-        database_path: "/invalid/path/db.db",
-        encryption_key: "k",
-      });
+    it("rejects init() on an unusable database path", async () => {
+      // A file where the parent directory should be makes ATTACH fail
+      // deterministically (not a directory), exercising the init failure path.
+      const temp_dir = make_temp_dir();
+      const blocking_file = path.join(temp_dir, "not-a-dir");
+      fs.writeFileSync(blocking_file, "");
 
-      // In a real scenario, this would throw an error
-      // For testing, we're just checking the structure
-      expect(badDb).toBeDefined();
+      const bad_db = new DuckDB({
+        database_path: path.join(blocking_file, "db.db"),
+        encryption_key: TEST_KEY,
+      });
+      await expect(bad_db.init()).rejects.toThrow();
+      // init() cleans up after itself, so close() is safe afterwards.
+      await expect(bad_db.close()).resolves.toBeUndefined();
+
+      fs.rmSync(temp_dir, { recursive: true, force: true });
     });
 
     it("should handle query errors gracefully", async () => {
@@ -569,26 +606,23 @@ describe("DuckDB", () => {
 });
 
 describe("at-rest encryption (real file)", () => {
-  const real_fs = jest.requireActual("fs") as typeof fs;
-  const real_path = jest.requireActual("path") as typeof path;
-  const os = jest.requireActual("os") as typeof import("os");
+  let temp_dir: string;
   let db_path: string;
 
   beforeEach(() => {
-    db_path = real_path.join(
-      real_fs.mkdtempSync(real_path.join(os.tmpdir(), "bergamot-enc-")),
-      "store.db"
-    );
+    temp_dir = make_temp_dir();
+    db_path = path.join(temp_dir, "store.db");
   });
 
   afterEach(() => {
-    real_fs.rmSync(real_path.dirname(db_path), { recursive: true, force: true });
+    fs.rmSync(temp_dir, { recursive: true, force: true });
   });
 
   it("persists data across reopen with the same key, and rejects a wrong key", async () => {
-    const key = "0123456789abcdef0123456789abcdef";
-
-    const writer = new DuckDB({ database_path: db_path, encryption_key: key });
+    const writer = new DuckDB({
+      database_path: db_path,
+      encryption_key: TEST_KEY,
+    });
     await writer.init();
     await insert_webpage_capture(
       writer,
@@ -598,35 +632,128 @@ describe("at-rest encryption (real file)", () => {
 
     const wrong = new DuckDB({
       database_path: db_path,
-      encryption_key: "not-the-key",
+      encryption_key: "f".repeat(64),
     });
     await expect(wrong.init()).rejects.toThrow(/encryption key/i);
     await wrong.close();
 
-    const reader = new DuckDB({ database_path: db_path, encryption_key: key });
+    const reader = new DuckDB({
+      database_path: db_path,
+      encryption_key: TEST_KEY,
+    });
     await reader.init();
     const capture = await get_webpage_capture(reader, "enc-session");
     expect(capture?.title).toBe("Encrypted Page");
     await reader.close();
   });
 
-  it("writes no plaintext page titles or URLs into the database file", async () => {
-    const key = "fedcba9876543210fedcba9876543210";
+  it("round-trips a database path containing single quotes (SQL literal escaping)", async () => {
+    // Production keys are hex-only, so the path is the operand that exercises
+    // sql_string_literal's quote escaping against a real ATTACH.
+    const quoted_dir = path.join(temp_dir, "it's a dir");
+    fs.mkdirSync(quoted_dir);
+    const quoted_path = path.join(quoted_dir, "store.db");
+
+    const writer = new DuckDB({
+      database_path: quoted_path,
+      encryption_key: TEST_KEY,
+    });
+    await writer.init();
+    await insert_webpage_capture(
+      writer,
+      capture_record("q", "Quoted", "https://example.com/q")
+    );
+    await writer.close();
+
+    const reader = new DuckDB({
+      database_path: quoted_path,
+      encryption_key: TEST_KEY,
+    });
+    await reader.init();
+    expect((await get_webpage_capture(reader, "q"))?.title).toBe("Quoted");
+    await reader.close();
+  });
+
+  it("writes no plaintext page titles or URLs into the database file or WAL", async () => {
     const marker = "PLAINTEXT_CANARY_TITLE";
 
-    const writer = new DuckDB({ database_path: db_path, encryption_key: key });
+    const writer = new DuckDB({
+      database_path: db_path,
+      encryption_key: TEST_KEY,
+    });
     await writer.init();
     await insert_webpage_capture(
       writer,
       capture_record("canary", marker, "https://plaintext-canary.example.com")
     );
+
+    // Before CHECKPOINT the fresh row lives in the WAL — the store spends most
+    // of its life in this state, so the WAL must be as opaque as the file.
+    const wal_path = `${db_path}.wal`;
+    expect(fs.existsSync(wal_path)).toBe(true);
+    const wal_bytes = fs.readFileSync(wal_path);
+    expect(wal_bytes.includes(marker)).toBe(false);
+    expect(wal_bytes.includes("plaintext-canary")).toBe(false);
+
     // CHECKPOINT flushes the WAL into the (encrypted) database file so the
     // on-disk scan below sees the row's bytes.
     await writer.exec("CHECKPOINT");
     await writer.close();
 
-    const bytes = real_fs.readFileSync(db_path);
+    const bytes = fs.readFileSync(db_path);
     expect(bytes.includes(marker)).toBe(false);
     expect(bytes.includes("plaintext-canary")).toBe(false);
+  });
+
+  it("control: an unencrypted DuckDB file written the same way DOES contain the canary", async () => {
+    // Proves the byte-scan method can see a leak at all. If DuckDB ever
+    // compresses these strings out of raw visibility, this control fails
+    // loudly instead of letting the canary test pass vacuously. The wrapper
+    // has no plaintext path, so this uses the raw driver.
+    const { DuckDBInstance } = jest.requireActual("@duckdb/node-api");
+    const plain_path = path.join(temp_dir, "control-plain.db");
+    const marker = "PLAINTEXT_CANARY_TITLE";
+
+    const instance = await DuckDBInstance.create(":memory:");
+    const connection = await instance.connect();
+    await connection.run(`ATTACH '${plain_path}' AS control`);
+    await connection.run("USE control");
+    await connection.run(
+      "CREATE TABLE webpage_capture (page_session_id TEXT, url TEXT, title TEXT)"
+    );
+    await connection.run(
+      `INSERT INTO webpage_capture VALUES ('canary', 'https://plaintext-canary.example.com', '${marker}')`
+    );
+    await connection.run("CHECKPOINT");
+    connection.disconnectSync();
+    instance.closeSync();
+
+    const bytes = fs.readFileSync(plain_path);
+    expect(bytes.includes(marker)).toBe(true);
+  });
+
+  it("checkpoints on close: the WAL is folded into the encrypted file", async () => {
+    const writer = new DuckDB({
+      database_path: db_path,
+      encryption_key: TEST_KEY,
+    });
+    await writer.init();
+    await insert_webpage_capture(
+      writer,
+      capture_record("wal-session", "WAL Page", "https://example.com/w")
+    );
+    await writer.close();
+
+    expect(fs.existsSync(`${db_path}.wal`)).toBe(false);
+
+    const reader = new DuckDB({
+      database_path: db_path,
+      encryption_key: TEST_KEY,
+    });
+    await reader.init();
+    expect((await get_webpage_capture(reader, "wal-session"))?.title).toBe(
+      "WAL Page"
+    );
+    await reader.close();
   });
 });

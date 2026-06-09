@@ -32,7 +32,7 @@ describe('server pipeline integration (real DuckDB, capture pipeline)', () => {
     db_manager = new DatabaseManager();
     const dbs = await db_manager.initialize_all(
       storage_dir,
-      'itest-encryption-key'
+      '0123456789abcdef'.repeat(4)
     );
     duck_db = dbs.duck_db;
 

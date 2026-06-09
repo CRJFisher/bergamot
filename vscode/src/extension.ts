@@ -1,9 +1,10 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 import * as path from 'path';
 import { ConfigManager } from './config/config_manager';
 import { get_storage_base } from './config/storage_path';
 import { init_dev_log } from './dev_log';
-import { DatabaseManager } from './database/database_manager';
+import { DatabaseManager, METADATA_DB_FILENAME } from './database/database_manager';
 import { get_or_create_metadata_db_key } from './database/encryption_key';
 import { ServerManager } from './server/server_manager';
 import { MCPServerManager } from './server/mcp_server_manager';
@@ -49,7 +50,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     console.log('Initializing databases...');
     database_manager = new DatabaseManager();
 
-    const encryption_key = await get_or_create_metadata_db_key(context.secrets);
+    const store_file_exists = fs.existsSync(
+      path.join(storage_base, METADATA_DB_FILENAME)
+    );
+    const encryption_key = await get_or_create_metadata_db_key(
+      context.secrets,
+      store_file_exists
+    );
     const databases = await database_manager.initialize_all(
       storage_base,
       encryption_key
@@ -78,10 +85,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     // Step 5: Start MCP server in background (deferred)
     console.log('Scheduling MCP server startup...');
-    mcp_server_manager = new MCPServerManager({
-      context,
-      storage_base
-    });
+    mcp_server_manager = new MCPServerManager({ context });
     mcp_server_manager.start_deferred(2000);
 
     // Register cleanup handlers

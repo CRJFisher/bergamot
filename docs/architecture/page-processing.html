@@ -121,7 +121,7 @@ classDiagram
   </div>
   <ul class="clean">
     <li><strong>Write</strong>: <code>run_page_capture()</code> builds the metadata record (URL, title, timestamp) and upserts it via <code>insert_webpage_capture()</code> (<code>ON CONFLICT (page_session_id) DO UPDATE</code>, so a re-capture overwrites cleanly), then records the stored outcome. The <code>&lt;meta&gt;</code>-derived fields (site, author, published, lang) are not stored here — they are parsed from the re-downloaded page and logged to <code>webpage_fetch</code>. The metadata view is <code>PageCapture</code> (<code>page_capture_models.ts</code>); navigation-tree queries read the title from <code>webpage_capture</code>.</li>
-    <li><strong>Read (content)</strong>: page content is acquired by re-downloading the stored URL during post-processing. Cached re-downloaded content (a separate encrypted tier) is the read path the RAG-prep pipeline uses; it is exposed over HTTP as <code>/query/capture_content</code> and surfaced by the MCP <code>get_webpage_content</code> tool, and may be unavailable for login-walled or dead pages.</li>
+    <li><strong>Read (content)</strong>: page content is acquired by re-downloading the stored URL live; the read path is exposed over HTTP as <code>/query/capture_content</code> and surfaced by the MCP <code>get_webpage_content</code> tool, and is unavailable for login-walled or dead pages. A fetch-result cache (a separate encrypted tier) is task-39.3.</li>
   </ul>
 
   <h2><span class="num">4</span>What ingest does <em>not</em> do</h2>

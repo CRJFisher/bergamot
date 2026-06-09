@@ -9,7 +9,7 @@ Every day, you browse dozens of valuable webpages - documentation, tutorials, ar
 1. **Metadata-Only Capture**: Records the trail of pages you visit (URL, title, timestamp, navigation graph) — never the page content
 2. **Re-Download to Understand**: Re-fetches public pages later from their URLs; pages behind a login wall fail to fetch and are excluded automatically
 3. **MCP Access**: Exposes the surfaced knowledge to AI agents for powerful PKM workflows
-4. **Semantic Search**: Find information using natural language, not just keywords
+4. **Queryable**: AI agents browse the record through MCP tools — by URL, title, navigation tree, and re-downloaded content
 
 The result? Your browsing becomes a searchable, local-only knowledge base that AI assistants can query — built from public pages you can actually re-fetch, with your private pages never stored.
 
@@ -42,13 +42,13 @@ Bergamot captures the metadata of the pages you visit, stores that metadata loca
 ### 💾 Store
 
 - Persists each visit's **metadata** to DuckDB as the durable source of truth (there is no raw-content capture row)
+- The metadata store is **encrypted at rest**; its key lives in your OS keystore (via VS Code SecretStorage). The database file alone is unreadable without that key — losing the key, or copying the file to another machine without it, means the data is unrecoverable. There is no recovery path (see [docs/threat-model.md](docs/threat-model.md))
 - Any content cached after re-download is a separate, on-demand, encrypted, deletable tier
 
 ### 🔍 Query
 
-- **MCP server** for AI agents — `semantic_search` and `get_webpage_content` (over re-downloaded public content), plus relational tools
-- **HTTP query API** for scripts
-- **Direct read-only DuckDB access** when the extension is not running
+- **MCP server** for AI agents — `get_webpage_content` (over re-downloaded public content) plus relational tools (visits, titles, navigation trees)
+- **HTTP query API** for scripts (the extension's server owns the single DuckDB connection)
 
 ## Installation
 
@@ -88,8 +88,8 @@ The MCP server enables AI agents to query your browsing knowledge:
 
 ```javascript
 // Example: Using with Claude or other MCP-compatible agents
-await use_mcp_tool("semantic_search", {
-  query: "React hooks best practices",
+await use_mcp_tool("get_visit_by_url", {
+  url: "https://react.dev/reference/react/hooks",
 });
 
 await use_mcp_tool("get_webpage_content", {
@@ -97,12 +97,9 @@ await use_mcp_tool("get_webpage_content", {
 });
 ```
 
-### Direct Search in VS Code
+### In VS Code
 
-- **Command Palette**: `Bergamot: Search Webpages` - Semantic search
 - **Hover over links**: View metadata for captured pages
-- **Quick access**: Recent and frequently accessed pages
-- **Filter metrics**: `Bergamot: Show Filter Metrics`
 - **Visit outcomes**: `Bergamot: Show Visit Outcomes`
 - **Replay a visit**: `Bergamot: Replay Visit`
 
@@ -111,17 +108,6 @@ await use_mcp_tool("get_webpage_content", {
 Bergamot includes a built-in MCP (Model Context Protocol) server that exposes your browsing knowledge to AI agents. This enables powerful PKM workflows where AI assistants can access your captured web knowledge.
 
 ### Available MCP Tools
-
-#### `semantic_search`
-
-Search through your browsing history using natural language queries. Returns relevant webpages based on semantic similarity.
-
-**Parameters:**
-
-- `query` (string): Your search query in natural language
-- `limit` (number, optional): Maximum results to return (default: 10)
-
-**Returns:** List of relevant webpages with titles, URLs, summaries, and relevance scores
 
 #### `get_webpage_content`
 
@@ -132,6 +118,10 @@ Retrieve the markdown content of a specific webpage, re-downloaded from its URL.
 - `page_session_id` (string): The unique ID of the webpage session
 
 **Returns:** Markdown content of the re-downloaded webpage, or unavailable if the page could not be fetched
+
+#### Relational tools
+
+`get_visit_by_url`, `search_by_title`, `get_navigation_tree`, and `list_recent_navigation_trees` query the metadata record directly: visits by URL, captures by title, and navigation trees (cross-page browsing sessions) with their member pages.
 
 ### Use Cases
 
@@ -220,7 +210,7 @@ npm run chrome:debug  # Launches Chrome with extension loaded
 
 - **Capture**: deterministic and local — metadata only, no page content and no model calls at ingest
 - **Re-download**: public pages are re-fetched from their URLs during post-processing; the login wall filters out private pages
-- **Storage**: DuckDB for the metadata store (the source of truth); LanceDB for vector embeddings over re-downloaded public content; any content cache is encrypted and deletable
+- **Storage**: DuckDB for the metadata store (the source of truth), encrypted at rest with a key held in the OS keystore; any content cache is encrypted and deletable
 - **AI**: embeddings run locally (all-MiniLM-L6-v2) for retrieval over re-downloaded public content
 - **Communication**: HTTP API between browser and VS Code
 - **Protocols**: MCP for AI agent integration
@@ -241,5 +231,5 @@ MIT © Bergamot Team
 
 ## Acknowledgments
 
-- Uses [DuckDB](https://duckdb.org) and [LanceDB](https://lancedb.com)
+- Uses [DuckDB](https://duckdb.org)
 - MCP integration via [Model Context Protocol](https://modelcontextprotocol.io)
