@@ -24,6 +24,7 @@ The data-model reorientation; everything else builds on it.
 4. **TASK-39.3** — Encrypted on-demand content cache — _after 39.2_
 5. **TASK-39.5** — Cascading right-to-forget — _after 39.3; extends as derived stores land_
 6. **TASK-39.6** — Provision the re-download headless browser for a packaged install — _release-gating; the fetcher runs only in dev until this lands_
+7. **TASK-39.7** — Surface Linux keyring degradation of SecretStorage-backed store keys — _runtime signal for the threat-model gap; macOS/Windows need nothing_
 
 - **TASK-34** (empty/degraded-content handling) folds into TASK-39.2's fetch-outcome classifier.
 - **TASK-39.6** also resolves the shared native-dep packaging gap (`@duckdb/node-api` has the same `--no-dependencies` problem).
