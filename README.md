@@ -37,7 +37,7 @@ Bergamot captures the metadata of the pages you visit, stores that metadata loca
 - **Page content is never captured.** Content is re-downloaded later from the public URL during post-processing
 - **The login wall is the privacy filter**: authenticated and paywalled pages fail to re-download and are excluded automatically — no heuristic guessing
 - **Local-only by default**; metadata syncs (if you enable it) only over your own devices, never a developer server
-- **Right-to-forget**: forgetting is deletion, not hiding — cached content is per-item deletable today, and the cascading delete (by URL, origin, or time-range, across metadata and every derived store) is being built into the core spine
+- **Right-to-forget**: forgetting is deletion, not hiding — `Bergamot: Forget` deletes by URL, origin, or time range, cascading across the metadata record and the encrypted content cache (derived vector/cluster stores join the cascade as they land)
 
 ### 💾 Store
 
@@ -100,6 +100,7 @@ await use_mcp_tool("get_webpage_content", {
 ### In VS Code
 
 - **Hover over links**: View metadata for captured pages
+- **Forget**: `Bergamot: Forget` — permanently delete visits by URL, origin, or time range, including all derived content
 - **Visit outcomes**: `Bergamot: Show Visit Outcomes`
 - **Replay a visit**: `Bergamot: Replay Visit`
 

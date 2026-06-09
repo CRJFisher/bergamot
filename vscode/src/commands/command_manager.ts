@@ -6,6 +6,11 @@ import { register_webpage_hover_provider } from '../webpage_hover_provider';
 import { ServerManager } from '../server/server_manager';
 import { get_recent_outcomes, show_dev_log_channel } from '../dev_log';
 import { list_replay_visits, load_replay_visit } from '../visit_replay';
+import {
+  CONTENT_CACHE_DB_FILENAME,
+  open_content_cache,
+} from '../redownload/content_cache';
+import { ForgetSelector, forget } from '../right_to_forget';
 
 /**
  * Configuration for command registration.
@@ -64,7 +69,119 @@ export class CommandManager {
    */
   register_all(): void {
     this.register_core_commands();
+    this.register_forget_command();
     this.register_dev_commands();
+  }
+
+  /**
+   * Registers the right-to-forget command (constitution principle 4): the
+   * user picks a selector — URL, origin, or time range — confirms, and the
+   * cascade deletes the matching metadata rows and every derived artifact.
+   * @private
+   */
+  private register_forget_command(): void {
+    const forget_command = vscode.commands.registerCommand(
+      'bergamot.forget',
+      () => this.run_forget()
+    );
+    this.config.context.subscriptions.push(forget_command);
+    this.disposables.push(forget_command);
+  }
+
+  /**
+   * Drives one forget: selector pick → input → modal confirmation → cascade.
+   * The content cache is opened only when its store file already exists —
+   * forgetting never creates a cache.
+   * @private
+   */
+  private async run_forget(): Promise<void> {
+    const selector = await this.pick_forget_selector();
+    if (!selector) return;
+
+    const what =
+      selector.kind === 'url'
+        ? selector.url
+        : selector.kind === 'origin'
+          ? `every visit on ${selector.origin}`
+          : `every visit from ${selector.from} to ${selector.to}`;
+    const confirmed = await vscode.window.showWarningMessage(
+      `Forget ${what}? This permanently deletes the matching visits and all derived content. There is no undo.`,
+      { modal: true },
+      'Forget'
+    );
+    if (confirmed !== 'Forget') return;
+
+    const cache_path = path.join(
+      this.config.storage_base,
+      CONTENT_CACHE_DB_FILENAME
+    );
+    const content_cache = fs.existsSync(cache_path)
+      ? await open_content_cache(
+          this.config.context.secrets,
+          this.config.storage_base
+        )
+      : null;
+    try {
+      const report = await forget(this.config.duck_db, content_cache, selector);
+      vscode.window.showInformationMessage(
+        report.page_session_ids === 0
+          ? 'Bergamot: nothing matched — nothing forgotten.'
+          : `Bergamot: forgot ${report.page_session_ids} visit(s) across ${report.urls} URL(s)` +
+            (report.content_cache_swept ? ', content cache swept.' : '.')
+      );
+    } finally {
+      if (content_cache) {
+        await content_cache.close();
+      }
+    }
+  }
+
+  /**
+   * Collects the forget selector from the user.
+   * @private
+   */
+  private async pick_forget_selector(): Promise<ForgetSelector | undefined> {
+    const pick = await vscode.window.showQuickPick(
+      [
+        { label: 'Forget a URL', selector_kind: 'url' as const },
+        { label: 'Forget an origin (every page on a site)', selector_kind: 'origin' as const },
+        { label: 'Forget a time range', selector_kind: 'time_range' as const },
+      ],
+      { placeHolder: 'What should Bergamot forget?' }
+    );
+    if (!pick) return undefined;
+
+    if (pick.selector_kind === 'url') {
+      const url = await vscode.window.showInputBox({
+        prompt: 'Exact URL to forget',
+        placeHolder: 'https://example.com/page',
+      });
+      return url ? { kind: 'url', url } : undefined;
+    }
+    if (pick.selector_kind === 'origin') {
+      const raw = await vscode.window.showInputBox({
+        prompt: 'Origin to forget (scheme + host)',
+        placeHolder: 'https://example.com',
+      });
+      if (!raw) return undefined;
+      try {
+        return { kind: 'origin', origin: new URL(raw).origin };
+      } catch {
+        vscode.window.showErrorMessage(`Bergamot: not a valid origin: ${raw}`);
+        return undefined;
+      }
+    }
+    const from = await vscode.window.showInputBox({
+      prompt: 'Forget visits from (ISO timestamp, inclusive)',
+      placeHolder: '2026-06-01T00:00:00Z',
+    });
+    if (!from) return undefined;
+    const to = await vscode.window.showInputBox({
+      prompt: 'Forget visits to (ISO timestamp, inclusive)',
+      placeHolder: '2026-06-08T00:00:00Z',
+    });
+    if (!to) return undefined;
+    return { kind: 'time_range', from, to };
   }
 
   /**

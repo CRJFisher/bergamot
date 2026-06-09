@@ -199,9 +199,27 @@ export class ContentCache {
    * orphaned cache rows become unaddressable except by {@link delete_by_url}.
    */
   async delete_item(page_session_id: string): Promise<void> {
+    await this.delete_items([page_session_id]);
+  }
+
+  /**
+   * Batch form of {@link delete_item}: one DELETE and one CHECKPOINT for the
+   * whole set — the shape the right-to-forget cascade uses, so a time-range
+   * forget over N pages does not pay N WAL flushes.
+   */
+  async delete_items(page_session_ids: string[]): Promise<void> {
+    if (page_session_ids.length === 0) {
+      return;
+    }
+    const params: Record<string, string> = {};
+    const placeholders = page_session_ids.map((id, i) => {
+      params[`id${i}`] = id;
+      return `$id${i}`;
+    });
     await this.db.execute(
-      `DELETE FROM ${CACHED_CONTENT_TABLE} WHERE page_session_id = $id`,
-      { id: page_session_id }
+      `DELETE FROM ${CACHED_CONTENT_TABLE}
+       WHERE page_session_id IN (${placeholders.join(", ")})`,
+      params
     );
     await this.db.exec("CHECKPOINT");
   }

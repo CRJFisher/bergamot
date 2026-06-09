@@ -53,10 +53,10 @@ function sql_string_literal(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
-const WEBPAGE_ACTIVITY_SESSIONS_TABLE = "webpage_activity_sessions";
-const WEBPAGE_TREES_TABLE = "webpage_trees";
-const WEBPAGE_CAPTURE_TABLE = "webpage_capture";
-const WEBPAGE_FETCH_TABLE = "webpage_fetch";
+export const WEBPAGE_ACTIVITY_SESSIONS_TABLE = "webpage_activity_sessions";
+export const WEBPAGE_TREES_TABLE = "webpage_trees";
+export const WEBPAGE_CAPTURE_TABLE = "webpage_capture";
+export const WEBPAGE_FETCH_TABLE = "webpage_fetch";
 
 /**
  * Capture metadata columns selected (aliased `cap_*`) when a tree query joins

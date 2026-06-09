@@ -34,6 +34,10 @@
       {
         "command": "bergamot.replayVisit",
         "title": "Bergamot: Replay Visit"
+      },
+      {
+        "command": "bergamot.forget",
+        "title": "Bergamot: Forget (delete by URL, origin, or time range)"
       }
     ],
     "configuration": {
