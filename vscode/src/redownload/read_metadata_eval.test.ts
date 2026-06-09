@@ -1,5 +1,5 @@
 import { read_metadata } from "./read_metadata";
-import { CAPTURE_FIXTURES } from "./__fixtures__/capture_fixtures";
+import { READ_METADATA_FIXTURES } from "./__fixtures__/read_metadata_fixtures";
 
 /**
  * Light metadata eval: over a committed fixture set of raw pages, asserts the
@@ -9,7 +9,7 @@ import { CAPTURE_FIXTURES } from "./__fixtures__/capture_fixtures";
  * re-download corpus depends on.)
  */
 describe("read_metadata eval (deterministic, offline)", () => {
-  it.each(CAPTURE_FIXTURES.map((f) => [f.name, f] as const))(
+  it.each(READ_METADATA_FIXTURES.map((f) => [f.name, f] as const))(
     "extracts cheap <head> metadata for %s",
     (_name, fixture) => {
       expect(read_metadata(fixture.html, fixture.url)).toEqual(

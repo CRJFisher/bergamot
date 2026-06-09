@@ -17,13 +17,14 @@ test("captures a real page visit end to end into the store", async ({
   expect(service_worker).toBeTruthy();
 
   const page = await context.newPage();
-  const url = page_server.url("/pipeline-page");
+  const url = page_server.url("/page-a");
   await page.goto(url);
 
   const stored = await wait_for_stored(url);
   expect(stored.url).toBe(url);
-  // The fake LLM analysis sets this title; its presence proves the workflow ran.
-  expect(stored.title).toBe("Fake Title");
+  // Title is captured directly from the tab (document.title); its presence in the
+  // store proves the metadata-only capture pipeline ran end to end.
+  expect(stored.title).toBe("Page A");
 
   // The extension must not have logged any service-worker errors during capture.
   expect(sw_errors).toEqual([]);

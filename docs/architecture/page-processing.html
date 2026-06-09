@@ -67,7 +67,7 @@
     <pre class="mermaid">
 flowchart TB
     raw["visit metadata<br/>(url, title, load timestamp)"]
-    store["store_capture (NON-LLM)<br/>persist visit metadata"]
+    store["run_page_capture (NON-LLM)<br/>persist visit metadata"]
     db[("DuckDB webpage_capture<br/>metadata only")]
 
     raw --> store --> db
@@ -120,7 +120,7 @@ classDiagram
     </pre>
   </div>
   <ul class="clean">
-    <li><strong>Write</strong>: <code>store_capture()</code> persists the visit metadata (URL, title, timestamp) and upserts via <code>insert_webpage_capture()</code> (<code>ON CONFLICT (page_session_id) DO UPDATE</code>, so a re-capture overwrites cleanly). The <code>&lt;meta&gt;</code>-derived fields (site, author, published, lang) are not stored here — they are parsed from the re-downloaded page and logged to <code>webpage_fetch</code>. The metadata view is <code>PageCapture</code> (<code>page_capture_models.ts</code>); navigation-tree queries read the title from <code>webpage_capture</code>.</li>
+    <li><strong>Write</strong>: <code>run_page_capture()</code> builds the metadata record (URL, title, timestamp) and upserts it via <code>insert_webpage_capture()</code> (<code>ON CONFLICT (page_session_id) DO UPDATE</code>, so a re-capture overwrites cleanly), then records the stored outcome. The <code>&lt;meta&gt;</code>-derived fields (site, author, published, lang) are not stored here — they are parsed from the re-downloaded page and logged to <code>webpage_fetch</code>. The metadata view is <code>PageCapture</code> (<code>page_capture_models.ts</code>); navigation-tree queries read the title from <code>webpage_capture</code>.</li>
     <li><strong>Read (content)</strong>: page content is acquired by re-downloading the stored URL during post-processing. Cached re-downloaded content (a separate encrypted tier) is the read path the RAG-prep pipeline uses; it is exposed over HTTP as <code>/query/capture_content</code> and surfaced by the MCP <code>get_webpage_content</code> tool, and may be unavailable for login-walled or dead pages.</li>
   </ul>
 
@@ -163,15 +163,14 @@ flowchart LR
   <p>Capture is a small set of single-purpose modules under <code>vscode/src/</code>:</p>
   <table>
     <tr><th>Module</th><th>Responsibility</th></tr>
-    <tr><td><code>workflow/page_capture_pipeline.ts</code></td><td><code>run_page_capture(deps, inputs)</code> — stores visit metadata and records the outcome (no gate)</td></tr>
-    <tr><td><code>workflow/read_metadata.ts</code></td><td><code>read_metadata(html, url) → PageMetadata</code> — cheap <code>&lt;meta&gt;</code> parse over re-downloaded content (used by <code>redownload/</code>, not capture)</td></tr>
-    <tr><td><code>workflow/store_capture.ts</code></td><td><code>store_capture()</code> — persist visit metadata to DuckDB</td></tr>
+    <tr><td><code>workflow/page_capture_pipeline.ts</code></td><td><code>run_page_capture(db, inputs)</code> — builds the metadata record, upserts via <code>insert_webpage_capture</code>, records the outcome (no gate)</td></tr>
+    <tr><td><code>redownload/read_metadata.ts</code></td><td><code>read_metadata(html, url) → PageMetadata</code> — cheap <code>&lt;meta&gt;</code> parse over re-downloaded content (used by the re-download corpus, not capture)</td></tr>
     <tr><td><code>page_capture_models.ts</code></td><td><code>PageCapture</code> / <code>PageActivitySessionWithMeta</code> schemas</td></tr>
     <tr><td><code>duck_db.ts</code></td><td><code>webpage_capture</code> table + <code>insert_webpage_capture</code> / <code>get_webpage_capture</code> + tree queries</td></tr>
   </table>
-  <p>The visit queue (<code>visit_queue_processor.ts</code>) holds the <code>CaptureDeps</code> and calls
-  <code>run_page_capture</code>; the server (<code>server/server_manager.ts</code>) builds the deps from its
-  DuckDB handle. There is no stateful workflow class and no LLM client in the capture path.</p>
+  <p>The visit queue (<code>visit_queue_processor.ts</code>) holds the DuckDB handle and calls
+  <code>run_page_capture</code> directly; the server (<code>server/server_manager.ts</code>) wires that handle
+  into the queue. There is no stateful workflow class and no LLM client in the capture path.</p>
 
   <h2><span class="num">6</span>Cost</h2>
   <div class="cards">

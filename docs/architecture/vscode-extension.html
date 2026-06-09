@@ -59,9 +59,8 @@ flowchart TB
     subgraph PROC["Capture — run_page_capture"]
       direction TB
       tree["tree assignment<br/>webpage_tree.ts (in the queue)"]
-      gate["capture gate<br/>page_gate.ts (keep/drop, no LLM)"]
-      store["store_capture<br/>visit metadata"]
-      tree --> gate --> store
+      store["run_page_capture<br/>persist visit metadata"]
+      tree --> store
     end
 
     subgraph POST["Post-processing"]
@@ -115,21 +114,17 @@ flowchart TB
 
   <h2><span class="num">4</span>Capture: <code>run_page_capture</code></h2>
   <p>The pipeline in <code>workflow/page_capture_pipeline.ts</code> turns a captured visit into a durable,
-  lossless metadata record with no LLM call. It is a plain function over an immutable <code>CaptureDeps</code>
-  struct (no stateful class).</p>
+  lossless metadata record with no LLM call. It is a plain function taking the DuckDB handle directly
+  (no stateful class). There is no capture gate — every non-incognito visit's metadata is stored.</p>
   <div class="diagram">
-    <p class="cap">run_page_capture(deps, inputs) — per visit</p>
+    <p class="cap">run_page_capture(db, inputs) — per visit</p>
     <pre class="mermaid">
 flowchart LR
-    A["visit metadata<br/>(url, title, load timestamp)"] --> E{"capture gate<br/>evaluate_page_gate()"}
-    E -- "interstitial" --> X["drop · record reason<br/>gate_metrics"]
-    E -- "keep" --> S["store_capture<br/>persist visit metadata"]
+    A["visit metadata<br/>(url, title, load timestamp)"] --> S["run_page_capture<br/>persist visit metadata"]
     S --> H["DuckDB webpage_capture<br/>+ record stored outcome"]
 
     classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
-    classDef warn fill:#3a2a1a,stroke:#f0883e,color:#f5d9c0;
     class A,S,H vs;
-    class E,X warn;
     </pre>
   </div>
   <p>No page content is read, no model is called, and nothing is written to a vector store. Title and URL come

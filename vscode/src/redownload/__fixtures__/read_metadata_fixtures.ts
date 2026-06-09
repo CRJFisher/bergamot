@@ -6,7 +6,7 @@ import { PageMetadata } from "../read_metadata";
  * A committed raw-page fixture with its expected cheap `<head>` metadata. Used
  * by the deterministic `read_metadata` eval — fully deterministic and offline.
  */
-export interface CaptureFixture {
+export interface ReadMetadataFixture {
   name: string;
   url: string;
   /** The raw page, read from the committed fixture file. */
@@ -16,10 +16,10 @@ export interface CaptureFixture {
 }
 
 function read_fixture(file: string): string {
-  return fs.readFileSync(path.join(__dirname, "capture", file), "utf-8");
+  return fs.readFileSync(path.join(__dirname, "read_metadata", file), "utf-8");
 }
 
-export const CAPTURE_FIXTURES: CaptureFixture[] = [
+export const READ_METADATA_FIXTURES: ReadMetadataFixture[] = [
   {
     name: "article",
     url: "https://blog.example.com/zstd",

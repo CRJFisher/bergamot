@@ -12,10 +12,7 @@ import {
 } from "./duck_db_models";
 import { OrphanedVisitsManager } from "./orphaned_visits";
 import { insert_page_activity_session_with_tree_management } from "./webpage_tree";
-import {
-  CaptureDeps,
-  run_page_capture,
-} from "./workflow/page_capture_pipeline";
+import { run_page_capture } from "./workflow/page_capture_pipeline";
 import { load_inbox, remove_visit } from "./visit_inbox";
 import { record_outcome, format_error_detail } from "./dev_log";
 
@@ -72,10 +69,8 @@ interface InsertionResult {
  * @example
  * ```typescript
  * const processor = new VisitQueueProcessor(
- *   duckDb,
- *   memoryDb,
- *   workflowApp,
- *   orphanManager,
+ *   duck_db,
+ *   orphan_manager,
  *   { batch_size: 5, batch_timeout: 1000 }
  * );
  * 
@@ -103,7 +98,6 @@ export class VisitQueueProcessor {
 
   constructor(
     private readonly duck_db: DuckDB,
-    private readonly capture_deps: CaptureDeps,
     private readonly orphan_manager: OrphanedVisitsManager,
     config: QueueProcessorConfig = {}
   ) {
@@ -230,7 +224,7 @@ export class VisitQueueProcessor {
       tree_id,
     };
 
-    await run_page_capture(this.capture_deps, {
+    await run_page_capture(this.duck_db, {
       new_page: page_with_tree_id,
       title: visit.title,
       visit_id: visit.visit_id,

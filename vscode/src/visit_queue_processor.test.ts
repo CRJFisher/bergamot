@@ -62,7 +62,6 @@ describe("VisitQueueProcessor", () => {
     // Create processor with test config
     processor = new VisitQueueProcessor(
       mockDuckDb,
-      { duck_db: mockDuckDb },
       mockOrphanManager,
       {
         batch_size: 3,

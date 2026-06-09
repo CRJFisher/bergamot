@@ -6,7 +6,7 @@
  * by {@link classify_fetch} over what the anonymous browser actually saw.
  */
 import { Page, Response } from "patchright";
-import { PageMetadata, read_metadata } from "../workflow/read_metadata";
+import { PageMetadata, read_metadata } from "./read_metadata";
 import {
   classify_fetch,
   extract_markers_from_html,

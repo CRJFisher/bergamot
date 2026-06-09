@@ -78,12 +78,11 @@ describe('ServerManager', () => {
       expect(mock_queue_processor.start).toHaveBeenCalled();
     });
 
-    it('should wire the capture pipeline deps into the queue processor', async () => {
+    it('should wire the DuckDB handle into the queue processor', async () => {
       await server_manager.start();
 
       expect(VisitQueueProcessor).toHaveBeenCalledWith(
         mock_config.duck_db,
-        { duck_db: mock_config.duck_db },
         expect.anything(),
         expect.objectContaining({ batch_size: 3 })
       );

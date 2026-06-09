@@ -1,5 +1,4 @@
-import { DuckDB, get_latest_webpage_fetch } from "../duck_db";
-import { store_capture } from "../workflow/store_capture";
+import { DuckDB, get_latest_webpage_fetch, insert_webpage_capture } from "../duck_db";
 import { ReDownloadCorpus } from "./corpus";
 import { Fetcher, FetchResult } from "./headless_fetcher";
 
@@ -139,7 +138,7 @@ describe("ReDownloadCorpus", () => {
 
 /** Seeds a webpage_capture metadata row whose `url` is the fetch target. */
 async function seed_capture(db: DuckDB, id: string, url: string): Promise<void> {
-  await store_capture(db, {
+  await insert_webpage_capture(db, {
     page_session_id: id,
     url,
     title: "seed",

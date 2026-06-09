@@ -16,7 +16,6 @@ import { OrphanedVisitsManager } from '../orphaned_visits';
 import { VisitQueueProcessor, ExtendedPageVisit } from '../visit_queue_processor';
 import { ensure_inbox, persist_visit } from '../visit_inbox';
 import { PageActivitySessionWithoutTreeSchema } from '../duck_db_models';
-import { CaptureDeps } from '../workflow/page_capture_pipeline';
 import { dev_log, is_dev_log_enabled, is_browser_dev_stage, format_error_detail } from '../dev_log';
 import { persist_replay_visit } from '../visit_replay';
 import { BrowserPool } from '../redownload/browser_pool';
@@ -76,14 +75,12 @@ export class ServerManager {
   private server?: Server;
   private queue_processor?: VisitQueueProcessor;
   private app: express.Application;
-  private readonly capture_deps: CaptureDeps;
   private readonly content_corpus: ContentCorpus;
   /** Set only when this manager owns the default re-download browser. */
   private browser_pool?: BrowserPool;
 
   constructor(private config: ServerConfig) {
     this.app = express();
-    this.capture_deps = { duck_db: config.duck_db };
     this.content_corpus = config.content_corpus ?? this.build_redownload_corpus();
     this.setup_middleware();
   }
@@ -133,7 +130,6 @@ export class ServerManager {
     const orphan_manager = new OrphanedVisitsManager();
     this.queue_processor = new VisitQueueProcessor(
       this.config.duck_db,
-      this.capture_deps,
       orphan_manager,
       {
         batch_size: 3,

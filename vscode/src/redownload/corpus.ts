@@ -19,7 +19,7 @@ import {
   list_capture_targets,
 } from "../duck_db";
 import { WebpageFetch } from "../page_capture_models";
-import { read_metadata } from "../workflow/read_metadata";
+import { read_metadata } from "./read_metadata";
 import { FetchOutcome, FetchOutcomeKind } from "./fetch_outcome";
 import { Fetcher, FetchResult } from "./headless_fetcher";
 
