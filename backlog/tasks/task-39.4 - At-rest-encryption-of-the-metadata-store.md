@@ -1,11 +1,11 @@
 ---
 id: TASK-39.4
 title: At-rest encryption of the metadata store
-status: In Progress
+status: Done
 assignee:
   - claude
 created_date: '2026-06-08 13:30'
-updated_date: '2026-06-09 20:05'
+updated_date: '2026-06-09 20:44'
 labels:
   - security
   - storage
@@ -30,11 +30,11 @@ PREREQUISITE: write the threat-model doc the constitution names (single trusted 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The DuckDB metadata store is opened with an `ENCRYPTION_KEY` sourced from the OS keystore (VS Code `SecretStorage`)
-- [ ] #2 `@duckdb/node-api` is on a version supporting native database encryption (DuckDB ≥ 1.4.0); the data layer passes its regression tests after the bump
-- [ ] #3 A random data-encryption key is generated at first run and stored in `SecretStorage`; key loss is documented as data loss with no plaintext fallback
-- [ ] #4 The store is created encrypted (no plaintext-to-encrypted migration shim)
-- [ ] #5 The threat-model doc is written and committed
+- [x] #1 The DuckDB metadata store is opened with an `ENCRYPTION_KEY` sourced from the OS keystore (VS Code `SecretStorage`)
+- [x] #2 `@duckdb/node-api` is on a version supporting native database encryption (DuckDB ≥ 1.4.0); the data layer passes its regression tests after the bump
+- [x] #3 A random data-encryption key is generated at first run and stored in `SecretStorage`; key loss is documented as data loss with no plaintext fallback
+- [x] #4 The store is created encrypted (no plaintext-to-encrypted migration shim)
+- [x] #5 The threat-model doc is written and committed
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -49,3 +49,25 @@ PREREQUISITE: write the threat-model doc the constitution names (single trusted 
 7. Docs: update backlog/docs/dev-db-reset.md (store is now encrypted; the SecretStorage key survives a reset and that is fine; LanceDB references are stale — prune). Reset is destructive per the no-migration rule; no plaintext→encrypted migration shim.
 After implementation: five Fable subagent reviews, apply recommendations, then finalize.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented in cd1b467 (feature) + d48e6b9 (five-lens review fixes).
+
+Review process: five parallel Fable subagent reviews (correctness, security/crypto, architecture/constitution, test quality, docs/product truth). Applied: temp-spill-file encryption + pinned temp_directory (two reviewers independently reproduced plaintext spill files — the decisive finding); instance close-on-close (WAL checkpointed away) and init-failure cleanup; existing-store guard + persistence verification in the key provider (a transient SecretStorage read failure can no longer silently re-key and brick the store); 64-hex key validation in the DuckDB constructor; dead MCP STORAGE_PATH/storage_base plumbing deleted; test scaffolding de-mocked (real tmp dirs), WAL canary scan + unencrypted control + checkpoint-on-close + quoted-path escaping tests; threat-model honesty fixes (visit-inbox/dev-log plaintext side-channels named, Linux no-keyring degradation, env-key e2e exception, indicator/pause marked not-yet-implemented); README purged of LanceDB/semantic_search and now documents key-loss = data-loss.
+
+Declined (with rationale): making the StoreTarget union the public constructor contract / factory methods — the runtime invariant is enforced at the innermost seam and pinned by tests; the refactor would churn five files for no behavioral gain (cheapest-change rule).
+
+Accepted gap: crash-recovery (encrypted WAL replay after a hard process exit) has no automated test — it requires a spawned child process. A reviewer verified the behavior manually: the WAL replays correctly on next ATTACH with the same key, and a stale WAL next to a deleted store file is tolerated.
+
+Follow-ups surfaced for triage (not ticketed): (1) visit inbox buffers visits as plaintext JSON before the DuckDB write — named in docs/threat-model.md as an open gap; candidate subtask under task-39. (2) Stale LanceDB-as-current-system claims remain in backlog/docs/mcp-rag-architecture.md, local-dev-loop-plan.md, mcp-tools-usage.md, query-interface.md — candidate doc-prune task.
+
+Verification: tsc clean, eslint clean, 234/234 jest tests (encryption block run 3x, no flakiness), full-pipeline e2e green against the encrypted store. Dev store reset performed per backlog/docs/dev-db-reset.md (coordinated once with the 39.1 schema reset, as the task required).
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The DuckDB metadata store is now encrypted at rest. @duckdb/node-api moved to 1.5.3-r.3 (bundles DuckDB ≥ 1.4 native AES encryption); a file-backed store is only ever created encrypted — the wrapper opens an in-memory instance and ATTACHes the file with ENCRYPTION_KEY, refuses keyless file stores, requires a 64-hex-char key, encrypts temp spill files, and pins the spill directory next to the store. The data-encryption key is 32 random bytes generated on first run and held via VS Code SecretStorage (OS keystore); a fresh key is minted only when no store file exists, so a transient keystore failure cannot silently re-key and brick an existing store. Key loss is data loss by design — no plaintext fallback, no escrow. The headless e2e server takes a per-run throwaway key via STORAGE_ENCRYPTION_KEY. The dead read_only config option and the MCP child's unused STORAGE_PATH plumbing were deleted. docs/threat-model.md (the constitution-named prerequisite) is committed, including honest statements of what at-rest encryption does not defend (hostile same-user processes; the plaintext visit-inbox buffer; Linux-no-keyring degradation). Encryption is pinned by real-file tests: round-trip reopen, wrong-key rejection, WAL + file canary scans with an unencrypted control, checkpoint-on-close, and SQL-literal escaping. 234 jest tests + full-pipeline e2e green.
+<!-- SECTION:FINAL_SUMMARY:END -->
