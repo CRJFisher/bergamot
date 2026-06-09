@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { DuckDB } from '../duck_db';
+import { DuckDB, create_metadata_schema } from '../duck_db';
 
 /** Filename of the encrypted DuckDB metadata store under the storage base. */
 export const METADATA_DB_FILENAME = 'webpage_categorizations.db';
@@ -55,6 +55,7 @@ export class DatabaseManager {
       encryption_key,
     });
     await duck_db.init();
+    await create_metadata_schema(duck_db);
 
     this.databases = { duck_db };
     return this.databases;

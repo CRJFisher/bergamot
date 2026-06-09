@@ -9,8 +9,9 @@
  * unavailable, with no content. The login wall is the privacy filter — auth-walled
  * visits are trail/metadata only and are absent from this corpus.
  *
- * Re-downloaded bytes are NOT persisted here; they are returned on demand. An
- * encrypted on-demand content cache is a separate tier (task-39.3).
+ * Re-downloaded bytes are NOT persisted here; they are returned on demand. The
+ * encrypted on-demand content cache is a separate, opt-in tier (`content_cache.ts`,
+ * populated only through `CachedCorpus`).
  */
 import {
   DuckDB,
@@ -60,9 +61,9 @@ export interface ContentCorpus {
    * Reads the public content for a stored page session. Each call performs a LIVE,
    * side-effecting re-download — a politeness-gated headless navigation to the
    * remote host plus a `webpage_fetch` log write — there is no content cache in
-   * this tier (an encrypted on-demand cache is task-39.3). Returns an exclusion
-   * entry for auth/paywall/dead/non-HTML pages, or `null` if no metadata row
-   * exists for the id.
+   * this tier (consumers that need repeated reads opt into `CachedCorpus`).
+   * Returns an exclusion entry for auth/paywall/dead/non-HTML pages, or `null`
+   * if no metadata row exists for the id.
    */
   get_content(page_session_id: string): Promise<CorpusEntry | null>;
 

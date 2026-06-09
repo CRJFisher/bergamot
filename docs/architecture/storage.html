@@ -47,8 +47,8 @@
     </div>
     <div class="card">
       <h3>Content cache — separate encrypted tier</h3>
-      <p>Content is obtained later by re-downloading the public URL. Any cached re-downloaded content lives in a separate, encrypted, on-demand, deletable tier — never the source of truth, and never inside the metadata store.</p>
-      <span class="tag">on-demand · encrypted</span>
+      <p>Content is obtained later by re-downloading the public URL. Cached re-downloaded content lives in its own encrypted DuckDB store (<code>content_cache.db</code>) under the storage base, with its own OS-keystore key — never the source of truth, never inside the metadata store, and never in a syncable or git-tracked directory. It is populated only when a consumer (TDT, RAG, a research project) opts in through <code>CachedCorpus</code> with a named scope; the default read path re-downloads live. Every item is per-item deletable for the right-to-forget cascade.</p>
+      <span class="tag">content_cache.db · on-demand · encrypted · scoped</span>
     </div>
     <div class="card">
       <h3>Vector search — deferred</h3>

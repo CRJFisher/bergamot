@@ -11,7 +11,7 @@ Bergamot serves a **single trusted user** on a **possibly-shared or possibly-com
 1. **The metadata store** — the DuckDB file (`webpage_categorizations.db`): visit ids, URLs, titles, timestamps, and the navigation/session graph. This is the durable source of truth. URLs are themselves sensitive metadata: query strings, tokens, identifiers, and the bare fact of a visit can each leak information (principle 3, residual surface).
 2. **The data-encryption key** for the metadata store, persisted by VS Code `SecretStorage` encrypted under a wrapping key held in the OS keystore (macOS Keychain / libsecret / DPAPI).
 3. **The visit inbox** (`<storage_base>/visit_inbox/`) — per-visit JSON files (URL, referrer, timestamps) buffered between HTTP accept and the DuckDB write.
-4. **The re-downloaded content cache** (task-39.3, not yet built) — on-demand, encrypted, quarantined page content fetched from stored public URLs.
+4. **The re-downloaded content cache** (`content_cache.db`) — on-demand, encrypted, quarantined page content fetched from stored public URLs; populated only when a consumer opts in with a named scope.
 5. **Derived stores** (task-36/31, not yet built) — embedding vectors and cluster tables built from re-downloaded content; they encode content and are bound to the right-to-forget cascade (principle 4).
 6. **The user's PKM repo** — user-authored notes; holds only explicitly-promoted artifacts, never captured data (principle 6).
 
@@ -21,7 +21,7 @@ Bergamot serves a **single trusted user** on a **possibly-shared or possibly-com
 
 Stolen or discarded disk, machine backups, a shared machine's other (non-root) accounts, file-grabbing malware that exfiltrates files without code execution in the user's session, cloud-synced directories that accidentally include storage paths.
 
-**Defense: at-rest encryption.** The metadata store is DuckDB-native encrypted (AES, DuckDB ≥ 1.4) and is **only ever created encrypted** — the data layer refuses to open or create a plaintext file store; the database file, its WAL, and its temp spill files (`temp_file_encryption`, pinned to the store's own `.tmp` directory) are all ciphertext. Without the key they disclose their size, existence, and that they are DuckDB files — nothing of their contents. The content cache tier (task-39.3, not yet built) is committed to the same property.
+**Defense: at-rest encryption.** The metadata store is DuckDB-native encrypted (AES, DuckDB ≥ 1.4) and is **only ever created encrypted** — the data layer refuses to open or create a plaintext file store; the database file, its WAL, and its temp spill files (`temp_file_encryption`, pinned to the store's own `.tmp` directory) are all ciphertext. Without the key they disclose their size, existence, and that they are DuckDB files — nothing of their contents. The content cache tier carries the same property, as its own encrypted DuckDB store under its own keystore key — destroying the cache key destroys only the cache, which rebuilds by re-downloading.
 
 **Plaintext side-channels, named honestly.** Two paths still put metadata on disk unencrypted and are open gaps against this adversary, not covered by store encryption: the **visit inbox** holds each visit as a plaintext JSON file between HTTP accept and the DuckDB write (deleted after ingest, forensically recoverable, persistent if ingest fails), and **dev-mode logging** writes visit URLs to `dev-log.jsonl` when `bergamot.devMode` or F5 debugging is on. Closing the inbox gap is tracked follow-up work under task-39.
 
@@ -64,6 +64,6 @@ Re-download is the system's one routine egress surface: it re-fetches stored URL
 ## Standing decisions this model underwrites
 
 - **At-rest encryption of the metadata store** (task-39.4): defends A; explicitly does not defend B.
-- **Encrypted, quarantined content cache** (task-39.3): same key-handling discipline; quarantine additionally closes silent egress via git-tracked/pushable directories (principle 6).
+- **Encrypted, quarantined content cache** (task-39.3): same key-handling discipline, separate key; quarantine additionally closes silent egress via git-tracked/pushable directories (principle 6).
 - **Capability-token authentication on the local server** (Scope-Now): the named mitigation for B's live-API exposure.
 - **Cascading right-to-forget** (task-39.5): bounds the blast radius of every asset by making deletion real across metadata, cache, vectors, and clusters.

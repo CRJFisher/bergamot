@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import {
-  get_or_create_metadata_db_key,
+  get_or_create_store_key,
   METADATA_DB_KEY_SECRET,
 } from "./encryption_key";
 
@@ -22,11 +22,11 @@ function fake_secret_storage(): vscode.SecretStorage {
   };
 }
 
-describe("get_or_create_metadata_db_key", () => {
+describe("get_or_create_store_key", () => {
   it("generates a 32-byte hex key on first run and persists it", async () => {
     const secrets = fake_secret_storage();
 
-    const key = await get_or_create_metadata_db_key(secrets, false);
+    const key = await get_or_create_store_key(secrets, METADATA_DB_KEY_SECRET, false);
 
     expect(key).toMatch(/^[0-9a-f]{64}$/);
     expect(await secrets.get(METADATA_DB_KEY_SECRET)).toBe(key);
@@ -35,15 +35,15 @@ describe("get_or_create_metadata_db_key", () => {
   it("returns the stored key on subsequent runs", async () => {
     const secrets = fake_secret_storage();
 
-    const first = await get_or_create_metadata_db_key(secrets, false);
-    const second = await get_or_create_metadata_db_key(secrets, true);
+    const first = await get_or_create_store_key(secrets, METADATA_DB_KEY_SECRET, false);
+    const second = await get_or_create_store_key(secrets, METADATA_DB_KEY_SECRET, true);
 
     expect(second).toBe(first);
   });
 
   it("generates distinct keys for distinct stores", async () => {
-    const a = await get_or_create_metadata_db_key(fake_secret_storage(), false);
-    const b = await get_or_create_metadata_db_key(fake_secret_storage(), false);
+    const a = await get_or_create_store_key(fake_secret_storage(), METADATA_DB_KEY_SECRET, false);
+    const b = await get_or_create_store_key(fake_secret_storage(), METADATA_DB_KEY_SECRET, false);
 
     expect(a).not.toBe(b);
   });
@@ -54,7 +54,7 @@ describe("get_or_create_metadata_db_key", () => {
     const secrets = fake_secret_storage();
 
     await expect(
-      get_or_create_metadata_db_key(secrets, true)
+      get_or_create_store_key(secrets, METADATA_DB_KEY_SECRET, true)
     ).rejects.toThrow(/key is missing/);
     // Crucially, nothing was written: the real key (if recoverable) survives.
     expect(await secrets.get(METADATA_DB_KEY_SECRET)).toBeUndefined();
@@ -70,7 +70,7 @@ describe("get_or_create_metadata_db_key", () => {
     };
 
     await expect(
-      get_or_create_metadata_db_key(broken, false)
+      get_or_create_store_key(broken, METADATA_DB_KEY_SECRET, false)
     ).rejects.toThrow(/did not persist/);
   });
 });

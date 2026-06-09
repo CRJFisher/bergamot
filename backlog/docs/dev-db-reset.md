@@ -10,22 +10,23 @@ Run this after any change that alters a persisted schema — a DuckDB `CREATE TA
 
 All persistent stores live under the resolved storage base (`get_storage_base`, `config/storage_path.ts`):
 
-- **DuckDB file** — `<storage_base>/webpage_categorizations.db`, encrypted at rest with DuckDB native encryption
+- **DuckDB metadata file** — `<storage_base>/webpage_categorizations.db`, encrypted at rest with DuckDB native encryption
+- **Content cache** — `<storage_base>/content_cache.db`, a separate encrypted DuckDB store holding opt-in cached re-download content
 - **Visit inbox** — `<storage_base>/visit_inbox/`
 
 During F5 debugging `BERGAMOT_STORAGE_PATH` points the storage base at the repo-local `.dev-storage/` (see `.vscode/launch.json`). An installed extension uses the per-extension `globalStorageUri` instead.
 
 ### The encryption key is not part of a reset
 
-The DuckDB file is encrypted with a key held in the OS keystore via VS Code `SecretStorage` (`bergamot.metadata_db_encryption_key`, see `database/encryption_key.ts`). Deleting the database file does **not** require touching the key: the next run reads the keystore entry and creates a fresh encrypted store with the same key. Deleting the key as well is harmless once the file is gone (a new key is generated on first run) — but deleting the key while keeping the file makes the file permanently unreadable, by design (no plaintext fallback; see `docs/threat-model.md`).
+Each encrypted store has its own key in the OS keystore via VS Code `SecretStorage` (`bergamot.metadata_db_encryption_key` for the metadata store, `bergamot.content_cache_encryption_key` for the content cache; see `database/encryption_key.ts`). Deleting a store file does **not** require touching its key: the next run reads the keystore entry and creates a fresh encrypted store with the same key. Deleting the key as well is harmless once the file is gone (a new key is generated on first run) — but deleting a key while keeping its file makes that file permanently unreadable, by design (no plaintext fallback; see `docs/threat-model.md`).
 
 ## The procedure (single step)
 
-Stop the Extension Development Host (and any running MCP server), then delete the DuckDB file:
+Stop the Extension Development Host (and any running MCP server), then delete the store files:
 
 ```bash
 # Dev (F5) — repo-local .dev-storage
-rm -rf .dev-storage/webpage_categorizations.db
+rm -rf .dev-storage/webpage_categorizations.db .dev-storage/content_cache.db
 ```
 
 Deleting the whole `.dev-storage/` directory is equivalent and also clears the visit inbox and dev log:

@@ -1,4 +1,6 @@
-import { DuckDB, get_page_sessions_with_tree_id, insert_webpage_capture } from "./duck_db";
+import {
+  DuckDB,
+  create_metadata_schema, get_page_sessions_with_tree_id, insert_webpage_capture } from "./duck_db";
 import {
   insert_page_activity_session_with_tree_management,
   get_tree_with_id,
@@ -21,6 +23,7 @@ describe("Webpage Tree Management", () => {
   beforeEach(async () => {
     db = new DuckDB({ database_path: ":memory:" });
     await db.init();
+    await create_metadata_schema(db);
     mock_md5_hash.mockClear();
     mock_md5_hash.mockImplementation((input) => {
       // Default implementation that generates unique IDs

@@ -1,7 +1,7 @@
 import type { Application } from "express";
 import request from "supertest";
 import { ServerManager } from "./server_manager";
-import { DuckDB } from "../duck_db";
+import { DuckDB, create_metadata_schema } from "../duck_db";
 import { ContentCorpus, CorpusEntry } from "../redownload/corpus";
 
 jest.mock("vscode");
@@ -60,6 +60,7 @@ describe("/query/capture_content read path", () => {
   beforeAll(async () => {
     db = new DuckDB({ database_path: ":memory:" });
     await db.init();
+    await create_metadata_schema(db);
     server = new ServerManager({ duck_db: db, content_corpus: fake_corpus });
     server.prepare();
     app = (server as object as { app: Application }).app;

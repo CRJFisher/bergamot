@@ -1,5 +1,6 @@
 import {
   DuckDB,
+  create_metadata_schema,
   insert_webpage_capture,
   get_webpage_capture,
   insert_page_activity_session,
@@ -43,6 +44,7 @@ describe("DuckDB", () => {
     // In-memory database: schema/query tests need no file and no key.
     db = new DuckDB({ database_path: ":memory:" });
     await db.init();
+    await create_metadata_schema(db);
   });
 
   afterEach(async () => {
@@ -80,6 +82,7 @@ describe("DuckDB", () => {
         encryption_key: TEST_KEY,
       });
       await writer.init();
+      await create_metadata_schema(writer);
       await writer.close();
       const size_before = fs.statSync(db_path).size;
 
@@ -624,6 +627,7 @@ describe("at-rest encryption (real file)", () => {
       encryption_key: TEST_KEY,
     });
     await writer.init();
+    await create_metadata_schema(writer);
     await insert_webpage_capture(
       writer,
       capture_record("enc-session", "Encrypted Page", "https://example.com/e")
@@ -642,6 +646,7 @@ describe("at-rest encryption (real file)", () => {
       encryption_key: TEST_KEY,
     });
     await reader.init();
+    await create_metadata_schema(reader);
     const capture = await get_webpage_capture(reader, "enc-session");
     expect(capture?.title).toBe("Encrypted Page");
     await reader.close();
@@ -659,6 +664,7 @@ describe("at-rest encryption (real file)", () => {
       encryption_key: TEST_KEY,
     });
     await writer.init();
+    await create_metadata_schema(writer);
     await insert_webpage_capture(
       writer,
       capture_record("q", "Quoted", "https://example.com/q")
@@ -670,6 +676,7 @@ describe("at-rest encryption (real file)", () => {
       encryption_key: TEST_KEY,
     });
     await reader.init();
+    await create_metadata_schema(reader);
     expect((await get_webpage_capture(reader, "q"))?.title).toBe("Quoted");
     await reader.close();
   });
@@ -682,6 +689,7 @@ describe("at-rest encryption (real file)", () => {
       encryption_key: TEST_KEY,
     });
     await writer.init();
+    await create_metadata_schema(writer);
     await insert_webpage_capture(
       writer,
       capture_record("canary", marker, "https://plaintext-canary.example.com")
@@ -738,6 +746,7 @@ describe("at-rest encryption (real file)", () => {
       encryption_key: TEST_KEY,
     });
     await writer.init();
+    await create_metadata_schema(writer);
     await insert_webpage_capture(
       writer,
       capture_record("wal-session", "WAL Page", "https://example.com/w")
@@ -751,6 +760,7 @@ describe("at-rest encryption (real file)", () => {
       encryption_key: TEST_KEY,
     });
     await reader.init();
+    await create_metadata_schema(reader);
     expect((await get_webpage_capture(reader, "wal-session"))?.title).toBe(
       "WAL Page"
     );

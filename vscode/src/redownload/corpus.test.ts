@@ -1,4 +1,6 @@
-import { DuckDB, get_latest_webpage_fetch, insert_webpage_capture } from "../duck_db";
+import {
+  DuckDB,
+  create_metadata_schema, get_latest_webpage_fetch, insert_webpage_capture } from "../duck_db";
 import { ReDownloadCorpus } from "./corpus";
 import { Fetcher, FetchResult } from "./headless_fetcher";
 
@@ -69,6 +71,7 @@ describe("ReDownloadCorpus", () => {
   beforeEach(async () => {
     db = new DuckDB({ database_path: ":memory:" });
     await db.init();
+    await create_metadata_schema(db);
     // Seed two metadata rows whose URLs the fake fetcher knows.
     await seed_capture(db, "ok1", OK_URL);
     await seed_capture(db, "auth1", AUTH_URL);

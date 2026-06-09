@@ -146,14 +146,12 @@ export class DuckDB {
   }
 
   /**
-   * Initializes the database connection and creates required tables.
-   * Creates the following tables:
-   * - webpage_trees: Navigation tree metadata
-   * - webpage_activity_sessions: Individual page visit records
-   * - webpage_capture: Per-visit browsing metadata (url, title, captured_at)
+   * Opens the database. The schema is the caller's contract, created
+   * explicitly after init — {@link create_metadata_schema} for the metadata
+   * store, `create_content_cache_schema` for the content cache.
    *
-   * @returns Promise that resolves when initialization is complete
-   * @throws {Error} If database connection or table creation fails
+   * @returns Promise that resolves when the store is open
+   * @throws {Error} If the store cannot be opened (e.g. wrong encryption key)
    *
    * @example
    * ```typescript
@@ -162,6 +160,7 @@ export class DuckDB {
    *   encryption_key: key_from_secret_storage,
    * });
    * await db.init();
+   * await create_metadata_schema(db);
    * // Database is now ready for use
    * ```
    */
@@ -175,7 +174,6 @@ export class DuckDB {
 
     try {
       await this.open_target_store();
-      await this.create_schema();
     } catch (error) {
       // A half-open instance (e.g. wrong key at ATTACH) would otherwise leak
       // native resources for the life of the host process.
@@ -215,114 +213,6 @@ export class DuckDB {
     );
   }
 
-  /** Creates the metadata tables and indexes (idempotent). */
-  private async create_schema(): Promise<void> {
-
-    const webpage_trees_schema = [
-      "id TEXT PRIMARY KEY", // hash of the root page session ID + its load time
-      "latest_activity_time TEXT", // ISO timestamp of the last activity in this tree
-      "first_load_time TEXT", // ISO timestamp of the first page load in this tree
-    ].join(", ");
-    await this.create_table(WEBPAGE_TREES_TABLE, webpage_trees_schema);
-
-    const activity_sessions_schema = [
-      "id TEXT PRIMARY KEY", // hash of url + timestamp
-      "url TEXT NOT NULL",
-      "referrer TEXT",
-      "referrer_page_session_id TEXT", // ID of the referrer page session, if any
-      "page_loaded_at TEXT", // ISO timestamp string when the page was loaded
-      `tree_id TEXT NOT NULL REFERENCES ${WEBPAGE_TREES_TABLE}(id)`, // ID of the navigation tree this session belongs to
-    ].join(", ");
-    await this.create_table(
-      WEBPAGE_ACTIVITY_SESSIONS_TABLE,
-      activity_sessions_schema
-    );
-
-    // Capture metadata store, keyed by page_session_id (no foreign key, so a
-    // capture can be written before or independently of the activity-session row).
-    // This holds browsing metadata only — page content is never stored here. The
-    // authoritative content path is RE-DOWNLOAD (src/redownload/): content, and
-    // the `<meta>`-derived fields (author / site_name / published_at / lang), are
-    // obtained by re-fetching the public URL and logged to `webpage_fetch`.
-    const webpage_capture_schema = [
-      "page_session_id TEXT PRIMARY KEY", // hash of url + timestamp
-      "url TEXT NOT NULL",
-      "title TEXT NOT NULL", // page title, captured from the browser tab
-      "content_type TEXT NOT NULL", // MIME type of the captured page
-      "captured_at TEXT NOT NULL", // ISO timestamp when the page was captured
-    ].join(", ");
-    await this.create_table(WEBPAGE_CAPTURE_TABLE, webpage_capture_schema);
-
-    // Re-download fidelity log: one row per post-processing fetch of a stored
-    // URL. Records the outcome classification, fidelity (fetched_at, http_status,
-    // content hash), and the <meta>-derived fields parsed from the re-downloaded
-    // page. Append-only so content drift and unavailability stay visible over
-    // time. Holds NO page content — re-downloaded bytes are served on demand; an
-    // encrypted on-demand content cache is a separate tier (task-39.3).
-    const webpage_fetch_schema = [
-      "fetch_id TEXT PRIMARY KEY", // hash of page_session_id + fetched_at
-      "page_session_id TEXT NOT NULL", // metadata row this fetch serves (no FK)
-      "url TEXT NOT NULL", // the stored public URL that was re-downloaded
-      "final_url TEXT", // url after redirects; null if unresolved
-      "outcome TEXT NOT NULL", // ok|auth_redirect|forbidden|paywall|dead_link|non_html
-      "http_status INTEGER", // final status; null on transport failure
-      "content_hash TEXT", // sha-256 hex of re-downloaded content; null if excluded
-      "content_type TEXT", // MIME of the re-downloaded response
-      "author TEXT", // <meta> fields parsed from the re-download
-      "published_at TEXT",
-      "lang TEXT",
-      "site_name TEXT",
-      "fetched_at TEXT NOT NULL", // ISO timestamp of the fetch attempt
-    ].join(", ");
-    await this.create_table(WEBPAGE_FETCH_TABLE, webpage_fetch_schema);
-
-    // Performance optimization: Add database indexes for common queries
-    await this.create_indexes();
-  }
-
-  /**
-   * Creates database indexes to optimize common query patterns.
-   * This significantly improves performance for frequently used queries.
-   *
-   * @returns Promise that resolves when all indexes are created
-   * @throws {Error} If index creation fails
-   */
-  private async create_indexes(): Promise<void> {
-    console.log("Creating database indexes for performance optimization...");
-
-    try {
-      // Index for URL lookups (common in tree finding operations)
-      await this.exec(`CREATE INDEX IF NOT EXISTS idx_activity_sessions_url 
-                      ON ${WEBPAGE_ACTIVITY_SESSIONS_TABLE}(url)`);
-
-      // Index for tree_id lookups (critical for tree member queries)
-      await this.exec(`CREATE INDEX IF NOT EXISTS idx_activity_sessions_tree_id 
-                      ON ${WEBPAGE_ACTIVITY_SESSIONS_TABLE}(tree_id)`);
-
-      // Index for referrer_page_session_id (used in orphan processing)
-      await this
-        .exec(`CREATE INDEX IF NOT EXISTS idx_activity_sessions_referrer 
-                      ON ${WEBPAGE_ACTIVITY_SESSIONS_TABLE}(referrer_page_session_id)`);
-
-      // Index for page_loaded_at (used for time-based sorting and filtering)
-      await this
-        .exec(`CREATE INDEX IF NOT EXISTS idx_activity_sessions_loaded_at 
-                      ON ${WEBPAGE_ACTIVITY_SESSIONS_TABLE}(page_loaded_at)`);
-
-      // Index for tree activity time lookups
-      await this.exec(`CREATE INDEX IF NOT EXISTS idx_trees_latest_activity
-                      ON ${WEBPAGE_TREES_TABLE}(latest_activity_time)`);
-
-      // Index for capture title searches (used in get_page_by_title)
-      await this.exec(`CREATE INDEX IF NOT EXISTS idx_capture_title
-                      ON ${WEBPAGE_CAPTURE_TABLE}(title)`);
-
-      console.log("✅ Database indexes created successfully");
-    } catch (error) {
-      console.error("Error creating database indexes:", error);
-      throw error;
-    }
-  }
 
   /**
    * Executes a SQL query and returns all matching results.
@@ -697,8 +587,9 @@ export async function list_capture_targets(
 /**
  * Reads the most recent re-download fetch record for a page session, or null —
  * the fidelity/drift lookup over the append-only {@link WEBPAGE_FETCH_TABLE} log.
- * The content read path does not consult this (it always re-downloads live); a
- * fetch-result cache that would is task-39.3.
+ * The content read path does not consult this (it always re-downloads live);
+ * consumers that need repeated content reads opt into the encrypted content
+ * cache (`redownload/cached_corpus.ts`).
  */
 export async function get_latest_webpage_fetch(
   db: DuckDB,
@@ -1255,4 +1146,80 @@ export async function get_webpage_by_url(
     console.error("Error getting webpage by URL:", error);
     throw error;
   }
+}
+
+/**
+ * Creates the metadata-store tables and indexes (idempotent). Called once
+ * after {@link DuckDB.init} by the owner of the metadata store; the content
+ * cache (a separate encrypted store) has its own schema.
+ */
+export async function create_metadata_schema(db: DuckDB): Promise<void> {
+  const webpage_trees_schema = [
+    "id TEXT PRIMARY KEY", // hash of the root page session ID + its load time
+    "latest_activity_time TEXT", // ISO timestamp of the last activity in this tree
+    "first_load_time TEXT", // ISO timestamp of the first page load in this tree
+  ].join(", ");
+  await db.create_table(WEBPAGE_TREES_TABLE, webpage_trees_schema);
+
+  const activity_sessions_schema = [
+    "id TEXT PRIMARY KEY", // hash of url + timestamp
+    "url TEXT NOT NULL",
+    "referrer TEXT",
+    "referrer_page_session_id TEXT", // ID of the referrer page session, if any
+    "page_loaded_at TEXT", // ISO timestamp string when the page was loaded
+    `tree_id TEXT NOT NULL REFERENCES ${WEBPAGE_TREES_TABLE}(id)`, // ID of the navigation tree this session belongs to
+  ].join(", ");
+  await db.create_table(WEBPAGE_ACTIVITY_SESSIONS_TABLE, activity_sessions_schema);
+
+  // Capture metadata store, keyed by page_session_id (no foreign key, so a
+  // capture can be written before or independently of the activity-session row).
+  // This holds browsing metadata only — page content is never stored here. The
+  // authoritative content path is RE-DOWNLOAD (src/redownload/): content, and
+  // the `<meta>`-derived fields (author / site_name / published_at / lang), are
+  // obtained by re-fetching the public URL and logged to `webpage_fetch`.
+  const webpage_capture_schema = [
+    "page_session_id TEXT PRIMARY KEY", // hash of url + timestamp
+    "url TEXT NOT NULL",
+    "title TEXT NOT NULL", // page title, captured from the browser tab
+    "content_type TEXT NOT NULL", // MIME type of the captured page
+    "captured_at TEXT NOT NULL", // ISO timestamp when the page was captured
+  ].join(", ");
+  await db.create_table(WEBPAGE_CAPTURE_TABLE, webpage_capture_schema);
+
+  // Re-download fidelity log: one row per post-processing fetch of a stored
+  // URL. Records the outcome classification, fidelity (fetched_at, http_status,
+  // content hash), and the <meta>-derived fields parsed from the re-downloaded
+  // page. Append-only so content drift and unavailability stay visible over
+  // time. Holds NO page content — re-downloaded bytes are served on demand; the
+  // encrypted on-demand content cache is a separate tier (redownload/content_cache.ts).
+  const webpage_fetch_schema = [
+    "fetch_id TEXT PRIMARY KEY", // hash of page_session_id + fetched_at
+    "page_session_id TEXT NOT NULL", // metadata row this fetch serves (no FK)
+    "url TEXT NOT NULL", // the stored public URL that was re-downloaded
+    "final_url TEXT", // url after redirects; null if unresolved
+    "outcome TEXT NOT NULL", // ok|auth_redirect|forbidden|paywall|dead_link|non_html
+    "http_status INTEGER", // final status; null on transport failure
+    "content_hash TEXT", // sha-256 hex of re-downloaded content; null if excluded
+    "content_type TEXT", // MIME of the re-downloaded response
+    "author TEXT", // <meta> fields parsed from the re-download
+    "published_at TEXT",
+    "lang TEXT",
+    "site_name TEXT",
+    "fetched_at TEXT NOT NULL", // ISO timestamp of the fetch attempt
+  ].join(", ");
+  await db.create_table(WEBPAGE_FETCH_TABLE, webpage_fetch_schema);
+
+  // Indexes for the common query patterns over the metadata tables.
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_activity_sessions_url
+                 ON ${WEBPAGE_ACTIVITY_SESSIONS_TABLE}(url)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_activity_sessions_tree_id
+                 ON ${WEBPAGE_ACTIVITY_SESSIONS_TABLE}(tree_id)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_activity_sessions_referrer
+                 ON ${WEBPAGE_ACTIVITY_SESSIONS_TABLE}(referrer_page_session_id)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_activity_sessions_loaded_at
+                 ON ${WEBPAGE_ACTIVITY_SESSIONS_TABLE}(page_loaded_at)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_trees_latest_activity
+                 ON ${WEBPAGE_TREES_TABLE}(latest_activity_time)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_capture_title
+                 ON ${WEBPAGE_CAPTURE_TABLE}(title)`);
 }

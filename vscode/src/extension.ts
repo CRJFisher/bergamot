@@ -5,7 +5,7 @@ import { ConfigManager } from './config/config_manager';
 import { get_storage_base } from './config/storage_path';
 import { init_dev_log } from './dev_log';
 import { DatabaseManager, METADATA_DB_FILENAME } from './database/database_manager';
-import { get_or_create_metadata_db_key } from './database/encryption_key';
+import { METADATA_DB_KEY_SECRET, get_or_create_store_key } from './database/encryption_key';
 import { ServerManager } from './server/server_manager';
 import { MCPServerManager } from './server/mcp_server_manager';
 import { CommandManager } from './commands/command_manager';
@@ -53,8 +53,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const store_file_exists = fs.existsSync(
       path.join(storage_base, METADATA_DB_FILENAME)
     );
-    const encryption_key = await get_or_create_metadata_db_key(
+    const encryption_key = await get_or_create_store_key(
       context.secrets,
+      METADATA_DB_KEY_SECRET,
       store_file_exists
     );
     const databases = await database_manager.initialize_all(
