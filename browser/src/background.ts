@@ -204,6 +204,9 @@ const handle_created_nav_target = (
   });
 };
 
+// Incognito tabs never reach this code: the extension is disabled in private
+// browsing via manifest.json "incognito": "not_allowed", so no listener fires and
+// no metadata is captured for an incognito tab (privacy-core principle 2).
 // Set up event listeners (registered synchronously at top level, as MV3 requires).
 chrome.tabs.onCreated.addListener(handle_tab_created);
 chrome.tabs.onUpdated.addListener(handle_tab_updated);

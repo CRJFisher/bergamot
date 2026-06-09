@@ -9,7 +9,6 @@ import { PageMetadata } from "../read_metadata";
 export interface CaptureFixture {
   name: string;
   url: string;
-  content_type: string;
   /** The raw page, read from the committed fixture file. */
   html: string;
   /** Expected cheap <head> metadata. */
@@ -24,7 +23,6 @@ export const CAPTURE_FIXTURES: CaptureFixture[] = [
   {
     name: "article",
     url: "https://blog.example.com/zstd",
-    content_type: "text/html",
     html: read_fixture("article.html"),
     expected_metadata: {
       title: "How zstd Compression Works & Why It Matters",
@@ -37,7 +35,6 @@ export const CAPTURE_FIXTURES: CaptureFixture[] = [
   {
     name: "docs_with_nav",
     url: "https://docs.example.com/api/configure",
-    content_type: "text/html",
     html: read_fixture("docs_with_nav.html"),
     expected_metadata: {
       title: "configure() — Bergamot API Reference",
@@ -50,7 +47,6 @@ export const CAPTURE_FIXTURES: CaptureFixture[] = [
   {
     name: "nav_heavy",
     url: "https://shop.example.com/sitemap",
-    content_type: "text/html",
     html: read_fixture("nav_heavy.html"),
     expected_metadata: {
       title: "Site Map",
@@ -63,7 +59,6 @@ export const CAPTURE_FIXTURES: CaptureFixture[] = [
   {
     name: "aggregator",
     url: "https://news.example.com/",
-    content_type: "text/html",
     html: read_fixture("aggregator.html"),
     expected_metadata: {
       title: "Top Stories",

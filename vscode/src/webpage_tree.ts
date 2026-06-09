@@ -194,8 +194,9 @@ async function create_new_tree_as_root(
   session: PageActivitySession
 ): Promise<TreeManagementResult> {
   // Tree construction is independent of relevance: every visit gets a tree node
-  // (referrer/tree linking), and the capture gate decides keep/drop separately
-  // downstream. Aggregator/nav pages are no longer special-cased here.
+  // (referrer/tree linking). There is no capture gate — content exclusion (login
+  // wall, dead links) happens at re-download time (src/redownload/). Aggregator/
+  // nav pages are no longer special-cased here.
 
   const tree_id = md5_hash(`${session.url}:${session.page_loaded_at}`);
   const session_with_tree_id = {

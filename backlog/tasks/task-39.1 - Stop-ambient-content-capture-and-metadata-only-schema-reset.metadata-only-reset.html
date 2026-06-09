@@ -145,7 +145,10 @@
   .verify{list-style:none;padding:0;margin:12px 0;max-width:86ch}
   .verify li{display:flex;gap:12px;padding:9px 0;border-top:var(--hair);align-items:flex-start}
   .verify li:first-child{border-top:none}
-  .verify .box{width:18px;height:18px;border:2px solid var(--g4);border-radius:5px;flex:0 0 auto;margin-top:2px}
+  .verify .box{width:18px;height:18px;border:2px solid var(--olive);border-radius:5px;flex:0 0 auto;margin-top:2px;
+    background:var(--olive);position:relative}
+  .verify .box::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:9px;
+    border:solid var(--ivory);border-width:0 2px 2px 0;transform:rotate(45deg)}
   .verify li span{font-size:.92rem}
 
   footer{margin-top:60px;padding-top:18px;border-top:var(--hair);font-family:var(--mono);
@@ -181,13 +184,13 @@
     <h1>Stop ambient content capture, reset the schema to metadata-only</h1>
     <p class="prose">Privacy is bergamot's organizing principle. The capture path stores
       <strong>browsing metadata only — never page content</strong>: visit id, URL, page-load timestamp,
-      title, and the navigation/session graph. The browser stops reading page content entirely. Page
+      title, and the navigation/session graph. The browser does not read page content at all. Page
       content and its derived fields are obtained later by re-downloading the public URL as an anonymous,
-      cookie-free visitor, where the login wall is the privacy filter. This is the contract for that change:
-      what the capture pipeline does, the settled design decisions behind it, and the exact files that carry
-      the work — read before any code is written.</p>
+      cookie-free visitor, where the login wall is the privacy filter. This page describes the capture
+      pipeline as it now stands: what it carries end to end, the design decisions behind it, and the exact
+      files that carry the work.</p>
     <div class="meta-row">
-      <span class="chip key">PRE-IMPLEMENTATION CONTRACT</span>
+      <span class="chip key">AS BUILT · commit 27a346f</span>
       <span class="chip">priority <strong>high</strong></span>
       <span class="chip olive">unblocked by 39.2 ✓</span>
       <span class="chip rust">destructive · no shims</span>
@@ -195,10 +198,10 @@
     </div>
     <div class="prompt-box">
       <div class="label">ground truth</div>
-      <p>Spec: <code>backlog/tasks/task-39.1 — Stop ambient content capture + metadata-only schema reset.md</code>.
+      <p>Implemented at <code>27a346f</code> · spec: <code>backlog/tasks/task-39.1 — Stop ambient content capture + metadata-only schema reset.md</code>.
         Model: <code>backlog/drafts/privacy-preserving-capture-model.md</code> ·
         Decision: <code>docs/decisions/privacy-core-reorientation.md</code> · intention tree: <code>CLAUDE.md</code>.
-        The file map below is verified against the current source.</p>
+        Every file map row, the schema shape, and the AC mapping below are verified against the committed source.</p>
     </div>
   </header>
 
@@ -226,8 +229,8 @@
     <h2>What the capture path carries, end to end</h2>
     <p class="prose">The capture pipeline runs from the page, through the browser extension and the local
       server, into the DuckDB metadata store. The diagram traces a single visit through every hop. The
-      upper band is the path as the code stands today; the lower band is the metadata-only contract this
-      task delivers. Reading downward at any column shows exactly what that hop stops doing.</p>
+      upper band is the content-handling path that was removed; the lower band is the metadata-only path
+      that runs today. Reading downward at any column shows exactly what that hop no longer does.</p>
 
     <div class="figure">
       <svg viewBox="0 0 1180 470" role="img" aria-label="Before-and-after of the capture pipeline. Today the content script reads document.body.outerHTML, the background worker zstd-compresses it, the server decompresses and re-compresses and parses head meta, and DuckDB stores a compressed content blob plus meta columns. The metadata-only contract reads only url and document.title, forwards metadata uncompressed, threads title through without decompression, and stores only page_session_id, url, title, content_type, and captured_at.">
@@ -248,7 +251,7 @@
 
         <!-- BEFORE band label -->
         <rect x="8" y="44" width="1164" height="172" rx="12" fill="#f2e6e0" opacity="0.45"/>
-        <text x="22" y="64" font-family="ui-monospace,monospace" font-size="10" font-weight="700" fill="#9c4a2f" letter-spacing="1">PIPELINE AS IT STANDS — reads & stores content</text>
+        <text x="22" y="64" font-family="ui-monospace,monospace" font-size="10" font-weight="700" fill="#9c4a2f" letter-spacing="1">REMOVED — the path that read & stored content</text>
 
         <!-- before nodes -->
         <g font-family="ui-sans-serif,system-ui" font-size="12">
@@ -301,7 +304,7 @@
 
         <!-- AFTER band label -->
         <rect x="8" y="266" width="1164" height="158" rx="12" fill="#eef0e2" opacity="0.5"/>
-        <text x="22" y="286" font-family="ui-monospace,monospace" font-size="10" font-weight="700" fill="#6f7a3f" letter-spacing="1">METADATA-ONLY CONTRACT — this task</text>
+        <text x="22" y="286" font-family="ui-monospace,monospace" font-size="10" font-weight="700" fill="#6f7a3f" letter-spacing="1">AS BUILT — metadata-only path (commit 27a346f)</text>
 
         <g font-family="ui-sans-serif,system-ui" font-size="12">
           <rect x="22" y="300" width="166" height="106" rx="9" fill="#f7f4ec" stroke="#6f7a3f" stroke-width="1.5"/>
@@ -322,7 +325,7 @@
           <text x="600" y="324" text-anchor="middle" font-weight="600">thread title</text>
           <text x="600" y="346" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">no decompress</text>
           <text x="600" y="362" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6f7a3f">no gate</text>
-          <text x="600" y="380" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">small body limit</text>
+          <text x="600" y="380" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">1mb body limit</text>
           <text x="600" y="394" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">title not raw_content</text>
 
           <rect x="772" y="300" width="166" height="106" rx="9" fill="#f7f4ec" stroke="#6f7a3f" stroke-width="1.5"/>
@@ -357,18 +360,19 @@
         <span><i style="border-top-color:#6c6859;border-top-style:dashed"></i> content sourced from re-download</span>
         <span><span class="swatch" style="background:#f2e6e0"></span> deleted surface</span>
       </div>
-      <figcaption>Each upper hop loses its content-handling step in the lower band: no extraction, no zstd
+      <figcaption>Each upper hop has lost its content-handling step in the lower band: no extraction, no zstd
         either side, no capture gate, no <code>&lt;head&gt;</code> parsing at capture. Title rides through as a
-        plain string from the tab. Content and its derived fields are no longer absent placeholders — they
-        are simply not part of capture; they arrive later from the cookie-less re-downloader.</figcaption>
+        plain string from the tab — <code>document.title</code> → <code>POST /visit</code> body → <code>ExtendedPageVisit.title</code>
+        → <code>CaptureInputs.title</code> → <code>store_capture</code> → the <code>title</code> column. Content and its
+        derived fields are not part of capture at all; they arrive later from the cookie-less re-downloader.</figcaption>
     </div>
   </section>
 
   <section id="decisions">
     <div class="eyebrow">settled with the product owner</div>
     <h2>Four resolved design decisions</h2>
-    <p class="prose">These are not open questions. Each was confirmed and is the cheapest correct way to
-      honor the model under the no-surplus rule.</p>
+    <p class="prose">Each decision was settled with the product owner before the work and landed exactly as
+      planned. Each is the cheapest correct way to honor the model under the no-surplus rule.</p>
     <div class="decisions">
       <div class="dec">
         <div class="head"><span class="num">1</span><h3>Title comes from the tab, not the HTML</h3></div>
@@ -399,22 +403,24 @@
           <code>show_gate_metrics</code> command are removed. Incognito refusal is added at the cheapest layer:
           <code>"incognito":"not_allowed"</code> in the manifest, so the extension never runs there.</p>
         <div class="why">Every gate check was content-based; auth/redirect filtering already moved to
-          re-download (39.2). Today no incognito handling exists anywhere — the manifest flag adds it.</div>
+          re-download (39.2). Incognito handling now lives in one declarative line — the manifest flag, so the
+          extension never runs in a private window.</div>
       </div>
     </div>
     <aside class="callout rust">
       <span class="k">no backwards-compat shims (constitution)</span>
       <p>This is a destructive change. No migration, no adapters, no kept-as-NULL columns, no tests propped
-        up against the old contract. The store is reset to the metadata-only shape; callers are updated to the
-        new pattern; obsolete code and fixtures are deleted outright.</p>
+        up against the old contract. The store is the metadata-only shape; every caller uses the new pattern;
+        obsolete code and fixtures are deleted outright. A development database carrying the old schema is reset
+        by hand — the procedure is documented at <code>backlog/docs/dev-db-reset.md</code>.</p>
     </aside>
   </section>
 
   <section id="files">
     <div class="eyebrow">the work · verified against source</div>
     <h2>File-by-file change map</h2>
-    <p class="prose">Grouped by layer. Each row names the file and the precise edit. Expand a group to read it;
-      browser, server, and schema are open by default because they carry the contract.</p>
+    <p class="prose">Grouped by layer. Each row names the file and the change that landed. Expand a group to
+      read it; browser, server, and schema are open by default because they carry the core of the change.</p>
 
     <div class="filemap">
       <details class="grp browser" open>
@@ -470,7 +476,7 @@
           <div class="frow"><div class="path">vscode/src/workflow/page_gate.test.ts · gate_metrics.test.ts</div><div class="act"><span class="verb del">delete</span>gate is gone.</div></div>
           <div class="frow"><div class="path">vscode/src/workflow/page_capture_pipeline.test.ts · capture_eval.test.ts · command_manager.test.ts · duck_db.test.ts</div><div class="act"><span class="verb edit">rewrite</span>to the metadata-only contract; remove gate / command assertions.</div></div>
           <div class="frow"><div class="path">vscode/src/workflow/__fixtures__/capture/{empty,auth,redirect}.html</div><div class="act"><span class="verb del">delete</span>obsolete gate fixtures.</div></div>
-          <div class="frow"><div class="path">a new test (AC #6)</div><div class="act"><span class="verb add">add</span>assert that browsing produces <strong>zero stored page content</strong>.</div></div>
+          <div class="frow"><div class="path">vscode/src/server/server_pipeline.integration.test.ts</div><div class="act"><span class="verb add">add</span>(AC #6) after a real ingest, query <code>information_schema.columns</code> for <code>webpage_capture</code> and assert it has no content column — browsing produces <strong>zero stored page content</strong>.</div></div>
         </div>
       </details>
     </div>
@@ -479,8 +485,9 @@
   <section id="schema">
     <div class="eyebrow">the destructive reset</div>
     <h2>The <code>webpage_capture</code> shape, before and after</h2>
-    <p class="prose">The store is recreated to the metadata-only shape — no migration. Eight columns leave:
-      three compression columns and four <code>&lt;head&gt;</code>-derived fields. Five columns remain.</p>
+    <p class="prose">The store is the metadata-only shape, created fresh — no migration. Seven columns are
+      gone: three compression columns and four <code>&lt;head&gt;</code>-derived fields. Five columns remain.
+      An existing development database is reset by hand, documented at <code>backlog/docs/dev-db-reset.md</code>.</p>
     <div class="code">
       <div class="fl"><span>vscode/src/duck_db.ts — CREATE TABLE webpage_capture</span><span>reset · no migration</span></div>
 <pre><span class="cm">// columns that LEAVE — content & its derived metadata</span>
@@ -493,11 +500,11 @@
 <span class="del">lang         TEXT,                  -- parsed from &lt;head&gt;</span>
 
 <span class="cm">// columns that REMAIN — browsing metadata only</span>
-<span class="add">page_session_id TEXT PRIMARY KEY,</span>
+<span class="add">page_session_id TEXT PRIMARY KEY,  <span class="dim">-- hash of url + timestamp</span></span>
 <span class="add">url             TEXT NOT NULL,</span>
-<span class="add">title           TEXT,        <span class="dim">-- from document.title (the tab), not parsed HTML</span></span>
-<span class="add">content_type    TEXT,</span>
-<span class="add">captured_at     TIMESTAMP NOT NULL</span>
+<span class="add">title           TEXT NOT NULL,      <span class="dim">-- from document.title (the tab), not parsed HTML</span></span>
+<span class="add">content_type    TEXT NOT NULL,      <span class="dim">-- set to 'text/html' at capture</span></span>
+<span class="add">captured_at     TEXT NOT NULL       <span class="dim">-- ISO timestamp</span></span>
 </pre>
     </div>
     <aside class="callout">
@@ -517,10 +524,10 @@
       <tbody>
         <tr><td class="acn">#1</td><td>The browser sends a metadata-only visit payload (no <code>content</code>, no compression); <code>visit_compression.ts</code> and the zstd dep are deleted.</td><td class="where">data_collector.ts · visit_compression.ts (del) · navigation.ts · content.ts · background.ts · browser/package.json</td></tr>
         <tr><td class="acn">#2</td><td>The server ingests metadata only; the decompress/store path and <code>@mongodb-js/zstd</code> are removed.</td><td class="where">server_manager.ts · vscode/package.json</td></tr>
-        <tr><td class="acn">#3</td><td>The <code>webpage_capture</code> schema has no content/compression columns, as a destructive reset with no migration shim.</td><td class="where">duck_db.ts · page_capture_models.ts · store_capture.ts</td></tr>
+        <tr><td class="acn">#3</td><td>The <code>webpage_capture</code> schema has no content/compression columns, as a destructive reset with no migration shim.</td><td class="where">duck_db.ts · page_capture_models.ts · store_capture.ts · backlog/docs/dev-db-reset.md</td></tr>
         <tr><td class="acn">#4</td><td>Title, URL, and load timestamp come directly from the tab; <code>&lt;meta&gt;</code>-derived fields are not read at capture.</td><td class="where">content.ts (<code>document.title</code>) · store_capture.ts (no <code>read_metadata</code>) · the four meta columns dropped</td></tr>
         <tr><td class="acn">#5</td><td>The capture gate keeps only incognito refusal; no content-based gating remains at capture.</td><td class="where">page_gate.ts &amp; gate_metrics.ts (del) · command_manager.ts (del cmd) · manifest.json <code>"incognito":"not_allowed"</code></td></tr>
-        <tr><td class="acn">#6</td><td>Browsing produces zero stored page content, verified by a test.</td><td class="where">new test asserting no stored content · server_pipeline.integration.test.ts</td></tr>
+        <tr><td class="acn">#6</td><td>Browsing produces zero stored page content, verified by a test that queries <code>information_schema.columns</code> for <code>webpage_capture</code> after a real ingest and asserts no content column exists.</td><td class="where">server_pipeline.integration.test.ts</td></tr>
         <tr><td class="acn">#7</td><td>The capture/storage test suite and obsolete fixtures are rewritten or deleted to the metadata-only contract (no shims); build and tests are green.</td><td class="where">all rows in the Tests group · __fixtures__/capture/*.html (del)</td></tr>
       </tbody>
     </table>
@@ -533,24 +540,25 @@
   </section>
 
   <section id="verify">
-    <div class="eyebrow">done means</div>
-    <h2>Verification checklist</h2>
+    <div class="eyebrow">what holds in the shipped code</div>
+    <h2>Verified properties</h2>
     <ul class="verify">
       <li><span class="box"></span><span>A visit payload carries <code>url</code> + <code>title</code> + session graph — no <code>content</code> field, no base64 blob.</span></li>
       <li><span class="box"></span><span>No <code>@hpcc-js/wasm-zstd</code> in the browser, no <code>@mongodb-js/zstd</code> in vscode; no WASM compile path; <code>'wasm-unsafe-eval'</code> gone from the manifest CSP.</span></li>
       <li><span class="box"></span><span>A fresh <code>webpage_capture</code> table has exactly five columns; no content/compression/meta columns exist.</span></li>
       <li><span class="box"></span><span><code>page_gate.ts</code>, <code>gate_metrics.ts</code>, and the <code>show_gate_metrics</code> command are gone; the extension declares <code>"incognito":"not_allowed"</code>.</span></li>
-      <li><span class="box"></span><span>A test browses a page and asserts zero stored page content (AC #6); obsolete gate fixtures are removed.</span></li>
+      <li><span class="box"></span><span><code>server_pipeline.integration.test.ts</code> ingests a visit then queries <code>information_schema.columns</code> and asserts <code>webpage_capture</code> has no content column (AC #6); obsolete gate fixtures are removed.</span></li>
       <li><span class="box"></span><span><code>read_metadata.ts</code> still exists and is reachable from <code>src/redownload/corpus.ts</code>; only its capture-time call is gone.</span></li>
+      <li><span class="box"></span><span><code>store_capture</code> is a thin metadata writer — no zstd, no <code>read_metadata</code>; the dead dev-log stages (<code>compression_failed</code>, <code>decompress_failed</code>, <code>gate_result</code>, <code>content_truncated</code>, <code>dropped</code>) and <code>byte_size</code> are pruned; the server JSON body limit is <code>1mb</code>.</span></li>
       <li><span class="box"></span><span>Build and the full test suite are green with no shims kept to stay green.</span></li>
     </ul>
   </section>
 
   <footer>
-    Pre-implementation understanding contract for task-39.1 (stop ambient content capture + metadata-only
-    DuckDB schema reset). The before/after pipeline diagram is a comprehension aid, clearly labeled; the
-    contract itself is the metadata-only path. File map verified against the working tree. Sibling of the task
-    doc · self-contained · no external assets · 2026-06-09.
+    As-built reference for task-39.1 (stop ambient content capture + metadata-only DuckDB schema reset),
+    implemented at commit 27a346f. The before/after pipeline diagram contrasts the removed content-handling
+    path with the metadata-only path that runs today. File map, schema shape, and AC mapping verified against
+    the committed source. Sibling of the task doc · self-contained · no external assets · 2026-06-09.
   </footer>
 </main>
 

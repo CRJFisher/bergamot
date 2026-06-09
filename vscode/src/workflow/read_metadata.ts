@@ -1,11 +1,12 @@
 /**
- * Cheap, deterministic metadata extraction from a captured HTML page.
+ * Cheap, deterministic `<head>` metadata extraction, applied to RE-DOWNLOADED
+ * public pages (the re-download corpus, task-39.2). Capture itself reads no page
+ * content; this parser runs only over content the re-download fetcher pulls back
+ * from the public URL.
  *
  * Reads only the document `<head>` signals — `<title>`, Open-Graph / `<meta>`
- * tags, and the `<html lang>` attribute. Main-content extraction and
- * summarisation are handled by the RAG-prep pipeline, which reads the stored
- * raw page on demand. The parse is a light regex scan so capture pulls in no
- * heavyweight HTML/DOM dependency.
+ * tags, and the `<html lang>` attribute. The parse is a light regex scan so it
+ * pulls in no heavyweight HTML/DOM dependency.
  */
 
 /** Metadata read from a page's `<head>` / Open-Graph tags. */

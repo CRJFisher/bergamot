@@ -22,8 +22,11 @@ export interface CaptureInputs {
  * The capture pipeline. For each visit it stores the browsing metadata (url,
  * title, capture timestamp) via `store_capture` in DuckDB. No page content is
  * read or stored — content is obtained on demand by re-downloading the public
- * URL (the re-download corpus, task-39.2). Tree linking happens upstream in the
- * visit queue (`webpage_tree`) before this runs.
+ * URL (the re-download corpus, task-39.2). There is no capture gate: empty /
+ * auth / redirect pages cannot be judged here (no content to inspect), so that
+ * exclusion now happens at re-download time — see `redownload/fetch_outcome.ts`
+ * (auth_redirect / dead_link) and `redownload/corpus.ts`. Tree linking happens
+ * upstream in the visit queue (`webpage_tree`) before this runs.
  */
 export async function run_page_capture(
   deps: CaptureDeps,

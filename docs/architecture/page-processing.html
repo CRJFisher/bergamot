@@ -30,7 +30,7 @@
     <p class="tagline">How a captured visit becomes a stored record. Ingestion is <strong>pure, lossless
     metadata capture with zero LLM calls</strong>: visit metadata is stored, and page content is acquired
     separately by re-downloading the public URL during post-processing.</p>
-    <span class="pill">visit → deterministic gate → store metadata &nbsp;·&nbsp; (no LLM, no network)</span>
+    <span class="pill">visit → store metadata &nbsp;·&nbsp; (no LLM, no network, no gate)</span>
   </section>
 
   <p class="lead">
@@ -59,50 +59,46 @@
   <p>Capture is a short, fully deterministic path orchestrated by
   <code>run_page_capture(deps, inputs)</code> in <code>vscode/src/workflow/page_capture_pipeline.ts</code> — a
   plain function over an immutable <code>CaptureDeps</code> struct, not a stateful class. For each visit it
-  runs the relevance gate; for kept visits it stores the visit metadata (URL, title, timestamp). No page
-  content is read, no model is ever called, and nothing is written to a vector store.</p>
+  stores the visit metadata (URL, title, timestamp). There is no capture gate: with no content to inspect,
+  every non-incognito visit's metadata is recorded. No page content is read, no model is ever called, and
+  nothing is written to a vector store.</p>
   <div class="diagram">
-    <p class="cap">Deterministic capture — zero LLM, metadata only</p>
+    <p class="cap">Deterministic capture — zero LLM, metadata only, no gate</p>
     <pre class="mermaid">
 flowchart TB
     raw["visit metadata<br/>(url, title, load timestamp)"]
-    gate{"evaluate_page_gate (NON-LLM)<br/>incognito refused upstream"}
-    drop["drop · record reason"]
     store["store_capture (NON-LLM)<br/>persist visit metadata"]
     db[("DuckDB webpage_capture<br/>metadata only")]
 
-    raw --> gate
-    gate -- "interstitial" --> drop
-    gate -- keep --> store --> db
+    raw --> store --> db
 
     classDef det fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
     classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
-    class raw,gate,store det;
+    class raw,store det;
     class db st;
     </pre>
   </div>
   <p>Navigation-tree linking (referrer → tree) happens upstream in the visit queue
-  (<code>webpage_tree.ts</code>) before the pipeline runs, and is independent of the keep/drop decision — every
-  visit gets a tree node; only the capture is gated.</p>
+  (<code>webpage_tree.ts</code>) before the pipeline runs — every visit gets a tree node and its metadata is
+  stored.</p>
   <div class="cards">
     <div class="card"><h3>Metadata source of truth</h3><p>Visit metadata (URL, title, timestamp, navigation graph) is stored losslessly in DuckDB and is the durable source of truth. Page content is acquired later by re-downloading the public URL.</p></div>
     <div class="card"><h3>Title from the tab</h3><p>Title and URL are read directly from the tab at capture — no page body needed. The <code>&lt;meta&gt;</code>-derived fields (site, author, published, language) are parsed later from the re-downloaded page.</p></div>
     <div class="card"><h3>Zero LLM, zero failure surface</h3><p>Ingestion makes no network call and cannot fail on auth, prompt-length, or non-JSON. It is the cheapest, most robust path; all model cost lives in the RAG pipeline where it is gated.</p></div>
   </div>
 
-  <h2><span class="num">2</span>The capture gate</h2>
-  <p><code>evaluate_page_gate(visit)</code> (<code>vscode/src/workflow/page_gate.ts</code>) returns a
-  <code>GateDecision {keep, reason}</code> from cheap, deterministic signals over metadata — no LLM, no topic
-  taxonomy, no content inspection (there is no content to inspect). Incognito tabs are refused before any
-  capture request is made. The gate is deliberately <strong>permissive</strong>: it keeps the visit and records
-  its metadata. There is no ingestion-time sensitivity heuristic and no content denylist — the privacy
-  exclusion is enforced by the login wall at re-download time.</p>
+  <h2><span class="num">2</span>No capture gate — exclusion moves to re-download</h2>
+  <p>There is no capture-time keep/drop decision. With no page content read at capture, there is nothing to
+  judge: every non-incognito visit's metadata is recorded. Incognito tabs never reach capture at all — the
+  extension is disabled in private-browsing windows via the browser manifest
+  (<code>"incognito": "not_allowed"</code>), so no listener fires for them.</p>
   <p>Empty, auth, and redirect interstitials cannot be judged at capture, because there is no content to
-  inspect. Dropping them moves to <strong>re-download time</strong>: a fetch that yields a login wall, redirect
-  stub, or empty body is discarded there, and the auth-walled visit remains as trail/metadata only. An optional
-  URL-pattern skip may avoid re-downloading obvious auth/redirect hosts. The gate never throws on unusual input.
-  Per-decision counts accumulate in <code>gate_metrics.ts</code> and are surfaced by the
-  <code>bergamot.showCaptureMetrics</code> command.</p>
+  inspect. That exclusion moves to <strong>re-download time</strong>: a fetch that yields a login wall, redirect
+  stub, dead link, or empty body is discarded there
+  (<code>vscode/src/redownload/fetch_outcome.ts</code> / <code>corpus.ts</code>), and the auth-walled visit
+  remains as trail/metadata only. The login wall is the privacy filter — there is no ingestion-time sensitivity
+  heuristic and no content denylist. An optional URL-pattern skip may avoid re-downloading obvious auth/redirect
+  hosts.</p>
 
   <h2><span class="num">3</span>The stored record — <code>PageCapture</code></h2>
   <p><code>webpage_capture</code> is the single canonical per-page metadata record, keyed by
@@ -117,17 +113,14 @@ classDiagram
       +string page_session_id   «PK · stable id»
       +string url               «source of truth»
       +string title             «from the tab»
-      +string site_name         «re-download &lt;meta&gt;»
-      +string author            «re-download &lt;meta&gt;»
-      +string published_at      «re-download &lt;meta&gt;»
-      +string lang              «re-download &lt;meta&gt;»
+      +string content_type
       +string captured_at
     }
-    note for PageCapture "Metadata only — no page content.\nNo LLM fields, no extraction, no summary.\nContent is re-downloaded on demand."
+    note for PageCapture "Metadata only — no page content.\nThe &lt;meta&gt;-derived fields (site, author,\npublished, lang) live in webpage_fetch,\nfilled from re-download, not here.\nContent is re-downloaded on demand."
     </pre>
   </div>
   <ul class="clean">
-    <li><strong>Write</strong>: <code>store_capture()</code> persists the visit metadata (URL, title, timestamp) and upserts via <code>insert_webpage_capture()</code> (<code>ON CONFLICT (page_session_id) DO UPDATE</code>, so a re-capture overwrites cleanly). The <code>&lt;meta&gt;</code>-derived fields are filled in later from the re-downloaded page. The metadata view is <code>PageCapture</code> (<code>page_capture_models.ts</code>); navigation-tree queries read the title from <code>webpage_capture</code>.</li>
+    <li><strong>Write</strong>: <code>store_capture()</code> persists the visit metadata (URL, title, timestamp) and upserts via <code>insert_webpage_capture()</code> (<code>ON CONFLICT (page_session_id) DO UPDATE</code>, so a re-capture overwrites cleanly). The <code>&lt;meta&gt;</code>-derived fields (site, author, published, lang) are not stored here — they are parsed from the re-downloaded page and logged to <code>webpage_fetch</code>. The metadata view is <code>PageCapture</code> (<code>page_capture_models.ts</code>); navigation-tree queries read the title from <code>webpage_capture</code>.</li>
     <li><strong>Read (content)</strong>: page content is acquired by re-downloading the stored URL during post-processing. Cached re-downloaded content (a separate encrypted tier) is the read path the RAG-prep pipeline uses; it is exposed over HTTP as <code>/query/capture_content</code> and surfaced by the MCP <code>get_webpage_content</code> tool, and may be unavailable for login-walled or dead pages.</li>
   </ul>
 
@@ -170,11 +163,9 @@ flowchart LR
   <p>Capture is a small set of single-purpose modules under <code>vscode/src/</code>:</p>
   <table>
     <tr><th>Module</th><th>Responsibility</th></tr>
-    <tr><td><code>workflow/page_capture_pipeline.ts</code></td><td><code>run_page_capture(deps, inputs)</code> — orchestrates gate → store metadata → record outcome</td></tr>
-    <tr><td><code>workflow/page_gate.ts</code></td><td><code>evaluate_page_gate(visit) → GateDecision</code> — the deterministic capture gate over metadata</td></tr>
-    <tr><td><code>workflow/read_metadata.ts</code></td><td><code>read_metadata(html, url) → PageMetadata</code> — cheap <code>&lt;meta&gt;</code> parse over re-downloaded content</td></tr>
+    <tr><td><code>workflow/page_capture_pipeline.ts</code></td><td><code>run_page_capture(deps, inputs)</code> — stores visit metadata and records the outcome (no gate)</td></tr>
+    <tr><td><code>workflow/read_metadata.ts</code></td><td><code>read_metadata(html, url) → PageMetadata</code> — cheap <code>&lt;meta&gt;</code> parse over re-downloaded content (used by <code>redownload/</code>, not capture)</td></tr>
     <tr><td><code>workflow/store_capture.ts</code></td><td><code>store_capture()</code> — persist visit metadata to DuckDB</td></tr>
-    <tr><td><code>workflow/gate_metrics.ts</code></td><td>process-wide captured/dropped counters (module accumulator, not a class)</td></tr>
     <tr><td><code>page_capture_models.ts</code></td><td><code>PageCapture</code> / <code>PageActivitySessionWithMeta</code> schemas</td></tr>
     <tr><td><code>duck_db.ts</code></td><td><code>webpage_capture</code> table + <code>insert_webpage_capture</code> / <code>get_webpage_capture</code> + tree queries</td></tr>
   </table>

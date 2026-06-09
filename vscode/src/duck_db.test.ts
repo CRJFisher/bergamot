@@ -28,8 +28,7 @@ jest.mock("path", () => ({
 // Create mock implementations
 const mockFs = fs as jest.Mocked<typeof fs>;
 
-/** Builds a minimal capture record for a session id (compressed bytes unused by
- *  the metadata-join queries under test). */
+/** Builds a minimal metadata-only capture record for a session id. */
 function capture_record(page_session_id: string, title: string, url: string) {
   return {
     page_session_id,

@@ -97,7 +97,7 @@ export class DuckDB {
    * Creates the following tables:
    * - webpage_trees: Navigation tree metadata
    * - webpage_activity_sessions: Individual page visit records
-   * - webpage_capture: Raw captured pages (zstd) plus cheap metadata
+   * - webpage_capture: Per-visit browsing metadata (url, title, captured_at)
    *
    * @returns Promise that resolves when initialization is complete
    * @throws {Error} If database connection or table creation fails

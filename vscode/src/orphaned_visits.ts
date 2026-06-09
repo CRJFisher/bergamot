@@ -14,7 +14,7 @@ import { dev_log, record_outcome } from "./dev_log";
  * @interface OrphanedVisit
  */
 export interface OrphanedVisit {
-  /** The page visit data including content */
+  /** The parked visit's browsing metadata (title + session graph), no content */
   visit: PageActivitySessionWithoutTree & { title: string; visit_id: string };
   /** Browser tab ID of the page that opened this page */
   opener_tab_id: number;

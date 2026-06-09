@@ -1,7 +1,7 @@
 /**
- * Bounded ring of raw page visits, kept so a developer can re-run the capture
- * pipeline on a real page without re-browsing it (see the `bergamot.replayVisit`
- * command). Unrelated to the DuckDB `webpage_capture` store.
+ * Bounded ring of page visits (browsing metadata only), kept so a developer can
+ * re-run the capture pipeline on a real visit without re-browsing it (see the
+ * `bergamot.replayVisit` command). Unrelated to the DuckDB `webpage_capture` store.
  *
  * Distinct from the durable visit inbox: inbox entries are deleted once a visit
  * reaches DuckDB, whereas these persist for replay until evicted by the ring.

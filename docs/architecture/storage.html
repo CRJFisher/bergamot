@@ -107,10 +107,7 @@ erDiagram
         text page_session_id PK
         text url
         text title "from the tab"
-        text site_name "re-download &lt;meta&gt;"
-        text author "re-download &lt;meta&gt;"
-        text published_at "re-download &lt;meta&gt;"
-        text lang "re-download &lt;meta&gt;"
+        text content_type
         text captured_at
     }
     </pre>
@@ -120,19 +117,20 @@ erDiagram
     <tr><th>Table</th><th>Grain</th><th>Holds</th></tr>
     <tr><td><code>webpage_trees</code></td><td>1 row / browsing session</td><td>Tree id + first/last activity timestamps.</td></tr>
     <tr><td><code>webpage_activity_sessions</code></td><td>1 row / page visit</td><td>URL, referrer + referrer session id, load time, owning tree.</td></tr>
-    <tr><td><code>webpage_capture</code></td><td>1 row / kept visit</td><td>Per-visit metadata: URL and title (captured directly from the tab) plus <code>&lt;meta&gt;</code>-derived fields (site, author, published, lang) filled in from re-download. No page content. The canonical per-page metadata record.</td></tr>
+    <tr><td><code>webpage_capture</code></td><td>1 row / visit</td><td>Per-visit metadata only: <code>page_session_id</code>, URL, title (captured directly from the tab), content type, and capture timestamp. No page content. The canonical per-page metadata record.</td></tr>
   </table>
   <p><code>webpage_capture</code> has no foreign key on <code>page_session_id</code>, so a capture can be written
   before (or independently of) its activity-session row. Tree queries <code>LEFT JOIN webpage_capture</code> to
   read a page's title. The title and URL are captured directly from the tab; the
-  <code>&lt;meta&gt;</code>-derived fields (site, author, published, lang) are populated later when the public
-  page is re-downloaded.</p>
+  <code>&lt;meta&gt;</code>-derived fields (site, author, published, lang) are <em>not</em> stored here — they are
+  parsed from the re-downloaded page and logged to <code>webpage_fetch</code>.</p>
 
   <div class="note green">
     <strong>Canonical record:</strong> <code>webpage_capture</code> is the single per-page <em>metadata</em>
-    record — URL, title, timestamps, and <code>&lt;meta&gt;</code>-derived fields. It holds no page content;
-    content is re-downloaded on demand and any cache is a separate encrypted tier. Schema changes are applied by
-    a destructive dev-DB reset (<code>backlog/docs/dev-db-reset.md</code>) — no migrations, no
+    record — <code>page_session_id</code>, URL, title, content type, and capture timestamp. It holds no page
+    content and no <code>&lt;meta&gt;</code>-derived fields; content and those fields come from re-download
+    (logged to <code>webpage_fetch</code>), and any content cache is a separate encrypted tier. Schema changes
+    are applied by a destructive dev-DB reset (<code>backlog/docs/dev-db-reset.md</code>) — no migrations, no
     backwards-compatibility shims.
   </div>
 
