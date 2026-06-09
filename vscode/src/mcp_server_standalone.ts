@@ -76,7 +76,14 @@ async function main() {
       {
         name: "get_webpage_content",
         description:
-          "Retrieve the raw captured page (decompressed) for a specific page session id",
+          "Retrieve the re-downloaded public content for a page session id. Content " +
+          "is fetched server-side from the page's public URL, not from local " +
+          "storage, so it may differ from the page as originally viewed (dynamic " +
+          "content or drift). It is unavailable for pages behind a login wall or " +
+          "paywall, or that are dead or redirected: those return an outcome with no " +
+          "content. The result is a discriminated object whose `outcome` is `ok` " +
+          "(with `content`) or an exclusion (`auth_redirect`, `forbidden`, " +
+          "`paywall`, `dead_link`, `non_html`) with a `reason`.",
         inputSchema: {
           type: "object",
           properties: {

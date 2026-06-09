@@ -7,7 +7,6 @@ import { compress } from '@mongodb-js/zstd';
 import { ServerManager } from './server_manager';
 import { DatabaseManager } from '../database/database_manager';
 import { DuckDB, get_webpage_by_url, get_webpage_capture } from '../duck_db';
-import { read_capture } from '../workflow/store_capture';
 import { VisitQueueProcessor } from '../visit_queue_processor';
 import { md5_hash } from '../hash_utils';
 
@@ -18,8 +17,7 @@ jest.mock('vscode');
 /**
  * Exercises the real capture seam end to end — real Express ServerManager, real
  * DuckDB on a temp path, the real visit queue and capture pipeline. Posts a
- * genuine zstd visit and asserts the raw page round-trips losslessly from the
- * capture store.
+ * genuine zstd visit and asserts the visit is ingested to a metadata row.
  */
 describe('server pipeline integration (real DuckDB, capture pipeline)', () => {
   let storage_dir: string;
@@ -80,14 +78,13 @@ describe('server pipeline integration (real DuckDB, capture pipeline)', () => {
     expect(row?.url).toBe(url);
     expect(row?.title).toBe('Integration');
 
-    // Capture store: the raw page round-trips losslessly from webpage_capture —
-    // the durable content. Nothing is written to any vector store at ingest.
+    // Capture store: the metadata row exists for this visit. Page content is read
+    // back by re-downloading the public URL (task-39.2), not from this store.
     const id = md5_hash(`${url}:${page_loaded_at}`);
     const capture_meta = await get_webpage_capture(duck_db, id);
     expect(capture_meta).not.toBeNull();
     expect(capture_meta?.url).toBe(url);
-    const recovered = await read_capture(duck_db, id);
-    expect(recovered?.html).toBe(html);
+    expect(capture_meta?.title).toBe('Integration');
   }, 60000);
 });
 

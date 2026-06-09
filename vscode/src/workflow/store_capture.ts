@@ -1,29 +1,17 @@
 /**
- * Capture-first storage: persist the raw page losslessly (zstd-compressed) as
- * the durable source of truth, alongside cheap `<head>` metadata. Interpretation
- * — main-content extraction, chunking, embedding, summarisation — is handled by
- * the RAG-prep pipeline (task-31), which reads the stored raw page on demand via
- * {@link read_capture}.
+ * Capture-first storage: persist the raw page losslessly (zstd-compressed)
+ * alongside cheap `<head>` metadata. Page content is read back by re-downloading
+ * the public URL in post-processing (the re-download corpus, task-39.2), not from
+ * this store.
  */
 
-import { compress, decompress } from "@mongodb-js/zstd";
-import {
-  DuckDB,
-  get_webpage_capture,
-  get_webpage_capture_bytes,
-  insert_webpage_capture,
-} from "../duck_db";
+import { compress } from "@mongodb-js/zstd";
+import { DuckDB, insert_webpage_capture } from "../duck_db";
 import { PageCapture } from "../page_capture_models";
 import { read_metadata } from "./read_metadata";
 
 /** Codec marker stored alongside the compressed page bytes. */
 export const CAPTURE_ENCODING = "zstd";
-
-/** The raw HTML and its cheap metadata, recovered from a stored capture. */
-export interface RecoveredCapture {
-  html: string;
-  metadata: PageCapture;
-}
 
 export interface StoreCaptureInput {
   page_session_id: string;
@@ -76,23 +64,4 @@ export async function store_capture(
     lang: record.lang,
     captured_at: record.captured_at,
   };
-}
-
-/**
- * Recovers a stored capture: decompresses the raw page bytes back to the
- * original HTML and returns it with the capture metadata. This is the
- * parent-document read path for the RAG-prep pipeline (task-31.3). Returns null
- * if no capture exists for the id.
- */
-export async function read_capture(
-  db: DuckDB,
-  page_session_id: string
-): Promise<RecoveredCapture | null> {
-  const [bytes, metadata] = await Promise.all([
-    get_webpage_capture_bytes(db, page_session_id),
-    get_webpage_capture(db, page_session_id),
-  ]);
-  if (!bytes || !metadata) return null;
-  const html = (await decompress(Buffer.from(bytes))).toString("utf-8");
-  return { html, metadata };
 }

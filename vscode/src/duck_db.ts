@@ -11,7 +11,10 @@ import {
   PageCapture,
   PageActivitySessionWithMeta,
   PageActivitySessionWithMetaSchema,
+  WebpageFetch,
+  WebpageFetchSchema,
 } from "./page_capture_models";
+import { md5_hash } from "./hash_utils";
 import {
   PageActivitySession,
   PageActivitySessionSchema,
@@ -32,6 +35,7 @@ export interface DuckDBConfig {
 const WEBPAGE_ACTIVITY_SESSIONS_TABLE = "webpage_activity_sessions";
 const WEBPAGE_TREES_TABLE = "webpage_trees";
 const WEBPAGE_CAPTURE_TABLE = "webpage_capture";
+const WEBPAGE_FETCH_TABLE = "webpage_fetch";
 
 /**
  * Capture metadata columns selected (aliased `cap_*`) when a tree query joins
@@ -170,6 +174,29 @@ export class DuckDB {
     ].join(", ");
     await this.create_table(WEBPAGE_CAPTURE_TABLE, webpage_capture_schema);
 
+    // Re-download fidelity log: one row per post-processing fetch of a stored
+    // URL. Records the outcome classification, fidelity (fetched_at, http_status,
+    // content hash), and the <meta>-derived fields parsed from the re-downloaded
+    // page. Append-only so content drift and unavailability stay visible over
+    // time. Holds NO page content — re-downloaded bytes are served on demand; an
+    // encrypted on-demand content cache is a separate tier (task-39.3).
+    const webpage_fetch_schema = [
+      "fetch_id TEXT PRIMARY KEY", // hash of page_session_id + fetched_at
+      "page_session_id TEXT NOT NULL", // metadata row this fetch serves (no FK)
+      "url TEXT NOT NULL", // the stored public URL that was re-downloaded
+      "final_url TEXT", // url after redirects; null if unresolved
+      "outcome TEXT NOT NULL", // ok|auth_redirect|forbidden|paywall|dead_link|non_html
+      "http_status INTEGER", // final status; null on transport failure
+      "content_hash TEXT", // sha-256 hex of re-downloaded content; null if excluded
+      "content_type TEXT", // MIME of the re-downloaded response
+      "author TEXT", // <meta> fields parsed from the re-download
+      "published_at TEXT",
+      "lang TEXT",
+      "site_name TEXT",
+      "fetched_at TEXT NOT NULL", // ISO timestamp of the fetch attempt
+    ].join(", ");
+    await this.create_table(WEBPAGE_FETCH_TABLE, webpage_fetch_schema);
+
     // Performance optimization: Add database indexes for common queries
     await this.create_indexes();
   }
@@ -210,6 +237,10 @@ export class DuckDB {
       // Index for capture title searches (used in get_page_by_title)
       await this.exec(`CREATE INDEX IF NOT EXISTS idx_capture_title
                       ON ${WEBPAGE_CAPTURE_TABLE}(title)`);
+
+      // Index for "latest fetch for this page session" reads on the read path.
+      await this.exec(`CREATE INDEX IF NOT EXISTS idx_fetch_session_time
+                      ON ${WEBPAGE_FETCH_TABLE}(page_session_id, fetched_at)`);
 
       console.log("✅ Database indexes created successfully");
     } catch (error) {
@@ -556,6 +587,108 @@ export async function get_webpage_capture_bytes(
   // getRowObjects returns a BLOB column as a DuckDBBlobValue whose `.bytes` is
   // the raw Uint8Array; tolerate a plain Uint8Array defensively.
   return value instanceof Uint8Array ? value : value.bytes;
+}
+
+/** Columns of {@link WEBPAGE_FETCH_TABLE}, in insert/select order. */
+const WEBPAGE_FETCH_COLUMNS = [
+  "fetch_id",
+  "page_session_id",
+  "url",
+  "final_url",
+  "outcome",
+  "http_status",
+  "content_hash",
+  "content_type",
+  "author",
+  "published_at",
+  "lang",
+  "site_name",
+  "fetched_at",
+] as const;
+
+/**
+ * Appends one re-download fetch record (outcome + fidelity + parsed `<meta>`).
+ * The row is keyed by a deterministic `fetch_id` of `page_session_id + fetched_at`
+ * so an accidental double-write of the same attempt is idempotent; distinct
+ * attempts (different timestamps) each append a row, preserving drift history.
+ */
+export async function insert_webpage_fetch(
+  db: DuckDB,
+  fetch: WebpageFetch
+): Promise<void> {
+  const fetch_id = md5_hash(`${fetch.page_session_id}:${fetch.fetched_at}`);
+  const params: Record<string, DuckDBValue> = {
+    fetch_id,
+    page_session_id: fetch.page_session_id,
+    url: fetch.url,
+    final_url: fetch.final_url,
+    outcome: fetch.outcome,
+    http_status: fetch.http_status,
+    content_hash: fetch.content_hash,
+    content_type: fetch.content_type,
+    author: fetch.author,
+    published_at: fetch.published_at,
+    lang: fetch.lang,
+    site_name: fetch.site_name,
+    fetched_at: fetch.fetched_at,
+  };
+  const columns = WEBPAGE_FETCH_COLUMNS.join(", ");
+  const placeholders = WEBPAGE_FETCH_COLUMNS.map((c) => `$${c}`).join(", ");
+  await db.execute(
+    `INSERT INTO ${WEBPAGE_FETCH_TABLE} (${columns}) VALUES (${placeholders})
+     ON CONFLICT (fetch_id) DO NOTHING`,
+    params
+  );
+}
+
+/**
+ * Lists every stored capture's `page_session_id` and `url` — the fetch targets
+ * the re-download corpus iterates to build the public subset.
+ */
+export async function list_capture_targets(
+  db: DuckDB
+): Promise<{ page_session_id: string; url: string }[]> {
+  const rows = await db.query<Record<string, DuckDBValue>>(
+    `SELECT page_session_id, url FROM ${WEBPAGE_CAPTURE_TABLE}`
+  );
+  return rows.map((row) => ({
+    page_session_id: row.page_session_id.toString(),
+    url: row.url.toString(),
+  }));
+}
+
+/** Reads the most recent re-download fetch record for a page session, or null. */
+export async function get_latest_webpage_fetch(
+  db: DuckDB,
+  page_session_id: string
+): Promise<WebpageFetch | null> {
+  const row = await db.query_first<Record<string, DuckDBValue>>(
+    `SELECT ${WEBPAGE_FETCH_COLUMNS.join(", ")}
+     FROM ${WEBPAGE_FETCH_TABLE}
+     WHERE page_session_id = $id
+     ORDER BY fetched_at DESC LIMIT 1`,
+    { id: page_session_id }
+  );
+  if (!row) return null;
+  const text = (value: DuckDBValue): string | null =>
+    value === null || value === undefined ? null : value.toString();
+  return {
+    page_session_id: row.page_session_id.toString(),
+    url: row.url.toString(),
+    final_url: text(row.final_url),
+    outcome: WebpageFetchSchema.shape.outcome.parse(row.outcome.toString()),
+    http_status:
+      row.http_status === null || row.http_status === undefined
+        ? null
+        : Number(row.http_status),
+    content_hash: text(row.content_hash),
+    content_type: text(row.content_type),
+    author: text(row.author),
+    published_at: text(row.published_at),
+    lang: text(row.lang),
+    site_name: text(row.site_name),
+    fetched_at: row.fetched_at.toString(),
+  };
 }
 
 /**

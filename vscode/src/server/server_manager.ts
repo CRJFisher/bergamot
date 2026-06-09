@@ -19,8 +19,11 @@ import { ensure_inbox, persist_visit } from '../visit_inbox';
 import { PageActivitySessionWithoutTreeOrContentSchema } from '../duck_db_models';
 import { CaptureDeps } from '../workflow/page_capture_pipeline';
 import { dev_log, is_dev_log_enabled, is_browser_dev_stage, format_error_detail } from '../dev_log';
-import { read_capture } from '../workflow/store_capture';
 import { persist_replay_visit } from '../visit_replay';
+import { BrowserPool } from '../redownload/browser_pool';
+import { PolitenessGate } from '../redownload/politeness_gate';
+import { HeadlessFetcher } from '../redownload/headless_fetcher';
+import { ReDownloadCorpus, ContentCorpus } from '../redownload/corpus';
 
 /**
  * Candidate ports the server tries to bind, in order. The browser extension
@@ -54,6 +57,11 @@ export interface ServerConfig {
   inbox_dir?: string;
   /** Storage base; used to persist raw captures for replay in dev mode */
   storage_base?: string;
+  /**
+   * Content read path backing `/query/capture_content`. Defaults to a stealth
+   * headless re-download corpus over the stored URLs; injectable for tests.
+   */
+  content_corpus?: ContentCorpus;
 }
 
 /**
@@ -77,11 +85,26 @@ export class ServerManager {
   private queue_processor?: VisitQueueProcessor;
   private app: express.Application;
   private readonly capture_deps: CaptureDeps;
+  private readonly content_corpus: ContentCorpus;
+  /** Set only when this manager owns the default re-download browser. */
+  private browser_pool?: BrowserPool;
 
   constructor(private config: ServerConfig) {
     this.app = express();
     this.capture_deps = { duck_db: config.duck_db };
+    this.content_corpus = config.content_corpus ?? this.build_redownload_corpus();
     this.setup_middleware();
+  }
+
+  /**
+   * Builds the default content read path: a stealth headless re-download corpus.
+   * The browser launches lazily on the first content request and is closed on
+   * {@link stop}.
+   */
+  private build_redownload_corpus(): ContentCorpus {
+    this.browser_pool = new BrowserPool();
+    const fetcher = new HeadlessFetcher(this.browser_pool, new PolitenessGate());
+    return new ReDownloadCorpus(this.config.duck_db, fetcher);
   }
 
   /**
@@ -297,9 +320,12 @@ export class ServerManager {
       );
     });
 
-    // Parent-document read path: decompress the stored raw page on demand. This
-    // is the source the RAG-prep pipeline (task-31) will read; the MCP
-    // get_webpage_content tool routes here.
+    // Content read path: re-download the stored public URL on demand and serve
+    // its content. Authenticated/paywalled/dead/non-HTML pages report unavailable
+    // with no content — the login wall is the privacy filter. Returns the
+    // discriminated corpus entry, or null when no metadata row exists for the id.
+    // The MCP get_webpage_content tool routes here, as does TDT/RAG via the
+    // corpus interface directly.
     this.app.get('/query/capture_content', async (req, res) => {
       const page_session_id = String(req.query.page_session_id ?? '');
       if (!page_session_id) {
@@ -308,17 +334,8 @@ export class ServerManager {
           .json({ error: 'Missing page_session_id query parameter' });
         return;
       }
-      const recovered = await read_capture(this.config.duck_db, page_session_id);
-      res.json(
-        recovered
-          ? {
-              page_session_id,
-              url: recovered.metadata.url,
-              title: recovered.metadata.title,
-              content: recovered.html,
-            }
-          : null
-      );
+      const entry = await this.content_corpus.get_content(page_session_id);
+      res.json(entry);
     });
   }
 
@@ -426,6 +443,11 @@ export class ServerManager {
   async stop(): Promise<void> {
     if (this.queue_processor) {
       this.queue_processor.stop();
+    }
+
+    if (this.browser_pool) {
+      // Close the re-download Chromium so no headless process is leaked.
+      await this.browser_pool.close();
     }
 
     if (this.server) {

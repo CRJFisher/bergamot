@@ -1,10 +1,11 @@
 import { DuckDB, get_webpage_capture } from "../duck_db";
-import { store_capture, read_capture } from "./store_capture";
+import { store_capture } from "./store_capture";
 
 /**
- * Verifies capture storage: the raw page round-trips losslessly through
- * zstd+DuckDB, and cheap <head> metadata is read. Uses a real in-memory
- * DuckDB so the BLOB column behaviour is exercised for real.
+ * Verifies capture storage: a capture writes a metadata row keyed by
+ * page_session_id, and cheap <head> metadata is read. Uses a real in-memory
+ * DuckDB. Page content is read back by re-downloading the public URL (the
+ * re-download corpus, task-39.2), not from this store.
  */
 describe("store_capture", () => {
   let db: DuckDB;
@@ -28,24 +29,6 @@ describe("store_capture", () => {
 </head>
 <body><h1>Body</h1><p>Some content with binary-ish chars: éü—🚀</p></body>
 </html>`;
-
-  it("round-trips the raw page byte-identically", async () => {
-    await store_capture(db, {
-      page_session_id: "p1",
-      url: "https://example.com/a",
-      html: RICH_HTML,
-      content_type: "text/html",
-      captured_at: "2026-06-05T00:00:00.000Z",
-    });
-
-    const recovered = await read_capture(db, "p1");
-    expect(recovered).not.toBeNull();
-    expect(recovered?.html).toBe(RICH_HTML);
-    // Byte-identical when re-encoded to UTF-8 (covers multibyte/emoji).
-    expect(Buffer.from(recovered!.html, "utf-8")).toEqual(
-      Buffer.from(RICH_HTML, "utf-8")
-    );
-  });
 
   it("stores original_byte_size as the decompressed length", async () => {
     const meta = await store_capture(db, {
@@ -92,7 +75,6 @@ describe("store_capture", () => {
   });
 
   it("returns null when no capture exists", async () => {
-    expect(await read_capture(db, "missing")).toBeNull();
     expect(await get_webpage_capture(db, "missing")).toBeNull();
   });
 });
