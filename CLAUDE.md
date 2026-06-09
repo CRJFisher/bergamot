@@ -13,14 +13,14 @@ Turn a user's passive browsing into a durable, local-only, queryable knowledge b
 ```text
 ROOT — local, durable, queryable knowledge base from passive browsing
 │
-├── CAPTURE  (shipped; metadata-only refactor in progress)
+├── CAPTURE  (shipped — metadata-only)
 │     Passively, deterministically capture METADATA ONLY: visit id, URL,
 │     load timestamp, title, and the navigation/session graph (referrer
 │     chains, tab-opener relationships, group/session ids, SPA events).
 │     Zero-LLM, deterministic. Page content is NEVER stored at capture.
 │     Browsing metadata is the durable source of truth.
 │
-├── STORE  (shipped; schema reset in progress)
+├── STORE  (shipped — encrypted metadata store + encrypted content-cache tier)
 │     Durable, local-only persistence of the metadata record. DuckDB
 │     metadata store + derived stores; no raw-content capture row. Any
 │     content cached after re-download is a separate, on-demand, encrypted,

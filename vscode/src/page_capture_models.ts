@@ -23,8 +23,9 @@ export type PageCapture = z.infer<typeof PageCaptureSchema>;
  * metadata (`fetched_at`, `http_status`, `content_hash`) and the `<meta>`-derived
  * fields parsed from the re-downloaded page. Appended once per fetch so that
  * content drift and unavailability over time stay visible. Holds no page content
- * — re-downloaded bytes are returned on demand by the read path, and an encrypted
- * on-demand cache is a separate tier (task-39.3).
+ * — re-downloaded bytes are returned on demand by the read path; the encrypted
+ * on-demand cache is a separate tier (`redownload/content_cache.ts`, populated
+ * only through `CachedCorpus`).
  */
 export const WebpageFetchSchema = z.object({
   page_session_id: z.string().describe("The stored metadata row this fetch serves"),

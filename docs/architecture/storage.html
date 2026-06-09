@@ -30,7 +30,7 @@
     <p class="tagline">Ingestion uses one store: DuckDB. It holds the browsing-metadata record — the durable
     source of truth. Any re-downloaded content is a separate encrypted on-demand tier; vector search is
     the job of the RAG-prep pipeline (task-31).</p>
-    <span class="pill">duck_db.ts · webpage_categorizations.db</span>
+    <span class="pill">duck_db.ts · webpage_categorizations.db · content_cache.db</span>
   </section>
 
   <h2><span class="num">1</span>One store at ingest</h2>
@@ -47,7 +47,7 @@
     </div>
     <div class="card">
       <h3>Content cache — separate encrypted tier</h3>
-      <p>Content is obtained later by re-downloading the public URL. Cached re-downloaded content lives in its own encrypted DuckDB store (<code>content_cache.db</code>) under the storage base, with its own OS-keystore key — never the source of truth, never inside the metadata store, and never in a syncable or git-tracked directory. It is populated only when a consumer (TDT, RAG, a research project) opts in through <code>CachedCorpus</code> with a named scope; the default read path re-downloads live. Every item is per-item deletable for the right-to-forget cascade.</p>
+      <p>Content is obtained later by re-downloading the public URL. Cached re-downloaded content lives in its own encrypted DuckDB store (<code>content_cache.db</code>) under the storage base, with its own OS-keystore key — never the source of truth and never inside the syncable metadata store; in dev it lives in the gitignored, unpackaged <code>.dev-storage/</code>, and if the surrounding directory is ever backed up or synced the file rides along as ciphertext — encryption, not location, is the load-bearing defense. It is populated only when a consumer opts in through <code>CachedCorpus</code> with a named scope (first consumers: the right-to-forget cascade, task-39.5; TDT, task-36.3); the default read path re-downloads live. Scopes attribute entries, they do not partition them — re-caching under a new scope reassigns the row. Every item is per-item deletable for the right-to-forget cascade.</p>
       <span class="tag">content_cache.db · on-demand · encrypted · scoped</span>
     </div>
     <div class="card">
@@ -89,6 +89,7 @@ erDiagram
     webpage_trees ||--o{ webpage_activity_sessions : contains
     webpage_activity_sessions ||--o| webpage_capture : "captured as"
     webpage_activity_sessions ||--o| webpage_activity_sessions : "referrer chain"
+    webpage_capture ||--o{ webpage_fetch : "re-downloaded as"
 
     webpage_trees {
         text id PK
@@ -110,6 +111,15 @@ erDiagram
         text content_type
         text captured_at
     }
+    webpage_fetch {
+        text fetch_id PK
+        text page_session_id
+        text url
+        text outcome "ok or exclusion"
+        int http_status
+        text content_hash
+        text fetched_at
+    }
     </pre>
   </div>
 
@@ -118,6 +128,7 @@ erDiagram
     <tr><td><code>webpage_trees</code></td><td>1 row / browsing session</td><td>Tree id + first/last activity timestamps.</td></tr>
     <tr><td><code>webpage_activity_sessions</code></td><td>1 row / page visit</td><td>URL, referrer + referrer session id, load time, owning tree.</td></tr>
     <tr><td><code>webpage_capture</code></td><td>1 row / visit</td><td>Per-visit metadata only: <code>page_session_id</code>, URL, title (captured directly from the tab), content type, and capture timestamp. No page content. The canonical per-page metadata record.</td></tr>
+    <tr><td><code>webpage_fetch</code></td><td>1 row / re-download attempt</td><td>Append-only fidelity log of the re-download fetcher: outcome classification (<code>ok</code> / auth_redirect / forbidden / paywall / dead_link / non_html), final URL, HTTP status, content hash, fetch timestamp, and the <code>&lt;meta&gt;</code>-derived fields. No page content.</td></tr>
   </table>
   <p><code>webpage_capture</code> has no foreign key on <code>page_session_id</code>, so a capture can be written
   before (or independently of) its activity-session row. Tree queries <code>LEFT JOIN webpage_capture</code> to

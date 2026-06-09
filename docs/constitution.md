@@ -15,14 +15,14 @@ The root has three load-bearing children, in sequence:
 ```
 ROOT — local, durable, queryable knowledge base from passive browsing
 │
-├── CAPTURE  (shipped; metadata-only refactor in progress)
+├── CAPTURE  (shipped — metadata-only)
 │     Passively, deterministically capture METADATA ONLY: visit id, URL,
 │     page-load timestamp, title, and the navigation/session graph (referrer
 │     chains, tab-opener relationships, group/session ids, SPA pushState/
 │     replaceState events). Zero-LLM, deterministic. Page content is NEVER
 │     stored at capture. Browsing metadata is the durable source of truth.
 │
-├── STORE  (shipped; schema reset in progress)
+├── STORE  (shipped — encrypted metadata store + encrypted content-cache tier)
 │     Durable, local-only persistence of the metadata record. DuckDB metadata
 │     store + derived stores; there is no raw-content capture row. "Durable"
 │     applies to the metadata (not silently mutated or lossy-extracted);

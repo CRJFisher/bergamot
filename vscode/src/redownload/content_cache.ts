@@ -7,12 +7,23 @@
  * never populated ambiently: content enters only when a consumer explicitly
  * caches a page under a named scope (see `CachedCorpus`). The store is its own
  * encrypted DuckDB file with its own OS-keystore key (separate from the
- * metadata store's, so destroying the cache key destroys only the cache), it
- * lives under the extension's storage base — outside any git-tracked,
- * syncable, or developer-controlled directory — and every item is deletable
- * for the right-to-forget cascade (task-39.5).
+ * metadata store's, so destroying the cache key destroys only the cache), and
+ * every item is deletable for the right-to-forget cascade (task-39.5).
+ *
+ * Quarantine: the file lives under the extension's storage base, never inside
+ * the syncable metadata artifact or the PKM repo (dev runs use the gitignored,
+ * unpackaged `.dev-storage/`). If the surrounding directory is ever swept into
+ * a backup or sync the file rides along as ciphertext — encryption, not
+ * location, is the load-bearing defense.
  */
+import * as fs from "fs";
+import * as path from "path";
+import * as vscode from "vscode";
 import { DuckDB } from "../duck_db";
+import {
+  CONTENT_CACHE_KEY_SECRET,
+  get_or_create_store_key,
+} from "../database/encryption_key";
 import { CorpusContent } from "./corpus";
 
 /** Filename of the encrypted content-cache store under the storage base. */
@@ -65,12 +76,43 @@ export async function create_content_cache_schema(db: DuckDB): Promise<void> {
 }
 
 /**
+ * The canonical open path for the content cache. Derives the store path from
+ * the storage base, sources the cache's own key from `SecretStorage` with the
+ * existence guard computed against that same path (so a transient keystore
+ * failure can never silently re-key an existing cache), opens the encrypted
+ * store, and creates the schema. Every consumer (the right-to-forget cascade,
+ * TDT) opens through here — hand-rolling the sequence risks pairing the wrong
+ * existence check with the key lookup.
+ */
+export async function open_content_cache(
+  secrets: vscode.SecretStorage,
+  storage_base: string
+): Promise<ContentCache> {
+  const database_path = path.join(storage_base, CONTENT_CACHE_DB_FILENAME);
+  const encryption_key = await get_or_create_store_key(
+    secrets,
+    CONTENT_CACHE_KEY_SECRET,
+    fs.existsSync(database_path)
+  );
+  const db = new DuckDB({ database_path, encryption_key });
+  await db.init();
+  await create_content_cache_schema(db);
+  return new ContentCache(db);
+}
+
+/**
  * Read/write/delete surface over the encrypted content-cache store. One row
  * per page session: re-caching a page (same deterministic id) replaces the
- * prior entry, so a fresher fetch wins and the newest scope owns the row.
+ * prior entry, so a fresher fetch wins and the newest WRITER's scope owns the
+ * row — a cache hit does not re-attribute scope (see {@link ContentCache.delete_scope}).
  */
 export class ContentCache {
   constructor(private readonly db: DuckDB) {}
+
+  /** Closes the underlying encrypted store (checkpoints the WAL away). */
+  async close(): Promise<void> {
+    await this.db.close();
+  }
 
   /** Reads a cached page's content, or null on a miss. */
   async get(page_session_id: string): Promise<CorpusContent | null> {
@@ -144,9 +186,17 @@ export class ContentCache {
 
   /**
    * Deletes one cached item — the per-item primitive the right-to-forget
-   * cascade (task-39.5) calls. The delete is checkpointed so the row leaves
-   * the WAL immediately; freed blocks inside the (encrypted) file are
-   * reclaimed by DuckDB on subsequent checkpoints.
+   * cascade (task-39.5) calls. The delete is checkpointed (one full WAL flush
+   * per call) so the row leaves the WAL and the live table immediately. The
+   * row's ciphertext may persist in freed blocks inside the file until DuckDB
+   * reuses them; it is unreadable without the cache key, and destroying the
+   * cache key (or emptying the cache, which truncates the file) destroys it
+   * outright. Deleting an id that is not cached is a no-op.
+   *
+   * Ordering constraint for the cascade: cache rows are resolved FROM the
+   * metadata store (by URL / origin / time-range), so derived tiers must be
+   * deleted before — or resolved before deleting — the metadata rows, or
+   * orphaned cache rows become unaddressable except by {@link delete_by_url}.
    */
   async delete_item(page_session_id: string): Promise<void> {
     await this.db.execute(
@@ -156,7 +206,26 @@ export class ContentCache {
     await this.db.exec("CHECKPOINT");
   }
 
-  /** Deletes every item cached under a scope (e.g. a finished project). */
+  /**
+   * Deletes every cached copy of a URL — the selector the cache serves
+   * natively (no metadata-store join), and the cleanup for rows orphaned by a
+   * metadata delete.
+   */
+  async delete_by_url(url: string): Promise<void> {
+    await this.db.execute(
+      `DELETE FROM ${CACHED_CONTENT_TABLE} WHERE url = $url`,
+      { url }
+    );
+    await this.db.exec("CHECKPOINT");
+  }
+
+  /**
+   * Deletes every item cached under a scope (e.g. a finished project). This
+   * is best-effort eviction, not right-to-forget: a cache hit does not
+   * re-attribute a row's scope, so a row written by scope A and later read by
+   * scope B is deleted with A's scope and survives B's. The forget primitive
+   * is {@link delete_item} / {@link delete_by_url} via the 39.5 cascade.
+   */
   async delete_scope(scope: string): Promise<void> {
     await this.db.execute(
       `DELETE FROM ${CACHED_CONTENT_TABLE} WHERE scope = $scope`,

@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import {
+  CONTENT_CACHE_KEY_SECRET,
   get_or_create_store_key,
   METADATA_DB_KEY_SECRET,
 } from "./encryption_key";
@@ -41,11 +42,23 @@ describe("get_or_create_store_key", () => {
     expect(second).toBe(first);
   });
 
-  it("generates distinct keys for distinct stores", async () => {
-    const a = await get_or_create_store_key(fake_secret_storage(), METADATA_DB_KEY_SECRET, false);
-    const b = await get_or_create_store_key(fake_secret_storage(), METADATA_DB_KEY_SECRET, false);
+  it("holds independent keys for the two stores in one SecretStorage", async () => {
+    const secrets = fake_secret_storage();
 
-    expect(a).not.toBe(b);
+    const metadata_key = await get_or_create_store_key(
+      secrets,
+      METADATA_DB_KEY_SECRET,
+      false
+    );
+    const cache_key = await get_or_create_store_key(
+      secrets,
+      CONTENT_CACHE_KEY_SECRET,
+      false
+    );
+
+    expect(metadata_key).not.toBe(cache_key);
+    expect(await secrets.get(METADATA_DB_KEY_SECRET)).toBe(metadata_key);
+    expect(await secrets.get(CONTENT_CACHE_KEY_SECRET)).toBe(cache_key);
   });
 
   it("refuses to mint a new key when a store file already exists", async () => {

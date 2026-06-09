@@ -79,6 +79,38 @@ function reason_of(outcome: FetchOutcome): string {
   return outcome.kind === "ok" ? "" : outcome.reason;
 }
 
+/**
+ * One public-corpus pass: walks every stored fetch target through the given
+ * content read and yields the `ok` pages. Shared by the live corpus and the
+ * cached corpus so the pass policy (target list, per-page failure isolation)
+ * cannot drift between them.
+ */
+export async function* iter_public_pages_via(
+  db: DuckDB,
+  get_content: (page_session_id: string) => Promise<CorpusEntry | null>
+): AsyncIterable<CorpusContent> {
+  const targets = await list_capture_targets(db);
+  for (const target of targets) {
+    let entry: CorpusEntry | null = null;
+    try {
+      entry = await get_content(target.page_session_id);
+    } catch (error) {
+      // Isolate per-page infrastructure failures (e.g. a transient browser or
+      // DB error) so one bad page does not abort the whole corpus pass. Only
+      // the opaque session id is logged — the extension-host console persists
+      // to plaintext log files, and URLs are sensitive metadata.
+      console.error(
+        `corpus read failed for page session ${target.page_session_id}:`,
+        error
+      );
+      continue;
+    }
+    if (entry && entry.outcome === "ok") {
+      yield entry.content;
+    }
+  }
+}
+
 export class ReDownloadCorpus implements ContentCorpus {
   constructor(
     private readonly db: DuckDB,
@@ -123,24 +155,7 @@ export class ReDownloadCorpus implements ContentCorpus {
   }
 
   async *iter_public_pages(): AsyncIterable<CorpusContent> {
-    const targets = await list_capture_targets(this.db);
-    for (const target of targets) {
-      let entry: CorpusEntry | null = null;
-      try {
-        entry = await this.get_content(target.page_session_id);
-      } catch (error) {
-        // Isolate per-page infrastructure failures (e.g. a transient browser or
-        // DB error) so one bad page does not abort the whole corpus pass.
-        console.error(
-          `re-download failed for ${target.page_session_id} (${target.url}):`,
-          error
-        );
-        continue;
-      }
-      if (entry && entry.outcome === "ok") {
-        yield entry.content;
-      }
-    }
+    yield* iter_public_pages_via(this.db, (id) => this.get_content(id));
   }
 
   /** Appends the fetch to the fidelity log so unavailability/drift stays visible. */

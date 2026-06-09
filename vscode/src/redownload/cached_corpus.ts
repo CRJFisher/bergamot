@@ -7,16 +7,23 @@
  * (`/query/capture_content`) stays uncached and re-downloads live — nothing
  * populates the cache ambiently.
  */
-import { DuckDB, list_capture_targets } from "../duck_db";
-import { ContentCorpus, CorpusContent, CorpusEntry } from "./corpus";
+import { DuckDB, get_webpage_capture } from "../duck_db";
+import {
+  ContentCorpus,
+  CorpusContent,
+  CorpusEntry,
+  iter_public_pages_via,
+} from "./corpus";
 import { ContentCache } from "./content_cache";
 
 export class CachedCorpus implements ContentCorpus {
   /**
-   * @param metadata_db - The metadata store (the fetch-target list)
+   * @param metadata_db - The metadata store (fetch targets + row existence)
    * @param corpus - The live re-download corpus to delegate misses to
    * @param cache - The encrypted content cache
-   * @param scope - The named consumer cache entries are attributed to
+   * @param scope - The named consumer cache entries are attributed to. A
+   *   cache hit does not re-attribute an existing row's scope — the newest
+   *   writer owns it (see `ContentCache.delete_scope`).
    */
   constructor(
     private readonly metadata_db: DuckDB,
@@ -31,8 +38,21 @@ export class CachedCorpus implements ContentCorpus {
    * under this scope. Exclusions (auth/paywall/dead/non-HTML) are never
    * cached — they re-classify on every read, so a page that becomes public
    * later is not pinned to a stale exclusion.
+   *
+   * The metadata row is checked first, even for a hit: `null` means "no
+   * metadata row exists", and a page whose metadata has been forgotten must
+   * not remain servable from the cache (the stale row is deleted on sight —
+   * the cascade's backstop, not its replacement).
    */
   async get_content(page_session_id: string): Promise<CorpusEntry | null> {
+    const capture = await get_webpage_capture(this.metadata_db, page_session_id);
+    if (!capture) {
+      const stale = await this.cache.get(page_session_id);
+      if (stale) {
+        await this.cache.delete_item(page_session_id);
+      }
+      return null;
+    }
     const cached = await this.cache.get(page_session_id);
     if (cached) {
       return { outcome: "ok", content: cached };
@@ -50,23 +70,8 @@ export class CachedCorpus implements ContentCorpus {
    * and cached. Excluded and unfetchable pages are not emitted.
    */
   async *iter_public_pages(): AsyncIterable<CorpusContent> {
-    const targets = await list_capture_targets(this.metadata_db);
-    for (const target of targets) {
-      let entry: CorpusEntry | null = null;
-      try {
-        entry = await this.get_content(target.page_session_id);
-      } catch (error) {
-        // Mirror the live corpus: isolate per-page infrastructure failures so
-        // one bad page does not abort the whole pass.
-        console.error(
-          `cached corpus read failed for ${target.page_session_id} (${target.url}):`,
-          error
-        );
-        continue;
-      }
-      if (entry && entry.outcome === "ok") {
-        yield entry.content;
-      }
-    }
+    yield* iter_public_pages_via(this.metadata_db, (id) =>
+      this.get_content(id)
+    );
   }
 }

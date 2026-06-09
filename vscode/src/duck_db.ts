@@ -38,7 +38,7 @@ export interface DuckDBConfig {
 }
 
 /** Alias under which the encrypted database file is attached. */
-const METADATA_STORE_ALIAS = "metadata_store";
+const STORE_ALIAS = "bergamot_store";
 
 /**
  * Normalized open target: an ephemeral in-memory database, or an encrypted
@@ -70,8 +70,11 @@ const CAPTURE_SELECT = [
 ].join(",\n         ");
 
 /**
- * DuckDB database wrapper for the capture pipeline. Manages tables for webpage
- * activity sessions, navigation trees, and raw-page captures.
+ * Generic encrypted single-file DuckDB store. The wrapper only opens (and
+ * closes) the store — a file-backed database is only ever created encrypted —
+ * and exposes query helpers; the schema is the store owner's contract, created
+ * explicitly after init ({@link create_metadata_schema} for the metadata
+ * store, `create_content_cache_schema` for the content cache).
  *
  * @example
  * ```typescript
@@ -80,10 +83,10 @@ const CAPTURE_SELECT = [
  *   encryption_key: key_from_secret_storage,
  * });
  * await db.init();
+ * await create_metadata_schema(db);
  *
- * // Query for webpage sessions
  * const sessions = await db.query<PageActivitySession>(
- *   'SELECT * FROM webpage_activity_sessions WHERE url LIKE ?',
+ *   'SELECT * FROM webpage_activity_sessions WHERE url LIKE $url_pattern',
  *   { url_pattern: '%example.com%' }
  * );
  *
@@ -203,10 +206,10 @@ export class DuckDB {
     // threat model (a process that can read our SQL can read the keystore).
     await this.connection.run(
       `ATTACH ${sql_string_literal(target.database_path)}
-       AS ${METADATA_STORE_ALIAS}
+       AS ${STORE_ALIAS}
        (ENCRYPTION_KEY ${sql_string_literal(target.encryption_key)})`
     );
-    await this.connection.run(`USE ${METADATA_STORE_ALIAS}`);
+    await this.connection.run(`USE ${STORE_ALIAS}`);
     await this.connection.run(`SET temp_file_encryption = true`);
     await this.connection.run(
       `SET temp_directory = ${sql_string_literal(`${target.database_path}.tmp`)}`

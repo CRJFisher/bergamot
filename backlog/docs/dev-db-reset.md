@@ -18,7 +18,7 @@ During F5 debugging `BERGAMOT_STORAGE_PATH` points the storage base at the repo-
 
 ### The encryption key is not part of a reset
 
-Each encrypted store has its own key in the OS keystore via VS Code `SecretStorage` (`bergamot.metadata_db_encryption_key` for the metadata store, `bergamot.content_cache_encryption_key` for the content cache; see `database/encryption_key.ts`). Deleting a store file does **not** require touching its key: the next run reads the keystore entry and creates a fresh encrypted store with the same key. Deleting the key as well is harmless once the file is gone (a new key is generated on first run) — but deleting a key while keeping its file makes that file permanently unreadable, by design (no plaintext fallback; see `docs/threat-model.md`).
+Each encrypted store has its own key in the OS keystore via VS Code `SecretStorage` (`bergamot.metadata_db_encryption_key` for the metadata store, `bergamot.content_cache_encryption_key` for the content cache; see `database/encryption_key.ts`). Deleting a store file does **not** require touching its key: the next open reads the keystore entry and creates a fresh encrypted store with the same key. Deleting the key as well is harmless once the file is gone (a new key is generated on first run) — but deleting a key while keeping its file makes that file permanently unreadable, by design (no plaintext fallback; see `docs/threat-model.md`).
 
 ## The procedure (single step)
 
@@ -35,7 +35,7 @@ Deleting the whole `.dev-storage/` directory is equivalent and also clears the v
 rm -rf .dev-storage
 ```
 
-The next F5 run recreates the DuckDB file — encrypted — with the current `CREATE TABLE` definitions.
+The next F5 run recreates the metadata store — encrypted — with the current `CREATE TABLE` definitions; the content cache is recreated the next time a consumer opts in through `CachedCorpus`.
 
 For an installed extension, delete the same entry under the extension's `globalStorageUri` directory.
 
