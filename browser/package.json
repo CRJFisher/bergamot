@@ -30,9 +30,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "dependencies": {
-    "@hpcc-js/wasm-zstd": "^1.2.1"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@jest/globals": "^29.7.0",
     "@playwright/test": "^1.60.0",

@@ -6,14 +6,12 @@ import request from 'supertest';
 import { ServerManager, ServerConfig, SERVER_PORT_RANGE } from './server_manager';
 import { DuckDB } from '../duck_db';
 import { VisitQueueProcessor } from '../visit_queue_processor';
-import { decompress } from '@mongodb-js/zstd';
 import { dev_log } from '../dev_log';
 
 // Mock dependencies
 jest.mock('../duck_db');
 jest.mock('../orphaned_visits');
 jest.mock('../visit_queue_processor');
-jest.mock('@mongodb-js/zstd');
 jest.mock('fs');
 jest.mock('../hash_utils', () => ({
   md5_hash: jest.fn().mockReturnValue('test-hash-id')
@@ -149,12 +147,11 @@ describe('ServerManager', () => {
     });
 
     describe('POST /visit', () => {
-      it('should process valid visit request', async () => {
-        (decompress as jest.Mock).mockResolvedValue(Buffer.from('test content'));
+      it('should process a valid metadata-only visit request', async () => {
         const visit_data = {
           url: 'https://example.com',
           page_loaded_at: '2024-01-01T00:00:00Z',
-          content: 'test content',
+          title: 'Example Page',
           referrer: null,
           referrer_page_session_id: null
         };
@@ -165,29 +162,47 @@ describe('ServerManager', () => {
           .expect(200);
 
         // With no browser-supplied visit_id, the server falls back to the
-        // deterministic content hash and echoes it back.
+        // deterministic url+timestamp hash and echoes it back.
         expect(response.body).toEqual({
           status: 'queued',
           position: 1,
           visit_id: 'test-hash-id'
         });
 
-        expect(mock_queue_processor.enqueue).toHaveBeenCalledWith(
+        // The page title is threaded onto the queued visit; no content field.
+        const enqueued = mock_queue_processor.enqueue.mock.calls[0][0];
+        expect(enqueued).toEqual(
           expect.objectContaining({
             id: 'test-hash-id',
             visit_id: 'test-hash-id',
             url: 'https://example.com',
-            raw_content: 'test content'
+            title: 'Example Page'
           })
+        );
+        expect('content' in enqueued).toBe(false);
+        expect('raw_content' in enqueued).toBe(false);
+      });
+
+      it('defaults the title to empty string when the browser omits it', async () => {
+        const visit_data = {
+          url: 'https://example.com',
+          page_loaded_at: '2024-01-01T00:00:00Z',
+          referrer: null,
+          referrer_page_session_id: null
+        };
+
+        await request(app).post('/visit').send(visit_data).expect(200);
+
+        expect(mock_queue_processor.enqueue).toHaveBeenCalledWith(
+          expect.objectContaining({ title: '' })
         );
       });
 
       it('echoes a browser-supplied visit_id back and threads it into the queued visit', async () => {
-        (decompress as jest.Mock).mockResolvedValue(Buffer.from('content'));
         const visit_data = {
           url: 'https://example.com',
           page_loaded_at: '2024-01-01T00:00:00Z',
-          content: 'content',
+          title: 'Example Page',
           referrer: null,
           referrer_page_session_id: null,
           visit_id: 'browser-supplied-visit-id',
@@ -199,62 +214,10 @@ describe('ServerManager', () => {
           .expect(200);
 
         // The browser-supplied correlation token is trusted and echoed back,
-        // not replaced by the server's content-hash fallback.
+        // not replaced by the server's hash fallback.
         expect(response.body.visit_id).toBe('browser-supplied-visit-id');
         expect(mock_queue_processor.enqueue).toHaveBeenCalledWith(
           expect.objectContaining({ visit_id: 'browser-supplied-visit-id' })
-        );
-      });
-
-      it('should decompress zstd compressed content', async () => {
-        const mock_decompress = decompress as jest.Mock;
-        mock_decompress.mockResolvedValue(Buffer.from('decompressed content'));
-
-        const visit_data = {
-          url: 'https://example.com',
-          page_loaded_at: '2024-01-01T00:00:00Z',
-          content: Buffer.from('compressed').toString('base64'),
-          referrer: null,
-          referrer_page_session_id: null
-        };
-
-        await request(app)
-          .post('/visit')
-          .send(visit_data)
-          .expect(200);
-
-        expect(mock_decompress).toHaveBeenCalled();
-        expect(mock_queue_processor.enqueue).toHaveBeenCalledWith(
-          expect.objectContaining({
-            raw_content: 'decompressed content'
-          })
-        );
-      });
-
-      it('should handle decompression failure gracefully', async () => {
-        const mock_decompress = decompress as jest.Mock;
-        mock_decompress.mockRejectedValue(new Error('Decompression failed'));
-
-        const visit_data = {
-          url: 'https://example.com',
-          page_loaded_at: '2024-01-01T00:00:00Z',
-          content: 'not-compressed-content',
-          referrer: null,
-          referrer_page_session_id: null
-        };
-
-        const response = await request(app)
-          .post('/visit')
-          .send(visit_data)
-          .expect(200);
-
-        // On decompression failure the content is dropped (stored empty) rather
-        // than passing the raw base64 through as page text.
-        expect(response.body.status).toBe('queued');
-        expect(mock_queue_processor.enqueue).toHaveBeenCalledWith(
-          expect.objectContaining({
-            raw_content: ''
-          })
         );
       });
 

@@ -4,7 +4,6 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { Server } from 'http';
-import { decompress } from '@mongodb-js/zstd';
 import { md5_hash } from '../hash_utils';
 import {
   DuckDB,
@@ -16,7 +15,7 @@ import {
 import { OrphanedVisitsManager } from '../orphaned_visits';
 import { VisitQueueProcessor, ExtendedPageVisit } from '../visit_queue_processor';
 import { ensure_inbox, persist_visit } from '../visit_inbox';
-import { PageActivitySessionWithoutTreeOrContentSchema } from '../duck_db_models';
+import { PageActivitySessionWithoutTreeSchema } from '../duck_db_models';
 import { CaptureDeps } from '../workflow/page_capture_pipeline';
 import { dev_log, is_dev_log_enabled, is_browser_dev_stage, format_error_detail } from '../dev_log';
 import { persist_replay_visit } from '../visit_replay';
@@ -33,13 +32,6 @@ import { ReDownloadCorpus, ContentCorpus } from '../redownload/corpus';
 export const SERVER_PORT_RANGE: readonly number[] = [
   5000, 5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009,
 ];
-
-/**
- * Upper bound on decompressed capture content. The browser already caps what it
- * sends; this is a defensive guard so a malformed or hostile payload cannot
- * exhaust memory when it decompresses (zstd "zip bomb").
- */
-const MAX_DECOMPRESSED_BYTES = 10 * 1024 * 1024; // 10 MB
 
 /** Maximum number of rows any read-only /query endpoint will return. */
 const MAX_QUERY_LIMIT = 100;
@@ -113,9 +105,9 @@ export class ServerManager {
    * @private
    */
   private setup_middleware(): void {
-    // Visits carry the page's zstd-compressed HTML (base64), which exceeds the
-    // default 100kb body limit on content-heavy pages.
-    this.app.use(express.json({ limit: '50mb' }));
+    // Visits carry browsing metadata only (url, title, timestamps, session
+    // graph), which is small; the cap is a defensive bound, not content sizing.
+    this.app.use(express.json({ limit: '1mb' }));
     // Only browser extensions (and origin-less local callers such as scripts or
     // tests) may reach the server. This blocks arbitrary web pages from POSTing
     // visits via fetch — the realistic threat for a loopback-bound server.
@@ -198,40 +190,16 @@ export class ServerManager {
           : id;
       dev_log('http_received', { visit_id, url: req.body.url });
 
-      // Decompress content if it's base64 encoded zstd compressed data
-      let content = req.body.content;
-      if (typeof content === 'string' && content.length > 0) {
-        try {
-          const compressed_data = Buffer.from(content, 'base64');
-          const decompressed_data = await decompress(compressed_data);
-          if (decompressed_data.length > MAX_DECOMPRESSED_BYTES) {
-            // Refuse oversized payloads rather than holding them in memory and
-            // capturing them; store nothing for this visit's content.
-            dev_log('decompress_failed', {
-              visit_id,
-              url: req.body.url,
-              error: `decompressed size ${decompressed_data.length} exceeds ${MAX_DECOMPRESSED_BYTES}`,
-            });
-            content = '';
-          } else {
-            content = decompressed_data.toString('utf-8');
-          }
-        } catch (error) {
-          dev_log('decompress_failed', {
-            visit_id,
-            url: req.body.url,
-            error: format_error_detail(error),
-          });
-          // Never fall through with the raw base64 string as page content — it
-          // would be captured verbatim instead of the real page.
-          content = '';
-        }
-      }
+      // The visit payload is metadata only. The page title is captured from the
+      // browser tab and threaded to the capture store; it is not part of the
+      // page-activity session row, so it rides alongside the parsed session.
+      const title: string =
+        typeof req.body.title === 'string' ? req.body.title : '';
 
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { content: _, visit_id: __, ...req_body_without_content } = req.body;
-      const parse_result = PageActivitySessionWithoutTreeOrContentSchema.safeParse({
-        ...req_body_without_content,
+      const { title: _title, visit_id: __, ...session_body } = req.body;
+      const parse_result = PageActivitySessionWithoutTreeSchema.safeParse({
+        ...session_body,
         id,
       });
 
@@ -254,15 +222,15 @@ export class ServerManager {
       const extended_visit: ExtendedPageVisit = {
         ...payload,
         visit_id,
-        raw_content: content
+        title
       };
       // Persist durably before acknowledging: the browser will not resend, so
       // the visit must survive an extension restart before it reaches DuckDB.
       if (this.config.inbox_dir) {
         persist_visit(this.config.inbox_dir, extended_visit);
       }
-      // In dev, keep a bounded ring of raw captures so the page can be replayed
-      // through the pipeline (bergamot.replayVisit) without re-browsing.
+      // In dev, keep a bounded ring of visits so a page can be replayed through
+      // the pipeline (bergamot.replayVisit) without re-browsing.
       if (this.config.storage_base && is_dev_log_enabled()) {
         persist_replay_visit(this.config.storage_base, extended_visit);
       }

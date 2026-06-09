@@ -31,15 +31,10 @@ export type DevLogStage =
   // Browser-relayed stages (occur before the visit reaches the server).
   | 'capture_attempted'
   | 'capture_failed'
-  | 'compression_failed'
   // Server pipeline stages.
   | 'http_received'
   | 'parse_failed'
-  | 'decompress_failed'
   | 'queued'
-  | 'gate_result'
-  | 'content_truncated'
-  | 'dropped'
   | 'workflow_failed'
   | 'stored'
   | 'orphan_parked'
@@ -52,7 +47,6 @@ export type DevLogStage =
 export const BROWSER_DEV_STAGES = [
   'capture_attempted',
   'capture_failed',
-  'compression_failed',
 ] as const;
 
 export type BrowserDevStage = (typeof BROWSER_DEV_STAGES)[number];
@@ -63,7 +57,6 @@ export function is_browser_dev_stage(value: string): value is BrowserDevStage {
 
 export type VisitDecision =
   | 'stored'
-  | 'dropped'
   | 'failed'
   | 'orphan_parked'
   | 'orphan_dropped';
@@ -71,10 +64,8 @@ export type VisitDecision =
 export interface VisitOutcome {
   visit_id: string;
   url: string;
-  /** Decompressed page size in bytes (captured pages). */
-  byte_size?: number;
   decision: VisitDecision;
-  /** Gate drop cause when dropped (`content_empty`, `auth`, or `redirect`). */
+  /** Drop cause for an orphan_dropped visit (`max_retries` or `expired`). */
   reason?: string;
   error?: string;
   at: string;
@@ -95,7 +86,6 @@ const recent_outcomes: VisitOutcome[] = [];
 /** Maps a visit's terminal decision to its structured-log stage. */
 const DECISION_TO_STAGE: Record<VisitDecision, DevLogStage> = {
   stored: 'stored',
-  dropped: 'dropped',
   failed: 'workflow_failed',
   orphan_parked: 'orphan_parked',
   orphan_dropped: 'orphan_dropped',
@@ -198,7 +188,6 @@ export function record_outcome(outcome: Omit<VisitOutcome, 'at'>): void {
   dev_log(DECISION_TO_STAGE[outcome.decision], {
     visit_id: outcome.visit_id,
     url: outcome.url,
-    byte_size: outcome.byte_size,
     reason: outcome.reason,
     error: outcome.error,
   });

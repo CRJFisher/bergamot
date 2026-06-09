@@ -3,7 +3,6 @@ import * as os from 'os';
 import * as path from 'path';
 import type { Application } from 'express';
 import request from 'supertest';
-import { compress } from '@mongodb-js/zstd';
 import { ServerManager } from './server_manager';
 import { DatabaseManager } from '../database/database_manager';
 import { DuckDB, get_webpage_by_url, get_webpage_capture } from '../duck_db';
@@ -17,7 +16,8 @@ jest.mock('vscode');
 /**
  * Exercises the real capture seam end to end — real Express ServerManager, real
  * DuckDB on a temp path, the real visit queue and capture pipeline. Posts a
- * genuine zstd visit and asserts the visit is ingested to a metadata row.
+ * metadata-only visit and asserts the visit is ingested to a metadata row with
+ * zero stored page content.
  */
 describe('server pipeline integration (real DuckDB, capture pipeline)', () => {
   let storage_dir: string;
@@ -51,19 +51,13 @@ describe('server pipeline integration (real DuckDB, capture pipeline)', () => {
     }
   });
 
-  it('ingests a posted zstd visit through to the DuckDB capture store', async () => {
+  it('ingests a posted metadata-only visit through to the DuckDB capture store', async () => {
     const url = 'https://example.com/integration';
     const page_loaded_at = '2024-01-01T00:00:00.000Z';
-    // A normal content page (not an interstitial), so the gate keeps it.
-    const html =
-      '<html><head><title>Integration</title></head><body><article><h1>Integration</h1><p>' +
-      'Real pipeline content stored losslessly by the capture pipeline. '.repeat(8) +
-      '</p></article></body></html>';
-    const content = (await compress(Buffer.from(html, 'utf-8'))).toString('base64');
 
     const response = await request(app)
       .post('/visit')
-      .send({ url, page_loaded_at, content, referrer: null })
+      .send({ url, page_loaded_at, title: 'Integration', referrer: null })
       .expect(200);
 
     expect(response.body.status).toBe('queued');
@@ -71,20 +65,56 @@ describe('server pipeline integration (real DuckDB, capture pipeline)', () => {
 
     await drain_queue(server.get_queue_processor());
 
-    // DuckDB: the session row exists and joins to the capture title (from the
-    // cheap <head> metadata).
+    // DuckDB: the session row exists and joins to the capture title (captured
+    // from the browser tab and threaded through).
     const row = await get_webpage_by_url(duck_db, url);
     expect(row).not.toBeNull();
     expect(row?.url).toBe(url);
     expect(row?.title).toBe('Integration');
 
-    // Capture store: the metadata row exists for this visit. Page content is read
-    // back by re-downloading the public URL (task-39.2), not from this store.
+    // Capture store: the metadata row exists for this visit. Page content is
+    // obtained by re-downloading the public URL (task-39.2), not from this store.
     const id = md5_hash(`${url}:${page_loaded_at}`);
     const capture_meta = await get_webpage_capture(duck_db, id);
     expect(capture_meta).not.toBeNull();
     expect(capture_meta?.url).toBe(url);
     expect(capture_meta?.title).toBe('Integration');
+  }, 60000);
+
+  it('stores zero page content — webpage_capture has no content column (AC#6)', async () => {
+    const url = 'https://example.com/no-content';
+    const page_loaded_at = '2024-02-02T00:00:00.000Z';
+
+    await request(app)
+      .post('/visit')
+      .send({ url, page_loaded_at, title: 'No Content', referrer: null })
+      .expect(200);
+    await drain_queue(server.get_queue_processor());
+
+    // The metadata row was stored (so the assertion below is not vacuous).
+    const id = md5_hash(`${url}:${page_loaded_at}`);
+    expect(await get_webpage_capture(duck_db, id)).not.toBeNull();
+
+    // The webpage_capture table itself carries no content column of any kind —
+    // browsing produces zero stored page content.
+    const columns = await duck_db.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_name = 'webpage_capture'`
+    );
+    const names = columns.map((c) => String(c.column_name));
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'page_session_id',
+        'url',
+        'title',
+        'content_type',
+        'captured_at',
+      ])
+    );
+    expect(names).not.toContain('content_compressed');
+    expect(names.some((n) => n.startsWith('content') && n !== 'content_type')).toBe(
+      false
+    );
   }, 60000);
 });
 

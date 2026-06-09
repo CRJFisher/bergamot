@@ -20,8 +20,7 @@
 
 export type BrowserDevStage =
   | 'capture_attempted'
-  | 'capture_failed'
-  | 'compression_failed';
+  | 'capture_failed';
 
 export const relay_dev_signal = (
   stage: BrowserDevStage,

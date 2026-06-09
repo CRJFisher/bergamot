@@ -53,12 +53,12 @@ const send_to_server = async (
   return false;
 };
 
-// Main page visit handler. The content script captures raw page content; the
-// background compresses it (page CSP can block WASM here) and attaches the
-// authoritative session metadata (referrer, group_id, opener_tab_id) when it
-// forwards the visit.
+// Main page visit handler. The content script captures browsing metadata only
+// (URL, title, load timestamp) — never page content; the background attaches
+// the authoritative session metadata (referrer, group_id, opener_tab_id) when
+// it forwards the visit.
 const handle_page_visit = async (url: string): Promise<void> => {
-  const visit_data = create_visit_data(url, "", undefined);
+  const visit_data = create_visit_data(url, document.title, "", undefined);
   // "Page seen" beacon, emitted before the send: a visit that never reaches the
   // server (page CSP, cold worker, crash) still leaves a trace that can be
   // reconciled against the server's `http_received` to find silent drops.

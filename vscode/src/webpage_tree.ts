@@ -6,7 +6,7 @@ import {
   update_webpage_tree_activity_time,
 } from "./duck_db";
 import { PageActivitySession } from "./duck_db_models";
-import { PageActivitySessionWithoutTreeOrContent } from "./duck_db_models";
+import { PageActivitySessionWithoutTree } from "./duck_db_models";
 import { PageActivitySessionWithMeta } from "./page_capture_models";
 import { md5_hash } from "./hash_utils";
 import { WebpageTreeNode } from "./webpage_tree_models";
@@ -55,7 +55,7 @@ export interface TreeManagementResult {
  */
 export async function insert_page_activity_session_with_tree_management(
   db: DuckDB,
-  session: PageActivitySessionWithoutTreeOrContent
+  session: PageActivitySessionWithoutTree
 ): Promise<TreeManagementResult> {
   try {
     let result: TreeManagementResult;
@@ -147,7 +147,7 @@ export function get_tree_with_id(
  */
 async function handle_page_with_referrer(
   db: DuckDB,
-  page: PageActivitySessionWithoutTreeOrContent
+  page: PageActivitySessionWithoutTree
 ): Promise<TreeManagementResult> {
   if (!page.referrer) {
     throw new Error("Referrer is required for this operation");

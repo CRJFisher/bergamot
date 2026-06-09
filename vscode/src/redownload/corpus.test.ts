@@ -142,7 +142,7 @@ async function seed_capture(db: DuckDB, id: string, url: string): Promise<void> 
   await store_capture(db, {
     page_session_id: id,
     url,
-    html: "<html><head><title>seed</title></head><body>seed</body></html>",
+    title: "seed",
     content_type: "text/html",
     captured_at: "2026-06-08T00:00:00.000Z",
   });

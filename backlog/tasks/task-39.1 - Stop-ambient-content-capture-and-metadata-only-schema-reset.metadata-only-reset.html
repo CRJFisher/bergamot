@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Metadata-only capture reset · task-39.1</title>
+<style>
+  :root{
+    --ivory:#f7f4ec; --slate:#33352f; --clay:#b56a44; --olive:#6f7a3f;
+    --oat:#e7e0cf; --rust:#9c4a2f; --ink:#22241f;
+    --g1:#fbf9f3; --g2:#efe9da; --g3:#d8d1bf; --g4:#a9a392; --g5:#6c6859;
+    --serif:ui-serif,Georgia,"Times New Roman",serif;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --r:12px; --hair:1px solid var(--g3); --navh:46px; --tocrh:44px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--ivory);color:var(--slate);font-family:var(--sans);
+    font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  main{width:90%;max-width:1600px;margin-inline:auto;padding:28px 0 120px}
+  .prose{max-width:70ch}
+  h1,h2,h3{font-family:var(--serif);font-weight:600;color:var(--ink);line-height:1.15}
+  h1{font-size:2.1rem;margin:.2em 0}
+  h2{font-size:1.5rem;margin:0 0 .5em}
+  h3{font-size:1.08rem;margin:0 0 .4em}
+  code{font-family:var(--mono);font-size:.9em;background:var(--g2);padding:1px 5px;border-radius:5px}
+  a{color:var(--clay)}
+  .eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;
+    font-size:.7rem;color:var(--g5)}
+
+  /* nav bars */
+  nav.cross{position:sticky;top:0;z-index:10;background:var(--ivory);border-bottom:var(--hair);
+    min-height:var(--navh);display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 5%}
+  nav.cross .home{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;
+    letter-spacing:.1em;color:var(--g5);margin-right:4px}
+  nav.cross a.doc-link,nav.cross span.pending,nav.cross span.curr{
+    font-family:var(--mono);font-size:.72rem;padding:4px 10px;border-radius:999px;
+    border:var(--hair);text-decoration:none;color:var(--slate);white-space:nowrap}
+  nav.cross a.doc-link:hover{background:var(--oat)}
+  nav.cross span.curr{background:var(--slate);color:var(--ivory);border-color:var(--slate)}
+  nav.cross span.pending{color:var(--g4);border-style:dashed}
+  nav.cross .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  nav.toc{position:sticky;top:var(--navh);z-index:9;background:var(--g1);border-bottom:var(--hair);
+    display:flex;gap:6px;flex-wrap:wrap;padding:8px 5%;min-height:var(--tocrh)}
+  nav.toc a{font-family:var(--mono);font-size:.7rem;text-decoration:none;color:var(--g5);
+    padding:3px 9px;border-radius:999px;border:1px solid transparent}
+  nav.toc a:hover{background:var(--oat);color:var(--slate)}
+  nav.toc a.active{background:var(--slate);color:var(--ivory)}
+  section{scroll-margin-top:calc(var(--navh) + var(--tocrh) + 14px);padding-top:34px}
+  header.id{padding:24px 0 8px}
+
+  .meta-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .chip{font-family:var(--mono);font-size:.72rem;background:var(--g2);border:var(--hair);
+    border-radius:999px;padding:4px 11px;color:var(--g5)}
+  .chip strong{color:var(--ink)}
+  .chip.key{background:var(--slate);color:var(--ivory);border-color:var(--slate)}
+  .chip.rust{background:var(--rust);color:var(--ivory);border-color:var(--rust)}
+  .chip.olive{background:var(--olive);color:var(--ivory);border-color:var(--olive)}
+
+  .prompt-box{border:var(--hair);border-left:4px solid var(--clay);border-radius:var(--r);
+    background:var(--g1);padding:14px 18px;margin:18px 0;max-width:84ch}
+  .prompt-box .label{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;
+    letter-spacing:.1em;color:var(--clay);margin-bottom:6px}
+  .prompt-box p{margin:.3em 0;font-size:.95rem}
+
+  aside.callout{border:var(--hair);border-left:4px solid var(--clay);border-radius:var(--r);
+    background:var(--g1);padding:16px 20px;margin:18px 0;max-width:86ch}
+  aside.callout.invert{background:var(--slate);color:var(--ivory);border-color:var(--slate)}
+  aside.callout.invert h3{color:var(--ivory)}
+  aside.callout.rust{border-left-color:var(--rust)}
+  aside.callout .k{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;
+    letter-spacing:.1em;color:var(--clay);display:block;margin-bottom:6px}
+  aside.callout.invert .k{color:var(--oat)}
+  aside.callout.rust .k{color:var(--rust)}
+  aside.callout p{margin:.3em 0}
+
+  .figure{margin:14px 0 6px}
+  .figure svg{width:100%;height:auto;display:block}
+  figcaption{font-size:.84rem;color:var(--g5);margin-top:8px;max-width:84ch}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:6px 0 0;font-family:var(--mono);font-size:.7rem;color:var(--g5)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:22px;height:0;border-top-width:2px;border-top-style:solid;display:inline-block}
+  .legend .swatch{width:12px;height:12px;border-radius:3px;display:inline-block}
+
+  /* decision cards */
+  .decisions{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px;margin:16px 0}
+  .dec{border:var(--hair);border-radius:var(--r);background:var(--g1);padding:16px 18px;
+    display:flex;flex-direction:column;gap:8px;border-top:3px solid var(--clay)}
+  .dec .num{font-family:var(--mono);font-size:.72rem;font-weight:600;color:var(--ivory);
+    background:var(--clay);border-radius:999px;width:24px;height:24px;display:inline-flex;
+    align-items:center;justify-content:center}
+  .dec .head{display:flex;align-items:center;gap:10px}
+  .dec h3{margin:0;font-size:1rem}
+  .dec p{margin:0;font-size:.9rem}
+  .dec .why{font-size:.82rem;color:var(--g5);border-top:var(--hair);padding-top:8px;margin-top:2px}
+
+  /* file map */
+  .filemap{margin:14px 0}
+  .grp{border:var(--hair);border-radius:var(--r);margin:10px 0;overflow:hidden;background:var(--g1)}
+  .grp>summary{cursor:pointer;list-style:none;padding:12px 16px;display:flex;align-items:center;gap:12px;
+    font-family:var(--sans);font-weight:600;color:var(--ink)}
+  .grp>summary::-webkit-details-marker{display:none}
+  .grp>summary .chev{transition:transform .15s;color:var(--g4);font-size:.8rem}
+  .grp[open]>summary .chev{transform:rotate(90deg)}
+  .grp>summary .tag{margin-left:auto;font-family:var(--mono);font-size:.66rem;text-transform:uppercase;
+    letter-spacing:.08em;background:var(--g2);border:var(--hair);border-radius:999px;padding:3px 10px;color:var(--g5)}
+  .grp .gicon{width:26px;height:26px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:.6rem;font-weight:700;color:var(--ivory)}
+  .grp.browser .gicon{background:var(--clay)} .grp.server .gicon{background:var(--olive)}
+  .grp.schema .gicon{background:var(--slate)} .grp.gate .gicon{background:var(--rust)}
+  .grp.tests .gicon{background:var(--g5)}
+  .grp .body{padding:2px 16px 14px}
+  .frow{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.4fr);gap:14px;padding:11px 0;
+    border-top:var(--hair);align-items:baseline}
+  .frow:first-child{border-top:none}
+  .frow .path{font-family:var(--mono);font-size:.78rem;color:var(--ink);word-break:break-all}
+  .frow .act{font-size:.86rem;color:var(--slate)}
+  .frow .act .verb{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;
+    border-radius:999px;padding:1px 7px;margin-right:7px;vertical-align:1px}
+  .verb.del{background:var(--rust);color:var(--ivory)} .verb.edit{background:var(--g2);color:var(--g5);border:var(--hair)}
+  .verb.add{background:var(--olive);color:var(--ivory)} .verb.keep{background:#eef0e2;color:var(--olive);border:1px solid var(--olive)}
+  @media(max-width:680px){ .frow{grid-template-columns:1fr;gap:4px} }
+
+  /* code panel */
+  .code{background:#23241f;border-radius:var(--r);overflow:hidden;margin:10px 0;border:1px solid #3a3c33}
+  .code .fl{font-family:var(--mono);font-size:.68rem;color:#b9b5a3;background:#2c2e27;
+    padding:7px 14px;border-bottom:1px solid #3a3c33;display:flex;justify-content:space-between}
+  .code pre{margin:0;padding:14px;overflow-x:auto;font-family:var(--mono);font-size:.76rem;line-height:1.6;color:#e7e3d5}
+  .code .kw{color:#c98b6b} .code .str{color:#a9b87a} .code .cm{color:#7e7a6b;font-style:italic}
+  .code .fn{color:#dcd08a} .code .dim{color:#6c6859}
+  .code .del{display:inline-block;width:100%;background:rgba(156,74,47,.26);text-decoration:line-through;text-decoration-color:#9c4a2f80}
+  .code .add{display:inline-block;width:100%;background:rgba(111,122,63,.26)}
+
+  /* AC table */
+  .actable{width:100%;border-collapse:collapse;margin:12px 0;font-size:.9rem}
+  .actable th,.actable td{text-align:left;padding:10px 12px;border-bottom:var(--hair);vertical-align:top}
+  .actable th{font-family:var(--mono);font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--g5)}
+  .actable td.acn{font-family:var(--mono);font-weight:700;color:var(--ink);white-space:nowrap}
+  .actable td.where{font-family:var(--mono);font-size:.8rem;color:var(--g5)}
+  .actable tr:hover td{background:var(--g1)}
+
+  /* checklist */
+  .verify{list-style:none;padding:0;margin:12px 0;max-width:86ch}
+  .verify li{display:flex;gap:12px;padding:9px 0;border-top:var(--hair);align-items:flex-start}
+  .verify li:first-child{border-top:none}
+  .verify .box{width:18px;height:18px;border:2px solid var(--g4);border-radius:5px;flex:0 0 auto;margin-top:2px}
+  .verify li span{font-size:.92rem}
+
+  footer{margin-top:60px;padding-top:18px;border-top:var(--hair);font-family:var(--mono);
+    font-size:.72rem;color:var(--g4);max-width:86ch;line-height:1.7}
+  @media(max-width:760px){ h1{font-size:1.7rem} }
+</style>
+</head>
+<body>
+
+<nav class="cross" aria-label="Task-39 family navigation">
+  <span class="home">task-39 ▸</span>
+  <a class="doc-link" href="task-39 - Privacy-preserving-capture-model-metadata-first-on-demand-encrypted-content.overview.html"><span class="dot" style="background:var(--clay)"></span>overview</a>
+  <span class="curr">39.1 metadata-only reset</span>
+  <a class="doc-link" href="task-39.2 - Re-download-post-processing-content-fetcher-and-content-read-path.content-flow.html"><span class="dot" style="background:var(--olive)"></span>39.2 fetcher · done</a>
+  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.3 encrypted cache</span>
+  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.4 store encryption</span>
+  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.5 right-to-forget</span>
+</nav>
+
+<nav class="toc" aria-label="On this page">
+  <a href="#why">Why not read content</a>
+  <a href="#flow">The pipeline</a>
+  <a href="#decisions">Resolved decisions</a>
+  <a href="#files">File-by-file map</a>
+  <a href="#schema">Schema shape</a>
+  <a href="#ac">Acceptance criteria</a>
+  <a href="#verify">Verification</a>
+</nav>
+
+<main>
+  <header class="id">
+    <div class="eyebrow">task-39.1 · privacy-core · capture / schema / tests</div>
+    <h1>Stop ambient content capture, reset the schema to metadata-only</h1>
+    <p class="prose">Privacy is bergamot's organizing principle. The capture path stores
+      <strong>browsing metadata only — never page content</strong>: visit id, URL, page-load timestamp,
+      title, and the navigation/session graph. The browser stops reading page content entirely. Page
+      content and its derived fields are obtained later by re-downloading the public URL as an anonymous,
+      cookie-free visitor, where the login wall is the privacy filter. This is the contract for that change:
+      what the capture pipeline does, the settled design decisions behind it, and the exact files that carry
+      the work — read before any code is written.</p>
+    <div class="meta-row">
+      <span class="chip key">PRE-IMPLEMENTATION CONTRACT</span>
+      <span class="chip">priority <strong>high</strong></span>
+      <span class="chip olive">unblocked by 39.2 ✓</span>
+      <span class="chip rust">destructive · no shims</span>
+      <span class="chip">7 acceptance criteria</span>
+    </div>
+    <div class="prompt-box">
+      <div class="label">ground truth</div>
+      <p>Spec: <code>backlog/tasks/task-39.1 — Stop ambient content capture + metadata-only schema reset.md</code>.
+        Model: <code>backlog/drafts/privacy-preserving-capture-model.md</code> ·
+        Decision: <code>docs/decisions/privacy-core-reorientation.md</code> · intention tree: <code>CLAUDE.md</code>.
+        The file map below is verified against the current source.</p>
+    </div>
+  </header>
+
+  <section id="why">
+    <div class="eyebrow">the principle</div>
+    <h2>The browser does not read the page at all</h2>
+    <p class="prose">The point is not "read the page but do not store it." Reading a logged-in page's
+      content at all would defeat the privacy model — the most private thing a user does is what they
+      actually read, and the moment it is in memory it is a liability that demands an impossible
+      "is this sensitive?" judgement. So the content script reads only what the tab already exposes
+      without touching the document body: the URL and <code>document.title</code>. Nothing parses the page.</p>
+    <aside class="callout invert">
+      <span class="k">the login wall is the privacy filter — and it lives elsewhere</span>
+      <h3 style="margin-top:4px">Content comes from re-download, not the logged-in browser</h3>
+      <p>To understand a page, bergamot re-downloads it from its public URL as an anonymous stranger
+        (task-39.2, shipped). A page that requires a login simply will not come back, so the private
+        ones exclude themselves with no heuristic to trust. The logged-in browser is never the source
+        of content; only the cookie-less re-downloader is. Every content-based judgement — auth, paywall,
+        empty, redirect — happens there, on the re-downloaded bytes, never on what the user saw.</p>
+    </aside>
+  </section>
+
+  <section id="flow">
+    <div class="eyebrow">the pipeline · the centerpiece</div>
+    <h2>What the capture path carries, end to end</h2>
+    <p class="prose">The capture pipeline runs from the page, through the browser extension and the local
+      server, into the DuckDB metadata store. The diagram traces a single visit through every hop. The
+      upper band is the path as the code stands today; the lower band is the metadata-only contract this
+      task delivers. Reading downward at any column shows exactly what that hop stops doing.</p>
+
+    <div class="figure">
+      <svg viewBox="0 0 1180 470" role="img" aria-label="Before-and-after of the capture pipeline. Today the content script reads document.body.outerHTML, the background worker zstd-compresses it, the server decompresses and re-compresses and parses head meta, and DuckDB stores a compressed content blob plus meta columns. The metadata-only contract reads only url and document.title, forwards metadata uncompressed, threads title through without decompression, and stores only page_session_id, url, title, content_type, and captured_at.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#6c6859"/></marker>
+          <marker id="ar-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9c4a2f"/></marker>
+          <marker id="ar-o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#6f7a3f"/></marker>
+        </defs>
+
+        <!-- column headers -->
+        <g font-family="ui-monospace,monospace" font-size="10.5" fill="#6c6859" text-anchor="middle">
+          <text x="105" y="24">content script</text>
+          <text x="345" y="24">background worker</text>
+          <text x="600" y="24">local server</text>
+          <text x="855" y="24">store_capture / queue</text>
+          <text x="1080" y="24">DuckDB webpage_capture</text>
+        </g>
+
+        <!-- BEFORE band label -->
+        <rect x="8" y="44" width="1164" height="172" rx="12" fill="#f2e6e0" opacity="0.45"/>
+        <text x="22" y="64" font-family="ui-monospace,monospace" font-size="10" font-weight="700" fill="#9c4a2f" letter-spacing="1">PIPELINE AS IT STANDS — reads & stores content</text>
+
+        <!-- before nodes -->
+        <g font-family="ui-sans-serif,system-ui" font-size="12">
+          <rect x="22" y="78" width="166" height="118" rx="9" fill="#f7f4ec" stroke="#9c4a2f" stroke-width="1.4"/>
+          <text x="105" y="100" text-anchor="middle" font-weight="600">read</text>
+          <text x="105" y="118" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#6c6859">document.body</text>
+          <text x="105" y="132" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#6c6859">.outerHTML</text>
+          <text x="105" y="154" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#9c4a2f">extract_page_</text>
+          <text x="105" y="166" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#9c4a2f">content()</text>
+          <text x="105" y="184" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">cap 2 MB</text>
+
+          <rect x="262" y="78" width="166" height="118" rx="9" fill="#f7f4ec" stroke="#9c4a2f" stroke-width="1.4"/>
+          <text x="345" y="100" text-anchor="middle" font-weight="600">zstd compress</text>
+          <text x="345" y="120" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">WASM · base64</text>
+          <text x="345" y="142" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#9c4a2f">visit_compression</text>
+          <text x="345" y="155" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#9c4a2f">@hpcc-js/wasm-zstd</text>
+          <text x="345" y="178" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">POST /visit (blob)</text>
+
+          <rect x="517" y="78" width="166" height="118" rx="9" fill="#f7f4ec" stroke="#9c4a2f" stroke-width="1.4"/>
+          <text x="600" y="100" text-anchor="middle" font-weight="600">decompress</text>
+          <text x="600" y="120" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">@mongodb-js/zstd</text>
+          <text x="600" y="138" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">50mb body limit</text>
+          <text x="600" y="160" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#9c4a2f">capture gate:</text>
+          <text x="600" y="173" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#9c4a2f">empty/auth/redirect</text>
+          <text x="600" y="186" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">inspects HTML</text>
+
+          <rect x="772" y="78" width="166" height="118" rx="9" fill="#f7f4ec" stroke="#9c4a2f" stroke-width="1.4"/>
+          <text x="855" y="100" text-anchor="middle" font-weight="600">recompress</text>
+          <text x="855" y="118" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">+ parse &lt;head&gt;</text>
+          <text x="855" y="138" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#9c4a2f">read_metadata():</text>
+          <text x="855" y="151" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8.5" fill="#9c4a2f">site_name·author·</text>
+          <text x="855" y="163" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8.5" fill="#9c4a2f">published_at·lang</text>
+          <text x="855" y="184" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">title from HTML</text>
+
+          <rect x="1000" y="78" width="158" height="118" rx="9" fill="#f2e6e0" stroke="#9c4a2f" stroke-width="1.5"/>
+          <text x="1079" y="100" text-anchor="middle" font-weight="600">stores content</text>
+          <text x="1079" y="120" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8.5" fill="#9c4a2f">content_compressed</text>
+          <text x="1079" y="132" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8.5" fill="#9c4a2f">content_encoding</text>
+          <text x="1079" y="144" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8.5" fill="#9c4a2f">original_byte_size</text>
+          <text x="1079" y="156" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8.5" fill="#9c4a2f">site_name·author·</text>
+          <text x="1079" y="168" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8.5" fill="#9c4a2f">published_at·lang</text>
+          <text x="1079" y="184" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">BLOB on disk</text>
+        </g>
+        <g fill="none" stroke="#9c4a2f" stroke-width="1.6">
+          <path d="M188 137 L262 137" marker-end="url(#ar-r)"/>
+          <path d="M428 137 L517 137" marker-end="url(#ar-r)"/>
+          <path d="M683 137 L772 137" marker-end="url(#ar-r)"/>
+          <path d="M938 137 L1000 137" marker-end="url(#ar-r)"/>
+        </g>
+
+        <!-- AFTER band label -->
+        <rect x="8" y="266" width="1164" height="158" rx="12" fill="#eef0e2" opacity="0.5"/>
+        <text x="22" y="286" font-family="ui-monospace,monospace" font-size="10" font-weight="700" fill="#6f7a3f" letter-spacing="1">METADATA-ONLY CONTRACT — this task</text>
+
+        <g font-family="ui-sans-serif,system-ui" font-size="12">
+          <rect x="22" y="300" width="166" height="106" rx="9" fill="#f7f4ec" stroke="#6f7a3f" stroke-width="1.5"/>
+          <text x="105" y="324" text-anchor="middle" font-weight="600">read tab only</text>
+          <text x="105" y="344" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#6c6859">url +</text>
+          <text x="105" y="358" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#6f7a3f">document.title</text>
+          <text x="105" y="380" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">no body read</text>
+          <text x="105" y="394" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">no extraction</text>
+
+          <rect x="262" y="300" width="166" height="106" rx="9" fill="#f7f4ec" stroke="#6f7a3f" stroke-width="1.5"/>
+          <text x="345" y="324" text-anchor="middle" font-weight="600">forward through</text>
+          <text x="345" y="346" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">no compression</text>
+          <text x="345" y="364" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6f7a3f">no WASM · no CSP</text>
+          <text x="345" y="377" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6f7a3f">wasm-unsafe-eval</text>
+          <text x="345" y="395" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">POST /visit (meta)</text>
+
+          <rect x="517" y="300" width="166" height="106" rx="9" fill="#f7f4ec" stroke="#6f7a3f" stroke-width="1.5"/>
+          <text x="600" y="324" text-anchor="middle" font-weight="600">thread title</text>
+          <text x="600" y="346" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">no decompress</text>
+          <text x="600" y="362" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6f7a3f">no gate</text>
+          <text x="600" y="380" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">small body limit</text>
+          <text x="600" y="394" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">title not raw_content</text>
+
+          <rect x="772" y="300" width="166" height="106" rx="9" fill="#f7f4ec" stroke="#6f7a3f" stroke-width="1.5"/>
+          <text x="855" y="324" text-anchor="middle" font-weight="600">store metadata</text>
+          <text x="855" y="346" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6c6859">title direct</text>
+          <text x="855" y="364" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6f7a3f">no read_metadata</text>
+          <text x="855" y="382" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6f7a3f">no compress</text>
+          <text x="855" y="397" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8.5" fill="#6c6859">WithoutTree naming</text>
+
+          <rect x="1000" y="300" width="158" height="106" rx="9" fill="#eef0e2" stroke="#6f7a3f" stroke-width="1.7"/>
+          <text x="1079" y="324" text-anchor="middle" font-weight="600">metadata row</text>
+          <text x="1079" y="346" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6f7a3f">page_session_id</text>
+          <text x="1079" y="360" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6f7a3f">url · title</text>
+          <text x="1079" y="374" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6f7a3f">content_type</text>
+          <text x="1079" y="388" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6f7a3f">captured_at</text>
+          <text x="1079" y="401" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8.5" fill="#6c6859">no content · no meta</text>
+        </g>
+        <g fill="none" stroke="#6f7a3f" stroke-width="1.6">
+          <path d="M188 353 L262 353" marker-end="url(#ar-o)"/>
+          <path d="M428 353 L517 353" marker-end="url(#ar-o)"/>
+          <path d="M683 353 L772 353" marker-end="url(#ar-o)"/>
+          <path d="M938 353 L1000 353" marker-end="url(#ar-o)"/>
+        </g>
+
+        <!-- content goes to re-download instead -->
+        <path d="M1079 196 C1079 230, 740 232, 600 246 C500 256, 760 268, 940 300" fill="none" stroke="#6c6859" stroke-width="1.3" stroke-dasharray="5 4"/>
+        <text x="600" y="244" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#6c6859">content + author/site_name/published_at/lang → re-download (39.2, webpage_fetch) — never the logged-in browser</text>
+      </svg>
+      <div class="legend">
+        <span><i style="border-top-color:#9c4a2f"></i> reads / stores content (removed)</span>
+        <span><i style="border-top-color:#6f7a3f"></i> metadata only (the contract)</span>
+        <span><i style="border-top-color:#6c6859;border-top-style:dashed"></i> content sourced from re-download</span>
+        <span><span class="swatch" style="background:#f2e6e0"></span> deleted surface</span>
+      </div>
+      <figcaption>Each upper hop loses its content-handling step in the lower band: no extraction, no zstd
+        either side, no capture gate, no <code>&lt;head&gt;</code> parsing at capture. Title rides through as a
+        plain string from the tab. Content and its derived fields are no longer absent placeholders — they
+        are simply not part of capture; they arrive later from the cookie-less re-downloader.</figcaption>
+    </div>
+  </section>
+
+  <section id="decisions">
+    <div class="eyebrow">settled with the product owner</div>
+    <h2>Four resolved design decisions</h2>
+    <p class="prose">These are not open questions. Each was confirmed and is the cheapest correct way to
+      honor the model under the no-surplus rule.</p>
+    <div class="decisions">
+      <div class="dec">
+        <div class="head"><span class="num">1</span><h3>Title comes from the tab, not the HTML</h3></div>
+        <p>The browser does not read page content at capture. Title is <code>document.title</code>, read
+          from the tab; URL and load timestamp likewise. Nothing parses the document body.</p>
+        <div class="why">Reading the logged-in page at all is the liability. The tab already exposes
+          title/url/time without touching content.</div>
+      </div>
+      <div class="dec">
+        <div class="head"><span class="num">2</span><h3>The four meta columns are dropped, not nulled</h3></div>
+        <p><code>site_name</code>, <code>author</code>, <code>published_at</code>, <code>lang</code> leave
+          <code>webpage_capture</code> entirely. Re-download's <code>webpage_fetch</code> log is the sole
+          source of fidelity metadata.</p>
+        <div class="why">Keeping them as perpetually-NULL columns is surplus. No-surplus per the constitution:
+          a column that nothing fills should not exist.</div>
+      </div>
+      <div class="dec">
+        <div class="head"><span class="num">3</span><h3>The model variants collapse</h3></div>
+        <p><code>content</code> leaves the canonical <code>PageActivitySession</code>. With it gone,
+          <code>PageActivitySessionWithoutContent</code> is identical to the base and is dropped;
+          <code>PageActivitySessionWithoutTreeOrContent</code> becomes <code>PageActivitySessionWithoutTree</code>.</p>
+        <div class="why">The "WithoutContent" distinction is meaningless once no variant carries content. The
+          remaining axis is tree / no-tree.</div>
+      </div>
+      <div class="dec">
+        <div class="head"><span class="num">4</span><h3>The capture gate is deleted; incognito moves to the manifest</h3></div>
+        <p><code>page_gate.ts</code> (empty/auth/redirect) + <code>gate_metrics.ts</code> + the
+          <code>show_gate_metrics</code> command are removed. Incognito refusal is added at the cheapest layer:
+          <code>"incognito":"not_allowed"</code> in the manifest, so the extension never runs there.</p>
+        <div class="why">Every gate check was content-based; auth/redirect filtering already moved to
+          re-download (39.2). Today no incognito handling exists anywhere — the manifest flag adds it.</div>
+      </div>
+    </div>
+    <aside class="callout rust">
+      <span class="k">no backwards-compat shims (constitution)</span>
+      <p>This is a destructive change. No migration, no adapters, no kept-as-NULL columns, no tests propped
+        up against the old contract. The store is reset to the metadata-only shape; callers are updated to the
+        new pattern; obsolete code and fixtures are deleted outright.</p>
+    </aside>
+  </section>
+
+  <section id="files">
+    <div class="eyebrow">the work · verified against source</div>
+    <h2>File-by-file change map</h2>
+    <p class="prose">Grouped by layer. Each row names the file and the precise edit. Expand a group to read it;
+      browser, server, and schema are open by default because they carry the contract.</p>
+
+    <div class="filemap">
+      <details class="grp browser" open>
+        <summary><span class="gicon">BR</span><span class="chev">▶</span>Browser — stop reading & sending content<span class="tag">7 files</span></summary>
+        <div class="body">
+          <div class="frow"><div class="path">browser/src/core/data_collector.ts</div><div class="act"><span class="verb del">delete</span><code>extract_page_content</code>, <code>MAX_CONTENT_BYTES</code>, <code>compress_content</code>, <code>ZstdCompressor</code>, <code>create_zstd_instance</code>, the <code>@hpcc-js/wasm-zstd</code> import. <code>create_visit_data</code> stops calling <code>extract_page_content</code> and takes <code>title</code> instead of <code>content</code>.</div></div>
+          <div class="frow"><div class="path">browser/src/core/visit_compression.ts</div><div class="act"><span class="verb del">delete</span>the whole module — <code>make_lazy_zstd</code>, <code>compress_visit_content</code>.</div></div>
+          <div class="frow"><div class="path">browser/src/types/navigation.ts</div><div class="act"><span class="verb edit">edit</span><code>VisitData</code>: remove <code>content</code>, add <code>title</code>.</div></div>
+          <div class="frow"><div class="path">browser/src/content.ts</div><div class="act"><span class="verb edit">edit</span><code>create_visit_data(url, document.title, …)</code> on both the load path and the SPA <code>captureVisit</code> path; no content.</div></div>
+          <div class="frow"><div class="path">browser/src/background.ts</div><div class="act"><span class="verb edit">edit</span>remove the zstd wiring (<code>create_zstd_instance</code>, <code>make_lazy_zstd</code>, <code>get_zstd</code>, the <code>compress_visit_content</code> call); the message forwards straight through.</div></div>
+          <div class="frow"><div class="path">browser/chrome/manifest.json</div><div class="act"><span class="verb add">add</span><code>"incognito":"not_allowed"</code>; <span class="verb del">drop</span><code>'wasm-unsafe-eval'</code> from the <code>extension_pages</code> CSP (no WASM anymore).</div></div>
+          <div class="frow"><div class="path">browser/package.json</div><div class="act"><span class="verb del">drop</span><code>@hpcc-js/wasm-zstd</code>.</div></div>
+        </div>
+      </details>
+
+      <details class="grp server" open>
+        <summary><span class="gicon">SV</span><span class="chev">▶</span>Server — stop decompressing & storing<span class="tag">2 files</span></summary>
+        <div class="body">
+          <div class="frow"><div class="path">vscode/src/server/server_manager.ts</div><div class="act"><span class="verb del">delete</span>the decompress block + <code>MAX_DECOMPRESSED_BYTES</code> + the <code>@mongodb-js/zstd</code> import; thread <code>req.body.title</code> instead of content; reduce the 50mb body limit; <code>ExtendedPageVisit</code> carries <code>title</code>, not <code>raw_content</code>.</div></div>
+          <div class="frow"><div class="path">vscode/package.json</div><div class="act"><span class="verb del">drop</span><code>@mongodb-js/zstd</code>.</div></div>
+        </div>
+      </details>
+
+      <details class="grp schema" open>
+        <summary><span class="gicon">DB</span><span class="chev">▶</span>Schema + store — reset to metadata-only<span class="tag">8 files</span></summary>
+        <div class="body">
+          <div class="frow"><div class="path">vscode/src/duck_db.ts</div><div class="act"><span class="verb edit">edit</span><code>webpage_capture</code>: drop <code>content_compressed</code> / <code>content_encoding</code> / <code>original_byte_size</code> <strong>and</strong> <code>site_name</code> / <code>author</code> / <code>published_at</code> / <code>lang</code> → leaves <code>page_session_id</code> / <code>url</code> / <code>title</code> / <code>content_type</code> / <code>captured_at</code>. Update <code>insert_webpage_capture</code>, <code>get_webpage_capture</code>, <code>CAPTURE_SELECT</code> + <code>row_to_page_activity_session_with_meta</code>, <code>WebpageCaptureRecord</code>. <code>list_capture_targets</code> unchanged.</div></div>
+          <div class="frow"><div class="path">vscode/src/page_capture_models.ts</div><div class="act"><span class="verb edit">edit</span><code>PageCaptureSchema</code>: drop <code>site_name</code> / <code>author</code> / <code>published_at</code> / <code>lang</code> / <code>original_byte_size</code>; keep <code>page_session_id</code> / <code>url</code> / <code>title</code> / <code>content_type</code> / <code>captured_at</code>.</div></div>
+          <div class="frow"><div class="path">vscode/src/workflow/store_capture.ts</div><div class="act"><span class="verb edit">edit</span>drop the <code>@mongodb-js/zstd</code> compress + <code>CAPTURE_ENCODING</code> + the <code>read_metadata</code> call; take <code>title</code> directly; store metadata only.</div></div>
+          <div class="frow"><div class="path">vscode/src/workflow/page_capture_pipeline.ts</div><div class="act"><span class="verb edit">edit</span>remove the gate call; <code>run_page_capture</code> stores metadata (title threaded); <code>record_outcome</code> no longer carries <code>byte_size</code>.</div></div>
+          <div class="frow"><div class="path">vscode/src/visit_queue_processor.ts</div><div class="act"><span class="verb edit">edit</span><code>ExtendedPageVisit</code>: <code>raw_content</code> → <code>title</code>; <code>handle_successful_visit</code> stops setting content; uses the <code>WithoutTree</code> naming.</div></div>
+          <div class="frow"><div class="path">vscode/src/duck_db_models.ts</div><div class="act"><span class="verb edit">edit</span>remove <code>content</code> from <code>PageActivitySessionSchema</code>; collapse / rename the variants (decision 3).</div></div>
+          <div class="frow"><div class="path">vscode/src/orphaned_visits.ts · vscode/src/webpage_tree.ts</div><div class="act"><span class="verb edit">edit</span>update to the renamed schemas / no content.</div></div>
+          <div class="frow"><div class="path">vscode/src/workflow/read_metadata.ts</div><div class="act"><span class="verb keep">keep</span>it is a live dependency of the re-download corpus (<code>src/redownload/corpus.ts</code>); only its use in <code>store_capture</code> is removed.</div></div>
+        </div>
+      </details>
+
+      <details class="grp gate">
+        <summary><span class="gicon">GT</span><span class="chev">▶</span>Gate — deleted entirely<span class="tag">3 surfaces</span></summary>
+        <div class="body">
+          <div class="frow"><div class="path">vscode/src/workflow/page_gate.ts</div><div class="act"><span class="verb del">delete</span>empty / auth / redirect — all content-based; auth & redirect already moved to re-download (39.2).</div></div>
+          <div class="frow"><div class="path">vscode/src/workflow/gate_metrics.ts</div><div class="act"><span class="verb del">delete</span>the gate's metrics module.</div></div>
+          <div class="frow"><div class="path">vscode/src/commands/command_manager.ts</div><div class="act"><span class="verb del">delete</span><code>show_gate_metrics</code> command + its menu registration.</div></div>
+        </div>
+      </details>
+
+      <details class="grp tests">
+        <summary><span class="gicon">TS</span><span class="chev">▶</span>Tests + fixtures — rewrite or delete to the new contract<span class="tag">11 files · no shims</span></summary>
+        <div class="body">
+          <div class="frow"><div class="path">browser/tests/data_collector.test.ts</div><div class="act"><span class="verb edit">rewrite</span>to the metadata-only payload.</div></div>
+          <div class="frow"><div class="path">browser/tests/visit_compression.test.ts</div><div class="act"><span class="verb del">delete</span>module is gone.</div></div>
+          <div class="frow"><div class="path">vscode/src/workflow/store_capture.test.ts · server_manager.test.ts · server_pipeline.integration.test.ts</div><div class="act"><span class="verb edit">rewrite</span>to metadata ingest / store.</div></div>
+          <div class="frow"><div class="path">vscode/src/workflow/page_gate.test.ts · gate_metrics.test.ts</div><div class="act"><span class="verb del">delete</span>gate is gone.</div></div>
+          <div class="frow"><div class="path">vscode/src/workflow/page_capture_pipeline.test.ts · capture_eval.test.ts · command_manager.test.ts · duck_db.test.ts</div><div class="act"><span class="verb edit">rewrite</span>to the metadata-only contract; remove gate / command assertions.</div></div>
+          <div class="frow"><div class="path">vscode/src/workflow/__fixtures__/capture/{empty,auth,redirect}.html</div><div class="act"><span class="verb del">delete</span>obsolete gate fixtures.</div></div>
+          <div class="frow"><div class="path">a new test (AC #6)</div><div class="act"><span class="verb add">add</span>assert that browsing produces <strong>zero stored page content</strong>.</div></div>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section id="schema">
+    <div class="eyebrow">the destructive reset</div>
+    <h2>The <code>webpage_capture</code> shape, before and after</h2>
+    <p class="prose">The store is recreated to the metadata-only shape — no migration. Eight columns leave:
+      three compression columns and four <code>&lt;head&gt;</code>-derived fields. Five columns remain.</p>
+    <div class="code">
+      <div class="fl"><span>vscode/src/duck_db.ts — CREATE TABLE webpage_capture</span><span>reset · no migration</span></div>
+<pre><span class="cm">// columns that LEAVE — content & its derived metadata</span>
+<span class="del">content_compressed BLOB NOT NULL,   -- zstd page bytes</span>
+<span class="del">content_encoding   TEXT NOT NULL,   -- codec marker, e.g. 'zstd'</span>
+<span class="del">original_byte_size INTEGER NOT NULL,-- decompressed size</span>
+<span class="del">site_name    TEXT,                  -- parsed from &lt;head&gt;</span>
+<span class="del">author       TEXT,                  -- parsed from &lt;head&gt;</span>
+<span class="del">published_at TEXT,                  -- parsed from &lt;head&gt;</span>
+<span class="del">lang         TEXT,                  -- parsed from &lt;head&gt;</span>
+
+<span class="cm">// columns that REMAIN — browsing metadata only</span>
+<span class="add">page_session_id TEXT PRIMARY KEY,</span>
+<span class="add">url             TEXT NOT NULL,</span>
+<span class="add">title           TEXT,        <span class="dim">-- from document.title (the tab), not parsed HTML</span></span>
+<span class="add">content_type    TEXT,</span>
+<span class="add">captured_at     TIMESTAMP NOT NULL</span>
+</pre>
+    </div>
+    <aside class="callout">
+      <span class="k">where the dropped fields live now</span>
+      <p>Content and <code>author</code> / <code>site_name</code> / <code>published_at</code> / <code>lang</code>
+        are produced by re-download and recorded in the <code>webpage_fetch</code> table (task-39.2). The
+        capture row holds the trail; the fetch log holds the fidelity metadata of whatever came back
+        through the login wall. The two join on the URL.</p>
+    </aside>
+  </section>
+
+  <section id="ac">
+    <div class="eyebrow">the contract</div>
+    <h2>Acceptance criteria, mapped to where each is satisfied</h2>
+    <table class="actable">
+      <thead><tr><th>#</th><th>Acceptance criterion</th><th>Satisfied at</th></tr></thead>
+      <tbody>
+        <tr><td class="acn">#1</td><td>The browser sends a metadata-only visit payload (no <code>content</code>, no compression); <code>visit_compression.ts</code> and the zstd dep are deleted.</td><td class="where">data_collector.ts · visit_compression.ts (del) · navigation.ts · content.ts · background.ts · browser/package.json</td></tr>
+        <tr><td class="acn">#2</td><td>The server ingests metadata only; the decompress/store path and <code>@mongodb-js/zstd</code> are removed.</td><td class="where">server_manager.ts · vscode/package.json</td></tr>
+        <tr><td class="acn">#3</td><td>The <code>webpage_capture</code> schema has no content/compression columns, as a destructive reset with no migration shim.</td><td class="where">duck_db.ts · page_capture_models.ts · store_capture.ts</td></tr>
+        <tr><td class="acn">#4</td><td>Title, URL, and load timestamp come directly from the tab; <code>&lt;meta&gt;</code>-derived fields are not read at capture.</td><td class="where">content.ts (<code>document.title</code>) · store_capture.ts (no <code>read_metadata</code>) · the four meta columns dropped</td></tr>
+        <tr><td class="acn">#5</td><td>The capture gate keeps only incognito refusal; no content-based gating remains at capture.</td><td class="where">page_gate.ts &amp; gate_metrics.ts (del) · command_manager.ts (del cmd) · manifest.json <code>"incognito":"not_allowed"</code></td></tr>
+        <tr><td class="acn">#6</td><td>Browsing produces zero stored page content, verified by a test.</td><td class="where">new test asserting no stored content · server_pipeline.integration.test.ts</td></tr>
+        <tr><td class="acn">#7</td><td>The capture/storage test suite and obsolete fixtures are rewritten or deleted to the metadata-only contract (no shims); build and tests are green.</td><td class="where">all rows in the Tests group · __fixtures__/capture/*.html (del)</td></tr>
+      </tbody>
+    </table>
+    <aside class="callout">
+      <span class="k">dependency — why 39.2 had to land first</span>
+      <p>This task drops the stored content blob. The read path that served content must already point at
+        re-download, or <code>get_webpage_content</code> returns nothing the moment the blob is gone. Task-39.2
+        repointed that read path and shipped first by design. With it in place, dropping the blob is safe.</p>
+    </aside>
+  </section>
+
+  <section id="verify">
+    <div class="eyebrow">done means</div>
+    <h2>Verification checklist</h2>
+    <ul class="verify">
+      <li><span class="box"></span><span>A visit payload carries <code>url</code> + <code>title</code> + session graph — no <code>content</code> field, no base64 blob.</span></li>
+      <li><span class="box"></span><span>No <code>@hpcc-js/wasm-zstd</code> in the browser, no <code>@mongodb-js/zstd</code> in vscode; no WASM compile path; <code>'wasm-unsafe-eval'</code> gone from the manifest CSP.</span></li>
+      <li><span class="box"></span><span>A fresh <code>webpage_capture</code> table has exactly five columns; no content/compression/meta columns exist.</span></li>
+      <li><span class="box"></span><span><code>page_gate.ts</code>, <code>gate_metrics.ts</code>, and the <code>show_gate_metrics</code> command are gone; the extension declares <code>"incognito":"not_allowed"</code>.</span></li>
+      <li><span class="box"></span><span>A test browses a page and asserts zero stored page content (AC #6); obsolete gate fixtures are removed.</span></li>
+      <li><span class="box"></span><span><code>read_metadata.ts</code> still exists and is reachable from <code>src/redownload/corpus.ts</code>; only its capture-time call is gone.</span></li>
+      <li><span class="box"></span><span>Build and the full test suite are green with no shims kept to stay green.</span></li>
+    </ul>
+  </section>
+
+  <footer>
+    Pre-implementation understanding contract for task-39.1 (stop ambient content capture + metadata-only
+    DuckDB schema reset). The before/after pipeline diagram is a comprehension aid, clearly labeled; the
+    contract itself is the metadata-only path. File map verified against the working tree. Sibling of the task
+    doc · self-contained · no external assets · 2026-06-09.
+  </footer>
+</main>
+
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+  var map = {}; links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  if (!('IntersectionObserver' in window)) return;
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (e.isIntersecting){
+        links.forEach(function(l){ l.classList.remove('active'); });
+        var a = map[e.target.id]; if (a) a.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-25% 0px -65% 0px', threshold: 0 });
+  document.querySelectorAll('main section[id]').forEach(function(s){ obs.observe(s); });
+})();
+</script>
+</body>
+</html>

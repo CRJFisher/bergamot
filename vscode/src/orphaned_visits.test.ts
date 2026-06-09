@@ -1,5 +1,5 @@
 import { OrphanedVisitsManager } from './orphaned_visits';
-import { PageActivitySessionWithoutTreeOrContent } from './duck_db_models';
+import { PageActivitySessionWithoutTree } from './duck_db_models';
 
 describe('OrphanedVisitsManager', () => {
   let manager: OrphanedVisitsManager;
@@ -11,13 +11,13 @@ describe('OrphanedVisitsManager', () => {
   const create_test_visit = (
     url: string,
     opener_tab_id?: number
-  ): PageActivitySessionWithoutTreeOrContent & { raw_content: string; visit_id: string } => ({
+  ): PageActivitySessionWithoutTree & { title: string; visit_id: string } => ({
     id: `test-${url}`,
     visit_id: `visit-${url}`,
     url,
     referrer: 'https://example.com',
     page_loaded_at: new Date().toISOString(),
-    raw_content: 'test content',
+    title: 'test content',
     ...(opener_tab_id && { opener_tab_id })
   });
 
@@ -166,7 +166,7 @@ describe('OrphanedVisitsManager', () => {
         referrer: 'https://example.com',
         page_loaded_at: new Date().toISOString(),
         opener_tab_id: 123
-      } as PageActivitySessionWithoutTreeOrContent & { opener_tab_id: number };
+      } as PageActivitySessionWithoutTree & { opener_tab_id: number };
 
       expect(OrphanedVisitsManager.is_potential_orphan(visit)).toBe(true);
     });
@@ -177,7 +177,7 @@ describe('OrphanedVisitsManager', () => {
         url: 'https://test.com',
         referrer: 'https://example.com',
         page_loaded_at: new Date().toISOString()
-      } as PageActivitySessionWithoutTreeOrContent;
+      } as PageActivitySessionWithoutTree;
 
       expect(OrphanedVisitsManager.is_potential_orphan(visit)).toBe(true);
     });
@@ -188,7 +188,7 @@ describe('OrphanedVisitsManager', () => {
         url: 'https://test.com',
         referrer: null,
         page_loaded_at: new Date().toISOString()
-      } as PageActivitySessionWithoutTreeOrContent;
+      } as PageActivitySessionWithoutTree;
 
       expect(OrphanedVisitsManager.is_potential_orphan(visit)).toBe(false);
     });

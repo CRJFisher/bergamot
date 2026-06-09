@@ -28,10 +28,6 @@
   "contributes": {
     "commands": [
       {
-        "command": "bergamot.showCaptureMetrics",
-        "title": "Bergamot: Show Capture Gate Metrics"
-      },
-      {
         "command": "bergamot.showVisitOutcomes",
         "title": "Bergamot: Show Visit Outcomes"
       },
@@ -73,7 +69,6 @@
   "dependencies": {
     "@duckdb/node-api": "^1.2.2-alpha.18",
     "@modelcontextprotocol/sdk": "^1.15.1",
-    "@mongodb-js/zstd": "^2.0.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "patchright": "^1.60.2",

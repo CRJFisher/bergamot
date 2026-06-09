@@ -2,10 +2,10 @@ import { DuckDB, get_webpage_capture } from "../duck_db";
 import { store_capture } from "./store_capture";
 
 /**
- * Verifies capture storage: a capture writes a metadata row keyed by
- * page_session_id, and cheap <head> metadata is read. Uses a real in-memory
- * DuckDB. Page content is read back by re-downloading the public URL (the
- * re-download corpus, task-39.2), not from this store.
+ * Verifies capture storage: a capture writes a metadata-only row keyed by
+ * page_session_id (url, title, content type, capture timestamp). Uses a real
+ * in-memory DuckDB. Page content is read back by re-downloading the public URL
+ * (the re-download corpus, task-39.2), not from this store.
  */
 describe("store_capture", () => {
   let db: DuckDB;
@@ -19,59 +19,52 @@ describe("store_capture", () => {
     await db.close();
   });
 
-  const RICH_HTML = `<!doctype html>
-<html lang="en-GB">
-<head>
-  <title>Understanding zstd &amp; capture</title>
-  <meta property="og:site_name" content="Bergamot Docs" />
-  <meta name="author" content="Ada Lovelace" />
-  <meta property="article:published_time" content="2026-01-02T03:04:05Z" />
-</head>
-<body><h1>Body</h1><p>Some content with binary-ish chars: éü—🚀</p></body>
-</html>`;
-
-  it("stores original_byte_size as the decompressed length", async () => {
+  it("stores the browsing metadata for a visit", async () => {
     const meta = await store_capture(db, {
-      page_session_id: "p2",
-      url: "https://example.com/b",
-      html: RICH_HTML,
-      content_type: "text/html",
-      captured_at: "2026-06-05T00:00:00.000Z",
-    });
-    expect(meta.original_byte_size).toBe(Buffer.byteLength(RICH_HTML, "utf-8"));
-  });
-
-  it("reads cheap metadata from the <head>", async () => {
-    const meta = await store_capture(db, {
-      page_session_id: "p3",
-      url: "https://example.com/c",
-      html: RICH_HTML,
+      page_session_id: "p1",
+      url: "https://example.com/a",
+      title: "Understanding zstd & capture",
       content_type: "text/html",
       captured_at: "2026-06-05T00:00:00.000Z",
     });
 
-    expect(meta.title).toBe("Understanding zstd & capture");
-    expect(meta.site_name).toBe("Bergamot Docs");
-    expect(meta.author).toBe("Ada Lovelace");
-    expect(meta.published_at).toBe("2026-01-02T03:04:05Z");
-    expect(meta.lang).toBe("en-GB");
+    expect(meta).toEqual({
+      page_session_id: "p1",
+      url: "https://example.com/a",
+      title: "Understanding zstd & capture",
+      content_type: "text/html",
+      captured_at: "2026-06-05T00:00:00.000Z",
+    });
   });
 
-  it("persists the metadata view without decompressing the page", async () => {
+  it("persists the metadata view, read back by page_session_id", async () => {
     await store_capture(db, {
       page_session_id: "p4",
       url: "https://example.com/d",
-      html: "<html><head><title>Only Title</title></head><body>x</body></html>",
+      title: "Only Title",
       content_type: "text/html",
       captured_at: "2026-06-05T00:00:00.000Z",
     });
 
     const meta = await get_webpage_capture(db, "p4");
     expect(meta?.title).toBe("Only Title");
-    expect(meta?.site_name).toBeNull();
-    expect(meta?.author).toBeNull();
     expect(meta?.content_type).toBe("text/html");
     expect(meta?.url).toBe("https://example.com/d");
+  });
+
+  it("stores zero page content (metadata only)", async () => {
+    await store_capture(db, {
+      page_session_id: "p5",
+      url: "https://example.com/e",
+      title: "No Content",
+      content_type: "text/html",
+      captured_at: "2026-06-05T00:00:00.000Z",
+    });
+
+    const meta = await get_webpage_capture(db, "p5");
+    // The record carries no content field of any kind.
+    expect(meta && "content" in meta).toBe(false);
+    expect(meta && "content_compressed" in meta).toBe(false);
   });
 
   it("returns null when no capture exists", async () => {

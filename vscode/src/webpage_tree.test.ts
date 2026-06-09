@@ -4,7 +4,7 @@ import {
   get_tree_with_id,
 } from "./webpage_tree";
 import {
-  PageActivitySessionWithoutTreeOrContent,
+  PageActivitySessionWithoutTree,
 } from "./duck_db_models";
 import {
   PageActivitySessionWithMeta
@@ -33,7 +33,7 @@ describe("Webpage Tree Management", () => {
   });
 
   describe("insert_page_activity_session_with_tree_management", () => {
-    const base_session: PageActivitySessionWithoutTreeOrContent = {
+    const base_session: PageActivitySessionWithoutTree = {
       id: "test-session-id",
       url: "https://example.com/page",
       referrer: null,
@@ -122,14 +122,14 @@ describe("Webpage Tree Management", () => {
     });
 
     describe("when session has referrer", () => {
-      const session_with_referrer: PageActivitySessionWithoutTreeOrContent = {
+      const session_with_referrer: PageActivitySessionWithoutTree = {
         ...base_session,
         referrer: "https://example.com/referrer",
       };
 
       it("should add to existing tree when referrer found", async () => {
         // First, insert a session that will be the referrer
-        const referrer_session: PageActivitySessionWithoutTreeOrContent = {
+        const referrer_session: PageActivitySessionWithoutTree = {
           id: "referrer-session-id",
           url: "https://example.com/referrer",
           referrer: null,
@@ -183,7 +183,7 @@ describe("Webpage Tree Management", () => {
 
       it("should handle fuzzy URL matching for referrer", async () => {
         // Insert a session with full URL including query params
-        const referrer_session: PageActivitySessionWithoutTreeOrContent = {
+        const referrer_session: PageActivitySessionWithoutTree = {
           id: "referrer-session-id",
           url: "https://example.com/page?query=test&param=value",
           referrer: null,
@@ -230,7 +230,7 @@ describe("Webpage Tree Management", () => {
           url: "https://example.com",
           referrer: null,
           page_loaded_at: "2025-01-01T00:00:00Z",
-        } as Partial<PageActivitySessionWithoutTreeOrContent> as PageActivitySessionWithoutTreeOrContent;
+        } as Partial<PageActivitySessionWithoutTree> as PageActivitySessionWithoutTree;
 
         await expect(
           insert_page_activity_session_with_tree_management(db, invalid_session)
@@ -441,16 +441,9 @@ describe("Webpage Tree Management", () => {
       // Capture metadata is the canonical per-page record.
       await insert_webpage_capture(db, {
         page_session_id: "session-with-meta",
-        content_compressed: new Uint8Array([1, 2, 3]),
-        content_encoding: "zstd",
-        original_byte_size: 3,
         content_type: "text/html",
         url: "https://example.com/analyzed",
         title: "Captured Page",
-        site_name: null,
-        author: null,
-        published_at: null,
-        lang: null,
         captured_at: "2025-01-01T00:00:00Z",
       });
 
@@ -593,7 +586,7 @@ describe("Webpage Tree Management", () => {
     });
 
     it("should handle special characters in URLs", async () => {
-      const session: PageActivitySessionWithoutTreeOrContent = {
+      const session: PageActivitySessionWithoutTree = {
         id: "special-chars",
         url: "https://example.com/page?q=test&foo=bar%20baz#section",
         referrer: "https://example.com/page?ref=<script>alert('xss')</script>",
@@ -613,7 +606,7 @@ describe("Webpage Tree Management", () => {
 
     it("should handle very long URLs", async () => {
       const very_long_url = "https://example.com/" + "a".repeat(2000);
-      const session: PageActivitySessionWithoutTreeOrContent = {
+      const session: PageActivitySessionWithoutTree = {
         id: "long-url",
         url: very_long_url,
         referrer: null,

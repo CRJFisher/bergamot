@@ -6,7 +6,7 @@
  * visit is processed before the parent page visit completes.
  */
 
-import { PageActivitySessionWithoutTreeOrContent } from "./duck_db_models";
+import { PageActivitySessionWithoutTree } from "./duck_db_models";
 import { dev_log, record_outcome } from "./dev_log";
 
 /**
@@ -15,7 +15,7 @@ import { dev_log, record_outcome } from "./dev_log";
  */
 export interface OrphanedVisit {
   /** The page visit data including content */
-  visit: PageActivitySessionWithoutTreeOrContent & { raw_content: string; visit_id: string };
+  visit: PageActivitySessionWithoutTree & { title: string; visit_id: string };
   /** Browser tab ID of the page that opened this page */
   opener_tab_id: number;
   /** Timestamp when this orphaned visit was first detected */
@@ -69,20 +69,20 @@ export class OrphanedVisitsManager {
    *   id: 'session-123',
    *   url: 'https://example.com/article',
    *   referrer: 'https://news.site.com',
-   *   raw_content: '<html>...</html>',
+   *   title: 'Example Page',
    *   page_loaded_at: '2024-01-01T12:00:00Z'
    * }, 42); // Tab 42 opened this page
    * ```
    */
   add_orphan(
-    visit: PageActivitySessionWithoutTreeOrContent & { raw_content: string; visit_id: string },
+    visit: PageActivitySessionWithoutTree & { title: string; visit_id: string },
     opener_tab_id: number
   ): void {
     dev_log('orphan_parked', {
       visit_id: visit.visit_id,
       url: visit.url,
       opener_tab_id,
-      visit_tab_id: (visit as PageActivitySessionWithoutTreeOrContent & { tab_id?: number }).tab_id,
+      visit_tab_id: (visit as PageActivitySessionWithoutTree & { tab_id?: number }).tab_id,
     });
 
     const orphan: OrphanedVisit = {
@@ -330,10 +330,10 @@ export class OrphanedVisitsManager {
    * ```
    */
   static is_potential_orphan(
-    visit: PageActivitySessionWithoutTreeOrContent
+    visit: PageActivitySessionWithoutTree
   ): boolean {
     // Check if visit has opener_tab_id field (from browser extension)
-    const has_opener = !!(visit as PageActivitySessionWithoutTreeOrContent & { opener_tab_id?: number }).opener_tab_id;
+    const has_opener = !!(visit as PageActivitySessionWithoutTree & { opener_tab_id?: number }).opener_tab_id;
     
     // Also check if it has a referrer but we might not find the parent
     const has_referrer = !!visit.referrer;

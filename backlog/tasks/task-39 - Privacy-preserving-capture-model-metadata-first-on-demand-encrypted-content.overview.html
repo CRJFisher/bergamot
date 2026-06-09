@@ -74,12 +74,14 @@
   .sub{border:var(--hair);border-radius:var(--r);background:var(--g1);padding:16px 18px;
     display:flex;flex-direction:column;gap:8px;position:relative;border-top:3px solid var(--g4)}
   .sub.keystone{border-top-color:var(--olive);background:#f6f8ee}
+  .sub.ready{border-top-color:var(--clay)}
   .sub .sid{font-family:var(--mono);font-size:.72rem;color:var(--g5);display:flex;
     justify-content:space-between;align-items:center;gap:6px}
   .sub .sid .ids{display:flex;align-items:center;gap:6px}
   .sub .sid .badge{background:var(--g3);color:var(--ink);border-radius:999px;padding:2px 9px;
     font-weight:600;font-size:.66rem;text-transform:uppercase;letter-spacing:.06em}
   .sub.keystone .sid .badge{background:var(--olive);color:var(--ivory)}
+  .sub.ready .sid .badge{background:var(--clay);color:var(--ivory)}
   .sub .status{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;
     border-radius:999px;padding:2px 8px;border:var(--hair);color:var(--g4)}
   .sub .status.done{background:var(--olive);color:var(--ivory);border-color:var(--olive)}
@@ -89,11 +91,13 @@
   .sub .links{margin-top:auto;display:flex;flex-wrap:wrap;gap:7px;padding-top:8px}
   .sub .links a{font-family:var(--mono);font-size:.72rem;text-decoration:none;color:var(--ivory);
     background:var(--olive);border-radius:999px;padding:4px 11px}
+  .sub.ready .links a{background:var(--clay)}
   .sub .links a:hover{background:var(--slate)}
   .sub .links .nogen{font-family:var(--mono);font-size:.7rem;color:var(--g4);
     border:1px dashed var(--g3);border-radius:999px;padding:4px 11px}
   .sub .order{font-family:var(--mono);font-size:.68rem;color:var(--g5)}
   .sub.keystone .order{color:var(--olive)}
+  .sub.ready .order{color:var(--clay)}
   footer{margin-top:60px;padding-top:18px;border-top:var(--hair);font-family:var(--mono);
     font-size:.72rem;color:var(--g4);max-width:82ch}
   @media(max-width:760px){ h1{font-size:1.7rem} }
@@ -103,7 +107,7 @@
 
 <nav class="cross" aria-label="Task-39 family navigation">
   <span class="curr">task-39 ▸ overview</span>
-  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.1 schema reset · not yet generated</span>
+  <a class="doc-link" href="task-39.1 - Stop-ambient-content-capture-and-metadata-only-schema-reset.metadata-only-reset.html"><span class="dot" style="background:var(--clay)"></span>39.1 schema reset · ready</a>
   <a class="doc-link" href="task-39.2 - Re-download-post-processing-content-fetcher-and-content-read-path.content-flow.html"><span class="dot" style="background:var(--olive)"></span>39.2 fetcher · done</a>
   <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.3 encrypted cache · not yet generated</span>
   <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.4 store encryption · not yet generated</span>
@@ -133,7 +137,7 @@
     <div class="meta-row">
       <span class="chip key">UMBRELLA · 5 subtasks</span>
       <span class="chip done">39.2 keystone · DONE</span>
-      <span class="chip">4 subtasks to do</span>
+      <span class="chip">39.1 · ready to build</span>
       <span class="chip">priority <strong>high</strong></span>
       <span class="chip">no backwards-compat shims</span>
     </div>
@@ -141,7 +145,7 @@
       <div class="label">Canonical model</div>
       <p>backlog/drafts/privacy-preserving-capture-model.md · docs/decisions/privacy-core-reorientation.md.
         The docs are already reoriented; task-39 brings the code and schema into line. The keystone fetcher
-        (39.2) is built — see its companion below.</p>
+        (39.2) is built and the metadata-only reset (39.1) has its understanding contract — see the companions below.</p>
     </div>
   </header>
 
@@ -224,13 +228,13 @@
     <div class="eyebrow">the work</div>
     <h2>Five subtasks</h2>
     <div class="subtasks">
-      <div class="sub">
+      <div class="sub ready">
         <div class="sid"><span class="ids"><span>task-39.1</span><span class="badge">schema reset</span></span><span class="status todo">to do</span></div>
         <h3>Stop ambient content capture + metadata-only schema reset</h3>
         <p>Remove all ambient page-content capture across browser, server, and schema. Drop
           <code>content_compressed</code> and the compression deps. Destructive reset, no migration.</p>
-        <span class="order">unblocked by 39.2 — read path already repointed</span>
-        <div class="links"><span class="nogen">companion not yet generated</span></div>
+        <span class="order">unblocked by 39.2 — read path already repointed · contract ready</span>
+        <div class="links"><a href="task-39.1 - Stop-ambient-content-capture-and-metadata-only-schema-reset.metadata-only-reset.html">metadata-only reset ▸</a></div>
       </div>
 
       <div class="sub keystone">
@@ -276,7 +280,7 @@
 
   <section id="order">
     <div class="eyebrow">sequencing</div>
-    <h2>Build order — 39.2 first, by necessity (now done)</h2>
+    <h2>Build order — 39.2 first, by design (now done)</h2>
     <div class="figure">
       <svg viewBox="0 0 1180 130" role="img" aria-label="Build order: 39.2 (done) lands with or before 39.1; 39.3 depends on 39.2; 39.5 depends on 39.3; 39.4 coordinates with 39.1.">
         <defs>
@@ -289,8 +293,9 @@
           <text x="105" y="66" text-anchor="middle" fill="#f7f4ec">39.2 fetcher</text>
           <text x="105" y="81" text-anchor="middle" fill="#eef0e2" font-family="ui-monospace,monospace" font-size="10" font-weight="400">keystone · done ✓</text>
 
-          <rect x="270" y="10" width="150" height="46" rx="10" fill="#efe9da" stroke="#a9a392" stroke-width="1.5"/>
-          <text x="345" y="38" text-anchor="middle" fill="#33352f">39.1 reset</text>
+          <rect x="270" y="10" width="150" height="46" rx="10" fill="#efe9da" stroke="#b56a44" stroke-width="1.6"/>
+          <text x="345" y="32" text-anchor="middle" fill="#33352f">39.1 reset</text>
+          <text x="345" y="47" text-anchor="middle" fill="#b56a44" font-family="ui-monospace,monospace" font-size="9.5" font-weight="400">contract ready</text>
           <rect x="270" y="80" width="150" height="46" rx="10" fill="#efe9da" stroke="#a9a392" stroke-width="1.5"/>
           <text x="345" y="108" text-anchor="middle" fill="#33352f">39.3 cache</text>
 
@@ -310,7 +315,8 @@
       </svg>
       <figcaption>39.2 repointed the content read path at re-download <em>before</em> 39.1 drops the stored
         content — otherwise <code>get_webpage_content</code> would return nothing. That ordering is why the
-        fetcher was the keystone, and it is built: the four remaining subtasks now sit on a working corpus.</figcaption>
+        fetcher was the keystone and landed first by design; with it in place, 39.1 can safely drop the stored
+        content blob, and the remaining subtasks sit on a working corpus.</figcaption>
     </div>
   </section>
 
@@ -329,8 +335,9 @@
 
   <footer>
     Overview of task-39 (privacy-core capture model) and its five subtasks. 39.2 (the keystone fetcher) is
-    done; 39.1 / 39.3 / 39.4 / 39.5 remain to do. Re-scanned the tasks directory for sibling companions; only
-    task-39.2 has one so far. Re-generate to refresh as the remaining companions land.
+    done; 39.1 (metadata-only reset) has its understanding contract and is ready to build; 39.3 / 39.4 / 39.5
+    remain to do. Re-scanned the tasks directory for sibling companions — 39.1 and 39.2 have companions so far.
+    Re-generate to refresh as the remaining companions land.
     Self-contained · no external assets · refreshed 2026-06-09.
   </footer>
 </main>

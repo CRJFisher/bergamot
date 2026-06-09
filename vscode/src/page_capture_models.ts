@@ -3,26 +3,18 @@ import { PageActivitySessionSchema } from "./duck_db_models";
 import { FETCH_OUTCOME_KINDS } from "./redownload/fetch_outcome";
 
 /**
- * The canonical per-page record: cheap metadata read from the page's
- * <head> alongside the stored raw page. The compressed bytes live in DuckDB
- * `webpage_capture`; this is the metadata view read for navigation/listing
- * without decompression.
+ * The canonical per-page capture record: browsing metadata only. The title is
+ * captured from the browser tab; page content and `<meta>`-derived fields
+ * (author / site_name / published_at / lang) are obtained on demand by
+ * re-downloading the public URL (see {@link WebpageFetchSchema}), never stored
+ * here.
  */
 export const PageCaptureSchema = z.object({
   page_session_id: z.string().describe("The page session this capture belongs to"),
   url: z.string().describe("The captured page URL"),
-  title: z.string().describe("Page title from the cheap <head> metadata"),
-  site_name: z.string().nullable().optional().describe("og:site_name, if present"),
-  author: z.string().nullable().optional().describe("Author meta, if present"),
-  published_at: z
-    .string()
-    .nullable()
-    .optional()
-    .describe("Publication timestamp meta, if present"),
-  lang: z.string().nullable().optional().describe("Document language, if present"),
+  title: z.string().describe("Page title, captured from the browser tab"),
   content_type: z.string().describe("MIME type of the captured page"),
   captured_at: z.string().describe("ISO timestamp when the page was captured"),
-  original_byte_size: z.number().describe("Decompressed page size in bytes"),
 });
 export type PageCapture = z.infer<typeof PageCaptureSchema>;
 

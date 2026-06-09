@@ -1,8 +1,9 @@
 import { z } from "zod";
 
 /**
- * Complete page activity session schema including all fields.
- * Represents a single webpage visit with full metadata and content.
+ * Complete page activity session schema. Represents a single webpage visit as
+ * browsing metadata only — page content is never part of a session (it is
+ * obtained on demand by re-downloading the public URL).
  */
 export const PageActivitySessionSchema = z.object({
   /** Unique identifier for the page session (used for references) */
@@ -27,59 +28,30 @@ export const PageActivitySessionSchema = z.object({
   tree_id: z
     .string()
     .describe("The ID of the navigation tree this page belongs to"),
-  /** The extracted and processed text content of the webpage */
-  content: z.string().describe("The extracted text content of the webpage"),
   /** ISO timestamp when the page was loaded in the browser */
   page_loaded_at: z
     .string()
     .describe("ISO timestamp string when the page was loaded"),
 });
-/**
- * Page activity session schema without content field.
- * Used when the raw page is stored separately (in the webpage_capture store).
- */
-export const PageActivitySessionWithoutContentSchema =
-  PageActivitySessionSchema.omit({
-    content: true,
-  });
 
 /**
- * Page activity session schema for initial processing before tree assignment.
- * Excludes both content and tree_id fields, used during the tree management phase.
+ * Page activity session before tree assignment — the shape ingested from the
+ * browser, missing only the `tree_id` that the tree-management phase assigns.
  */
-export const PageActivitySessionWithoutTreeOrContentSchema =
-  PageActivitySessionWithoutContentSchema.omit({
+export const PageActivitySessionWithoutTreeSchema =
+  PageActivitySessionSchema.omit({
     tree_id: true,
   }).describe(
     "PageActivitySession schema without tree_id, used for initial page activity tracking"
   );
 
 /**
- * Page activity session without content field.
- * Used when content is managed separately for performance or storage optimization.
- * 
+ * Page activity session for the initial ingestion phase, before a navigation
+ * tree is assigned.
+ *
  * @example
  * ```typescript
- * const sessionWithoutContent: PageActivitySessionWithoutContent = {
- *   id: 'session-123',
- *   url: 'https://example.com',
- *   referrer: 'https://google.com',
- *   tree_id: 'tree-456',
- *   page_loaded_at: '2024-01-01T12:00:00Z'
- * };
- * ```
- */
-export type PageActivitySessionWithoutContent = z.infer<
-  typeof PageActivitySessionWithoutContentSchema
->;
-
-/**
- * Page activity session for initial processing phase.
- * Missing tree assignment and content, used during webpage visit ingestion.
- * 
- * @example
- * ```typescript
- * const newVisit: PageActivitySessionWithoutTreeOrContent = {
+ * const newVisit: PageActivitySessionWithoutTree = {
  *   id: 'session-123',
  *   url: 'https://example.com/article',
  *   referrer: 'https://news.site.com',
@@ -88,14 +60,13 @@ export type PageActivitySessionWithoutContent = z.infer<
  * };
  * ```
  */
-export type PageActivitySessionWithoutTreeOrContent = z.infer<
-  typeof PageActivitySessionWithoutTreeOrContentSchema
+export type PageActivitySessionWithoutTree = z.infer<
+  typeof PageActivitySessionWithoutTreeSchema
 >;
 
 /**
- * Complete page activity session with all fields.
- * Represents a fully processed webpage visit including content and tree assignment.
- * 
+ * Complete page activity session with tree assignment.
+ *
  * @example
  * ```typescript
  * const fullSession: PageActivitySession = {
@@ -104,7 +75,6 @@ export type PageActivitySessionWithoutTreeOrContent = z.infer<
  *   referrer: 'https://news.site.com',
  *   referrer_page_session_id: 'session-122',
  *   tree_id: 'tree-456',
- *   content: 'Article content here...',
  *   page_loaded_at: '2024-01-01T12:00:00Z'
  * };
  * ```

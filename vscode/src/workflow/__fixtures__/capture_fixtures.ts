@@ -1,23 +1,19 @@
 import * as fs from "fs";
 import * as path from "path";
 import { PageMetadata } from "../read_metadata";
-import { GateDecision } from "../page_gate";
 
 /**
- * A committed raw-page fixture with its expected cheap metadata and gate label.
- * Shared by the gate unit tests (task-35.8) and the deterministic capture eval
- * (task-35.10). Fully deterministic and offline.
+ * A committed raw-page fixture with its expected cheap `<head>` metadata. Used
+ * by the deterministic `read_metadata` eval — fully deterministic and offline.
  */
 export interface CaptureFixture {
   name: string;
   url: string;
   content_type: string;
-  /** The raw captured page, read from the committed fixture file. */
+  /** The raw page, read from the committed fixture file. */
   html: string;
-  /** Expected cheap <head> metadata, or null when not asserted (pdf/empty). */
-  expected_metadata: PageMetadata | null;
-  /** Expected deterministic gate decision. */
-  expected_gate: GateDecision;
+  /** Expected cheap <head> metadata. */
+  expected_metadata: PageMetadata;
 }
 
 function read_fixture(file: string): string {
@@ -37,7 +33,6 @@ export const CAPTURE_FIXTURES: CaptureFixture[] = [
       published_at: "2026-02-14T09:30:00Z",
       lang: "en",
     },
-    expected_gate: { keep: true },
   },
   {
     name: "docs_with_nav",
@@ -51,7 +46,6 @@ export const CAPTURE_FIXTURES: CaptureFixture[] = [
       published_at: null,
       lang: "en",
     },
-    expected_gate: { keep: true },
   },
   {
     name: "nav_heavy",
@@ -65,8 +59,6 @@ export const CAPTURE_FIXTURES: CaptureFixture[] = [
       published_at: null,
       lang: "en",
     },
-    // Permissive gate: a nav/sitemap page is real content worth capturing.
-    expected_gate: { keep: true },
   },
   {
     name: "aggregator",
@@ -80,31 +72,5 @@ export const CAPTURE_FIXTURES: CaptureFixture[] = [
       published_at: null,
       lang: "en",
     },
-    // Permissive gate: a link aggregator is kept; quality filtering is task-31's.
-    expected_gate: { keep: true },
-  },
-  {
-    name: "empty",
-    url: "https://example.com/blank",
-    content_type: "text/html",
-    html: read_fixture("empty.html"),
-    expected_metadata: null,
-    expected_gate: { keep: false, reason: "content_empty" },
-  },
-  {
-    name: "auth",
-    url: "https://accounts.example.com/login",
-    content_type: "text/html",
-    html: read_fixture("auth.html"),
-    expected_metadata: null,
-    expected_gate: { keep: false, reason: "auth" },
-  },
-  {
-    name: "redirect",
-    url: "https://example.com/r/abc",
-    content_type: "text/html",
-    html: read_fixture("redirect.html"),
-    expected_metadata: null,
-    expected_gate: { keep: false, reason: "redirect" },
   },
 ];

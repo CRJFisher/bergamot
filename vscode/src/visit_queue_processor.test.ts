@@ -85,7 +85,7 @@ describe("VisitQueueProcessor", () => {
         url: "https://example.com",
         referrer: null,
         page_loaded_at: "2024-01-01T12:00:00Z",
-        raw_content: "<html>Test</html>"
+        title: "<html>Test</html>"
       };
       
       const position = processor.enqueue(visit);
@@ -104,7 +104,7 @@ describe("VisitQueueProcessor", () => {
           url: "https://example.com/1",
           referrer: null,
           page_loaded_at: "2024-01-01T12:00:00Z",
-          raw_content: "<html>1</html>"
+          title: "<html>1</html>"
         },
         {
           id: "visit-2",
@@ -112,7 +112,7 @@ describe("VisitQueueProcessor", () => {
           url: "https://example.com/2",
           referrer: null,
           page_loaded_at: "2024-01-01T12:01:00Z",
-          raw_content: "<html>2</html>"
+          title: "<html>2</html>"
         },
         {
           id: "visit-3",
@@ -120,7 +120,7 @@ describe("VisitQueueProcessor", () => {
           url: "https://example.com/3",
           referrer: null,
           page_loaded_at: "2024-01-01T12:02:00Z",
-          raw_content: "<html>3</html>"
+          title: "<html>3</html>"
         }
       ];
       
@@ -140,7 +140,7 @@ describe("VisitQueueProcessor", () => {
         url: "https://example.com",
         referrer: null,
         page_loaded_at: "2024-01-01T12:00:00Z",
-        raw_content: "<html>Test</html>"
+        title: "<html>Test</html>"
       };
       
       processor.enqueue(visit);
@@ -165,7 +165,7 @@ describe("VisitQueueProcessor", () => {
         url: "https://example.com/regular",
         referrer: null,
         page_loaded_at: "2024-01-01T12:00:00Z",
-        raw_content: "<html>Regular</html>"
+        title: "<html>Regular</html>"
       });
       
       // Add priority visits
@@ -176,7 +176,7 @@ describe("VisitQueueProcessor", () => {
           url: "https://example.com/priority1",
           referrer: "https://example.com",
           page_loaded_at: "2024-01-01T12:01:00Z",
-          raw_content: "<html>Priority 1</html>"
+          title: "<html>Priority 1</html>"
         },
         {
           id: "priority-2",
@@ -184,7 +184,7 @@ describe("VisitQueueProcessor", () => {
           url: "https://example.com/priority2",
           referrer: "https://example.com",
           page_loaded_at: "2024-01-01T12:02:00Z",
-          raw_content: "<html>Priority 2</html>"
+          title: "<html>Priority 2</html>"
         }
       ];
       
@@ -212,7 +212,7 @@ describe("VisitQueueProcessor", () => {
         url: "https://example.com",
         referrer: null,
         page_loaded_at: "2024-01-01T12:00:00Z",
-        raw_content: "<html>Test</html>",
+        title: "<html>Test</html>",
         tab_id: 42
       };
       
@@ -236,7 +236,7 @@ describe("VisitQueueProcessor", () => {
         url: "https://example.com/child",
         referrer: "https://example.com/parent",
         page_loaded_at: "2024-01-01T12:00:00Z",
-        raw_content: "<html>Child</html>",
+        title: "<html>Child</html>",
         opener_tab_id: 10,
         tab_id: 20
       };
@@ -260,7 +260,7 @@ describe("VisitQueueProcessor", () => {
         url: "https://example.com/parent",
         referrer: null,
         page_loaded_at: "2024-01-01T12:00:00Z",
-        raw_content: "<html>Parent</html>",
+        title: "<html>Parent</html>",
         tab_id: 10
       };
       
@@ -271,7 +271,7 @@ describe("VisitQueueProcessor", () => {
           url: "https://example.com/child",
           referrer: "https://example.com/parent",
           page_loaded_at: "2024-01-01T12:01:00Z",
-          raw_content: "<html>Child</html>"
+          title: "<html>Child</html>"
         },
         opener_tab_id: 10,
         arrival_time: Date.now(),
@@ -297,7 +297,7 @@ describe("VisitQueueProcessor", () => {
         url: "https://news.ycombinator.com",
         referrer: null,
         page_loaded_at: "2024-01-01T12:00:00Z",
-        raw_content: "<html>HN</html>"
+        title: "<html>HN</html>"
       };
       
       mockInsertPageActivitySession.mockResolvedValue({
@@ -322,7 +322,7 @@ describe("VisitQueueProcessor", () => {
         url: `https://example.com/${i}`,
         referrer: null,
         page_loaded_at: `2024-01-01T12:0${i}:00Z`,
-        raw_content: `<html>${i}</html>`
+        title: `<html>${i}</html>`
       }));
       
       visits.forEach(v => processor.enqueue(v));
@@ -349,7 +349,7 @@ describe("VisitQueueProcessor", () => {
           url: "https://example.com/good",
           referrer: null,
           page_loaded_at: "2024-01-01T12:00:00Z",
-          raw_content: "<html>Good</html>"
+          title: "<html>Good</html>"
         },
         {
           id: "bad-1",
@@ -357,7 +357,7 @@ describe("VisitQueueProcessor", () => {
           url: "https://example.com/bad",
           referrer: null,
           page_loaded_at: "2024-01-01T12:01:00Z",
-          raw_content: "<html>Bad</html>"
+          title: "<html>Bad</html>"
         },
         {
           id: "good-2",
@@ -365,7 +365,7 @@ describe("VisitQueueProcessor", () => {
           url: "https://example.com/good2",
           referrer: null,
           page_loaded_at: "2024-01-01T12:02:00Z",
-          raw_content: "<html>Good 2</html>"
+          title: "<html>Good 2</html>"
         }
       ];
       
@@ -402,7 +402,7 @@ describe("VisitQueueProcessor", () => {
         url: "https://example.com",
         referrer: null,
         page_loaded_at: "2024-01-01T12:00:00Z",
-        raw_content: "<html>Test</html>"
+        title: "<html>Test</html>"
       };
       
       processor.enqueue(visit);
@@ -427,7 +427,7 @@ describe("VisitQueueProcessor", () => {
           url: "https://example.com/orphan",
           referrer: "https://example.com/parent",
           page_loaded_at: "2024-01-01T12:00:00Z",
-          raw_content: "<html>Orphan</html>",
+          title: "<html>Orphan</html>",
           opener_tab_id: 10
         },
         opener_tab_id: 10,
@@ -462,7 +462,7 @@ describe("VisitQueueProcessor", () => {
           url: "https://example.com/orphan",
           referrer: "https://example.com/parent",
           page_loaded_at: "2024-01-01T12:00:00Z",
-          raw_content: "<html>Orphan</html>",
+          title: "<html>Orphan</html>",
           opener_tab_id: 10
         },
         opener_tab_id: 10,
@@ -512,7 +512,7 @@ describe("VisitQueueProcessor", () => {
           url: "https://example.com/1",
           referrer: null,
           page_loaded_at: "2024-01-01T12:00:00Z",
-          raw_content: "<html>1</html>"
+          title: "<html>1</html>"
         },
         {
           id: "visit-2",
@@ -520,7 +520,7 @@ describe("VisitQueueProcessor", () => {
           url: "https://example.com/2",
           referrer: null,
           page_loaded_at: "2024-01-01T12:01:00Z",
-          raw_content: "<html>2</html>"
+          title: "<html>2</html>"
         }
       ];
       
@@ -589,7 +589,7 @@ describe("VisitQueueProcessor", () => {
         url: `https://example.com/${i}`,
         referrer: null,
         page_loaded_at: `2024-01-01T12:00:00Z`,
-        raw_content: `<html>${i}</html>`
+        title: `<html>${i}</html>`
       }));
       
       visits.forEach(v => processor.enqueue(v));
@@ -610,7 +610,7 @@ describe("VisitQueueProcessor", () => {
         url: "https://example.com",
         referrer: null,
         page_loaded_at: "2024-01-01T12:00:00Z",
-        raw_content: "<html>Minimal</html>"
+        title: "<html>Minimal</html>"
         // No tab_id, opener_tab_id, etc.
       };
       

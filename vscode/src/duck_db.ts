@@ -2,7 +2,6 @@ import {
   DuckDBInstance,
   DuckDBConnection,
   DuckDBValue,
-  blobValue,
 } from "@duckdb/node-api";
 import * as path from "path";
 import * as fs from "fs";
@@ -17,7 +16,6 @@ import { md5_hash } from "./hash_utils";
 import {
   PageActivitySession,
   PageActivitySessionSchema,
-  PageActivitySessionWithoutContent,
 } from "./duck_db_models";
 
 /**
@@ -43,13 +41,8 @@ const WEBPAGE_FETCH_TABLE = "webpage_fetch";
  */
 const CAPTURE_SELECT = [
   "c.title as cap_title",
-  "c.site_name as cap_site_name",
-  "c.author as cap_author",
-  "c.published_at as cap_published_at",
-  "c.lang as cap_lang",
   "c.content_type as cap_content_type",
   "c.captured_at as cap_captured_at",
-  "c.original_byte_size as cap_original_byte_size",
 ].join(",\n         ");
 
 /**
@@ -154,23 +147,15 @@ export class DuckDB {
 
     // Capture metadata store, keyed by page_session_id (no foreign key, so a
     // capture can be written before or independently of the activity-session row).
-    // The authoritative content path is RE-DOWNLOAD (src/redownload/): content is
-    // obtained by re-fetching the public URL, not read from here. The
-    // `content_compressed` BLOB is a legacy ambient-capture column still written by
-    // the capture pipeline; it is dropped, along with ambient content capture, by
-    // the metadata-only schema reset (task-39.1). Nothing reads it.
+    // This holds browsing metadata only — page content is never stored here. The
+    // authoritative content path is RE-DOWNLOAD (src/redownload/): content, and
+    // the `<meta>`-derived fields (author / site_name / published_at / lang), are
+    // obtained by re-fetching the public URL and logged to `webpage_fetch`.
     const webpage_capture_schema = [
       "page_session_id TEXT PRIMARY KEY", // hash of url + timestamp
-      "content_compressed BLOB NOT NULL", // legacy: dropped by task-39.1; unread
-      "content_encoding TEXT NOT NULL", // codec marker, e.g. 'zstd'
-      "original_byte_size INTEGER NOT NULL", // decompressed page size in bytes
-      "content_type TEXT NOT NULL", // MIME type of the captured page
       "url TEXT NOT NULL",
-      "title TEXT NOT NULL",
-      "site_name TEXT",
-      "author TEXT",
-      "published_at TEXT",
-      "lang TEXT",
+      "title TEXT NOT NULL", // page title, captured from the browser tab
+      "content_type TEXT NOT NULL", // MIME type of the captured page
       "captured_at TEXT NOT NULL", // ISO timestamp when the page was captured
     ].join(", ");
     await this.create_table(WEBPAGE_CAPTURE_TABLE, webpage_capture_schema);
@@ -483,21 +468,14 @@ export class DuckDB {
 }
 
 /**
- * A row in {@link WEBPAGE_CAPTURE_TABLE}: the {@link PageCapture} metadata plus
- * the raw page bytes. The compressed bytes are supplied by the caller
- * (zstd-compressed); metadata is read from the page's `<head>`.
+ * A row in {@link WEBPAGE_CAPTURE_TABLE}: browsing metadata only. The page's
+ * title is captured from the browser tab; content is never stored here.
  */
-export interface WebpageCaptureRecord extends PageCapture {
-  /** The raw page, already zstd-compressed by the caller. */
-  content_compressed: Uint8Array;
-  /** Codec marker for {@link content_compressed} (e.g. `'zstd'`). */
-  content_encoding: string;
-}
+export type WebpageCaptureRecord = PageCapture;
 
 /**
- * Inserts (or replaces) a raw-page capture. The page bytes are stored exactly as
- * supplied (zstd-compressed) so they round-trip losslessly; metadata columns
- * carry the cheap `<head>` signals for navigation/listing without decompression.
+ * Inserts (or replaces) a capture's browsing metadata. No page content is
+ * stored — content and `<meta>`-derived fields come from re-download.
  */
 export async function insert_webpage_capture(
   db: DuckDB,
@@ -505,63 +483,41 @@ export async function insert_webpage_capture(
 ): Promise<void> {
   const params: Record<string, DuckDBValue> = {
     page_session_id: capture.page_session_id,
-    content_compressed: blobValue(capture.content_compressed),
-    content_encoding: capture.content_encoding,
-    original_byte_size: capture.original_byte_size,
-    content_type: capture.content_type,
     url: capture.url,
     title: capture.title,
-    site_name: capture.site_name,
-    author: capture.author,
-    published_at: capture.published_at,
-    lang: capture.lang,
+    content_type: capture.content_type,
     captured_at: capture.captured_at,
   };
   // Upsert: a re-captured page (deterministic id) overwrites the prior capture.
   await db.execute(
     `INSERT INTO ${WEBPAGE_CAPTURE_TABLE}
-      (page_session_id, content_compressed, content_encoding, original_byte_size,
-       content_type, url, title, site_name, author, published_at, lang, captured_at)
-     VALUES ($page_session_id, $content_compressed, $content_encoding, $original_byte_size,
-       $content_type, $url, $title, $site_name, $author, $published_at, $lang, $captured_at)
+      (page_session_id, url, title, content_type, captured_at)
+     VALUES ($page_session_id, $url, $title, $content_type, $captured_at)
      ON CONFLICT (page_session_id) DO UPDATE SET
-       content_compressed = excluded.content_compressed,
-       content_encoding = excluded.content_encoding,
-       original_byte_size = excluded.original_byte_size,
-       content_type = excluded.content_type,
        url = excluded.url,
        title = excluded.title,
-       site_name = excluded.site_name,
-       author = excluded.author,
-       published_at = excluded.published_at,
-       lang = excluded.lang,
+       content_type = excluded.content_type,
        captured_at = excluded.captured_at`,
     params
   );
 }
 
-/** Reads the capture metadata for a page session (no raw bytes), or null. */
+/** Reads the capture metadata for a page session, or null. */
 export async function get_webpage_capture(
   db: DuckDB,
   page_session_id: string
 ): Promise<PageCapture | null> {
   const row = await db.query_first<Record<string, DuckDBValue>>(
-    `SELECT page_session_id, original_byte_size, content_type, url, title,
-            site_name, author, published_at, lang, captured_at
+    `SELECT page_session_id, url, title, content_type, captured_at
      FROM ${WEBPAGE_CAPTURE_TABLE} WHERE page_session_id = $id`,
     { id: page_session_id }
   );
   if (!row) return null;
   return {
     page_session_id: row.page_session_id.toString(),
-    original_byte_size: Number(row.original_byte_size),
-    content_type: row.content_type.toString(),
     url: row.url.toString(),
     title: row.title.toString(),
-    site_name: row.site_name ? row.site_name.toString() : null,
-    author: row.author ? row.author.toString() : null,
-    published_at: row.published_at ? row.published_at.toString() : null,
-    lang: row.lang ? row.lang.toString() : null,
+    content_type: row.content_type.toString(),
     captured_at: row.captured_at.toString(),
   };
 }
@@ -682,7 +638,7 @@ export async function get_latest_webpage_fetch(
  * Returns whether this was a new session or an update to an existing one.
  *
  * @param db - DuckDB instance to insert into
- * @param session - Page activity session data (without content field)
+ * @param session - Page activity session data (before tree assignment)
  * @returns Promise resolving to whether the session row was newly created
  *   (`was_new_session`) and whether its tree assignment changed (`tree_changed`,
  *   true for a new row or when an existing row is moved to a different tree).
@@ -702,7 +658,7 @@ export async function get_latest_webpage_fetch(
  */
 export async function insert_page_activity_session(
   db: DuckDB,
-  session: PageActivitySessionWithoutContent
+  session: PageActivitySession
 ): Promise<{ was_new_session: boolean; tree_changed: boolean }> {
   try {
     // Check if the session already exists, capturing its current tree so we can
@@ -877,7 +833,6 @@ function row_to_page_activity_session(
     referrer_page_session_id: row.referrer_page_session_id
       ? row.referrer_page_session_id.toString()
       : null,
-    content: "", // Content now stored in separate table
     page_loaded_at: row.page_loaded_at.toString(),
     tree_id: row.tree_id.toString(),
   });
@@ -1109,8 +1064,8 @@ function row_to_page_activity_session_with_meta(
   const base_session = row_to_page_activity_session(row);
 
   // A capture row is present iff its (NOT NULL) title joined through. When
-  // present, the other NOT NULL columns (content_type / captured_at /
-  // original_byte_size) are guaranteed non-null, so they are read directly.
+  // present, the other NOT NULL columns (content_type / captured_at) are
+  // guaranteed non-null, so they are read directly.
   const capture_exists =
     row.cap_title !== null && row.cap_title !== undefined;
   const capture: PageCapture | undefined = capture_exists
@@ -1118,21 +1073,13 @@ function row_to_page_activity_session_with_meta(
         page_session_id: base_session.id,
         url: base_session.url,
         title: row.cap_title.toString(),
-        site_name: row.cap_site_name ? row.cap_site_name.toString() : null,
-        author: row.cap_author ? row.cap_author.toString() : null,
-        published_at: row.cap_published_at
-          ? row.cap_published_at.toString()
-          : null,
-        lang: row.cap_lang ? row.cap_lang.toString() : null,
         content_type: row.cap_content_type.toString(),
         captured_at: row.cap_captured_at.toString(),
-        original_byte_size: Number(row.cap_original_byte_size),
       }
     : undefined;
 
   return PageActivitySessionWithMetaSchema.parse({
     ...base_session,
-    content: "",
     capture,
   });
 }

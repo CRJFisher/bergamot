@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { DuckDB } from '../duck_db';
 import { register_webpage_hover_provider } from '../webpage_hover_provider';
-import { get_gate_metrics } from '../workflow/gate_metrics';
 import { ServerManager } from '../server/server_manager';
 import { get_recent_outcomes, show_dev_log_channel } from '../dev_log';
 import { list_replay_visits, load_replay_visit } from '../visit_replay';
@@ -65,7 +64,6 @@ export class CommandManager {
    */
   register_all(): void {
     this.register_core_commands();
-    this.register_gate_commands();
     this.register_dev_commands();
   }
 
@@ -109,7 +107,6 @@ export class CommandManager {
     lines.push(`=== Recent Visit Outcomes (${outcomes.length}) ===`);
     for (const o of outcomes) {
       const detail = [
-        o.byte_size !== undefined && `bytes=${o.byte_size}`,
         o.reason && `reason=${o.reason}`,
         o.error && `error=${o.error}`,
       ]
@@ -186,74 +183,6 @@ export class CommandManager {
     // Semantic search over page content is deferred to the RAG-prep pipeline
     // (task-31), so no LanceDB-backed search command is registered.
     register_webpage_hover_provider(this.config.context, this.config.duck_db);
-  }
-
-  /**
-   * Registers the capture-gate metrics command.
-   * @private
-   */
-  private register_gate_commands(): void {
-    const show_metrics_command = vscode.commands.registerCommand(
-      'bergamot.showCaptureMetrics',
-      () => this.show_gate_metrics()
-    );
-    
-    this.config.context.subscriptions.push(show_metrics_command);
-    this.disposables.push(show_metrics_command);
-  }
-
-  /**
-   * Shows the capture-gate metrics (captured vs dropped + drop reasons) in an
-   * output channel.
-   * @private
-   */
-  private show_gate_metrics(): void {
-    const metrics = get_gate_metrics();
-    const output = vscode.window.createOutputChannel('Bergamot Capture Gate Metrics');
-
-    output.clear();
-    output.appendLine('=== Capture Gate Metrics ===');
-    output.appendLine(`Total pages seen: ${metrics.total_pages}`);
-    output.appendLine(
-      `Captured: ${metrics.captured_pages} (${this.get_percentage(
-        metrics.captured_pages,
-        metrics.total_pages
-      )}%)`
-    );
-    output.appendLine(
-      `Dropped: ${metrics.dropped_pages} (${this.get_percentage(
-        metrics.dropped_pages,
-        metrics.total_pages
-      )}%)`
-    );
-    output.appendLine('');
-    output.appendLine('Drop reasons:');
-
-    Object.entries(metrics.drop_reasons)
-      .sort(([, a], [, b]) => b - a)
-      .forEach(([reason, count]) => {
-        output.appendLine(
-          `  ${reason}: ${count} (${this.get_percentage(
-            count,
-            metrics.dropped_pages
-          )}%)`
-        );
-      });
-
-    output.show();
-  }
-
-  /**
-   * Helper to calculate percentage.
-   * 
-   * @param value - The value to calculate percentage for
-   * @param total - The total value (denominator)
-   * @returns Percentage as string with one decimal place
-   * @private
-   */
-  private get_percentage(value: number, total: number): string {
-    if (total === 0) return '0';
-    return ((value / total) * 100).toFixed(1);
   }
 
   /**

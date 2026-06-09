@@ -12,10 +12,7 @@ import {
   get_page_by_title,
   get_webpage_by_url
 } from "./duck_db";
-import {
-  PageActivitySession,
-  PageActivitySessionWithoutContent
-} from "./duck_db_models";
+import { PageActivitySession } from "./duck_db_models";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -36,16 +33,9 @@ const mockFs = fs as jest.Mocked<typeof fs>;
 function capture_record(page_session_id: string, title: string, url: string) {
   return {
     page_session_id,
-    content_compressed: new Uint8Array([1, 2, 3]),
-    content_encoding: "zstd",
-    original_byte_size: 3,
     content_type: "text/html",
     url,
     title,
-    site_name: null,
-    author: null,
-    published_at: null,
-    lang: null,
     captured_at: "2024-01-01T00:00:00Z",
   };
 }
@@ -215,7 +205,7 @@ describe("DuckDB", () => {
       const meta = await get_webpage_capture(db, "session-123");
       expect(meta?.title).toBe("Test Page");
       expect(meta?.url).toBe("https://example.com");
-      expect(meta?.original_byte_size).toBe(3);
+      expect(meta?.content_type).toBe("text/html");
     });
 
     it("should replace an existing capture (INSERT OR REPLACE)", async () => {
@@ -244,7 +234,7 @@ describe("DuckDB", () => {
     });
 
     it("should insert new page activity session", async () => {
-      const session: PageActivitySessionWithoutContent = {
+      const session: PageActivitySession = {
         id: "session-123",
         url: "https://example.com",
         referrer: "https://google.com",
@@ -259,7 +249,7 @@ describe("DuckDB", () => {
     });
 
     it("should update existing page activity session", async () => {
-      const session: PageActivitySessionWithoutContent = {
+      const session: PageActivitySession = {
         id: "session-123",
         url: "https://example.com",
         referrer: null,
@@ -277,7 +267,7 @@ describe("DuckDB", () => {
 
     it("should find tree containing URL with fuzzy matching", async () => {
       // Insert a session with a specific URL
-      const session: PageActivitySessionWithoutContent = {
+      const session: PageActivitySession = {
         id: "session-123",
         url: "https://example.com/page?query=test",
         referrer: null,
@@ -317,7 +307,6 @@ describe("DuckDB", () => {
         url: "https://example.com",
         referrer: null,
         referrer_page_session_id: null,
-        content: "",
         page_loaded_at: "2024-01-01T12:00:00Z",
         tree_id: "tree-1"
       };

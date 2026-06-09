@@ -1,5 +1,5 @@
 import { OrphanedVisitsManager } from './orphaned_visits';
-import { PageActivitySessionWithoutTreeOrContent } from './duck_db_models';
+import { PageActivitySessionWithoutTree } from './duck_db_models';
 
 describe('OrphanedVisitsManager - Edge Cases and Race Conditions', () => {
   let manager: OrphanedVisitsManager;
@@ -13,13 +13,13 @@ describe('OrphanedVisitsManager - Edge Cases and Race Conditions', () => {
     tab_id?: number,
     opener_tab_id?: number,
     referrer?: string
-  ): PageActivitySessionWithoutTreeOrContent & { raw_content: string; visit_id: string; tab_id?: number; opener_tab_id?: number } => ({
+  ): PageActivitySessionWithoutTree & { title: string; visit_id: string; tab_id?: number; opener_tab_id?: number } => ({
     id: `test-${url}-${Date.now()}`,
     visit_id: `visit-${url}-${Date.now()}`,
     url,
     referrer: referrer || null,
     page_loaded_at: new Date().toISOString(),
-    raw_content: 'test content',
+    title: 'test content',
     ...(tab_id && { tab_id }),
     ...(opener_tab_id && { opener_tab_id })
   });
@@ -69,7 +69,7 @@ describe('OrphanedVisitsManager - Edge Cases and Race Conditions', () => {
 
   describe('Concurrent operations', () => {
     it('should handle rapid addition and removal of orphans', () => {
-      const visits: Array<PageActivitySessionWithoutTreeOrContent & { raw_content: string; visit_id: string }> = [];
+      const visits: Array<PageActivitySessionWithoutTree & { title: string; visit_id: string }> = [];
       
       // Rapidly add 100 orphans
       for (let i = 0; i < 100; i++) {

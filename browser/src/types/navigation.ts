@@ -18,7 +18,9 @@ export class VisitData {
     public readonly url: string,
     public readonly page_loaded_at: string,
     public readonly referrer: string,
-    public readonly content: string,
+    // Page title, read from the browser tab at capture time. Capture stores
+    // browsing metadata only; the page's content is never read.
+    public readonly title: string,
     public readonly referrer_timestamp?: number,
     // Group connection fields
     public readonly tab_id?: number,

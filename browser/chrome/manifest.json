@@ -5,12 +5,13 @@
   "description": "Steep knowledge from your web browsing patterns.",
   "permissions": ["tabs", "activeTab", "storage", "webNavigation"],
   "host_permissions": ["<all_urls>"],
+  "incognito": "not_allowed",
   "background": {
     "service_worker": "dist/background.bundle.js",
     "type": "module"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+    "extension_pages": "script-src 'self'; object-src 'self'"
   },
   "content_scripts": [
     {

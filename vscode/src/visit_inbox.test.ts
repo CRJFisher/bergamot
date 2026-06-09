@@ -10,7 +10,7 @@ const make_visit = (id: string, url: string): ExtendedPageVisit =>
     url,
     referrer: "",
     page_loaded_at: "2026-06-02T00:00:00.000Z",
-    raw_content: "<html></html>",
+    title: "<html></html>",
   } as ExtendedPageVisit);
 
 describe("visit_inbox", () => {
@@ -32,7 +32,7 @@ describe("visit_inbox", () => {
     const reloaded = load_inbox(dir).sort((x, y) => x.id.localeCompare(y.id));
     expect(reloaded.map((v) => v.id)).toEqual(["a", "b"]);
     expect(reloaded[0].url).toBe("https://a.com");
-    expect(reloaded[0].raw_content).toBe("<html></html>");
+    expect(reloaded[0].title).toBe("<html></html>");
   });
 
   it("removes a processed visit so it is not reloaded", () => {

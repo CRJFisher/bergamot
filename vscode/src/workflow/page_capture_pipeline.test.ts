@@ -1,68 +1,52 @@
 import { run_page_capture, CaptureDeps } from "./page_capture_pipeline";
 import { DuckDB } from "../duck_db";
-import * as pageGate from "./page_gate";
 import * as duckDbQueries from "../duck_db";
-import * as gateMetrics from "./gate_metrics";
-import { PageActivitySessionWithoutContent } from "../duck_db_models";
+import { PageActivitySession } from "../duck_db_models";
 
 // duck_db is auto-mocked, so insert_webpage_capture is a jest.fn(); store_capture
-// itself runs for real (real zstd compress + metadata parse over the mocked
-// insert).
+// itself runs for real over the mocked insert.
 jest.mock("../duck_db");
 
 describe("run_page_capture (capture pipeline)", () => {
   const deps: CaptureDeps = { duck_db: {} as DuckDB };
 
-  const article_html = `<html><head><title>T</title></head><body><article><p>${"Real standalone content. ".repeat(
-    20
-  )}</p></article></body></html>`;
-
   const inputs = {
     new_page: {
       id: "page-2",
       url: "https://example.com/page2",
+      referrer: null,
       tree_id: "tree-123",
       page_loaded_at: "2024-01-01T12:00:00Z",
-    } as PageActivitySessionWithoutContent,
-    raw_content: article_html,
+    } as PageActivitySession,
+    title: "Page Two",
   };
 
   beforeEach(() => {
     jest.restoreAllMocks();
     jest.clearAllMocks();
     jest.spyOn(duckDbQueries, "insert_webpage_capture").mockResolvedValue(undefined);
-    jest.spyOn(gateMetrics, "record_gate_decision").mockImplementation(() => {});
   });
 
-  it("captures a kept page", async () => {
+  it("stores a visit's metadata", async () => {
     await run_page_capture(deps, inputs);
 
-    expect(gateMetrics.record_gate_decision).toHaveBeenCalledWith({ keep: true });
-    expect(duckDbQueries.insert_webpage_capture).toHaveBeenCalled();
+    expect(duckDbQueries.insert_webpage_capture).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        page_session_id: "page-2",
+        url: "https://example.com/page2",
+        title: "Page Two",
+        content_type: "text/html",
+      })
+    );
   });
 
-  it("drops a page the gate rejects, before capture", async () => {
-    jest
-      .spyOn(pageGate, "evaluate_page_gate")
-      .mockReturnValue({ keep: false, reason: "auth" });
+  it("stores every visit — there is no capture gate", async () => {
+    // A previously gate-dropped shape (empty-ish title) is still stored: the
+    // capture gate is gone; auth/redirect filtering lives in re-download.
+    await run_page_capture(deps, { ...inputs, title: "" });
 
-    await run_page_capture(deps, inputs);
-
-    expect(gateMetrics.record_gate_decision).toHaveBeenCalledWith({
-      keep: false,
-      reason: "auth",
-    });
-    expect(duckDbQueries.insert_webpage_capture).not.toHaveBeenCalled();
-  });
-
-  it("drops an empty page as content_empty", async () => {
-    await run_page_capture(deps, { ...inputs, raw_content: "   \n  " });
-
-    expect(gateMetrics.record_gate_decision).toHaveBeenCalledWith({
-      keep: false,
-      reason: "content_empty",
-    });
-    expect(duckDbQueries.insert_webpage_capture).not.toHaveBeenCalled();
+    expect(duckDbQueries.insert_webpage_capture).toHaveBeenCalledTimes(1);
   });
 
   it("propagates capture errors", async () => {

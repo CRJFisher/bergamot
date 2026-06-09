@@ -7,7 +7,7 @@
 
 import { DuckDB } from "./duck_db";
 import {
-  PageActivitySessionWithoutTreeOrContent,
+  PageActivitySessionWithoutTree,
   PageActivitySession
 } from "./duck_db_models";
 import { OrphanedVisitsManager } from "./orphaned_visits";
@@ -20,13 +20,14 @@ import { load_inbox, remove_visit } from "./visit_inbox";
 import { record_outcome, format_error_detail } from "./dev_log";
 
 /**
- * Extended visit type that includes raw content and tab metadata
+ * Extended visit type that includes the page title (captured from the browser
+ * tab) and tab metadata.
  */
-export interface ExtendedPageVisit extends PageActivitySessionWithoutTreeOrContent {
+export interface ExtendedPageVisit extends PageActivitySessionWithoutTree {
   /** Correlation token threaded through the pipeline for end-to-end tracing */
   visit_id: string;
-  /** Raw HTML content of the page */
-  raw_content: string;
+  /** Page title, captured from the browser tab */
+  title: string;
   /** Browser tab ID that opened this page */
   opener_tab_id?: number;
   /** Browser tab ID of this page */
@@ -227,12 +228,11 @@ export class VisitQueueProcessor {
     const page_with_tree_id: PageActivitySession = {
       ...visit,
       tree_id,
-      content: visit.raw_content,
     };
 
     await run_page_capture(this.capture_deps, {
       new_page: page_with_tree_id,
-      raw_content: visit.raw_content,
+      title: visit.title,
       visit_id: visit.visit_id,
     });
 

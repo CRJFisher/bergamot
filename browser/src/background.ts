@@ -9,8 +9,6 @@ import {
 } from './core/tab_history_manager';
 import { load_store, save_store } from './core/tab_history_persistence';
 import { handle_message, forward_dev_signal, Message, MessageResponse } from './core/message_router';
-import { create_zstd_instance } from './core/data_collector';
-import { make_lazy_zstd, compress_visit_content } from './core/visit_compression';
 import { TabHistory } from './types/navigation';
 
 console.log("🚀 Bergamot Extension: Background script initialized");
@@ -214,12 +212,6 @@ chrome.webNavigation.onCommitted.addListener(handle_nav_committed);
 chrome.webNavigation.onHistoryStateUpdated.addListener(handle_nav_history_state);
 chrome.webNavigation.onCreatedNavigationTarget.addListener(handle_created_nav_target);
 
-// zstd WASM is compiled once here, lazily, in the service-worker context. A
-// page's CSP can block WebAssembly in the content script's isolated world, so
-// page content arrives uncompressed and is compressed here, where the
-// extension's own CSP (which permits `wasm-unsafe-eval`) applies.
-const get_zstd = make_lazy_zstd(create_zstd_instance);
-
 // Message handling — routed through the same serialized store chain.
 const process_runtime_message = async (
   request: Message,
@@ -235,11 +227,6 @@ const process_runtime_message = async (
     );
     return { success: true };
   }
-
-  // Compress in the SW context before forwarding (page CSP cannot block it here).
-  const prepared = await compress_visit_content(request, get_zstd, (stage, fields) =>
-    forward_dev_signal(stage, fields, request.api_base_url ?? '')
-  );
 
   const response = await with_store<MessageResponse>(async (store) => {
     // A page message can arrive before the tab/navigation events that would
@@ -261,7 +248,7 @@ const process_runtime_message = async (
       }
     }
     const { response, new_store } = await handle_message(
-      prepared,
+      request,
       sender_tab?.id,
       base
     );
