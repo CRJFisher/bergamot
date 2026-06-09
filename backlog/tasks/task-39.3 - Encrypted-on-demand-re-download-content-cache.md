@@ -1,11 +1,11 @@
 ---
 id: TASK-39.3
 title: Encrypted on-demand re-download content cache
-status: In Progress
+status: Done
 assignee:
   - claude
 created_date: '2026-06-08 13:30'
-updated_date: '2026-06-09 20:47'
+updated_date: '2026-06-09 21:15'
 labels:
   - security
   - storage
@@ -32,10 +32,10 @@ Caches the output of the re-download fetcher (task-39.2).
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Cached re-downloaded content is encrypted at rest with the key held in the OS keystore (VS Code `SecretStorage`); no plaintext page content is written to disk, verified by inspecting on-disk artifacts
-- [ ] #2 The cache is on-demand and scoped, not populated ambiently
-- [ ] #3 The cache lives outside any syncable / git-tracked / developer-controlled directory
-- [ ] #4 Cached items are per-item deletable, exposed for the right-to-forget cascade
+- [x] #1 Cached re-downloaded content is encrypted at rest with the key held in the OS keystore (VS Code `SecretStorage`); no plaintext page content is written to disk, verified by inspecting on-disk artifacts
+- [x] #2 The cache is on-demand and scoped, not populated ambiently
+- [x] #3 The cache lives outside any syncable / git-tracked / developer-controlled directory
+- [x] #4 Cached items are per-item deletable, exposed for the right-to-forget cascade
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -52,3 +52,21 @@ Reuse the 39.4-hardened encrypted DuckDB wrapper as a SEPARATE store (separate f
 7. Docs: storage.html content-cache card (tier now exists: file, separate key, location); dev-db-reset.md stores list + reset command; threat-model.md asset/defense updates (cache built; same at-rest property); stale "task-39.3" forward references in corpus.ts/duck_db.ts/page-processing.html updated to point at the real tier.
 After implementation: five Fable subagent reviews, apply recommendations, then finalize.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented in 94e8c57 (feature) + 3573ab1 (five-lens review fixes).
+
+Review process: five parallel Fable subagent reviews (correctness, security, architecture/constitution, test quality, docs/product truth). Decisive findings applied: (1) open_content_cache() canonical factory — two reviewers independently flagged that the hand-rolled open recipe let a consumer pair the wrong existence check with the key lookup and silently re-key (brick) an existing cache; (2) the delete_item JSDoc's block-reclamation claim was empirically FALSE (a security reviewer proved freed ciphertext blocks are never reclaimed by subsequent checkpoints — the file even grows on partial delete; only emptying the store truncates) — docs and threat model now state the residue honestly, and the 39.5 cascade must account for it; (3) CachedCorpus served cached content for deleted metadata rows — now checks row existence on every read and purges stale rows; (4) three vacuous tests fixed (conditionally-skipped WAL scan, no unencrypted control in the cache table's shape, deleted-means-gone asserted by scanning an encrypted file) — deletion is now verified by reopen+miss+row-count; (5) delete_by_url added (the one selector the cache serves natively; justifies the url index; cleanup for orphaned rows); (6) shared iter_public_pages_via() deduplicates the corpus-pass policy; (7) corpus/cached-corpus logging drops URLs (extension-host console persists to plaintext logs); (8) scope semantics documented and tested: newest WRITER owns the row, hits do not re-attribute, delete_scope is best-effort eviction not right-to-forget; (9) doc sweep — README cascade over-claim fixed, CLAUDE.md/constitution intention-tree status updated, storage.html gained the webpage_fetch entity, quarantine claims softened to "encryption, not location, is load-bearing".
+
+Deferred to 39.5 (recorded constraints): batch delete_items(ids) with a single CHECKPOINT (per-item delete pays one WAL flush each); the cascade must resolve cache rows from metadata BEFORE deleting metadata rows (or use delete_by_url for orphans); the cascade should account for freed-block ciphertext residue (delete-all truncates; consider compaction for partial forgets of high-sensitivity items).
+
+Verification: tsc clean, eslint clean, 254/254 jest (cache suite 3x, no flakes), full-pipeline e2e green.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The encrypted on-demand content cache exists as its own tier: content_cache.db, a second encrypted DuckDB store under the storage base, reusing the 39.4-hardened wrapper (encrypted file + WAL + temp spill, no plaintext path) with its own SecretStorage key (bergamot.content_cache_encryption_key) so destroying the cache key forfeits only the cache. The canonical open path is open_content_cache(secrets, storage_base), which makes the existing-store re-key guard structurally un-skippable. Population is never ambient: CachedCorpus — an opt-in, scope-named wrapper over the live re-download corpus — is the only write path; it caches only ok outcomes, re-classifies exclusions on every read, verifies the metadata row still exists before serving a hit (and purges stale rows), and the default /query/capture_content read path still re-downloads live. ContentCache exposes get/put plus the forget primitives the 39.5 cascade calls: delete_item, delete_by_url, delete_scope (best-effort eviction; newest writer owns a row's scope). Deletion semantics are documented honestly: deletes are checkpointed out of the WAL and live table immediately; freed-block ciphertext can persist inside the encrypted file until reused (unreadable without the key; emptying the store truncates). Encryption and deletion are pinned by real-file tests with an unencrypted control in the cache table's exact shape, WAL scans, reopen-based deletion verification, and factory open/reopen/missing-key tests. 254 jest tests + full-pipeline e2e green.
+<!-- SECTION:FINAL_SUMMARY:END -->
