@@ -30,7 +30,10 @@ describe('server pipeline integration (real DuckDB, capture pipeline)', () => {
     storage_dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bergamot-itest-'));
 
     db_manager = new DatabaseManager();
-    const dbs = await db_manager.initialize_all(storage_dir);
+    const dbs = await db_manager.initialize_all(
+      storage_dir,
+      'itest-encryption-key'
+    );
     duck_db = dbs.duck_db;
 
     server = new ServerManager({

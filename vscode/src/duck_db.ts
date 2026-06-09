@@ -23,10 +23,34 @@ import {
  * @interface DuckDBConfig
  */
 export interface DuckDBConfig {
-  /** File system path where the database will be stored */
+  /**
+   * File system path where the database will be stored, or `:memory:` for an
+   * ephemeral in-memory database (tests).
+   */
   database_path: string;
-  /** Whether to open the database in read-only mode (default: false) */
-  read_only?: boolean;
+  /**
+   * Key encrypting the database file at rest (DuckDB native encryption).
+   * Required for file-backed databases — a file store is only ever created
+   * encrypted, and there is no plaintext fallback (see docs/threat-model.md).
+   * Must be omitted for `:memory:` databases, which never touch disk.
+   */
+  encryption_key?: string;
+}
+
+/** Alias under which the encrypted database file is attached. */
+const METADATA_STORE_ALIAS = "metadata_store";
+
+/**
+ * Normalized open target: an ephemeral in-memory database, or an encrypted
+ * file-backed store. The discriminated shape makes "file ⇒ key" structural.
+ */
+type StoreTarget =
+  | { in_memory: true }
+  | { in_memory: false; database_path: string; encryption_key: string };
+
+/** Escapes a value for inclusion in a single-quoted SQL string literal. */
+function sql_string_literal(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }
 
 const WEBPAGE_ACTIVITY_SESSIONS_TABLE = "webpage_activity_sessions";
@@ -51,7 +75,10 @@ const CAPTURE_SELECT = [
  *
  * @example
  * ```typescript
- * const db = new DuckDB({ database_path: './webpages.db' });
+ * const db = new DuckDB({
+ *   database_path: './webpages.db',
+ *   encryption_key: key_from_secret_storage,
+ * });
  * await db.init();
  *
  * // Query for webpage sessions
@@ -66,7 +93,7 @@ const CAPTURE_SELECT = [
 export class DuckDB {
   private db: DuckDBInstance;
   public connection: DuckDBConnection;
-  private config: DuckDBConfig;
+  private readonly target: StoreTarget;
 
   /**
    * Creates a new DuckDB instance with the specified configuration.
@@ -79,12 +106,30 @@ export class DuckDB {
    * ```typescript
    * const db = new DuckDB({
    *   database_path: './my-database.db',
-   *   read_only: false
+   *   encryption_key: key_from_secret_storage,
    * });
    * ```
    */
   constructor(config: DuckDBConfig) {
-    this.config = config;
+    if (config.database_path === ":memory:") {
+      if (config.encryption_key !== undefined) {
+        throw new Error(
+          "An in-memory DuckDB database never touches disk and takes no encryption key"
+        );
+      }
+      this.target = { in_memory: true };
+      return;
+    }
+    if (!config.encryption_key) {
+      throw new Error(
+        "A file-backed DuckDB store requires an encryption_key — it is only ever created encrypted (no plaintext fallback)"
+      );
+    }
+    this.target = {
+      in_memory: false,
+      database_path: config.database_path,
+      encryption_key: config.encryption_key,
+    };
     // Ensure the parent directory exists so the database file can be created.
     const dir = path.dirname(config.database_path);
     if (!fs.existsSync(dir)) {
@@ -110,19 +155,21 @@ export class DuckDB {
    * ```
    */
   async init(): Promise<void> {
-    const create_options = this.config.read_only
-      ? { access_mode: "read_only" }
-      : undefined;
-    this.db = await DuckDBInstance.create(
-      this.config.database_path,
-      create_options
-    );
+    // The instance itself is always in-memory; a file-backed store is attached
+    // with DuckDB native encryption so the file is only ever created (and
+    // opened) encrypted. Opening it without the key, or with the wrong key,
+    // fails — there is no plaintext path.
+    this.db = await DuckDBInstance.create(":memory:");
     this.connection = await this.db.connect();
 
-    if (this.config.read_only) {
-      // Read-only connections cannot create tables or indexes; the schema is
-      // expected to already exist (created by the read-write owner process).
-      return;
+    const target = this.target;
+    if (target.in_memory === false) {
+      await this.connection.run(
+        `ATTACH ${sql_string_literal(target.database_path)}
+         AS ${METADATA_STORE_ALIAS}
+         (ENCRYPTION_KEY ${sql_string_literal(target.encryption_key)})`
+      );
+      await this.connection.run(`USE ${METADATA_STORE_ALIAS}`);
     }
 
     const webpage_trees_schema = [

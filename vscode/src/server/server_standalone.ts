@@ -9,7 +9,10 @@
  * without launching the editor.
  *
  * Environment:
- *  - STORAGE_PATH  (required) base dir for DuckDB + the visit inbox
+ *  - STORAGE_PATH            (required) base dir for DuckDB + the visit inbox
+ *  - STORAGE_ENCRYPTION_KEY  (required) at-rest encryption key for the DuckDB
+ *    store. Headless runs have no VS Code SecretStorage, so the harness that
+ *    spawns this process supplies a (typically per-run, throwaway) key.
  */
 
 import { DatabaseManager } from '../database/database_manager';
@@ -23,12 +26,17 @@ async function main(): Promise<void> {
     console.error('Missing required environment variable: STORAGE_PATH');
     process.exit(1);
   }
+  const encryption_key = process.env.STORAGE_ENCRYPTION_KEY;
+  if (!encryption_key) {
+    console.error('Missing required environment variable: STORAGE_ENCRYPTION_KEY');
+    process.exit(1);
+  }
 
   // Dev logging on by default for the headless server (it exists for debugging).
   init_dev_log(storage_path, true);
 
   const db_manager = new DatabaseManager();
-  const databases = await db_manager.initialize_all(storage_path);
+  const databases = await db_manager.initialize_all(storage_path, encryption_key);
 
   const server = new ServerManager({
     duck_db: databases.duck_db,

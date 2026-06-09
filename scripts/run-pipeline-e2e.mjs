@@ -20,6 +20,7 @@
  */
 
 import { execSync, spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -69,7 +70,13 @@ async function main() {
       ],
       {
         cwd: VSCODE_DIR,
-        env: { ...process.env, BERGAMOT_LLM: 'fake', STORAGE_PATH: storage_dir },
+        env: {
+          ...process.env,
+          BERGAMOT_LLM: 'fake',
+          STORAGE_PATH: storage_dir,
+          // The store is throwaway (mkdtemp), so a per-run random key suffices.
+          STORAGE_ENCRYPTION_KEY: randomBytes(32).toString('hex'),
+        },
       }
     );
     const capture = (buf) => {

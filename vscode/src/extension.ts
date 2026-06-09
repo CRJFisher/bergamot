@@ -4,6 +4,7 @@ import { ConfigManager } from './config/config_manager';
 import { get_storage_base } from './config/storage_path';
 import { init_dev_log } from './dev_log';
 import { DatabaseManager } from './database/database_manager';
+import { get_or_create_metadata_db_key } from './database/encryption_key';
 import { ServerManager } from './server/server_manager';
 import { MCPServerManager } from './server/mcp_server_manager';
 import { CommandManager } from './commands/command_manager';
@@ -41,11 +42,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       ConfigManager.get_dev_mode() || !!process.env.BERGAMOT_STORAGE_PATH
     );
 
-    // Step 2: Initialize databases
+    // Step 2: Initialize databases. The metadata store is encrypted at rest;
+    // its data-encryption key lives in the OS keystore via SecretStorage and
+    // is generated on first run. Key loss means the store is unrecoverable
+    // (no plaintext fallback) — see docs/threat-model.md.
     console.log('Initializing databases...');
     database_manager = new DatabaseManager();
 
-    const databases = await database_manager.initialize_all(storage_base);
+    const encryption_key = await get_or_create_metadata_db_key(context.secrets);
+    const databases = await database_manager.initialize_all(
+      storage_base,
+      encryption_key
+    );
 
     // Step 3: Start Express server for webpage categorization
     console.log('Starting webpage categorizer service...');

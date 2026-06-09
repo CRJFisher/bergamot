@@ -67,7 +67,7 @@
     "publish:all": "npm run publish:vscode && npm run publish:openvsx"
   },
   "dependencies": {
-    "@duckdb/node-api": "^1.2.2-alpha.18",
+    "@duckdb/node-api": "^1.5.3-r.3",
     "@modelcontextprotocol/sdk": "^1.15.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",

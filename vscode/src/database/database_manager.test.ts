@@ -28,11 +28,13 @@ describe('DatabaseManager', () => {
   describe('initialize_all()', () => {
     it('should initialize the DuckDB store (no LanceDB at ingest)', async () => {
       const result = await database_manager.initialize_all(
-        mock_context.globalStorageUri.fsPath
+        mock_context.globalStorageUri.fsPath,
+        'test-encryption-key'
       );
 
       expect(DuckDB).toHaveBeenCalledWith({
-        database_path: '/test/storage/webpage_categorizations.db'
+        database_path: '/test/storage/webpage_categorizations.db',
+        encryption_key: 'test-encryption-key'
       });
       expect(mock_duck_db.init).toHaveBeenCalled();
       expect(result.duck_db).toBeDefined();
@@ -43,14 +45,20 @@ describe('DatabaseManager', () => {
       mock_duck_db.init.mockRejectedValue(new Error('DB init failed'));
 
       await expect(
-        database_manager.initialize_all(mock_context.globalStorageUri.fsPath)
+        database_manager.initialize_all(
+          mock_context.globalStorageUri.fsPath,
+          'test-encryption-key'
+        )
       ).rejects.toThrow('DB init failed');
     });
   });
 
   describe('close_all()', () => {
     it('should close the DuckDB connection', async () => {
-      await database_manager.initialize_all(mock_context.globalStorageUri.fsPath);
+      await database_manager.initialize_all(
+        mock_context.globalStorageUri.fsPath,
+        'test-encryption-key'
+      );
       await database_manager.close_all();
       expect(mock_duck_db.close).toHaveBeenCalled();
     });
@@ -66,7 +74,10 @@ describe('DatabaseManager', () => {
     });
 
     it('should return databases after initialization', async () => {
-      await database_manager.initialize_all(mock_context.globalStorageUri.fsPath);
+      await database_manager.initialize_all(
+        mock_context.globalStorageUri.fsPath,
+        'test-encryption-key'
+      );
 
       const databases = database_manager.get_databases();
       expect(databases).toBeDefined();

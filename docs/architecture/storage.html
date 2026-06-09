@@ -42,8 +42,8 @@
   <div class="cards">
     <div class="card">
       <h3>DuckDB — metadata source of truth</h3>
-      <p>Visits, navigation trees, and per-visit metadata (URL, title, timestamps). No page bytes. Fast analytical queries; single-writer.</p>
-      <span class="tag">webpage_categorizations.db</span>
+      <p>Visits, navigation trees, and per-visit metadata (URL, title, timestamps). No page bytes. Fast analytical queries; single-writer. Encrypted at rest with DuckDB native encryption — the key lives in the OS keystore via VS Code <code>SecretStorage</code>, the file is only ever created encrypted, and key loss means the store is unrecoverable (no plaintext fallback; see <code>docs/threat-model.md</code>).</p>
+      <span class="tag">webpage_categorizations.db · encrypted at rest</span>
     </div>
     <div class="card">
       <h3>Content cache — separate encrypted tier</h3>

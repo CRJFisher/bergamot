@@ -32,18 +32,24 @@ export class DatabaseManager {
   private databases?: DatabaseInstances;
 
   /**
-   * Initializes the DuckDB relational + raw-page capture store. Ingestion is
-   * DuckDB-only; vector search is reintroduced by the RAG-prep pipeline (task-31).
+   * Initializes the DuckDB relational metadata store, encrypted at rest with
+   * DuckDB native encryption. Ingestion is DuckDB-only; vector search is
+   * reintroduced by the RAG-prep pipeline (task-31).
    *
    * @param storage_path - Resolved storage base directory (dev or global)
+   * @param encryption_key - Data-encryption key for the store, sourced from
+   *   the OS keystore via VS Code `SecretStorage` (see
+   *   `database/encryption_key.ts`)
    * @returns Complete set of initialized databases
    * @throws {Error} If initialization fails
    */
   async initialize_all(
-    storage_path: string
+    storage_path: string,
+    encryption_key: string
   ): Promise<DatabaseInstances> {
     const duck_db = new DuckDB({
       database_path: path.join(storage_path, 'webpage_categorizations.db'),
+      encryption_key,
     });
     await duck_db.init();
 
