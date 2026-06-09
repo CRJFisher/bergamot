@@ -36,6 +36,8 @@ export class BrowserPool implements PageRunner {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
   private launching: Promise<BrowserContext> | null = null;
+  /** Set once close() runs, so a launch in flight at shutdown tears itself down. */
+  private closed = false;
 
   constructor(private readonly options: BrowserPoolOptions = {}) {}
 
@@ -59,6 +61,11 @@ export class BrowserPool implements PageRunner {
 
   /** Closes the browser and clears state. Idempotent. Call on server shutdown. */
   async close(): Promise<void> {
+    this.closed = true;
+    // Wait for any in-flight launch to settle so we close the browser it created
+    // rather than racing it (which would leak an untracked Chromium).
+    const launching = this.launching;
+    if (launching) await launching.catch(ignore_error);
     const browser = this.browser;
     this.browser = null;
     this.context = null;
@@ -79,6 +86,12 @@ export class BrowserPool implements PageRunner {
       const browser = await chromium.launch({
         headless: this.options.headless ?? true,
       });
+      // If close() ran while this launch was in flight, tear down the browser we
+      // just created instead of adopting it — otherwise it leaks untracked.
+      if (this.closed) {
+        await browser.close().catch(ignore_error);
+        throw new Error("browser pool closed during launch");
+      }
       // A Chromium crash nulls the singletons so the next fetch relaunches cleanly.
       browser.on("disconnected", () => {
         if (this.browser === browser) {
@@ -87,6 +100,10 @@ export class BrowserPool implements PageRunner {
           this.launching = null;
         }
       });
+      // No storageState and no persistent profile: the context is cookie- and
+      // credential-free, so every page is fetched as an anonymous stranger. This
+      // is what makes the login wall the privacy filter — authenticated and
+      // paywalled pages fail to render content and are excluded.
       const context = await browser.newContext();
       await context.route("**/*", (route) => {
         if (BLOCKED_RESOURCE_TYPES.has(route.request().resourceType())) {

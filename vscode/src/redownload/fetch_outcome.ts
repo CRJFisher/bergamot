@@ -72,14 +72,16 @@ const _kinds_cover_union: AssertSame<
 void _kinds_cover_union;
 
 /**
- * Page-level signals read from the rendered DOM (or, in tests, from a static
- * HTML string via {@link extract_markers_from_html}). These are the inputs the
- * classifier needs that a bare HTTP status cannot provide.
+ * Page-level signals extracted from the page's HTML — the inputs the classifier
+ * needs that a bare HTTP status cannot provide. The fetcher produces these by
+ * running {@link extract_markers_from_html} over the serialized rendered HTML
+ * (`page.content()`, i.e. the DOM after JS has run); tests build them from static
+ * HTML the same way. There is no separate in-page script — one regex extractor.
  */
 export interface DomMarkers {
-  /** A visible password input — a same-URL login wall served with HTTP 200. */
+  /** A password input in the HTML — a same-URL login wall served with HTTP 200. */
   has_password_input: boolean;
-  /** Length of the page's visible text; a login wall is short, an article long. */
+  /** Tag-stripped text length; a login wall is short, an article long. */
   visible_text_length: number;
   /** Which known paywall container selectors/markers matched. */
   paywall_selector_hits: string[];
@@ -101,9 +103,14 @@ export interface FetchObservation {
   content_type: string | null;
   /** Redirect hops, oldest first. */
   redirect_chain: { url: string; status: number }[];
-  /** Set when navigation threw (timeout, DNS, connection reset, redirect loop). */
+  /**
+   * Set when the fetch failed with no usable response (timeout, DNS, connection
+   * reset, redirect loop). When set, the classifier short-circuits to dead_link
+   * and ignores `content_type`, `dom_markers`, and `html`, which the fetcher
+   * leaves as empty placeholders on this path.
+   */
   transport_error: string | null;
-  /** Signals read from the rendered DOM. */
+  /** Signals extracted from the rendered HTML. */
   dom_markers: DomMarkers;
   /** The rendered HTML; empty string on transport failure. */
   html: string;
@@ -297,10 +304,10 @@ const PAYWALL_MARKERS: readonly { label: string; re: RegExp }[] = [
 ];
 
 /**
- * Extracts {@link DomMarkers} from a static HTML string with light regex scans —
- * the no-browser equivalent of the in-page extraction the headless fetcher runs.
- * Used by the classifier's unit tests and as the contract reference for the
- * in-page script in {@link ./headless_fetcher}.
+ * Extracts {@link DomMarkers} from an HTML string with light regex scans. This is
+ * the single marker extractor: the headless fetcher calls it on the serialized
+ * rendered HTML (`page.content()`), and the classifier's unit tests call it on
+ * static fixture HTML. It pulls in no DOM/HTML-parser dependency.
  */
 export function extract_markers_from_html(html: string): DomMarkers {
   const has_password_input = /<input\b[^>]*\btype\s*=\s*["']?password\b/i.test(html);

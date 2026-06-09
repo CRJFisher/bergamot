@@ -40,6 +40,10 @@ const fake_corpus: ContentCorpus = {
         reason: "redirected to login",
       };
     }
+    if (page_session_id === "boom") {
+      // Simulates a re-download infrastructure failure (e.g. browser launch).
+      throw new Error("headless browser failed to launch");
+    }
     return null;
   },
   // eslint-disable-next-line require-yield
@@ -96,5 +100,14 @@ describe("/query/capture_content read path", () => {
 
   it("rejects a missing page_session_id with 400", async () => {
     await request(app).get("/query/capture_content").expect(400);
+  });
+
+  it("reports 503 unavailable when the re-download infrastructure fails", async () => {
+    const res = await request(app)
+      .get("/query/capture_content")
+      .query({ page_session_id: "boom" })
+      .expect(503);
+    expect(res.body.outcome).toBe("unavailable");
+    expect(res.body.reason).toMatch(/launch/i);
   });
 });

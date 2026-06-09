@@ -165,15 +165,26 @@ export class HeadlessFetcher implements Fetcher {
     let content_type: string | null = null;
     let retry_after_ms: number | null = null;
     let redirect_chain: { url: string; status: number }[] = [];
+    // page.url() is about:blank after an aborted download; the response URL is the
+    // real resource. Falls back to the requested URL if neither is available.
+    let final_url = page.url();
     const response = nav_response;
     if (response) {
-      http_status = response.status();
-      const headers = response.headers();
-      content_type = headers["content-type"] ?? null;
-      retry_after_ms = parse_retry_after(headers["retry-after"]);
-      redirect_chain = await build_redirect_chain(response);
-      // A response arrived; an aborted download is not a transport failure.
-      transport_error = null;
+      // Inspecting the response (headers, redirect walk) can itself reject; keep
+      // it inside a guard so a fetch failure always degrades to an outcome rather
+      // than throwing out of the fetcher's never-throw contract.
+      try {
+        http_status = response.status();
+        const headers = response.headers();
+        content_type = headers["content-type"] ?? null;
+        retry_after_ms = parse_retry_after(headers["retry-after"]);
+        redirect_chain = await build_redirect_chain(response);
+        final_url = response.url();
+        // A response arrived; an aborted download is not a transport failure.
+        transport_error = null;
+      } catch (error) {
+        transport_error = error instanceof Error ? error.message : String(error);
+      }
     }
 
     const html = transport_error
@@ -185,7 +196,7 @@ export class HeadlessFetcher implements Fetcher {
 
     return {
       requested_url: url,
-      final_url: page.url(),
+      final_url: final_url || url,
       http_status,
       content_type,
       redirect_chain,

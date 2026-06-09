@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Re-download content fetcher · task-39.2</title>
+<style>
+  :root{
+    --ivory:#f7f4ec; --slate:#33352f; --clay:#b56a44; --olive:#6f7a3f;
+    --oat:#e7e0cf; --rust:#9c4a2f; --ink:#22241f;
+    --g1:#fbf9f3; --g2:#efe9da; --g3:#d8d1bf; --g4:#a9a392; --g5:#6c6859;
+    --serif:ui-serif,Georgia,"Times New Roman",serif;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --r:12px; --hair:1px solid var(--g3);
+    --navh:46px; --tocrh:44px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--ivory);color:var(--slate);font-family:var(--sans);
+    font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  main{width:90%;max-width:1600px;margin-inline:auto;padding:28px 0 120px}
+  .prose{max-width:68ch}
+  h1,h2,h3{font-family:var(--serif);font-weight:600;color:var(--ink);line-height:1.15}
+  h1{font-size:2rem;margin:.2em 0}
+  h2{font-size:1.5rem;margin:0 0 .5em}
+  h3{font-size:1.15rem;margin:0 0 .4em}
+  code,kbd{font-family:var(--mono)}
+  a{color:var(--clay)}
+  .eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;
+    font-size:.7rem;color:var(--g5)}
+  /* cross-doc nav */
+  nav.cross{position:sticky;top:0;z-index:10;background:var(--ivory);
+    border-bottom:var(--hair);min-height:var(--navh);display:flex;align-items:center;
+    gap:8px;flex-wrap:wrap;padding:6px 5%}
+  nav.cross .home{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;
+    letter-spacing:.1em;color:var(--g5);text-decoration:none;margin-right:4px}
+  nav.cross a.doc-link,nav.cross span.pending,nav.cross span.curr{
+    font-family:var(--mono);font-size:.72rem;padding:4px 10px;border-radius:999px;
+    border:var(--hair);text-decoration:none;color:var(--slate);white-space:nowrap}
+  nav.cross a.doc-link:hover{background:var(--oat)}
+  nav.cross span.curr{background:var(--slate);color:var(--ivory);border-color:var(--slate)}
+  nav.cross span.pending{color:var(--g4);border-style:dashed}
+  nav.cross .dot{display:inline-block;width:7px;height:7px;border-radius:50%;
+    margin-right:6px;vertical-align:middle}
+  /* sticky section outline */
+  nav.toc{position:sticky;top:var(--navh);z-index:9;background:var(--g1);
+    border-bottom:var(--hair);display:flex;gap:6px;flex-wrap:wrap;
+    padding:8px 5%;min-height:var(--tocrh)}
+  nav.toc a{font-family:var(--mono);font-size:.7rem;text-decoration:none;
+    color:var(--g5);padding:3px 9px;border-radius:999px;border:1px solid transparent}
+  nav.toc a:hover{background:var(--oat);color:var(--slate)}
+  nav.toc a.active{background:var(--slate);color:var(--ivory)}
+  section{scroll-margin-top:calc(var(--navh) + var(--tocrh) + 14px);padding-top:34px}
+  /* header */
+  header.id{padding:26px 0 8px}
+  .meta-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .chip{font-family:var(--mono);font-size:.72rem;background:var(--g2);
+    border:var(--hair);border-radius:999px;padding:4px 11px;color:var(--g5)}
+  .chip strong{color:var(--ink);font-weight:600}
+  .chip.key{background:var(--slate);color:var(--ivory);border-color:var(--slate)}
+  .chip.done{background:var(--olive);color:var(--ivory);border-color:var(--olive)}
+  .prompt-box{border:var(--hair);border-left:4px solid var(--clay);border-radius:var(--r);
+    background:var(--g1);padding:14px 18px;margin:18px 0;max-width:88ch}
+  .prompt-box .label{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;
+    letter-spacing:.1em;color:var(--clay);margin-bottom:6px}
+  .prompt-box p{margin:.3em 0;font-size:.95rem}
+  /* callouts */
+  aside.callout{border:var(--hair);border-left:4px solid var(--clay);border-radius:var(--r);
+    background:var(--g1);padding:14px 18px;margin:18px 0;max-width:88ch}
+  aside.callout.olive{border-left-color:var(--olive)}
+  aside.callout.rust{border-left-color:var(--rust)}
+  aside.callout.invert{background:var(--slate);color:var(--ivory);border-color:var(--slate)}
+  aside.callout.invert h3{color:var(--ivory)}
+  aside.callout .k{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;
+    letter-spacing:.1em;color:var(--clay);display:block;margin-bottom:4px}
+  aside.callout.olive .k{color:var(--olive)}
+  aside.callout.rust .k{color:var(--rust)}
+  aside.callout.invert .k{color:var(--oat)}
+  aside.callout .owner{font-family:var(--mono);font-size:.74rem;color:var(--g4);margin-top:8px}
+  aside.callout.invert .owner{color:var(--g3)}
+  /* diagram block (full width) */
+  .figure{margin:14px 0 6px}
+  .figure svg{width:100%;height:auto;display:block}
+  figcaption{font-size:.84rem;color:var(--g5);margin-top:8px;max-width:80ch}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;margin:10px 0 0;font-family:var(--mono);
+    font-size:.72rem;color:var(--g5)}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .legend i{width:22px;height:0;border-top:2px solid var(--g5);display:inline-block}
+  .legend i.dash{border-top-style:dashed}
+  .legend i.solid-olive{border-top-color:var(--olive)}
+  .legend i.solid-rust{border-top-color:var(--rust)}
+  .legend i.solid-clay{border-top-color:var(--clay)}
+  .legend i.box{height:13px;border:2px solid var(--g4);border-top:none;border-radius:3px;width:18px}
+  /* code panel */
+  .code{background:#26271f;border-radius:var(--r);overflow:hidden;margin:14px 0;border:1px solid #3a3b30}
+  .file-label{font-family:var(--mono);font-size:.72rem;color:#b9b39c;background:#1c1d16;
+    padding:7px 14px;border-bottom:1px solid #3a3b30;display:flex;justify-content:space-between}
+  .file-label .tag{color:#8a8472}
+  .code pre{margin:0;padding:13px 16px;overflow-x:auto;font-family:var(--mono);
+    font-size:.8rem;line-height:1.6;color:#e4dfce;white-space:pre}
+  .kw{color:#c98a5e}.str{color:#9aa86a}.cm{color:#6f6c5a;font-style:italic}
+  .fn{color:#d9c97e}.dim{color:#6f6c5a}.ty{color:#8fb0c4}
+  .hl{background:rgba(181,106,68,.22);display:inline-block;width:100%}
+  .add{background:rgba(111,122,63,.22);display:inline-block;width:100%}
+  .del{background:rgba(156,74,47,.22);display:inline-block;width:100%;text-decoration:line-through;
+    text-decoration-color:rgba(228,223,206,.4)}
+  /* generic cards / grid */
+  .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:14px 0}
+  .card{border:var(--hair);border-radius:var(--r);background:var(--g1);padding:16px 18px}
+  .card h3{margin-top:0}
+  .card .tag{font-family:var(--mono);font-size:.66rem;text-transform:uppercase;
+    letter-spacing:.08em;border-radius:999px;padding:2px 9px;border:var(--hair)}
+  .card.then{border-top:3px solid var(--g4)}
+  .card.now{border-top:3px solid var(--olive)}
+  .tag.then{color:var(--g5)}
+  .tag.now{color:var(--olive);border-color:var(--olive)}
+  /* module map */
+  .modules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:14px 0}
+  .mod{border:var(--hair);border-radius:var(--r);background:var(--g1);padding:13px 16px}
+  .mod.heart{border-left:4px solid var(--clay)}
+  .mod.contract{border-left:4px solid var(--olive)}
+  .mod h3{font-size:.96rem;margin:0 0 4px;display:flex;justify-content:space-between;
+    align-items:baseline;gap:8px;flex-wrap:wrap}
+  .mod h3 code{font-size:.84rem;color:var(--ink)}
+  .mod .role{font-family:var(--mono);font-size:.64rem;text-transform:uppercase;
+    letter-spacing:.06em;color:var(--g4);border:var(--hair);border-radius:999px;padding:2px 8px}
+  .mod.heart .role{color:var(--clay);border-color:var(--clay)}
+  .mod.contract .role{color:var(--olive);border-color:var(--olive)}
+  .mod p{margin:.2em 0 0;font-size:.86rem}
+  /* outcome matrix */
+  table.matrix{width:100%;border-collapse:collapse;margin:14px 0;font-size:.86rem}
+  table.matrix th,table.matrix td{border:var(--hair);padding:9px 12px;text-align:left;vertical-align:top}
+  table.matrix th{background:var(--g2);font-family:var(--mono);font-size:.7rem;
+    text-transform:uppercase;letter-spacing:.06em;color:var(--g5);font-weight:600}
+  table.matrix td code{font-size:.78rem}
+  .disc{display:inline-block;width:13px;height:13px;border-radius:50%;vertical-align:-2px;margin-right:6px}
+  .disc.ok{background:var(--olive)}
+  .disc.no{background:var(--rust)}
+  .verdict{font-family:var(--mono);font-size:.72rem;font-weight:600}
+  .verdict.ok{color:var(--olive)}
+  .verdict.no{color:var(--rust)}
+  /* step list */
+  .steps{margin:14px 0}
+  .step{display:grid;grid-template-columns:44px 1fr;gap:14px;margin-bottom:14px;align-items:start}
+  .badge{width:32px;height:32px;border-radius:50%;background:var(--g3);color:var(--ink);
+    font-family:var(--mono);font-weight:600;display:flex;align-items:center;justify-content:center;
+    font-size:.85rem}
+  .step.hot .badge{background:var(--clay);color:var(--ivory)}
+  .step .body{border:var(--hair);border-radius:var(--r);background:var(--g1);padding:11px 15px}
+  .step .body h3{font-size:1rem;margin:0 0 3px;display:flex;justify-content:space-between;
+    align-items:baseline;gap:10px;flex-wrap:wrap}
+  .where{font-family:var(--mono);font-size:.72rem;color:var(--g4)}
+  .where .rng{color:var(--g3)}
+  .step .body p{margin:.3em 0;font-size:.9rem}
+  /* contract / metric chips */
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+  .mchip{font-family:var(--mono);font-size:.74rem;background:var(--g1);border:var(--hair);
+    border-radius:999px;padding:5px 12px}
+  .mchip strong{color:var(--ink)}
+  dl.fields{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:10px 0;font-size:.88rem}
+  dl.fields dt{font-family:var(--mono);font-size:.78rem;color:var(--clay)}
+  dl.fields dd{margin:0;color:var(--slate)}
+  footer{margin-top:60px;padding-top:18px;border-top:var(--hair);font-family:var(--mono);
+    font-size:.72rem;color:var(--g4);max-width:88ch}
+  @media(max-width:860px){
+    .grid2,.modules{grid-template-columns:1fr}
+    h1{font-size:1.6rem}
+  }
+</style>
+</head>
+<body>
+
+<nav class="cross" aria-label="Task-39 family navigation">
+  <a class="home" href="task-39 - Privacy-preserving-capture-model-metadata-first-on-demand-encrypted-content.overview.html">task-39 ▸ overview</a>
+  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.1 schema reset</span>
+  <span class="curr">39.2 fetcher · done</span>
+  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.3 encrypted cache</span>
+  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.4 store encryption</span>
+  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.5 right-to-forget</span>
+</nav>
+
+<nav class="toc" aria-label="On this page">
+  <a href="#shift">Where content comes from</a>
+  <a href="#browser">Stealth browser</a>
+  <a href="#filter">Outcome classifier</a>
+  <a href="#modules">Module map</a>
+  <a href="#readpath">Read path</a>
+  <a href="#fetch">Fetch record</a>
+  <a href="#contract">Corpus contract</a>
+  <a href="#limits">Known limits</a>
+</nav>
+
+<main>
+  <header class="id">
+    <div class="eyebrow">task-39.2 · privacy-core · keystone subtask</div>
+    <h1>Re-download content fetcher &amp; the content read path</h1>
+    <p class="prose">Page content is no longer stored at browse time. It is obtained later by
+      re-downloading the public URL the metadata row recorded, through a stealth headless browser
+      running as an anonymous, cookie-free visitor. The login wall does the filtering: authenticated
+      and paywalled pages fail to render content and drop out automatically. This page maps where
+      content comes from now versus before, the stealth browser and why it does not weaken privacy,
+      the pure classifier that <em>is</em> the privacy mechanism, the <code>redownload/</code> module
+      map, and the corpus every downstream consumer reads.</p>
+    <div class="meta-row">
+      <span class="chip key">KEYSTONE</span>
+      <span class="chip done">DONE</span>
+      <span class="chip"><strong>6</strong> fetch outcomes</span>
+      <span class="chip">read path: <strong>1 entry point</strong></span>
+      <span class="chip">consumers: <strong>TDT 36 · RAG 31</strong></span>
+    </div>
+    <div class="prompt-box">
+      <div class="label">Source · as built</div>
+      <p><code>vscode/src/redownload/{fetch_outcome, headless_fetcher, browser_pool, politeness_gate, corpus, content_hash}.ts</code>
+        · <code>vscode/src/server/server_manager.ts</code> · <code>vscode/src/mcp_server_standalone.ts</code> ·
+        <code>vscode/src/duck_db.ts</code> · <code>vscode/src/page_capture_models.ts</code> ·
+        <code>vscode/src/workflow/read_metadata.ts</code></p>
+    </div>
+  </header>
+
+  <!-- ============ BEFORE / AFTER FLOW ============ -->
+  <section id="shift">
+    <div class="eyebrow">the shift</div>
+    <h2>Where page content comes from — then vs. now</h2>
+    <p class="prose">A request for a page's content used to read a zstd-compressed BLOB written into DuckDB
+      at capture time. Now the same request triggers a live re-download of the stored URL: a stealth
+      headless browser navigates to it as a stranger, the result is classified, and either public content
+      or a structured "unavailable" comes back. No content BLOB is read; <code>read_capture()</code> and
+      <code>get_webpage_capture_bytes</code> are deleted.</p>
+
+    <div class="figure">
+      <svg viewBox="0 0 1180 360" role="img" aria-label="Before-and-after data flow: the stored-BLOB read path becomes a re-download-on-demand read path through a stealth browser gated by the login wall.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#6c6859"/>
+          </marker>
+          <marker id="ar-o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#6f7a3f"/>
+          </marker>
+          <marker id="ar-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#9c4a2f"/>
+          </marker>
+          <marker id="ar-c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#b56a44"/>
+          </marker>
+        </defs>
+
+        <!-- divider -->
+        <line x1="590" y1="20" x2="590" y2="340" stroke="#d8d1bf" stroke-width="1" stroke-dasharray="4 5"/>
+        <text x="20" y="34" font-family="ui-monospace,monospace" font-size="13" fill="#a9a392" letter-spacing="1">BEFORE — stored BLOB (deleted)</text>
+        <text x="612" y="34" font-family="ui-monospace,monospace" font-size="13" fill="#6f7a3f" letter-spacing="1">NOW — stealth re-download on demand</text>
+
+        <!-- BEFORE column -->
+        <g font-family="ui-sans-serif,system-ui" font-size="13" fill="#33352f">
+          <rect x="40" y="60" width="220" height="46" rx="9" fill="#efe9da" stroke="#a9a392" stroke-width="1.5"/>
+          <text x="150" y="82" text-anchor="middle" font-weight="600">Browser capture</text>
+          <text x="150" y="98" text-anchor="middle" font-size="11" fill="#6c6859">reads &amp; sends page HTML</text>
+
+          <rect x="40" y="150" width="220" height="58" rx="9" fill="#efe9da" stroke="#a9a392" stroke-width="1.5"/>
+          <text x="150" y="173" text-anchor="middle" font-weight="600">DuckDB webpage_capture</text>
+          <text x="150" y="190" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#6c6859">content_compressed BLOB</text>
+          <text x="150" y="202" text-anchor="middle" font-size="10" fill="#9c4a2f">content = source of truth</text>
+
+          <rect x="40" y="252" width="220" height="46" rx="9" fill="#efe9da" stroke="#a9a392" stroke-width="1.5"/>
+          <text x="150" y="274" text-anchor="middle" font-weight="600">read_capture() · deleted</text>
+          <text x="150" y="290" text-anchor="middle" font-size="11" fill="#6c6859">decompress BLOB → html</text>
+
+          <rect x="330" y="252" width="210" height="46" rx="9" fill="#efe9da" stroke="#a9a392" stroke-width="1.5"/>
+          <text x="435" y="274" text-anchor="middle" font-weight="600">get_webpage_content</text>
+          <text x="435" y="290" text-anchor="middle" font-size="11" fill="#6c6859">returns stored html</text>
+        </g>
+        <g fill="none" stroke="#6c6859" stroke-width="1.6">
+          <path d="M150 106 L150 150" marker-end="url(#ar)"/>
+          <path d="M150 208 L150 252" marker-end="url(#ar)"/>
+          <path d="M260 275 L330 275" marker-end="url(#ar)"/>
+        </g>
+
+        <!-- NOW column -->
+        <g font-family="ui-sans-serif,system-ui" font-size="13" fill="#33352f">
+          <rect x="630" y="60" width="200" height="46" rx="9" fill="#efe9da" stroke="#a9a392" stroke-width="1.5"/>
+          <text x="730" y="82" text-anchor="middle" font-weight="600">Browser capture</text>
+          <text x="730" y="98" text-anchor="middle" font-size="11" fill="#6c6859">metadata only · url+title</text>
+
+          <rect x="630" y="150" width="200" height="58" rx="9" fill="#efe9da" stroke="#6f7a3f" stroke-width="1.6"/>
+          <text x="730" y="173" text-anchor="middle" font-weight="600">DuckDB webpage_capture</text>
+          <text x="730" y="190" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#6c6859">url · title · session graph</text>
+          <text x="730" y="202" text-anchor="middle" font-size="10" fill="#6f7a3f">metadata = source of truth</text>
+
+          <!-- fetcher -->
+          <rect x="630" y="252" width="200" height="58" rx="9" fill="#33352f" stroke="#33352f"/>
+          <text x="730" y="276" text-anchor="middle" font-weight="600" fill="#f7f4ec">stealth re-download</text>
+          <text x="730" y="293" text-anchor="middle" font-size="10.5" fill="#e7e0cf">patchright · anon · classify</text>
+
+          <!-- login wall -->
+          <path d="M905 281 l28 -19 l28 19 l-28 19 z" fill="#f7f4ec" stroke="#9c4a2f" stroke-width="1.6"/>
+          <text x="933" y="285" text-anchor="middle" font-size="10.5" font-weight="600">login</text>
+          <text x="933" y="338" text-anchor="middle" font-size="10.5" fill="#9c4a2f">wall = filter</text>
+
+          <!-- public content out -->
+          <rect x="1010" y="150" width="150" height="46" rx="9" fill="#efe9da" stroke="#6f7a3f" stroke-width="1.6"/>
+          <text x="1085" y="171" text-anchor="middle" font-weight="600">public content</text>
+          <text x="1085" y="187" text-anchor="middle" font-size="11" fill="#6f7a3f">+ &lt;meta&gt; + fidelity</text>
+
+          <!-- excluded -->
+          <rect x="1010" y="252" width="150" height="46" rx="9" fill="#efe9da" stroke="#9c4a2f" stroke-width="1.6"/>
+          <text x="1085" y="273" text-anchor="middle" font-weight="600">unavailable</text>
+          <text x="1085" y="289" text-anchor="middle" font-size="11" fill="#9c4a2f">trail only</text>
+        </g>
+        <g fill="none" stroke-width="1.7">
+          <path d="M730 106 L730 150" stroke="#6c6859" marker-end="url(#ar)"/>
+          <path d="M730 208 L730 252" stroke="#b56a44" marker-end="url(#ar-c)"/>
+          <path d="M830 281 L905 281" stroke="#b56a44" marker-end="url(#ar-c)"/>
+          <!-- wall to public (up) -->
+          <path d="M955 270 C1000 240, 1000 200, 1010 180" stroke="#6f7a3f" marker-end="url(#ar-o)"/>
+          <!-- wall to excluded (right) -->
+          <path d="M961 281 C985 281, 990 278, 1010 277" stroke="#9c4a2f" marker-end="url(#ar-r)"/>
+        </g>
+      </svg>
+      <div class="legend">
+        <span><i class="box"></i> process / store</span>
+        <span><i class="solid-clay"></i> stealth re-download (egress)</span>
+        <span><i class="solid-olive"></i> succeeds → corpus</span>
+        <span><i class="solid-rust"></i> fails → unavailable</span>
+      </div>
+      <figcaption>The trigger point is unchanged — a consumer asks for a page's content. What changed is
+        the right half: content is fetched live by an anonymous headless browser, passes through the
+        login-wall filter, and either becomes public corpus or is reported unavailable. Each read is a
+        live, side-effecting re-download — there is no content cache in this tier.</figcaption>
+    </div>
+
+    <div class="grid2">
+      <div class="card then">
+        <span class="tag then">BEFORE · removed</span>
+        <h3>Stored-BLOB read</h3>
+        <p>Capture sent HTML; it was zstd-compressed into <code>content_compressed</code> and
+          <code>read_capture()</code> decompressed on demand. Content was the durable source of truth —
+          and a privacy liability on disk. Both reader functions are now deleted; 39.1 drops the column.</p>
+      </div>
+      <div class="card now">
+        <span class="tag now">NOW · built by 39.2</span>
+        <h3>Stealth re-download on demand</h3>
+        <p>Capture sends only url/title/timestamp/graph. A patchright headless browser re-downloads the URL
+          as an anonymous visitor when content is needed, classifies the outcome, and emits fidelity
+          metadata. Metadata is the durable source of truth; content is derived and transient.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ STEALTH BROWSER ============ -->
+  <section id="browser">
+    <div class="eyebrow">the fetch mechanism · AC&nbsp;#1</div>
+    <h2>A stealth headless browser, fetching as a stranger</h2>
+    <p class="prose">Re-download runs through <strong>patchright</strong> — a stealth-patched, drop-in
+      replacement for Playwright — driving headless Chromium. Stealth hides the automation signals
+      (<code>navigator.webdriver</code>, CDP leaks, the headless user-agent) that anti-bot defenses use to
+      block headless browsers, so genuinely public pages re-download as content instead of being lost to an
+      interstitial. A plain HTTP fetch would also miss JS-rendered pages whose real content arrives via
+      client-side scripts; the browser renders them.</p>
+
+    <aside class="callout olive">
+      <span class="k">why stealth does not weaken privacy</span>
+      <p style="margin:.2em 0">Stealth widens coverage of <em>public</em> pages only — it defeats anti-bot
+        detection, never authentication. The browser context carries <strong>no cookies and no user
+        profile</strong> (no <code>storageState</code>, no persistent profile), so every page is fetched as
+        an anonymous stranger. Authenticated and paywalled pages still answer with a login redirect, a 403,
+        or a paywall and are excluded. The login wall remains the privacy filter; stealth just makes sure
+        the truly-public pages on the other side of it actually come back.</p>
+    </aside>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>Browser pool <span class="where">browser_pool.ts</span></h3>
+        <p style="font-size:.88rem">Owns one shared headless Chromium, launched lazily on first content
+          request. A single ephemeral cookie-free context is reused; each fetch gets a fresh page that is
+          always closed. Images, media, and fonts are aborted per request — only text and
+          <code>&lt;meta&gt;</code> are needed. The browser is closed on server shutdown.</p>
+      </div>
+      <div class="card">
+        <h3>Polite egress <span class="where">politeness_gate.ts · AC #6</span></h3>
+        <p style="font-size:.88rem">Re-download is a generic async scheduler: a per-host minimum interval
+          (2 s), global (2) and per-host (1) concurrency caps, and exponential backoff with jitter. Only
+          transient failures — timeout, 5xx, 429 — retry (up to 3 times), and a <code>Retry-After</code>
+          header overrides the computed backoff.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THE CLASSIFIER ============ -->
+  <section id="filter">
+    <div class="eyebrow">the conceptual heart · AC&nbsp;#2</div>
+    <h2>The login wall <em>is</em> the privacy filter</h2>
+    <p class="prose">There is no "is this page sensitive?" heuristic to trust or get wrong. The browser
+      re-downloads and the pure <code>classify_fetch(observation)</code> reads what came back, returning a
+      discriminated <code>FetchOutcome</code>. A page is excluded because it would not re-download as public
+      content for an anonymous visitor — not because its topic was judged. The classifier takes a serializable
+      observation, so it is fully unit-testable without launching a browser.</p>
+
+    <div class="figure">
+      <svg viewBox="0 0 1180 392" role="img" aria-label="Ordered decision tree classifying each re-download observation into one of six outcomes; only ok yields content into the corpus.">
+        <defs>
+          <marker id="d-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#6c6859"/>
+          </marker>
+        </defs>
+        <!-- start -->
+        <rect x="20" y="168" width="150" height="56" rx="9" fill="#33352f"/>
+        <text x="95" y="193" text-anchor="middle" fill="#f7f4ec" font-family="ui-sans-serif,system-ui" font-size="13" font-weight="600">observe(page)</text>
+        <text x="95" y="210" text-anchor="middle" fill="#e7e0cf" font-family="ui-monospace,monospace" font-size="10">status + DOM markers</text>
+
+        <!-- decision diamond -->
+        <path d="M310 196 l64 -54 l64 54 l-64 54 z" fill="#f7f4ec" stroke="#b56a44" stroke-width="1.8"/>
+        <text x="374" y="191" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="12.5" font-weight="600">classify_fetch</text>
+        <text x="374" y="207" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#6c6859">ordered checks</text>
+        <path d="M170 196 L310 196" fill="none" stroke="#6c6859" stroke-width="1.6" marker-end="url(#d-ar)"/>
+
+        <!-- six outcome rows -->
+        <g font-family="ui-sans-serif,system-ui" font-size="12.5">
+          <!-- ok -->
+          <rect x="648" y="22" width="300" height="44" rx="8" fill="#eef0e2" stroke="#6f7a3f" stroke-width="1.6"/>
+          <circle cx="672" cy="44" r="7" fill="#6f7a3f"/>
+          <text x="690" y="41" font-weight="600">ok — 200, HTML, no wall</text>
+          <text x="690" y="57" font-family="ui-monospace,monospace" font-size="10" fill="#6c6859">→ html + &lt;meta&gt; + sha-256 hash</text>
+          <text x="966" y="48" font-family="ui-monospace,monospace" font-size="11" font-weight="700" fill="#6f7a3f">CORPUS</text>
+
+          <!-- dead_link (transport) -->
+          <rect x="648" y="74" width="300" height="40" rx="8" fill="#f2e6e0" stroke="#9c4a2f" stroke-width="1.4"/>
+          <circle cx="672" cy="94" r="7" fill="#9c4a2f"/>
+          <text x="690" y="90" font-weight="600">dead_link — transport error</text>
+          <text x="690" y="105" font-family="ui-monospace,monospace" font-size="10" fill="#6c6859">timeout / DNS / reset · retryable</text>
+          <text x="966" y="98" font-family="ui-monospace,monospace" font-size="10.5" font-weight="700" fill="#9c4a2f">EXCLUDED</text>
+
+          <!-- forbidden -->
+          <rect x="648" y="122" width="300" height="40" rx="8" fill="#f2e6e0" stroke="#9c4a2f" stroke-width="1.4"/>
+          <circle cx="672" cy="142" r="7" fill="#9c4a2f"/>
+          <text x="690" y="138" font-weight="600">forbidden — 401 / 403</text>
+          <text x="690" y="153" font-family="ui-monospace,monospace" font-size="10" fill="#6c6859">not public to a stranger</text>
+          <text x="966" y="146" font-family="ui-monospace,monospace" font-size="10.5" font-weight="700" fill="#9c4a2f">EXCLUDED</text>
+
+          <!-- dead_link (status) -->
+          <rect x="648" y="170" width="300" height="40" rx="8" fill="#f2e6e0" stroke="#9c4a2f" stroke-width="1.4"/>
+          <circle cx="672" cy="190" r="7" fill="#9c4a2f"/>
+          <text x="690" y="186" font-weight="600">dead_link — 404 / 410 / 429 / 5xx</text>
+          <text x="690" y="201" font-family="ui-monospace,monospace" font-size="10" fill="#6c6859">gone, or retryable (429/5xx)</text>
+          <text x="966" y="194" font-family="ui-monospace,monospace" font-size="10.5" font-weight="700" fill="#9c4a2f">EXCLUDED</text>
+
+          <!-- non_html -->
+          <rect x="648" y="218" width="300" height="40" rx="8" fill="#f2e6e0" stroke="#9c4a2f" stroke-width="1.4"/>
+          <circle cx="672" cy="238" r="7" fill="#9c4a2f"/>
+          <text x="690" y="234" font-weight="600">non_html — PDF / image / binary</text>
+          <text x="690" y="249" font-family="ui-monospace,monospace" font-size="10" fill="#6c6859">content-type not text/html</text>
+          <text x="966" y="242" font-family="ui-monospace,monospace" font-size="10.5" font-weight="700" fill="#9c4a2f">EXCLUDED</text>
+
+          <!-- auth_redirect -->
+          <rect x="648" y="266" width="300" height="40" rx="8" fill="#f2e6e0" stroke="#9c4a2f" stroke-width="1.4"/>
+          <circle cx="672" cy="286" r="7" fill="#9c4a2f"/>
+          <text x="690" y="282" font-weight="600">auth_redirect — login / SSO</text>
+          <text x="690" y="297" font-family="ui-monospace,monospace" font-size="10" fill="#6c6859">redirect to login url, or password form</text>
+          <text x="966" y="290" font-family="ui-monospace,monospace" font-size="10.5" font-weight="700" fill="#9c4a2f">EXCLUDED</text>
+
+          <!-- paywall -->
+          <rect x="648" y="314" width="300" height="40" rx="8" fill="#f2e6e0" stroke="#9c4a2f" stroke-width="1.4"/>
+          <circle cx="672" cy="334" r="7" fill="#9c4a2f"/>
+          <text x="690" y="330" font-weight="600">paywall — gated body</text>
+          <text x="690" y="345" font-family="ui-monospace,monospace" font-size="10" fill="#6c6859">isAccessibleForFree:false / known container</text>
+          <text x="966" y="338" font-family="ui-monospace,monospace" font-size="10.5" font-weight="700" fill="#9c4a2f">EXCLUDED</text>
+        </g>
+        <!-- edges from diamond -->
+        <g fill="none" stroke="#6c6859" stroke-width="1.3">
+          <path d="M438 178 C560 90, 580 50, 648 44" stroke="#6f7a3f" marker-end="url(#d-ar)"/>
+          <path d="M438 184 C560 120, 580 96, 648 94" marker-end="url(#d-ar)"/>
+          <path d="M438 190 C560 150, 580 144, 648 142" marker-end="url(#d-ar)"/>
+          <path d="M438 196 L648 190" marker-end="url(#d-ar)"/>
+          <path d="M438 202 C560 232, 580 236, 648 238" marker-end="url(#d-ar)"/>
+          <path d="M438 208 C560 274, 580 284, 648 286" marker-end="url(#d-ar)"/>
+          <path d="M438 214 C560 322, 580 332, 648 334" marker-end="url(#d-ar)"/>
+        </g>
+        <!-- fidelity note -->
+        <text x="648" y="378" font-family="ui-monospace,monospace" font-size="10.5" fill="#a9a392">order is load-bearing: transport → status → content-type → auth → paywall → ok. Every branch logs to webpage_fetch.</text>
+      </svg>
+      <div class="legend">
+        <span><span class="disc ok"></span> yields content → corpus</span>
+        <span><span class="disc no"></span> no content → trail/metadata only</span>
+      </div>
+      <figcaption>One re-download, six outcome classes, two destinations. Exactly <code>ok</code> yields
+        content; the five failure classes are the privacy filter operating without any sensitivity guess.
+        The check order is load-bearing — a transport failure short-circuits before any DOM inspection, and
+        a 403 is decided before content-type.</figcaption>
+    </div>
+
+    <table class="matrix">
+      <thead>
+        <tr><th>Outcome</th><th>Signal that triggers it</th><th>Content?</th><th>In corpus?</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>ok</strong></td><td><code>200</code>, HTML content-type, no auth/paywall marker</td><td><span class="disc ok"></span><span class="verdict ok">yes</span></td><td><span class="verdict ok">yes</span></td></tr>
+        <tr><td><strong>dead_link</strong></td><td>transport error, or <code>404/410/429/5xx</code> (<code>429/5xx</code> retried)</td><td><span class="disc no"></span><span class="verdict no">no</span></td><td><span class="verdict no">no</span></td></tr>
+        <tr><td><strong>forbidden</strong></td><td><code>401</code> / <code>403</code></td><td><span class="disc no"></span><span class="verdict no">no</span></td><td><span class="verdict no">no</span></td></tr>
+        <tr><td><strong>non_html</strong></td><td>content-type not <code>text/html</code> (PDF, image, binary)</td><td><span class="disc no"></span><span class="verdict no">no</span></td><td><span class="verdict no">no</span></td></tr>
+        <tr><td><strong>auth_redirect</strong></td><td>redirect / meta-refresh to a login URL, or a password form as dominant content</td><td><span class="disc no"></span><span class="verdict no">no</span></td><td><span class="verdict no">no</span></td></tr>
+        <tr><td><strong>paywall</strong></td><td>schema.org <code>isAccessibleForFree:false</code>, or a known paywall container</td><td><span class="disc no"></span><span class="verdict no">no</span></td><td><span class="verdict no">no</span></td></tr>
+      </tbody>
+    </table>
+    <p class="prose" style="font-size:.86rem;color:var(--g5)">The DOM markers (<code>has_password_input</code>,
+      <code>visible_text_length</code>, <code>paywall_selector_hits</code>,
+      <code>jsonld_accessible_for_free</code>, <code>meta_refresh_target</code>) are pulled by a single regex
+      extractor, <code>extract_markers_from_html</code>, run on the serialized rendered HTML. The fetcher and
+      the classifier's unit tests call the same extractor, so a static fixture exercises every branch without
+      a browser. A real-browser integration test over a loopback fixture server covers all six outcomes
+      end-to-end.</p>
+  </section>
+
+  <!-- ============ MODULE MAP ============ -->
+  <section id="modules">
+    <div class="eyebrow">the package</div>
+    <h2>The <code>redownload/</code> module map</h2>
+    <p class="prose">The work lands as a new <code>vscode/src/redownload/</code> package. Chromium coupling is
+      isolated to two files; the classifier and the corpus contract are browser-free. The front door is
+      <code>corpus.ts</code> — the interface TDT and RAG consume.</p>
+    <div class="modules">
+      <div class="mod contract">
+        <h3><code>corpus.ts</code> <span class="role">front door · contract</span></h3>
+        <p>The <code>ContentCorpus</code> contract: <code>get_content(id)</code> re-downloads one page on
+          demand and appends the fidelity record; <code>iter_public_pages()</code> yields only the
+          <code>ok</code> subset, isolating per-page failures. The thing downstream depends on.</p>
+      </div>
+      <div class="mod heart">
+        <h3><code>fetch_outcome.ts</code> <span class="role">pure · the filter</span></h3>
+        <p>The pure, browser-free classifier. <code>classify_fetch</code> + the discriminated
+          <code>FetchOutcome</code> union + <code>extract_markers_from_html</code>. Where the login wall as
+          privacy filter actually lives.</p>
+      </div>
+      <div class="mod">
+        <h3><code>headless_fetcher.ts</code> <span class="role">patchright</span></h3>
+        <p>Drives a patchright page: navigate, settle, observe the final main-frame response, run the
+          classifier, compute the content hash, parse <code>&lt;meta&gt;</code>. Never throws on a
+          page-level failure — exclusions come back as outcomes.</p>
+      </div>
+      <div class="mod">
+        <h3><code>browser_pool.ts</code> <span class="role">chromium</span></h3>
+        <p>The shared, lazily-launched headless Chromium with one ephemeral cookie-free context. The only
+          other file that touches the browser. Blocks image/media/font requests; closes cleanly on shutdown.</p>
+      </div>
+      <div class="mod">
+        <h3><code>politeness_gate.ts</code> <span class="role">egress</span></h3>
+        <p>A generic async scheduler: per-host interval, concurrency caps, backoff + jitter,
+          <code>Retry-After</code> honouring. Knows nothing about browsers or outcomes.</p>
+      </div>
+      <div class="mod">
+        <h3><code>content_hash.ts</code> <span class="role">fidelity</span></h3>
+        <p>SHA-256 hex of the re-downloaded HTML, so later drift (the same URL returning different content)
+          is visible.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ READ PATH ============ -->
+  <section id="readpath">
+    <div class="eyebrow">repointing · AC&nbsp;#5</div>
+    <h2>The content read path, repointed at re-download</h2>
+    <p class="prose">One HTTP endpoint serves content; the MCP tool is a thin proxy in front of it. The swap
+      is at <code>/query/capture_content</code>: instead of decompressing a BLOB, it calls
+      <code>content_corpus.get_content(page_session_id)</code> and returns the discriminated corpus entry —
+      content for <code>ok</code>, a structured exclusion otherwise. If the re-download infrastructure itself
+      fails (e.g. the headless browser cannot launch), the endpoint degrades to a 503 "unavailable" rather
+      than an opaque 500.</p>
+
+    <div class="steps">
+      <div class="step hot">
+        <div class="badge">1</div>
+        <div class="body">
+          <h3>get_webpage_content (MCP tool) <span class="where">mcp_server_standalone.ts <span class="rng">:77,:144</span></span></h3>
+          <p>Thin proxy. It forwards <code>page_session_id</code> to <code>/query/capture_content</code>; the
+            tool now describes re-downloaded public content (or unavailable), not a decompressed capture.</p>
+        </div>
+      </div>
+      <div class="step hot">
+        <div class="badge">2</div>
+        <div class="body">
+          <h3>/query/capture_content (HTTP) <span class="where">server_manager.ts <span class="rng">:329–350</span></span></h3>
+          <p>The swap point. Calls <code>this.content_corpus.get_content(page_session_id)</code> and returns
+            the <code>CorpusEntry</code> as JSON — <code>null</code> when no metadata row exists, a 503
+            <code>{ outcome: 'unavailable' }</code> when the browser can't launch. The corpus defaults to a
+            stealth re-download corpus built lazily in the server manager; it is injectable for tests.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="badge">3</div>
+        <div class="body">
+          <h3>read_capture + get_webpage_capture_bytes <span class="where">deleted</span></h3>
+          <p>The stored-content reader and its dead byte-reader are removed entirely — no shim. The
+            <code>&lt;meta&gt;</code> parse (<code>read_metadata</code>) is reused verbatim, now run on the
+            re-downloaded page inside the fetcher rather than at capture time.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="code">
+      <div class="file-label"><span>server_manager.ts — /query/capture_content (as built)</span><span class="tag">verbatim</span></div>
+<pre><span class="cm">// Re-download the stored public URL on demand and serve its content.</span>
+<span class="cm">// Auth/paywall/dead/non-HTML report unavailable — the login wall is the filter.</span>
+<span class="kw">this</span>.app.<span class="fn">get</span>(<span class="str">'/query/capture_content'</span>, <span class="kw">async</span> (req, res) => {
+  <span class="kw">const</span> page_session_id = <span class="fn">String</span>(req.query.page_session_id ?? <span class="str">''</span>);
+  <span class="kw">if</span> (!page_session_id) {
+    res.<span class="fn">status</span>(<span class="ty">400</span>).<span class="fn">json</span>({ error: <span class="str">'Missing page_session_id query parameter'</span> });
+    <span class="kw">return</span>;
+  }
+  <span class="kw">try</span> {
+    <span class="kw">const</span> entry = <span class="kw">await</span> <span class="kw">this</span>.content_corpus.<span class="fn">get_content</span>(page_session_id);
+    res.<span class="fn">json</span>(entry);                         <span class="cm">// CorpusEntry | null</span>
+  } <span class="kw">catch</span> (error) {
+    <span class="cm">// Reaching here means the re-download infrastructure failed</span>
+    <span class="cm">// (e.g. headless browser could not launch) — not a per-page exclusion.</span>
+    res.<span class="fn">status</span>(<span class="ty">503</span>).<span class="fn">json</span>({
+      outcome: <span class="str">'unavailable'</span>, page_session_id, reason: <span class="fn">format_error_detail</span>(error),
+    });
+  }
+});</pre>
+    </div>
+  </section>
+
+  <!-- ============ FETCH RECORD ============ -->
+  <section id="fetch">
+    <div class="eyebrow">fidelity · AC&nbsp;#3 #4</div>
+    <h2>What each fetch records: the <code>webpage_fetch</code> log</h2>
+    <p class="prose">Every re-download — whether it yields content or not — appends one row to a new
+      append-only DuckDB table, <code>webpage_fetch</code>. The row records the outcome, the fidelity triple,
+      and any parsed <code>&lt;meta&gt;</code>. It stores <strong>no page content</strong>: the re-downloaded
+      bytes are returned on demand and dropped. An encrypted on-demand content cache is a separate tier
+      (task-39.3).</p>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>Parsed from the page (AC #3)</h3>
+        <dl class="fields">
+          <dt>author</dt><dd>meta author / article:author</dd>
+          <dt>published_at</dt><dd>article:published_time / date</dd>
+          <dt>lang</dt><dd>&lt;html lang&gt; / og:locale</dd>
+          <dt>site_name</dt><dd>og:site_name / application-name</dd>
+        </dl>
+        <p style="font-size:.84rem;color:var(--g5);margin:6px 0 0">Reuses <code>read_metadata.ts</code> verbatim,
+          now run on the re-downloaded page.</p>
+      </div>
+      <div class="card">
+        <h3>Fidelity per fetch (AC #4)</h3>
+        <dl class="fields">
+          <dt>fetched_at</dt><dd>ISO timestamp of this re-download</dd>
+          <dt>http_status</dt><dd>final status (null on transport failure)</dd>
+          <dt>final_url</dt><dd>URL after redirects</dd>
+          <dt>content_hash</dt><dd>sha-256 of body → detects drift (null when excluded)</dd>
+          <dt>outcome</dt><dd>ok / auth_redirect / forbidden / paywall / dead_link / non_html</dd>
+        </dl>
+        <p style="font-size:.84rem;color:var(--g5);margin:6px 0 0">A re-download is not the page as viewed —
+          hash + status + time make the divergence visible.</p>
+      </div>
+    </div>
+
+    <aside class="callout">
+      <span class="k">live re-download, every read · no cache in this tier</span>
+      <p style="margin:.2em 0">Each <code>get_content</code> call performs a real, side-effecting,
+        politeness-gated headless navigation plus a <code>webpage_fetch</code> log write. There is no content
+        cache here — the encrypted on-demand cache that avoids re-fetching is task-39.3. The persistence
+        helpers are <code>insert_webpage_fetch</code> / <code>get_latest_webpage_fetch</code> in
+        <code>duck_db.ts</code>, with <code>WebpageFetchSchema</code> in <code>page_capture_models.ts</code>.</p>
+    </aside>
+  </section>
+
+  <!-- ============ CONTRACT ============ -->
+  <section id="contract">
+    <div class="eyebrow">the contract · AC&nbsp;#7</div>
+    <h2>The corpus that TDT and RAG consume</h2>
+    <p class="prose">The corpus is a named, documented interface — the <strong>re-downloadable public
+      subset</strong>. <code>get_content(id)</code> returns a discriminated <code>CorpusEntry</code>
+      (<code>ok</code> carries the content + metadata + fidelity; any other outcome carries a reason and no
+      content; <code>null</code> means no stored metadata row). <code>iter_public_pages()</code> yields only
+      the <code>ok</code> pages. Auth-walled and dead visits never enter it — they remain trail/metadata only.
+      This is the single coverage boundary every downstream consumer inherits.</p>
+
+    <div class="figure">
+      <svg viewBox="0 0 1180 200" role="img" aria-label="The corpus emits the public subset consumed by Temporal Topic Detection first, then RAG; excluded visits remain metadata-only.">
+        <defs>
+          <marker id="c-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#6f7a3f"/>
+          </marker>
+        </defs>
+        <rect x="30" y="70" width="210" height="64" rx="10" fill="#33352f"/>
+        <text x="135" y="98" text-anchor="middle" fill="#f7f4ec" font-family="ui-sans-serif,system-ui" font-size="14" font-weight="600">ContentCorpus</text>
+        <text x="135" y="117" text-anchor="middle" fill="#e7e0cf" font-family="ui-monospace,monospace" font-size="10.5">corpus.ts · 39.2 (this)</text>
+
+        <rect x="340" y="70" width="230" height="64" rx="10" fill="#eef0e2" stroke="#6f7a3f" stroke-width="1.8"/>
+        <text x="455" y="96" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="14" font-weight="600">public corpus</text>
+        <text x="455" y="115" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10.5" fill="#6c6859">iter_public_pages() · ok only</text>
+
+        <rect x="690" y="30" width="200" height="50" rx="10" fill="#efe9da" stroke="#b56a44" stroke-width="1.6"/>
+        <text x="790" y="52" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="13" font-weight="600">TDT — first</text>
+        <text x="790" y="68" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#6c6859">task-36 · embed → cluster</text>
+
+        <rect x="690" y="124" width="200" height="50" rx="10" fill="#efe9da" stroke="#a9a392" stroke-width="1.4"/>
+        <text x="790" y="146" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="13" font-weight="600">RAG — after</text>
+        <text x="790" y="162" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#6c6859">task-31 · retrieval</text>
+
+        <rect x="960" y="124" width="200" height="50" rx="10" fill="#f2e6e0" stroke="#9c4a2f" stroke-width="1.4" stroke-dasharray="5 4"/>
+        <text x="1060" y="146" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="13" font-weight="600">excluded visits</text>
+        <text x="1060" y="162" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#9c4a2f">metadata / trail only</text>
+
+        <g fill="none" stroke="#6f7a3f" stroke-width="1.8">
+          <path d="M240 102 L340 102" marker-end="url(#c-ar)"/>
+          <path d="M570 95 C630 80, 650 60, 690 56" marker-end="url(#c-ar)"/>
+          <path d="M570 110 C630 125, 650 145, 690 149" marker-end="url(#c-ar)"/>
+        </g>
+        <path d="M135 134 C135 188, 1060 200, 1060 174" fill="none" stroke="#9c4a2f" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#c-ar)" opacity=".8"/>
+      </svg>
+      <figcaption>The corpus interface is the one thing downstream tasks depend on. TDT (task-36) consumes it
+        first to cluster the user's projects; RAG (task-31) follows. Excluded visits are a deliberate coverage
+        gap, not a bug — they were never public to a stranger.</figcaption>
+    </div>
+
+    <div class="chips">
+      <span class="mchip"><strong>CorpusContent:</strong> { url, content, title, site_name, author, published_at, lang, fetched_at, http_status, content_hash }</span>
+      <span class="mchip"><strong>membership:</strong> outcome === "ok"</span>
+      <span class="mchip"><strong>consumers:</strong> TDT 36 → RAG 31</span>
+    </div>
+  </section>
+
+  <!-- ============ KNOWN LIMITS ============ -->
+  <section id="limits">
+    <div class="eyebrow">honest edges</div>
+    <h2>Known limits, surfaced not hidden</h2>
+
+    <aside class="callout rust">
+      <span class="k">SPA walls mounted after the settle window</span>
+      <p style="margin:.2em 0">Login and paywall detection is regex over the rendered HTML at the end of a
+        bounded settle window (<code>load</code> + a 3 s cap). A wall that a single-page app mounts
+        client-side <em>after</em> that window can slip through as <code>ok</code>. This is a fidelity limit,
+        not a soundness one — the structured signals (password form, <code>isAccessibleForFree:false</code>,
+        known containers) catch the common cases.</p>
+    </aside>
+
+    <aside class="callout rust">
+      <span class="k">Chromium provisioning for a packaged extension — not yet wired</span>
+      <p style="margin:.2em 0">The headless browser (~150 MB) is downloaded out-of-band today; provisioning
+        it for a packaged extension is a follow-up before release. Until then, a launch failure degrades to
+        the 503 "unavailable" path rather than crashing the read.</p>
+    </aside>
+
+    <aside class="callout">
+      <span class="k">fidelity caveat — represented, never pretended-away</span>
+      <p style="margin:.2em 0">A re-downloaded page is not guaranteed to equal the page as viewed: dynamic
+        content, dead links, paywall/consent drift, A/B variants, edits over time. Citations reference the URL
+        and metadata, never a byte-for-byte snapshot. The <code>fetched_at</code> + <code>content_hash</code> +
+        <code>http_status</code> triple in <code>webpage_fetch</code> is how that divergence is surfaced.</p>
+    </aside>
+  </section>
+
+  <footer>
+    Companion to task-39.2 (keystone of the privacy-core reorientation, task-39) · status DONE.
+    Grounded in vscode/src/redownload/{fetch_outcome, headless_fetcher, browser_pool, politeness_gate,
+    corpus, content_hash}.ts, server/server_manager.ts, mcp_server_standalone.ts, duck_db.ts,
+    page_capture_models.ts, workflow/read_metadata.ts. Self-contained · no external assets · refreshed 2026-06-09.
+  </footer>
+</main>
+
+<script>
+// progressive enhancement: highlight the in-view section in the outline rail
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+  var map = {};
+  links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  if (!('IntersectionObserver' in window)) return;
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (e.isIntersecting){
+        links.forEach(function(l){ l.classList.remove('active'); });
+        var a = map[e.target.id]; if (a) a.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px', threshold: 0 });
+  document.querySelectorAll('main section[id]').forEach(function(s){ obs.observe(s); });
+})();
+</script>
+</body>
+</html>

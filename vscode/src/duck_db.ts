@@ -2,7 +2,6 @@ import {
   DuckDBInstance,
   DuckDBConnection,
   DuckDBValue,
-  DuckDBBlobValue,
   blobValue,
 } from "@duckdb/node-api";
 import * as path from "path";
@@ -153,14 +152,16 @@ export class DuckDB {
       activity_sessions_schema
     );
 
-    // Capture-first store: the raw page kept zstd-compressed as the durable,
-    // lossless source of truth for downstream extraction/RAG, plus cheap
-    // metadata read from the <head>. Keyed by page_session_id but with
-    // no foreign key, so a capture can be written before (or independently of)
-    // the activity-session row.
+    // Capture metadata store, keyed by page_session_id (no foreign key, so a
+    // capture can be written before or independently of the activity-session row).
+    // The authoritative content path is RE-DOWNLOAD (src/redownload/): content is
+    // obtained by re-fetching the public URL, not read from here. The
+    // `content_compressed` BLOB is a legacy ambient-capture column still written by
+    // the capture pipeline; it is dropped, along with ambient content capture, by
+    // the metadata-only schema reset (task-39.1). Nothing reads it.
     const webpage_capture_schema = [
       "page_session_id TEXT PRIMARY KEY", // hash of url + timestamp
-      "content_compressed BLOB NOT NULL", // the raw page, zstd-compressed
+      "content_compressed BLOB NOT NULL", // legacy: dropped by task-39.1; unread
       "content_encoding TEXT NOT NULL", // codec marker, e.g. 'zstd'
       "original_byte_size INTEGER NOT NULL", // decompressed page size in bytes
       "content_type TEXT NOT NULL", // MIME type of the captured page
@@ -237,10 +238,6 @@ export class DuckDB {
       // Index for capture title searches (used in get_page_by_title)
       await this.exec(`CREATE INDEX IF NOT EXISTS idx_capture_title
                       ON ${WEBPAGE_CAPTURE_TABLE}(title)`);
-
-      // Index for "latest fetch for this page session" reads on the read path.
-      await this.exec(`CREATE INDEX IF NOT EXISTS idx_fetch_session_time
-                      ON ${WEBPAGE_FETCH_TABLE}(page_session_id, fetched_at)`);
 
       console.log("✅ Database indexes created successfully");
     } catch (error) {
@@ -569,26 +566,6 @@ export async function get_webpage_capture(
   };
 }
 
-/**
- * Reads the raw compressed page bytes for a page session. This is the
- * parent-document source for the RAG-prep pipeline (task-31.3): callers
- * decompress these bytes to recover the original page on demand.
- */
-export async function get_webpage_capture_bytes(
-  db: DuckDB,
-  page_session_id: string
-): Promise<Uint8Array | null> {
-  const row = await db.query_first<{ content_compressed: DuckDBBlobValue | Uint8Array }>(
-    `SELECT content_compressed FROM ${WEBPAGE_CAPTURE_TABLE} WHERE page_session_id = $id`,
-    { id: page_session_id }
-  );
-  if (!row) return null;
-  const value = row.content_compressed;
-  // getRowObjects returns a BLOB column as a DuckDBBlobValue whose `.bytes` is
-  // the raw Uint8Array; tolerate a plain Uint8Array defensively.
-  return value instanceof Uint8Array ? value : value.bytes;
-}
-
 /** Columns of {@link WEBPAGE_FETCH_TABLE}, in insert/select order. */
 const WEBPAGE_FETCH_COLUMNS = [
   "fetch_id",
@@ -608,15 +585,19 @@ const WEBPAGE_FETCH_COLUMNS = [
 
 /**
  * Appends one re-download fetch record (outcome + fidelity + parsed `<meta>`).
- * The row is keyed by a deterministic `fetch_id` of `page_session_id + fetched_at`
- * so an accidental double-write of the same attempt is idempotent; distinct
- * attempts (different timestamps) each append a row, preserving drift history.
+ * The row is keyed by a deterministic `fetch_id` derived from page_session_id,
+ * fetched_at, outcome, and content_hash. An identical replay of the same attempt
+ * is idempotent (ON CONFLICT DO NOTHING), while two genuinely distinct fetches
+ * that happen to share a millisecond differ in outcome or content hash and so
+ * each append a row, preserving drift history.
  */
 export async function insert_webpage_fetch(
   db: DuckDB,
   fetch: WebpageFetch
 ): Promise<void> {
-  const fetch_id = md5_hash(`${fetch.page_session_id}:${fetch.fetched_at}`);
+  const fetch_id = md5_hash(
+    `${fetch.page_session_id}:${fetch.fetched_at}:${fetch.outcome}:${fetch.content_hash ?? ""}`
+  );
   const params: Record<string, DuckDBValue> = {
     fetch_id,
     page_session_id: fetch.page_session_id,
@@ -657,7 +638,12 @@ export async function list_capture_targets(
   }));
 }
 
-/** Reads the most recent re-download fetch record for a page session, or null. */
+/**
+ * Reads the most recent re-download fetch record for a page session, or null —
+ * the fidelity/drift lookup over the append-only {@link WEBPAGE_FETCH_TABLE} log.
+ * The content read path does not consult this (it always re-downloads live); a
+ * fetch-result cache that would is task-39.3.
+ */
 export async function get_latest_webpage_fetch(
   db: DuckDB,
   page_session_id: string

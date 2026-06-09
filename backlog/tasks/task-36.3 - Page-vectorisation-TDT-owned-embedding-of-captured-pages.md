@@ -22,6 +22,8 @@ Build the one-vector-per-page step that makes TDT independent of the RAG pipelin
 
 Correctness guards ship here: multi-topic dispersion → represent by dominant segment; degenerate near-zero vector → fallback; pages with no extractable text → excluded. Determinism is anchored by fixed-order float64 accumulation when pooling segments.
 
+Concrete interface (task-39.2, shipped): consume `ContentCorpus` in `vscode/src/redownload/corpus.ts` — `iter_public_pages()` yields only the re-downloadable public subset (one `CorpusContent` per `ok` page, with `content` + parsed `<meta>`), and `get_content(page_session_id)` reads a single page. Excluded visits (auth/paywall/dead/non-HTML) are simply not emitted, which realizes the "no vector for non-public visits" exclusion above.
+
 Design reference: backlog/drafts/tdt-hdbscan-micro-tier-plan.md §4 (Data inputs & the page-vector problem).
 
 <!-- SECTION:DESCRIPTION:END -->

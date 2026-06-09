@@ -57,9 +57,12 @@ export type CorpusEntry =
 
 export interface ContentCorpus {
   /**
-   * Reads the public content for a stored page session, re-downloading on demand.
-   * Returns an exclusion entry for auth/paywall/dead/non-HTML pages, or `null` if
-   * no metadata row exists for the id.
+   * Reads the public content for a stored page session. Each call performs a LIVE,
+   * side-effecting re-download — a politeness-gated headless navigation to the
+   * remote host plus a `webpage_fetch` log write — there is no content cache in
+   * this tier (an encrypted on-demand cache is task-39.3). Returns an exclusion
+   * entry for auth/paywall/dead/non-HTML pages, or `null` if no metadata row
+   * exists for the id.
    */
   get_content(page_session_id: string): Promise<CorpusEntry | null>;
 
@@ -104,7 +107,8 @@ export class ReDownloadCorpus implements ContentCorpus {
           lang: metadata.lang,
           fetched_at: result.fidelity.fetched_at,
           http_status: result.outcome.http_status,
-          content_hash: result.fidelity.content_hash ?? "",
+          // An ok outcome always carries a hash (sha-256 of the rendered HTML).
+          content_hash: result.fidelity.content_hash,
         },
       };
     }
@@ -120,7 +124,18 @@ export class ReDownloadCorpus implements ContentCorpus {
   async *iter_public_pages(): AsyncIterable<CorpusContent> {
     const targets = await list_capture_targets(this.db);
     for (const target of targets) {
-      const entry = await this.get_content(target.page_session_id);
+      let entry: CorpusEntry | null = null;
+      try {
+        entry = await this.get_content(target.page_session_id);
+      } catch (error) {
+        // Isolate per-page infrastructure failures (e.g. a transient browser or
+        // DB error) so one bad page does not abort the whole corpus pass.
+        console.error(
+          `re-download failed for ${target.page_session_id} (${target.url}):`,
+          error
+        );
+        continue;
+      }
       if (entry && entry.outcome === "ok") {
         yield entry.content;
       }

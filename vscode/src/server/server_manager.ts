@@ -334,8 +334,19 @@ export class ServerManager {
           .json({ error: 'Missing page_session_id query parameter' });
         return;
       }
-      const entry = await this.content_corpus.get_content(page_session_id);
-      res.json(entry);
+      try {
+        const entry = await this.content_corpus.get_content(page_session_id);
+        res.json(entry);
+      } catch (error) {
+        // Per-page exclusions are normal outcomes; reaching here means the
+        // re-download infrastructure itself failed (e.g. the headless browser
+        // could not launch). Report it as unavailable rather than an opaque 500.
+        res.status(503).json({
+          outcome: 'unavailable',
+          page_session_id,
+          reason: format_error_detail(error),
+        });
+      }
     });
   }
 

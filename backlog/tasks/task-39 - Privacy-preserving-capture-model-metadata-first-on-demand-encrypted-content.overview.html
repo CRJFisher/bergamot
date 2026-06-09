@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Privacy-core capture model · task-39 overview</title>
+<style>
+  :root{
+    --ivory:#f7f4ec; --slate:#33352f; --clay:#b56a44; --olive:#6f7a3f;
+    --oat:#e7e0cf; --rust:#9c4a2f; --ink:#22241f;
+    --g1:#fbf9f3; --g2:#efe9da; --g3:#d8d1bf; --g4:#a9a392; --g5:#6c6859;
+    --serif:ui-serif,Georgia,"Times New Roman",serif;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --r:12px; --hair:1px solid var(--g3); --navh:46px; --tocrh:44px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--ivory);color:var(--slate);font-family:var(--sans);
+    font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  main{width:90%;max-width:1600px;margin-inline:auto;padding:28px 0 120px}
+  .prose{max-width:70ch}
+  h1,h2,h3{font-family:var(--serif);font-weight:600;color:var(--ink);line-height:1.15}
+  h1{font-size:2.1rem;margin:.2em 0}
+  h2{font-size:1.5rem;margin:0 0 .5em}
+  h3{font-size:1.1rem;margin:0 0 .4em}
+  code{font-family:var(--mono)}
+  a{color:var(--clay)}
+  .eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;
+    font-size:.7rem;color:var(--g5)}
+  nav.cross{position:sticky;top:0;z-index:10;background:var(--ivory);border-bottom:var(--hair);
+    min-height:var(--navh);display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 5%}
+  nav.cross .home{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;
+    letter-spacing:.1em;color:var(--g5);margin-right:4px}
+  nav.cross a.doc-link,nav.cross span.pending,nav.cross span.curr{
+    font-family:var(--mono);font-size:.72rem;padding:4px 10px;border-radius:999px;
+    border:var(--hair);text-decoration:none;color:var(--slate);white-space:nowrap}
+  nav.cross a.doc-link:hover{background:var(--oat)}
+  nav.cross span.curr{background:var(--slate);color:var(--ivory);border-color:var(--slate)}
+  nav.cross span.pending{color:var(--g4);border-style:dashed}
+  nav.cross .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  nav.toc{position:sticky;top:var(--navh);z-index:9;background:var(--g1);border-bottom:var(--hair);
+    display:flex;gap:6px;flex-wrap:wrap;padding:8px 5%;min-height:var(--tocrh)}
+  nav.toc a{font-family:var(--mono);font-size:.7rem;text-decoration:none;color:var(--g5);
+    padding:3px 9px;border-radius:999px;border:1px solid transparent}
+  nav.toc a:hover{background:var(--oat);color:var(--slate)}
+  nav.toc a.active{background:var(--slate);color:var(--ivory)}
+  section{scroll-margin-top:calc(var(--navh) + var(--tocrh) + 14px);padding-top:34px}
+  header.id{padding:26px 0 8px}
+  .meta-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .chip{font-family:var(--mono);font-size:.72rem;background:var(--g2);border:var(--hair);
+    border-radius:999px;padding:4px 11px;color:var(--g5)}
+  .chip strong{color:var(--ink)}
+  .chip.key{background:var(--slate);color:var(--ivory);border-color:var(--slate)}
+  .chip.done{background:var(--olive);color:var(--ivory);border-color:var(--olive)}
+  .prompt-box{border:var(--hair);border-left:4px solid var(--clay);border-radius:var(--r);
+    background:var(--g1);padding:14px 18px;margin:18px 0;max-width:82ch}
+  .prompt-box .label{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;
+    letter-spacing:.1em;color:var(--clay);margin-bottom:6px}
+  .prompt-box p{margin:.3em 0;font-size:.95rem}
+  aside.callout{border:var(--hair);border-left:4px solid var(--clay);border-radius:var(--r);
+    background:var(--g1);padding:14px 18px;margin:18px 0;max-width:84ch}
+  aside.callout.invert{background:var(--slate);color:var(--ivory);border-color:var(--slate)}
+  aside.callout.invert h3{color:var(--ivory)}
+  aside.callout .k{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;
+    letter-spacing:.1em;color:var(--clay);display:block;margin-bottom:4px}
+  aside.callout.invert .k{color:var(--oat)}
+  .figure{margin:14px 0 6px}
+  .figure svg{width:100%;height:auto;display:block}
+  figcaption{font-size:.84rem;color:var(--g5);margin-top:8px;max-width:78ch}
+  /* subtask cards */
+  .subtasks{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin:16px 0}
+  .sub{border:var(--hair);border-radius:var(--r);background:var(--g1);padding:16px 18px;
+    display:flex;flex-direction:column;gap:8px;position:relative;border-top:3px solid var(--g4)}
+  .sub.keystone{border-top-color:var(--olive);background:#f6f8ee}
+  .sub .sid{font-family:var(--mono);font-size:.72rem;color:var(--g5);display:flex;
+    justify-content:space-between;align-items:center;gap:6px}
+  .sub .sid .ids{display:flex;align-items:center;gap:6px}
+  .sub .sid .badge{background:var(--g3);color:var(--ink);border-radius:999px;padding:2px 9px;
+    font-weight:600;font-size:.66rem;text-transform:uppercase;letter-spacing:.06em}
+  .sub.keystone .sid .badge{background:var(--olive);color:var(--ivory)}
+  .sub .status{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;
+    border-radius:999px;padding:2px 8px;border:var(--hair);color:var(--g4)}
+  .sub .status.done{background:var(--olive);color:var(--ivory);border-color:var(--olive)}
+  .sub .status.todo{color:var(--g4);border-style:dashed}
+  .sub h3{margin:0;font-size:1.08rem}
+  .sub p{margin:0;font-size:.9rem;color:var(--slate)}
+  .sub .links{margin-top:auto;display:flex;flex-wrap:wrap;gap:7px;padding-top:8px}
+  .sub .links a{font-family:var(--mono);font-size:.72rem;text-decoration:none;color:var(--ivory);
+    background:var(--olive);border-radius:999px;padding:4px 11px}
+  .sub .links a:hover{background:var(--slate)}
+  .sub .links .nogen{font-family:var(--mono);font-size:.7rem;color:var(--g4);
+    border:1px dashed var(--g3);border-radius:999px;padding:4px 11px}
+  .sub .order{font-family:var(--mono);font-size:.68rem;color:var(--g5)}
+  .sub.keystone .order{color:var(--olive)}
+  footer{margin-top:60px;padding-top:18px;border-top:var(--hair);font-family:var(--mono);
+    font-size:.72rem;color:var(--g4);max-width:82ch}
+  @media(max-width:760px){ h1{font-size:1.7rem} }
+</style>
+</head>
+<body>
+
+<nav class="cross" aria-label="Task-39 family navigation">
+  <span class="curr">task-39 ▸ overview</span>
+  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.1 schema reset · not yet generated</span>
+  <a class="doc-link" href="task-39.2 - Re-download-post-processing-content-fetcher-and-content-read-path.content-flow.html"><span class="dot" style="background:var(--olive)"></span>39.2 fetcher · done</a>
+  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.3 encrypted cache · not yet generated</span>
+  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.4 store encryption · not yet generated</span>
+  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.5 right-to-forget · not yet generated</span>
+</nav>
+
+<nav class="toc" aria-label="On this page">
+  <a href="#why">Why</a>
+  <a href="#model">The model</a>
+  <a href="#subtasks">Five subtasks</a>
+  <a href="#order">Build order</a>
+  <a href="#contract">Downstream contract</a>
+</nav>
+
+<main>
+  <header class="id">
+    <div class="eyebrow">task-39 · privacy-core · umbrella</div>
+    <h1>Privacy-core capture model</h1>
+    <p class="prose">Privacy is bergamot's core organizing principle. Capture stores
+      <strong>browsing metadata only — never page content</strong>: visit id, URL, page-load timestamp,
+      title, and the navigation/session graph. That metadata is the durable source of truth. Page content
+      is obtained later by <strong>re-downloading the public URL</strong> through a stealth headless browser
+      running as an anonymous, cookie-free visitor — the login wall is the privacy filter, so authenticated
+      and paywalled pages fail to render content and are excluded. Any cached content is encrypted,
+      on-demand, scoped, and deletable. This task is the code and schema work that makes the product behave
+      that way.</p>
+    <div class="meta-row">
+      <span class="chip key">UMBRELLA · 5 subtasks</span>
+      <span class="chip done">39.2 keystone · DONE</span>
+      <span class="chip">4 subtasks to do</span>
+      <span class="chip">priority <strong>high</strong></span>
+      <span class="chip">no backwards-compat shims</span>
+    </div>
+    <div class="prompt-box">
+      <div class="label">Canonical model</div>
+      <p>backlog/drafts/privacy-preserving-capture-model.md · docs/decisions/privacy-core-reorientation.md.
+        The docs are already reoriented; task-39 brings the code and schema into line. The keystone fetcher
+        (39.2) is built — see its companion below.</p>
+    </div>
+  </header>
+
+  <section id="why">
+    <div class="eyebrow">the why</div>
+    <h2>Why metadata-first changes everything</h2>
+    <p class="prose">Storing page content at browse time means the most private thing a user does — what they
+      actually read — lives on disk as the source of truth, and demands a "is this sensitive?" judgement that
+      is impossible to get right. The privacy-core model removes that liability at the root: the trail is kept,
+      the contents are not. To understand a page, bergamot re-downloads it from its public URL as an anonymous
+      stranger. A page that requires a login simply will not come back — so the private ones exclude
+      themselves, with no heuristic to trust.</p>
+    <aside class="callout">
+      <span class="k">admissibility — the spine, not a feature</span>
+      <p style="margin:.2em 0">Per the intention tree, this advances the CAPTURE and STORE nodes directly:
+        capture becomes metadata-only and deterministic; the metadata store becomes the durable, encryptable
+        source of truth. Every UNDERSTAND/SURFACE consumer (TDT, then RAG) reads only what re-download yields.</p>
+    </aside>
+  </section>
+
+  <section id="model">
+    <div class="eyebrow">at a glance</div>
+    <h2>Capture the trail, re-download the contents</h2>
+    <div class="figure">
+      <svg viewBox="0 0 1180 250" role="img" aria-label="Metadata is captured and is the durable source of truth; content is re-downloaded on demand through the stealth browser and login-wall filter; cached content is encrypted; right-to-forget cascades.">
+        <defs>
+          <marker id="o-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#6c6859"/>
+          </marker>
+          <marker id="o-or" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#6f7a3f"/>
+          </marker>
+        </defs>
+        <rect x="30" y="95" width="190" height="60" rx="10" fill="#efe9da" stroke="#a9a392" stroke-width="1.5"/>
+        <text x="125" y="120" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="13" font-weight="600">browse</text>
+        <text x="125" y="138" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#6c6859">metadata only</text>
+
+        <rect x="280" y="85" width="210" height="80" rx="10" fill="#33352f"/>
+        <text x="385" y="113" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="13.5" font-weight="600" fill="#f7f4ec">metadata store</text>
+        <text x="385" y="132" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#e7e0cf">source of truth · encrypted</text>
+        <text x="385" y="148" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#b56a44">39.1 reset · 39.4 encrypt</text>
+
+        <!-- stealth re-download + login wall -->
+        <path d="M560 125 l30 -22 l30 22 l-30 22 z" fill="#f7f4ec" stroke="#6f7a3f" stroke-width="1.8"/>
+        <text x="590" y="123" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="10.5" font-weight="600">re-dl</text>
+        <text x="590" y="180" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#6f7a3f">stealth · anon · 39.2 ✓</text>
+
+        <rect x="680" y="40" width="200" height="56" rx="10" fill="#eef0e2" stroke="#6f7a3f" stroke-width="1.7"/>
+        <text x="780" y="64" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="13" font-weight="600">public content</text>
+        <text x="780" y="81" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#6c6859">→ TDT, then RAG</text>
+
+        <rect x="680" y="155" width="200" height="56" rx="10" fill="#f2e6e0" stroke="#9c4a2f" stroke-width="1.4" stroke-dasharray="5 4"/>
+        <text x="780" y="179" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="13" font-weight="600">walled / dead</text>
+        <text x="780" y="196" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#9c4a2f">excluded · trail only</text>
+
+        <rect x="940" y="40" width="210" height="56" rx="10" fill="#efe9da" stroke="#b56a44" stroke-width="1.5"/>
+        <text x="1045" y="64" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="13" font-weight="600">encrypted cache</text>
+        <text x="1045" y="81" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#6c6859">on-demand · scoped · 39.3</text>
+
+        <rect x="940" y="155" width="210" height="56" rx="10" fill="#efe9da" stroke="#9c4a2f" stroke-width="1.5"/>
+        <text x="1045" y="179" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="13" font-weight="600">right-to-forget</text>
+        <text x="1045" y="196" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#6c6859">cascades · 39.5</text>
+
+        <g fill="none" stroke-width="1.6">
+          <path d="M220 125 L280 125" stroke="#6c6859" marker-end="url(#o-ar)"/>
+          <path d="M490 125 L560 125" stroke="#6c6859" marker-end="url(#o-ar)"/>
+          <path d="M620 116 C650 95, 660 78, 680 70" stroke="#6f7a3f" marker-end="url(#o-or)"/>
+          <path d="M620 134 C650 160, 660 178, 680 182" stroke="#9c4a2f" marker-end="url(#o-ar)"/>
+          <path d="M880 68 L940 68" stroke="#b56a44" marker-end="url(#o-ar)"/>
+        </g>
+      </svg>
+      <figcaption>The five subtasks placed on the model they implement: 39.1 resets the schema to metadata-only,
+        39.2 (the keystone, built) re-downloads through a stealth anonymous browser and the login-wall filter,
+        39.3 encrypts any cached content, 39.4 encrypts the metadata store, 39.5 makes deletion cascade across
+        all of it.</figcaption>
+    </div>
+  </section>
+
+  <section id="subtasks">
+    <div class="eyebrow">the work</div>
+    <h2>Five subtasks</h2>
+    <div class="subtasks">
+      <div class="sub">
+        <div class="sid"><span class="ids"><span>task-39.1</span><span class="badge">schema reset</span></span><span class="status todo">to do</span></div>
+        <h3>Stop ambient content capture + metadata-only schema reset</h3>
+        <p>Remove all ambient page-content capture across browser, server, and schema. Drop
+          <code>content_compressed</code> and the compression deps. Destructive reset, no migration.</p>
+        <span class="order">unblocked by 39.2 — read path already repointed</span>
+        <div class="links"><span class="nogen">companion not yet generated</span></div>
+      </div>
+
+      <div class="sub keystone">
+        <div class="sid"><span class="ids"><span>task-39.2</span><span class="badge">keystone</span></span><span class="status done">done</span></div>
+        <h3>Re-download content fetcher + content read path</h3>
+        <p>A stealth headless browser (patchright) re-downloads the stored URL as an anonymous, cookie-free
+          visitor; a pure classifier returns one of six outcomes (<code>ok</code> / <code>auth_redirect</code>
+          / <code>forbidden</code> / <code>paywall</code> / <code>dead_link</code> / <code>non_html</code>);
+          only <code>ok</code> enters the corpus. The read path serves re-downloaded content or reports
+          unavailable. The login wall is the privacy filter. Everything content-related depends on this.</p>
+        <span class="order">built — landed the new redownload/ package</span>
+        <div class="links"><a href="task-39.2 - Re-download-post-processing-content-fetcher-and-content-read-path.content-flow.html">content-flow ▸</a></div>
+      </div>
+
+      <div class="sub">
+        <div class="sid"><span class="ids"><span>task-39.3</span><span class="badge">cache</span></span><span class="status todo">to do</span></div>
+        <h3>Encrypted on-demand re-download content cache</h3>
+        <p>The fetcher returns content live with no cache in its tier. This adds a separate encrypted,
+          on-demand, scoped, deletable cache — never plaintext on disk, never the source of truth.</p>
+        <span class="order">depends on 39.2 (built)</span>
+        <div class="links"><span class="nogen">companion not yet generated</span></div>
+      </div>
+
+      <div class="sub">
+        <div class="sid"><span class="ids"><span>task-39.4</span><span class="badge">store crypto</span></span><span class="status todo">to do</span></div>
+        <h3>At-rest encryption of the metadata store</h3>
+        <p>DuckDB native encryption with an OS-keystore-backed key via VS Code <code>SecretStorage</code>.
+          Create the store encrypted rather than migrating. Coordinates with 39.1's reset.</p>
+        <span class="order">coordinates with 39.1</span>
+        <div class="links"><span class="nogen">companion not yet generated</span></div>
+      </div>
+
+      <div class="sub">
+        <div class="sid"><span class="ids"><span>task-39.5</span><span class="badge">forget</span></span><span class="status todo">to do</span></div>
+        <h3>Cascading right-to-forget</h3>
+        <p>Deleting by URL / origin / time-range atomically removes the metadata row and every derived
+          artifact: content cache, vectors, cluster memberships. Forgetting is deletion, not hiding.</p>
+        <span class="order">depends on 39.3</span>
+        <div class="links"><span class="nogen">companion not yet generated</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="order">
+    <div class="eyebrow">sequencing</div>
+    <h2>Build order — 39.2 first, by necessity (now done)</h2>
+    <div class="figure">
+      <svg viewBox="0 0 1180 130" role="img" aria-label="Build order: 39.2 (done) lands with or before 39.1; 39.3 depends on 39.2; 39.5 depends on 39.3; 39.4 coordinates with 39.1.">
+        <defs>
+          <marker id="s-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#6c6859"/>
+          </marker>
+        </defs>
+        <g font-family="ui-sans-serif,system-ui" font-size="13" font-weight="600">
+          <rect x="30" y="45" width="150" height="46" rx="10" fill="#6f7a3f"/>
+          <text x="105" y="66" text-anchor="middle" fill="#f7f4ec">39.2 fetcher</text>
+          <text x="105" y="81" text-anchor="middle" fill="#eef0e2" font-family="ui-monospace,monospace" font-size="10" font-weight="400">keystone · done ✓</text>
+
+          <rect x="270" y="10" width="150" height="46" rx="10" fill="#efe9da" stroke="#a9a392" stroke-width="1.5"/>
+          <text x="345" y="38" text-anchor="middle" fill="#33352f">39.1 reset</text>
+          <rect x="270" y="80" width="150" height="46" rx="10" fill="#efe9da" stroke="#a9a392" stroke-width="1.5"/>
+          <text x="345" y="108" text-anchor="middle" fill="#33352f">39.3 cache</text>
+
+          <rect x="510" y="80" width="150" height="46" rx="10" fill="#efe9da" stroke="#a9a392" stroke-width="1.5"/>
+          <text x="585" y="108" text-anchor="middle" fill="#33352f">39.5 forget</text>
+
+          <rect x="510" y="10" width="150" height="46" rx="10" fill="#efe9da" stroke="#a9a392" stroke-width="1.5"/>
+          <text x="585" y="38" text-anchor="middle" fill="#33352f">39.4 store crypto</text>
+        </g>
+        <g fill="none" stroke="#6c6859" stroke-width="1.6">
+          <path d="M180 60 C220 48, 230 38, 270 33" marker-end="url(#s-ar)"/>
+          <path d="M180 72 C220 88, 230 98, 270 103" marker-end="url(#s-ar)"/>
+          <path d="M420 103 L510 103" marker-end="url(#s-ar)"/>
+          <path d="M420 33 L510 33" stroke-dasharray="5 4" marker-end="url(#s-ar)"/>
+        </g>
+        <text x="700" y="37" font-family="ui-monospace,monospace" font-size="11" fill="#a9a392">— coordinates (schema reset once, encrypted)</text>
+      </svg>
+      <figcaption>39.2 repointed the content read path at re-download <em>before</em> 39.1 drops the stored
+        content — otherwise <code>get_webpage_content</code> would return nothing. That ordering is why the
+        fetcher was the keystone, and it is built: the four remaining subtasks now sit on a working corpus.</figcaption>
+    </div>
+  </section>
+
+  <section id="contract">
+    <aside class="callout invert">
+      <span class="k">downstream contract</span>
+      <h3 style="margin-top:4px">The corpus is the re-downloadable public subset</h3>
+      <p style="margin:.4em 0">The keystone fetcher exposes a <code>ContentCorpus</code> contract
+        (<code>get_content</code>, <code>iter_public_pages</code>). TDT (task-36) clusters this corpus first;
+        RAG (task-31) retrieves over it after. Visits whose pages fail to re-download — auth-walled, dead,
+        paywalled, non-HTML — stay as trail/metadata only and are excluded from clustering and retrieval. That
+        coverage boundary is deliberate, and it is set entirely by the keystone fetcher. The task-31 and
+        task-36 rescopes are tracked under their own parents.</p>
+    </aside>
+  </section>
+
+  <footer>
+    Overview of task-39 (privacy-core capture model) and its five subtasks. 39.2 (the keystone fetcher) is
+    done; 39.1 / 39.3 / 39.4 / 39.5 remain to do. Re-scanned the tasks directory for sibling companions; only
+    task-39.2 has one so far. Re-generate to refresh as the remaining companions land.
+    Self-contained · no external assets · refreshed 2026-06-09.
+  </footer>
+</main>
+
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+  var map = {}; links.forEach(function(a){ map[a.getAttribute('href').slice(1)] = a; });
+  if (!('IntersectionObserver' in window)) return;
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (e.isIntersecting){
+        links.forEach(function(l){ l.classList.remove('active'); });
+        var a = map[e.target.id]; if (a) a.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px', threshold: 0 });
+  document.querySelectorAll('main section[id]').forEach(function(s){ obs.observe(s); });
+})();
+</script>
+</body>
+</html>
