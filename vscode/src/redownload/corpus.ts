@@ -3,15 +3,18 @@
  * downstream consumers (Temporal Topic Detection — task-36; RAG — task-31) read.
  *
  * Given a stored metadata row, the corpus re-downloads its public URL through the
- * {@link Fetcher}, records the fetch (outcome + fidelity + parsed `<meta>`) to the
- * `webpage_fetch` log, and exposes the result. Only an `ok` re-download carries
+ * {@link Fetcher}, extracts clean main-content markdown + derived metadata from
+ * the result via a single {@link parse_page} pass, records the fetch (outcome +
+ * fidelity + metadata) to the `webpage_fetch` log, and exposes the result. Only
+ * an `ok` re-download carries
  * content; authenticated, paywalled, dead, and non-HTML pages are reported as
  * unavailable, with no content. The login wall is the privacy filter — auth-walled
  * visits are trail/metadata only and are absent from this corpus.
  *
- * Re-downloaded bytes are NOT persisted here; they are returned on demand. The
- * encrypted on-demand content cache is a separate, opt-in tier (`content_cache.ts`,
- * populated only through `CachedCorpus`).
+ * This live corpus persists nothing itself; it returns the parsed content on
+ * demand. Persistence is the separate encrypted content cache (`content_cache.ts`),
+ * written only through `CachedCorpus` — which the server wraps around this corpus
+ * on the default read path, so served re-downloads are cached as a side effect.
  */
 import {
   DuckDB,
@@ -20,7 +23,7 @@ import {
   list_capture_targets,
 } from "../duck_db";
 import { WebpageFetch } from "../page_capture_models";
-import { read_metadata } from "./read_metadata";
+import { PageMetadata, parse_page } from "./main_content";
 import { FetchOutcome, FetchOutcomeKind } from "./fetch_outcome";
 import { Fetcher, FetchResult } from "./headless_fetcher";
 
@@ -29,7 +32,7 @@ export interface CorpusContent {
   page_session_id: string;
   url: string;
   title: string;
-  /** The re-downloaded public HTML. */
+  /** The extracted main-content markdown (boilerplate pruned). */
   content: string;
   site_name: string | null;
   author: string | null;
@@ -58,10 +61,10 @@ export type CorpusEntry =
 
 export interface ContentCorpus {
   /**
-   * Reads the public content for a stored page session. Each call performs a LIVE,
-   * side-effecting re-download — a politeness-gated headless navigation to the
-   * remote host plus a `webpage_fetch` log write — there is no content cache in
-   * this tier (consumers that need repeated reads opt into `CachedCorpus`).
+   * Reads the public content for a stored page session. The live
+   * {@link ReDownloadCorpus} performs a side-effecting re-download per call — a
+   * politeness-gated headless navigation plus a `webpage_fetch` log write —
+   * while {@link CachedCorpus} serves a cache hit without touching the network.
    * Returns an exclusion entry for auth/paywall/dead/non-HTML pages, or `null`
    * if no metadata row exists for the id.
    */
@@ -122,25 +125,30 @@ export class ReDownloadCorpus implements ContentCorpus {
     if (!capture) return null;
 
     const result = await this.fetcher.fetch(capture.url);
-    await this.record(page_session_id, capture.url, result);
+    // One heuristic parse per ok re-download yields both the clean main-content
+    // markdown and the page's derived metadata; excluded outcomes carry neither.
+    const parsed =
+      result.outcome.kind === "ok"
+        ? await parse_page(result.outcome.html, capture.url)
+        : null;
+    await this.record(page_session_id, capture.url, result, parsed?.metadata ?? null);
 
     if (result.outcome.kind === "ok") {
-      const metadata =
-        result.metadata ?? read_metadata(result.outcome.html, capture.url);
       return {
         outcome: "ok",
         content: {
           page_session_id,
           url: capture.url,
-          title: metadata.title,
-          content: result.outcome.html,
-          site_name: metadata.site_name,
-          author: metadata.author,
-          published_at: metadata.published_at,
-          lang: metadata.lang,
+          title: parsed!.metadata.title,
+          content: parsed!.body_markdown,
+          site_name: parsed!.metadata.site_name,
+          author: parsed!.metadata.author,
+          published_at: parsed!.metadata.published_at,
+          lang: parsed!.metadata.lang,
           fetched_at: result.fidelity.fetched_at,
           http_status: result.outcome.http_status,
-          // An ok outcome always carries a hash (sha-256 of the rendered HTML).
+          // The hash stays the sha-256 of the rendered HTML the markdown was
+          // extracted from — a fidelity marker of the fetch, not of the body.
           content_hash: result.fidelity.content_hash,
         },
       };
@@ -158,11 +166,16 @@ export class ReDownloadCorpus implements ContentCorpus {
     yield* iter_public_pages_via(this.db, (id) => this.get_content(id));
   }
 
-  /** Appends the fetch to the fidelity log so unavailability/drift stays visible. */
+  /**
+   * Appends the fetch to the fidelity log so unavailability/drift stays visible.
+   * The derived metadata is the single parse from {@link get_content} (null for
+   * excluded outcomes, which carry no content to parse).
+   */
   private async record(
     page_session_id: string,
     url: string,
-    result: FetchResult
+    result: FetchResult,
+    metadata: PageMetadata | null
   ): Promise<void> {
     const record: WebpageFetch = {
       page_session_id,
@@ -173,10 +186,10 @@ export class ReDownloadCorpus implements ContentCorpus {
       content_hash: result.fidelity.content_hash,
       content_type:
         result.outcome.kind === "non_html" ? result.outcome.content_type : null,
-      author: result.metadata?.author ?? null,
-      published_at: result.metadata?.published_at ?? null,
-      lang: result.metadata?.lang ?? null,
-      site_name: result.metadata?.site_name ?? null,
+      author: metadata?.author ?? null,
+      published_at: metadata?.published_at ?? null,
+      lang: metadata?.lang ?? null,
+      site_name: metadata?.site_name ?? null,
       fetched_at: result.fidelity.fetched_at,
     };
     await insert_webpage_fetch(this.db, record);

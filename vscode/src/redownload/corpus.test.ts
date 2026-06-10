@@ -22,10 +22,24 @@ class FakeFetcher implements Fetcher {
 const OK_URL = "https://example.com/public";
 const AUTH_URL = "https://example.com/members";
 
+// The corpus parses this HTML itself (one Defuddle pass), so the metadata the
+// assertions check is embedded here, and the body carries enough text to extract.
+const OK_HTML = `<!doctype html><html lang="en"><head>
+    <title>Public Title</title>
+    <meta property="og:title" content="Public Title">
+    <meta property="og:site_name" content="Example">
+    <meta name="author" content="Ada Lovelace">
+    <meta property="article:published_time" content="2026-01-01T00:00:00Z">
+  </head><body>
+    <main><article><h1>Public Title</h1>
+    <p>hi there — this is the public article body, with enough words to extract
+    cleanly as the page's main content.</p></article></main>
+  </body></html>`;
+
 const OK_RESULT: FetchResult = {
   outcome: {
     kind: "ok",
-    html: "<html lang='en'><head><title>Public</title></head><body>hi</body></html>",
+    html: OK_HTML,
     final_url: OK_URL,
     http_status: 200,
   },
@@ -35,13 +49,6 @@ const OK_RESULT: FetchResult = {
     content_hash: "a".repeat(64),
     final_url: OK_URL,
     redirect_count: 0,
-  },
-  metadata: {
-    title: "Public Title",
-    site_name: "Example",
-    author: "Ada Lovelace",
-    published_at: "2026-01-01T00:00:00Z",
-    lang: "en",
   },
   retry_after_ms: null,
 };
@@ -60,7 +67,6 @@ const AUTH_RESULT: FetchResult = {
     final_url: "https://example.com/login",
     redirect_count: 1,
   },
-  metadata: null,
   retry_after_ms: null,
 };
 

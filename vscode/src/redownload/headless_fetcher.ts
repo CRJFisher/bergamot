@@ -6,7 +6,6 @@
  * by {@link classify_fetch} over what the anonymous browser actually saw.
  */
 import type { Page, Response } from "patchright";
-import { PageMetadata, read_metadata } from "./read_metadata";
 import {
   classify_fetch,
   extract_markers_from_html,
@@ -38,8 +37,6 @@ export interface FetchFidelity {
 export interface FetchResult {
   outcome: FetchOutcome;
   fidelity: FetchFidelity;
-  /** `<meta>`-derived fields parsed from the re-downloaded page; null if excluded. */
-  metadata: PageMetadata | null;
   /** `Retry-After` from a 429/503, in ms, for the gate's backoff; else null. */
   retry_after_ms: number | null;
 }
@@ -104,14 +101,9 @@ export class HeadlessFetcher implements Fetcher {
       const fetched_at = new Date().toISOString();
       const content_hash =
         outcome.kind === "ok" ? sha256_hex(outcome.html) : null;
-      const metadata =
-        outcome.kind === "ok"
-          ? read_metadata(outcome.html, observation.final_url)
-          : null;
 
       return {
         outcome,
-        metadata,
         retry_after_ms: this.retry_after_for(observation),
         fidelity: {
           fetched_at,

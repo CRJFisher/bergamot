@@ -13,10 +13,26 @@ export const ENTRYPOINTS = [
 
 /**
  * `vscode` is extension-host-provided; `@duckdb/node-api` loads a native
- * binding; `patchright` carries browser registry assets and dynamic requires.
- * The latter two are staged into the VSIX with their transitive closure.
+ * binding; `patchright` carries browser registry assets and dynamic requires;
+ * `defuddle` is loaded through its ESM-only `./node` subpath (a runtime dynamic
+ * import esbuild must not inline) and pulls `linkedom` + `turndown` for
+ * string-input DOM parsing and HTML→markdown. All but `vscode` are staged into
+ * the VSIX with their transitive closure.
  */
-export const EXTERNALS = ['vscode', '@duckdb/node-api', 'patchright'];
+export const EXTERNALS = [
+  'vscode',
+  '@duckdb/node-api',
+  'patchright',
+  'defuddle',
+  'linkedom',
+  'turndown',
+];
 
 /** The external packages staged into the VSIX (vscode is host-provided). */
-export const SHIPPED_EXTERNALS = ['@duckdb/node-api', 'patchright'];
+export const SHIPPED_EXTERNALS = [
+  '@duckdb/node-api',
+  'patchright',
+  'defuddle',
+  'linkedom',
+  'turndown',
+];

@@ -53,17 +53,6 @@ describe("HeadlessFetcher (real browser, loopback fixtures)", () => {
     }
   }, 30000);
 
-  it("parses <meta> fields from the re-downloaded page (AC#3)", async () => {
-    const result = await fetcher.fetch(server.url("/article"));
-    expect(result.metadata).toEqual({
-      title: "Re-download Works",
-      site_name: "Bergamot Times",
-      author: "Ada Lovelace",
-      published_at: "2026-01-02T03:04:05Z",
-      lang: "en-GB",
-    });
-  }, 30000);
-
   it("records fidelity metadata for every fetch (AC#4)", async () => {
     const result = await fetcher.fetch(server.url("/article"));
     expect(Date.parse(result.fidelity.fetched_at)).toBeGreaterThan(0);

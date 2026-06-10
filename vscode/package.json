@@ -74,8 +74,11 @@
     "@duckdb/node-api": "^1.5.3-r.3",
     "@modelcontextprotocol/sdk": "^1.15.1",
     "cors": "^2.8.5",
+    "defuddle": "^0.18.1",
     "express": "^5.1.0",
+    "linkedom": "^0.18.12",
     "patchright": "^1.60.2",
+    "turndown": "^7.2.4",
     "zod": "^3.23.8"
   },
   "devDependencies": {
