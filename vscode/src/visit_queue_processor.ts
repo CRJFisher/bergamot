@@ -132,6 +132,25 @@ export class VisitQueueProcessor {
   }
 
   /**
+   * Drops every queued and orphan-parked visit the predicate matches — the
+   * right-to-forget cascade calls this before deleting stored rows, so a
+   * forgotten visit sitting in the in-memory pipeline cannot be re-inserted
+   * after the forget. Matching visits' durable inbox files are removed by
+   * the cascade's own file sweep.
+   *
+   * @returns How many in-memory visits were dropped
+   */
+  purge(matches: (visit: ExtendedPageVisit) => boolean): number {
+    const before = this.request_queue.length;
+    this.request_queue = this.request_queue.filter((visit) => !matches(visit));
+    const dropped_from_queue = before - this.request_queue.length;
+    const dropped_orphans = this.orphan_manager.purge((orphan) =>
+      matches({ ...orphan.visit })
+    );
+    return dropped_from_queue + dropped_orphans;
+  }
+
+  /**
    * Starts the queue processor and orphan retry timer.
    */
   start(): void {

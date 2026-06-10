@@ -100,7 +100,7 @@ await use_mcp_tool("get_webpage_content", {
 ### In VS Code
 
 - **Hover over links**: View metadata for captured pages
-- **Forget**: `Bergamot: Forget` — permanently delete visits by URL, origin, or time range, including all derived content
+- **Forget**: `Bergamot: Forget` — permanently delete visits by URL, origin, or time range, including all derived content. There is no undo
 - **Visit outcomes**: `Bergamot: Show Visit Outcomes`
 - **Replay a visit**: `Bergamot: Replay Visit`
 

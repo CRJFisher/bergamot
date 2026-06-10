@@ -123,6 +123,25 @@ export class OrphanedVisitsManager {
   }
 
   /**
+   * Drops every parked orphan the predicate matches (right-to-forget purge).
+   *
+   * @returns How many orphans were dropped
+   */
+  purge(matches: (orphan: OrphanedVisit) => boolean): number {
+    let dropped = 0;
+    for (const [tab_id, orphans] of this.orphaned_visits) {
+      const kept = orphans.filter((orphan) => !matches(orphan));
+      dropped += orphans.length - kept.length;
+      if (kept.length === 0) {
+        this.orphaned_visits.delete(tab_id);
+      } else if (kept.length !== orphans.length) {
+        this.orphaned_visits.set(tab_id, kept);
+      }
+    }
+    return dropped;
+  }
+
+  /**
    * Removes all orphaned visits for a specific tab after they've been successfully processed.
    * 
    * @param tab_id - Browser tab ID to remove orphans for

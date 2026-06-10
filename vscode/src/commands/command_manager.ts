@@ -7,10 +7,10 @@ import { ServerManager } from '../server/server_manager';
 import { get_recent_outcomes, show_dev_log_channel } from '../dev_log';
 import { list_replay_visits, load_replay_visit } from '../visit_replay';
 import {
-  CONTENT_CACHE_DB_FILENAME,
-  open_content_cache,
+  ContentCache,
+  open_content_cache_if_exists,
 } from '../redownload/content_cache';
-import { ForgetSelector, forget } from '../right_to_forget';
+import { ForgetSelector, forget, selector_matches } from '../right_to_forget';
 
 /**
  * Configuration for command registration.
@@ -89,9 +89,9 @@ export class CommandManager {
   }
 
   /**
-   * Drives one forget: selector pick → input → modal confirmation → cascade.
-   * The content cache is opened only when its store file already exists —
-   * forgetting never creates a cache.
+   * Drives one forget: selector pick → input → modal confirmation → live
+   * pipeline purge → cascade. The content cache is opened only when its
+   * store file already exists — forgetting never creates a cache.
    * @private
    */
   private async run_forget(): Promise<void> {
@@ -111,24 +111,39 @@ export class CommandManager {
     );
     if (confirmed !== 'Forget') return;
 
-    const cache_path = path.join(
-      this.config.storage_base,
-      CONTENT_CACHE_DB_FILENAME
-    );
-    const content_cache = fs.existsSync(cache_path)
-      ? await open_content_cache(
-          this.config.context.secrets,
-          this.config.storage_base
-        )
-      : null;
+    let content_cache: ContentCache | null = null;
     try {
-      const report = await forget(this.config.duck_db, content_cache, selector);
+      // Purge matching visits from the live in-memory pipeline first, so a
+      // queued or orphan-parked visit cannot re-insert the forgotten rows
+      // right after the cascade commits.
+      this.config.server_manager
+        .get_queue_processor()
+        ?.purge((visit) =>
+          selector_matches(selector, visit.url, visit.page_loaded_at ?? null)
+        );
+
+      content_cache = await open_content_cache_if_exists(
+        this.config.context.secrets,
+        this.config.storage_base
+      );
+      const report = await forget(this.config.duck_db, content_cache, selector, {
+        storage_base: this.config.storage_base,
+      });
+      const swept = [
+        report.content_cache_swept ? 'content cache swept' : null,
+        report.files_removed > 0
+          ? `${report.files_removed} buffered file(s) removed`
+          : null,
+      ].filter(Boolean);
       vscode.window.showInformationMessage(
-        report.page_session_ids === 0
+        report.page_session_ids === 0 && report.files_removed === 0
           ? 'Bergamot: nothing matched — nothing forgotten.'
           : `Bergamot: forgot ${report.page_session_ids} visit(s) across ${report.urls} URL(s)` +
-            (report.content_cache_swept ? ', content cache swept.' : '.')
+            (swept.length > 0 ? ` (${swept.join(', ')}).` : '.')
       );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      vscode.window.showErrorMessage(`Bergamot: forget failed — ${message}`);
     } finally {
       if (content_cache) {
         await content_cache.close();
@@ -171,17 +186,38 @@ export class CommandManager {
         return undefined;
       }
     }
-    const from = await vscode.window.showInputBox({
-      prompt: 'Forget visits from (ISO timestamp, inclusive)',
-      placeHolder: '2026-06-01T00:00:00Z',
-    });
+    const from = await this.pick_timestamp(
+      'Forget visits from (ISO timestamp, inclusive)',
+      '2026-06-01T00:00:00Z'
+    );
     if (!from) return undefined;
-    const to = await vscode.window.showInputBox({
-      prompt: 'Forget visits to (ISO timestamp, inclusive)',
-      placeHolder: '2026-06-08T00:00:00Z',
-    });
+    const to = await this.pick_timestamp(
+      'Forget visits to (ISO timestamp, inclusive)',
+      '2026-06-08T00:00:00Z'
+    );
     if (!to) return undefined;
     return { kind: 'time_range', from, to };
+  }
+
+  /**
+   * Collects and validates one timestamp. A typo must not silently become a
+   * window that matches nothing — this is a deletion primitive.
+   * @private
+   */
+  private async pick_timestamp(
+    prompt: string,
+    place_holder: string
+  ): Promise<string | undefined> {
+    const raw = await vscode.window.showInputBox({
+      prompt,
+      placeHolder: place_holder,
+      validateInput: (value) =>
+        Number.isNaN(Date.parse(value))
+          ? 'Not a parseable timestamp (use ISO-8601, e.g. 2026-06-01T00:00:00Z)'
+          : null,
+    });
+    if (!raw) return undefined;
+    return new Date(raw).toISOString();
   }
 
   /**

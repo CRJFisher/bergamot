@@ -197,6 +197,20 @@ export function get_recent_outcomes(): VisitOutcome[] {
   return [...recent_outcomes];
 }
 
+/**
+ * Drops in-memory outcomes whose URL matches — called by the right-to-forget
+ * cascade so a forgotten URL stops appearing in `Show Visit Outcomes`. The
+ * ring is in-memory only; the on-disk dev-log.jsonl is a named plaintext
+ * side-channel the cascade does not rewrite (see docs/threat-model.md).
+ */
+export function purge_outcomes(matches: (url: string) => boolean): void {
+  for (let i = recent_outcomes.length - 1; i >= 0; i--) {
+    if (matches(recent_outcomes[i].url)) {
+      recent_outcomes.splice(i, 1);
+    }
+  }
+}
+
 /** Reveals the Bergamot Dev output channel, if running in the extension host. */
 export function show_dev_log_channel(): void {
   channel?.show(true);

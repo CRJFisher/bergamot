@@ -53,6 +53,9 @@ function sql_string_literal(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
+// Exported solely for the right-to-forget cascade (right_to_forget.ts),
+// which must remain a single auditable module; all other metadata access
+// goes through this module's functions.
 export const WEBPAGE_ACTIVITY_SESSIONS_TABLE = "webpage_activity_sessions";
 export const WEBPAGE_TREES_TABLE = "webpage_trees";
 export const WEBPAGE_CAPTURE_TABLE = "webpage_capture";
@@ -311,6 +314,44 @@ export class DuckDB {
     } catch (error) {
       console.error(`Error creating table ${table_name}:`, error);
       throw error;
+    }
+  }
+
+  /**
+   * Runs `fn` inside one transaction on a DEDICATED connection to the same
+   * store, so concurrent statements on the shared main connection (e.g. the
+   * live visit writer) never join — or get rolled back with — the
+   * transaction. Commits when `fn` resolves, rolls back when it throws, and
+   * always disconnects the dedicated connection.
+   */
+  async isolated_transaction(
+    fn: (
+      run: (sql: string, params?: Record<string, DuckDBValue>) => Promise<void>
+    ) => Promise<void>
+  ): Promise<void> {
+    const connection = await this.db.connect();
+    const run = async (
+      sql: string,
+      params: Record<string, DuckDBValue> = {}
+    ): Promise<void> => {
+      await connection.run(sql, params);
+    };
+    try {
+      if (this.target.in_memory === false) {
+        // The default catalog is per-connection; point the fresh connection
+        // at the attached store like init() does for the main one.
+        await run(`USE ${STORE_ALIAS}`);
+      }
+      await run("BEGIN TRANSACTION");
+      try {
+        await fn(run);
+        await run("COMMIT");
+      } catch (error) {
+        await run("ROLLBACK");
+        throw error;
+      }
+    } finally {
+      connection.disconnectSync();
     }
   }
 

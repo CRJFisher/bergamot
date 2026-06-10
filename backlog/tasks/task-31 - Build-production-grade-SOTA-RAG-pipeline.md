@@ -4,7 +4,7 @@ title: Build production-grade SOTA RAG pipeline
 status: To Do
 assignee: []
 created_date: '2026-06-02 12:21'
-updated_date: '2026-06-05 19:22'
+updated_date: '2026-06-10 07:47'
 labels: []
 dependencies: []
 ---
@@ -29,4 +29,5 @@ RAG operates over the re-downloaded public corpus (pages re-downloaded during po
 - [ ] #6 backlog/docs/rag-pipeline-upgrade-plan.md remains the canonical reference and stays in sync with what ships
 - [ ] #7 Time is a first-class retrieval signal — time-intent queries are served by a relative-time pre-filter + recency rerank over the existing visit timestamps, measured on the harness
 - [ ] #8 The vector store is searchable through MCP in both modes via a single semantic_search tool: non-time-based topic search by default, and time-based search via optional time_range + time_reranked (recency) parameters
+- [ ] #9 Every vector/index store this task introduces joins the right-to-forget cascade in vscode/src/right_to_forget.ts (constitution principle 4), with the cascade tests extended to cover it
 <!-- AC:END -->

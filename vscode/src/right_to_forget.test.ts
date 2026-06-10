@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { DuckDBValue } from "@duckdb/node-api";
 import {
   DuckDB,
   create_metadata_schema,
@@ -21,6 +22,50 @@ import { forget } from "./right_to_forget";
 /** A production-shaped key: 64 lowercase hex chars (32 bytes). */
 const TEST_KEY = "abcdef0123456789".repeat(4);
 
+/** DuckDB that throws on any statement matching `poison` (when set). */
+class PoisonableDuckDB extends DuckDB {
+  poison: RegExp | null = null;
+
+  private check(sql: string): void {
+    if (this.poison && this.poison.test(sql)) {
+      throw new Error(`poisoned: ${sql.slice(0, 60)}`);
+    }
+  }
+
+  async execute(
+    sql: string,
+    params: Record<string, DuckDBValue> = {}
+  ): Promise<void> {
+    this.check(sql);
+    return super.execute(sql, params);
+  }
+
+  async exec(sql: string): Promise<void> {
+    this.check(sql);
+    return super.exec(sql);
+  }
+
+  async isolated_transaction(
+    fn: (
+      run: (sql: string, params?: Record<string, DuckDBValue>) => Promise<void>
+    ) => Promise<void>
+  ): Promise<void> {
+    return super.isolated_transaction(async (run) => {
+      await fn(async (sql, params) => {
+        this.check(sql);
+        await run(sql, params);
+      });
+    });
+  }
+}
+
+/** Cache whose batch delete always fails — pins cache-first ordering. */
+class PoisonedCache extends ContentCache {
+  async delete_items(): Promise<void> {
+    throw new Error("cache down");
+  }
+}
+
 function cached(page_session_id: string, url: string): CorpusContent {
   return {
     page_session_id,
@@ -38,7 +83,7 @@ function cached(page_session_id: string, url: string): CorpusContent {
 }
 
 describe("right-to-forget cascade", () => {
-  let metadata_db: DuckDB;
+  let metadata_db: PoisonableDuckDB;
   let cache_db: DuckDB;
   let cache: ContentCache;
   let seeded_trees: Set<string>;
@@ -108,7 +153,7 @@ describe("right-to-forget cascade", () => {
 
   beforeEach(async () => {
     seeded_trees = new Set();
-    metadata_db = new DuckDB({ database_path: ":memory:" });
+    metadata_db = new PoisonableDuckDB({ database_path: ":memory:" });
     await metadata_db.init();
     await create_metadata_schema(metadata_db);
 
@@ -265,6 +310,244 @@ describe("right-to-forget cascade", () => {
     expect(report.page_session_ids).toBe(1);
     expect(report.content_cache_swept).toBe(false);
     expect(await get_webpage_capture(metadata_db, "a")).toBeNull();
+  });
+
+  it("rolls back metadata on mid-transaction failure; cache already swept; re-run completes", async () => {
+    await seed_visit("a", "https://example.com/a", "2026-06-01T10:00:00Z");
+
+    // Poison the LAST in-transaction statement (the referrer scrub UPDATE).
+    metadata_db.poison = /UPDATE webpage_activity_sessions/;
+    await expect(
+      forget(metadata_db, cache, { kind: "url", url: "https://example.com/a" })
+    ).rejects.toThrow(/poisoned/);
+
+    // Cache swept first (the safe direction)...
+    expect(await cache.get("a")).toBeNull();
+    // ...metadata fully intact after ROLLBACK — fetch log, capture, session.
+    expect(await get_webpage_capture(metadata_db, "a")).not.toBeNull();
+    expect(await get_latest_webpage_fetch(metadata_db, "a")).not.toBeNull();
+    expect(await session_count()).toBe(1);
+
+    // Re-running the same forget from the partial state completes it.
+    metadata_db.poison = null;
+    const report = await forget(metadata_db, cache, {
+      kind: "url",
+      url: "https://example.com/a",
+    });
+    expect(report.page_session_ids).toBe(1);
+    expect(await get_webpage_capture(metadata_db, "a")).toBeNull();
+  });
+
+  it("a failing cache sweep leaves metadata untouched (cache-first ordering)", async () => {
+    await seed_visit("a", "https://example.com/a", "2026-06-01T10:00:00Z");
+
+    await expect(
+      forget(metadata_db, new PoisonedCache(cache_db), {
+        kind: "url",
+        url: "https://example.com/a",
+      })
+    ).rejects.toThrow("cache down");
+
+    expect(await get_webpage_capture(metadata_db, "a")).not.toBeNull();
+    expect(await session_count()).toBe(1);
+  });
+
+  it("re-running a forget completes a previously failed empty-tree sweep", async () => {
+    await seed_visit("solo", "https://example.com/solo", "2026-06-01T10:00:00Z");
+
+    metadata_db.poison = /DELETE FROM webpage_trees/;
+    await expect(
+      forget(metadata_db, cache, { kind: "url", url: "https://example.com/solo" })
+    ).rejects.toThrow(/poisoned/);
+    expect(await session_count()).toBe(0); // transaction committed
+    expect(await tree_count()).toBe(1); // orphaned tree left behind
+
+    metadata_db.poison = null;
+    await forget(metadata_db, cache, {
+      kind: "url",
+      url: "https://example.com/solo",
+    });
+    expect(await tree_count()).toBe(0); // the always-run sweep completes it
+  });
+
+  it("deletes a fetch row whose final_url is the forgotten URL (redirect), keeping its session", async () => {
+    await seed_visit("keep", "https://t.co/abc", "2026-06-01T09:00:00Z");
+    await seed_visit("victim", "https://example.com/a", "2026-06-01T10:00:00Z");
+    // keep's re-download redirected to the soon-forgotten URL.
+    await insert_webpage_fetch(metadata_db, {
+      page_session_id: "keep",
+      url: "https://t.co/abc",
+      final_url: "https://example.com/a",
+      outcome: "ok",
+      http_status: 200,
+      content_hash: "h",
+      content_type: "text/html",
+      author: null,
+      published_at: null,
+      lang: null,
+      site_name: null,
+      fetched_at: "2026-06-01T09:00:01Z",
+    });
+
+    await forget(metadata_db, cache, { kind: "url", url: "https://example.com/a" });
+
+    const orphan = await metadata_db.query_first<{ n: unknown }>(
+      "SELECT count(*)::INTEGER AS n FROM webpage_fetch WHERE final_url = 'https://example.com/a'"
+    );
+    expect(Number(orphan?.n)).toBe(0); // redirect row gone
+    // keep's own visit survives — only the connecting fetch row encoded the URL.
+    expect(await get_webpage_capture(metadata_db, "keep")).not.toBeNull();
+    expect(await session_count()).toBe(1);
+  });
+
+  it("a URL existing only as an orphan fetch row and cache row is still forgotten", async () => {
+    // No capture/session rows at all — e.g. leftovers of an earlier partial run.
+    await insert_webpage_fetch(metadata_db, {
+      page_session_id: "ghost",
+      url: "https://example.com/orphan",
+      final_url: "https://example.com/orphan",
+      outcome: "ok",
+      http_status: 200,
+      content_hash: "h",
+      content_type: "text/html",
+      author: null,
+      published_at: null,
+      lang: null,
+      site_name: null,
+      fetched_at: "2026-06-01T09:00:00Z",
+    });
+    await cache.put(cached("ghost", "https://example.com/orphan"), "scope");
+
+    const report = await forget(metadata_db, cache, {
+      kind: "url",
+      url: "https://example.com/orphan",
+    });
+
+    expect(report.page_session_ids).toBe(0);
+    const remaining = await metadata_db.query_first<{ n: unknown }>(
+      "SELECT count(*)::INTEGER AS n FROM webpage_fetch"
+    );
+    expect(Number(remaining?.n)).toBe(0);
+    expect(await cache.get("ghost")).toBeNull();
+  });
+
+  it("origin forget sweeps cache rows on the origin that no metadata row carries", async () => {
+    await cache.put(
+      cached("cache-only", "https://secret.example.com/cached-only"),
+      "scope"
+    );
+    await seed_visit("other", "https://kept.com/x", "2026-06-01T10:00:00Z");
+
+    await forget(metadata_db, cache, {
+      kind: "origin",
+      origin: "https://secret.example.com",
+    });
+
+    expect(await cache.get("cache-only")).toBeNull();
+    expect(await cache.get("other")).not.toBeNull();
+  });
+
+  it("resolves capture-only and session-only rows, with millisecond timestamps (epoch compare)", async () => {
+    // Capture row with no session, millisecond precision exactly on the bound.
+    await insert_webpage_capture(metadata_db, {
+      page_session_id: "cap-only",
+      url: "https://example.com/cap",
+      title: "Cap",
+      content_type: "text/html",
+      captured_at: "2026-06-01T00:00:00.000Z",
+    });
+    // Session row with no capture.
+    await insert_webpage_tree(metadata_db, "tree-sess", "2026-06-01T12:00:00Z", "2026-06-01T12:00:00Z");
+    await insert_page_activity_session(metadata_db, {
+      id: "sess-only",
+      url: "https://example.com/sess",
+      referrer: null,
+      referrer_page_session_id: null,
+      page_loaded_at: "2026-06-01T12:00:00.500Z",
+      tree_id: "tree-sess",
+    });
+
+    const report = await forget(metadata_db, cache, {
+      kind: "time_range",
+      from: "2026-06-01T00:00:00Z",
+      to: "2026-06-02T00:00:00Z",
+    });
+
+    expect(report.page_session_ids).toBe(2);
+    expect(await get_webpage_capture(metadata_db, "cap-only")).toBeNull();
+    expect(await session_count()).toBe(0);
+  });
+
+  it("accepts offset-bearing time bounds (epoch comparison, not string order)", async () => {
+    await seed_visit("in", "https://example.com/in", "2026-06-01T11:30:00.000Z");
+
+    const report = await forget(metadata_db, cache, {
+      kind: "time_range",
+      from: "2026-06-01T12:00:00+01:00", // = 11:00Z
+      to: "2026-06-01T13:00:00+01:00", // = 12:00Z
+    });
+
+    expect(report.page_session_ids).toBe(1);
+    expect(await get_webpage_capture(metadata_db, "in")).toBeNull();
+  });
+
+  it("counts distinct URLs in the report when several sessions share one URL", async () => {
+    await seed_visit("v1", "https://example.com/shared", "2026-06-01T10:00:00Z");
+    await seed_visit("v2", "https://example.com/shared", "2026-06-01T11:00:00Z");
+
+    const report = await forget(metadata_db, cache, {
+      kind: "url",
+      url: "https://example.com/shared",
+    });
+
+    expect(report.page_session_ids).toBe(2);
+    expect(report.urls).toBe(1);
+  });
+
+  it("origin matching is exact: ports and schemes are distinct, malformed URLs survive", async () => {
+    await seed_visit("https-page", "https://example.com/a", "2026-06-01T10:00:00Z");
+    await seed_visit("port-page", "https://example.com:8443/b", "2026-06-01T10:01:00Z");
+    await seed_visit("http-page", "http://example.com/c", "2026-06-01T10:02:00Z");
+    await seed_visit("broken", "not a url", "2026-06-01T10:03:00Z");
+
+    const report = await forget(metadata_db, cache, {
+      kind: "origin",
+      origin: "https://example.com",
+    });
+
+    expect(report.page_session_ids).toBe(1);
+    expect(await get_webpage_capture(metadata_db, "https-page")).toBeNull();
+    expect(await get_webpage_capture(metadata_db, "port-page")).not.toBeNull();
+    expect(await get_webpage_capture(metadata_db, "http-page")).not.toBeNull();
+    expect(await get_webpage_capture(metadata_db, "broken")).not.toBeNull();
+  });
+
+  it("sweeps matching plaintext visit-inbox and replay files under the storage base", async () => {
+    const storage_base = fs.mkdtempSync(path.join(os.tmpdir(), "bergamot-sweep-"));
+    fs.mkdirSync(path.join(storage_base, "visit_inbox"));
+    fs.mkdirSync(path.join(storage_base, "captures"));
+    const write = (dir: string, name: string, url: string, at: string) =>
+      fs.writeFileSync(
+        path.join(storage_base, dir, name),
+        JSON.stringify({ id: name, url, page_loaded_at: at, title: "t" })
+      );
+    write("visit_inbox", "match.json", "https://example.com/a", "2026-06-01T10:00:00Z");
+    write("visit_inbox", "keep.json", "https://kept.com/x", "2026-06-01T10:00:00Z");
+    write("captures", "replay-match.json", "https://example.com/a", "2026-06-01T10:00:00Z");
+
+    const report = await forget(
+      metadata_db,
+      cache,
+      { kind: "url", url: "https://example.com/a" },
+      { storage_base }
+    );
+
+    expect(report.files_removed).toBe(2);
+    expect(fs.existsSync(path.join(storage_base, "visit_inbox", "match.json"))).toBe(false);
+    expect(fs.existsSync(path.join(storage_base, "captures", "replay-match.json"))).toBe(false);
+    expect(fs.existsSync(path.join(storage_base, "visit_inbox", "keep.json"))).toBe(true);
+
+    fs.rmSync(storage_base, { recursive: true, force: true });
   });
 
   it("sweeps cache rows for the forgotten URL even under a different session id", async () => {

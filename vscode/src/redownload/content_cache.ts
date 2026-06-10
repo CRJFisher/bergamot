@@ -8,7 +8,7 @@
  * caches a page under a named scope (see `CachedCorpus`). The store is its own
  * encrypted DuckDB file with its own OS-keystore key (separate from the
  * metadata store's, so destroying the cache key destroys only the cache), and
- * every item is deletable for the right-to-forget cascade (task-39.5).
+ * every item is deletable for the right-to-forget cascade (`right_to_forget.ts`).
  *
  * Quarantine: the file lives under the extension's storage base, never inside
  * the syncable metadata artifact or the PKM repo (dev runs use the gitignored,
@@ -101,6 +101,22 @@ export async function open_content_cache(
 }
 
 /**
+ * Opens the content cache only when its store file already exists, else
+ * returns null. The right-to-forget cascade and any other delete-only
+ * consumer uses this: forgetting (or sweeping) must never create a cache.
+ */
+export async function open_content_cache_if_exists(
+  secrets: vscode.SecretStorage,
+  storage_base: string
+): Promise<ContentCache | null> {
+  const database_path = path.join(storage_base, CONTENT_CACHE_DB_FILENAME);
+  if (!fs.existsSync(database_path)) {
+    return null;
+  }
+  return open_content_cache(secrets, storage_base);
+}
+
+/**
  * Read/write/delete surface over the encrypted content-cache store. One row
  * per page session: re-caching a page (same deterministic id) replaces the
  * prior entry, so a fresher fetch wins and the newest WRITER's scope owns the
@@ -185,27 +201,27 @@ export class ContentCache {
   }
 
   /**
-   * Deletes one cached item — the per-item primitive the right-to-forget
-   * cascade (task-39.5) calls. The delete is checkpointed (one full WAL flush
-   * per call) so the row leaves the WAL and the live table immediately. The
-   * row's ciphertext may persist in freed blocks inside the file until DuckDB
-   * reuses them; it is unreadable without the cache key, and destroying the
-   * cache key (or emptying the cache, which truncates the file) destroys it
-   * outright. Deleting an id that is not cached is a no-op.
-   *
-   * Ordering constraint for the cascade: cache rows are resolved FROM the
-   * metadata store (by URL / origin / time-range), so derived tiers must be
-   * deleted before — or resolved before deleting — the metadata rows, or
-   * orphaned cache rows become unaddressable except by {@link delete_by_url}.
+   * Deletes one cached item — single-item convenience over
+   * {@link delete_items}. Deleting an id that is not cached is a no-op.
    */
   async delete_item(page_session_id: string): Promise<void> {
     await this.delete_items([page_session_id]);
   }
 
   /**
-   * Batch form of {@link delete_item}: one DELETE and one CHECKPOINT for the
-   * whole set — the shape the right-to-forget cascade uses, so a time-range
-   * forget over N pages does not pay N WAL flushes.
+   * Batch deletion: one DELETE and one CHECKPOINT for the whole set — the
+   * shape the right-to-forget cascade (`right_to_forget.ts`) uses, so a
+   * time-range forget over N pages does not pay N WAL flushes. The delete is
+   * checkpointed so the rows leave the WAL and the live table immediately;
+   * their ciphertext may persist in freed blocks inside the file until
+   * DuckDB reuses them — unreadable without the cache key, and destroying
+   * the key (or emptying the cache, which truncates the file) destroys it
+   * outright.
+   *
+   * Ordering constraint for the cascade: cache rows are resolved FROM the
+   * metadata store, so derived tiers must be deleted before — or resolved
+   * before deleting — the metadata rows, or orphaned cache rows become
+   * unaddressable except by {@link delete_by_url} / {@link delete_by_origin}.
    */
   async delete_items(page_session_ids: string[]): Promise<void> {
     if (page_session_ids.length === 0) {
@@ -233,6 +249,40 @@ export class ContentCache {
     await this.db.execute(
       `DELETE FROM ${CACHED_CONTENT_TABLE} WHERE url = $url`,
       { url }
+    );
+    await this.db.exec("CHECKPOINT");
+  }
+
+  /**
+   * Deletes every cached row whose URL belongs to the origin — the
+   * right-to-forget cascade's sweep for cache rows no metadata row carries
+   * (origin equality requires URL parsing, so the rows are matched here, not
+   * by a SQL prefix).
+   */
+  async delete_by_origin(origin: string): Promise<void> {
+    const rows = await this.db.query<{ url: unknown }>(
+      `SELECT DISTINCT url FROM ${CACHED_CONTENT_TABLE}`
+    );
+    const matching = rows
+      .map((row) => String(row.url))
+      .filter((url) => {
+        try {
+          return new URL(url).origin === origin;
+        } catch {
+          return false;
+        }
+      });
+    if (matching.length === 0) {
+      return;
+    }
+    const params: Record<string, string> = {};
+    const placeholders = matching.map((url, i) => {
+      params[`url${i}`] = url;
+      return `$url${i}`;
+    });
+    await this.db.execute(
+      `DELETE FROM ${CACHED_CONTENT_TABLE} WHERE url IN (${placeholders.join(", ")})`,
+      params
     );
     await this.db.exec("CHECKPOINT");
   }

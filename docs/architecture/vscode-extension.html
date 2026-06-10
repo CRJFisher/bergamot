@@ -94,7 +94,7 @@ flowchart TB
     classDef vs fill:#16263a,stroke:#58a6ff,color:#cfe3ff;
     classDef st fill:#1a2e1c,stroke:#3fb950,color:#cdeccd;
     classDef sv fill:#2a1f3a,stroke:#bc8cff,color:#e6d9ff;
-    class srv,inbox,qp,tree,gate,store vs;
+    class srv,inbox,qp,tree,store vs;
     class redl,tdt vs;
     class duck st;
     class mcpm,qapi,cmds sv;
@@ -136,8 +136,8 @@ flowchart LR
   <h2><span class="num">5</span>Navigation trees</h2>
   <p>Visits are organized into <em>trees</em> — one per browsing session — using the referrer chain captured by
   the browser extension. A page with a known referrer is attached as a child of the tree containing that
-  referrer; a page without one starts a new tree. Tree construction runs in the visit queue, independent of the
-  capture gate: every visit gets a tree node, while the gate decides separately whether the page is captured.</p>
+  referrer; a page without one starts a new tree. Tree construction runs in the visit queue: every visit gets a tree
+  node, and <code>run_page_capture</code> persists the visit's metadata.</p>
 
   <div class="note blue">
     <strong>Single-writer discipline.</strong> Only the extension writes to DuckDB. Every other
