@@ -3,11 +3,11 @@ id: TASK-39.5
 title: >-
   Cascading right-to-forget across metadata, content cache, vectors, and
   clusters
-status: In Progress
+status: Done
 assignee:
   - claude
 created_date: '2026-06-08 13:30'
-updated_date: '2026-06-09 21:16'
+updated_date: '2026-06-10 07:49'
 labels:
   - privacy
   - storage
@@ -29,10 +29,10 @@ Forgetting is deletion, not hiding: no derived artifact may continue to encode f
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Delete-by-URL, delete-by-origin, and delete-by-time-range are available
+- [x] #1 Delete-by-URL, delete-by-origin, and delete-by-time-range are available
 - [ ] #2 A delete atomically removes the metadata row(s), the encrypted content-cache entries, derived vectors, and cluster memberships
-- [ ] #3 Deletion is real, not a tombstone — verified that no derived artifact still encodes the forgotten content
-- [ ] #4 The cascade is covered by tests across all derived stores that exist
+- [x] #3 Deletion is real, not a tombstone — verified that no derived artifact still encodes the forgotten content
+- [x] #4 The cascade is covered by tests across all derived stores that exist
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -51,3 +51,23 @@ The derived stores that exist today are the metadata tables (webpage_trees / web
 5. Docs: README right-to-forget bullet states the shipped cascade (metadata + content cache; vectors/clusters join as they land); threat-model standing-decisions line updated to present tense; cascade ordering + residue note stays in content_cache.ts.
 After implementation: five Fable subagent reviews, apply recommendations, then finalize.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented in 63f6343 (feature) + 6b2db01 (five-lens review fixes).
+
+Review process: five parallel Fable subagent reviews (correctness, privacy-completeness, architecture/constitution, test quality, docs/product truth). The decisive findings, all applied: (1) CRITICAL — url/origin forgets dead-ended when metadata resolution was empty (orphan fetch rows and cache content survived while the command reported "nothing matched"); the resolver now matches the fetch log directly by url and post-redirect final_url (extending only the URL sweep — a redirecting visit's own session survives), the selector's URL always joins the sweep, and origin forgets sweep cache rows via delete_by_origin. (2) CRITICAL — plaintext visit-inbox files survived a forget and resurrected the forgotten rows on restart via reload_persisted_visits; the cascade now sweeps matching visit_inbox/ and captures/ (replay ring) files, the live queue and orphan manager are purged before the cascade, and the in-memory outcome ring is purged. (3) Time-range matching was lexicographic string comparison — millisecond-precision rows in the boundary second and offset-bearing bounds were silently missed; now epoch comparison, with validated/normalized command input. (4) The metadata transaction ran on the shared live-writer connection (a concurrent visit could be destroyed by ROLLBACK — verified empirically by a reviewer); now a dedicated connection via DuckDB.isolated_transaction, plus a cutoff-guarded tree sweep that runs on every forget (a reviewer proved with a red test that the old "re-run completes it" claim was false). (5) Tests added for every load-bearing claim: rollback, cache-first ordering, partial-state re-run, tree-sweep recovery, redirect fetch rows, orphan rows, origin edges (port/scheme/malformed), union/ms-timestamp resolution, file sweep — 21 cascade tests, 275 total.
+
+AC#2 deliberately left unchecked pending a user decision: constitution principle 4 says "atomically removes"; the implementation is per-store transactional + derived-content-first + idempotent across stores (cross-store atomicity over separate database files is not possible). The deviation is documented honestly in the module header and threat model, but per the constitution's own Section 7, reconciling the principle's wording is a user-authored amendment — proposed wording: "atomic per store; across stores, ordered derived-content-first and idempotent, so no derived artifact can survive its metadata." Vectors/clusters do not exist yet; task-31 AC#9 and task-36 AC#7 now anchor their joining the cascade in vscode/src/right_to_forget.ts.
+
+Known accepted bounds (documented in threat-model.md and the module header): dev-log.jsonl is never rewritten; plaintext buffer files that existed before a forget remain forensically recoverable after unlinking; freed-block ciphertext persists inside the encrypted stores until reused; a visit arriving concurrently with a forget can land after the referrer scrub (the queue purge closes most of that window).
+
+Verification: tsc clean, eslint clean, 275/275 jest, full-pipeline e2e green.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The cascading right-to-forget primitive (constitution principle 4) is live, surfaced as the `Bergamot: Forget` command. Forgetting by URL, by origin (URL.origin equality, not prefix matching), or by time range (inclusive, epoch-compared) removes: the metadata rows (capture, activity sessions), the fetch log — matched by session id, stored URL, and post-redirect final_url, so a forgotten URL reached via someone else's redirect is also erased; the encrypted content-cache entries (by id batch, by URL, and by origin for rows no metadata row carries); the plaintext visit-inbox and dev-replay buffer files under the storage base (closing the restart-resurrection path); the in-memory outcome ring; and referrer fields on surviving visits that encode the forgotten pages. Navigation trees left empty are removed by an always-run, cutoff-guarded sweep. The live queue and orphan manager are purged before the cascade runs. The metadata deletes run in one transaction on a dedicated connection so the live visit writer can never join or be rolled back with a forget; the cascade is derived-content-first and idempotent across stores, and the command validates timestamp input, confirms via modal, opens the cache only if it exists, and surfaces failures. vscode/src/right_to_forget.ts is the cascade's single home; task-31 and task-36 now carry acceptance criteria binding their future vector/cluster stores to it. 21 cascade tests (rollback, ordering, recovery, redirects, orphans, file sweep, origin edges) + 275 total + e2e green.
+<!-- SECTION:FINAL_SUMMARY:END -->
