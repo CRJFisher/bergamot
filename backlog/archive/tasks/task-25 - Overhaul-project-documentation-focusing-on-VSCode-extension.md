@@ -3,7 +3,7 @@ id: task-25
 title: Overhaul project documentation focusing on VSCode extension
 status: To Do
 assignee: []
-created_date: '2025-08-11 10:39'
+created_date: "2025-08-11 10:39"
 labels: []
 dependencies: []
 ---

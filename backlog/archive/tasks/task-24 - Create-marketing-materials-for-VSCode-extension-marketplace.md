@@ -3,7 +3,7 @@ id: task-24
 title: Create marketing materials for VSCode extension marketplace
 status: To Do
 assignee: []
-created_date: '2025-08-10 20:08'
+created_date: "2025-08-10 20:08"
 labels: []
 dependencies: []
 ---
