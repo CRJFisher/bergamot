@@ -27,9 +27,10 @@ ROOT — local, durable, queryable knowledge base from passive browsing
 │     store + derived stores; there is no raw-content capture row. "Durable"
 │     applies to the metadata (not silently mutated or lossy-extracted);
 │     content's absence at capture is by design, not lossy extraction — NOT
-│     permanent against the user's will (see right-to-forget). Any content
-│     cached after re-download is a separate, on-demand, encrypted, scoped,
-│     deletable tier — never the source of truth.
+│     permanent against the user's will (see right-to-forget). Content cached
+│     after re-download is a separate encrypted, scoped, deletable tier —
+│     populated by default as public pages are re-downloaded (amendment:
+│     docs/decisions/default-path-content-cache.md) — never the source of truth.
 │
 └── UNDERSTAND / SURFACE  (in progress — the hero loop)
       Post-process re-downloads public page content from the stored URLs
@@ -105,7 +106,7 @@ These are the tunable defaults and disciplines that govern day-to-day work. They
 ### Capture and storage
 
 - **Capture records metadata only; there is no content gate.** After incognito is excluded (principle 2), every visit's metadata is recorded — there is no capture-time keep/drop decision. Empty, auth, and redirect interstitials cannot be judged at capture — there is no content to inspect — so dropping them moves to re-download time, where a fetch that yields a login wall, redirect stub, or empty body is discarded. An optional URL-pattern skip may avoid re-downloading obvious auth/redirect hosts.
-- **Retention is two-tiered.** The metadata record defaults to forever and is tunable. The re-downloaded content cache is on-demand, encrypted, scoped, and may carry a shorter or ephemeral retention. The forget _mechanism_ (principle 4) is inviolable for both; the window _lengths_ are policy.
+- **Retention is two-tiered.** The metadata record defaults to forever and is tunable. The re-downloaded content cache is default-populated (the default read path persists every public re-download under a `"default"` scope; amendment: docs/decisions/default-path-content-cache.md), encrypted, scoped, and may carry a shorter or ephemeral retention. The forget _mechanism_ (principle 4) is inviolable for both; the window _lengths_ are policy.
 - **At-rest encryption of the metadata store** (OS-keychain-backed key, e.g. VS Code `SecretStorage`; DuckDB native database encryption) is the recommended near-term default. Because metadata is now the durable source of truth, this is a tracked commitment, not optional polish. **Encryption of the re-downloaded content cache is a core, non-deferrable property** of that tier, separable from the quarantine line: quarantine closes the silent-egress path; encryption defends physical and malware compromise.
 - **A written threat model is the prerequisite** for the at-rest, authentication, re-download, and metadata-sync decisions: single trusted user, on a possibly-shared or possibly-compromised machine, with hostile local processes in scope.
 
