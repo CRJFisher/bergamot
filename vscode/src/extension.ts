@@ -68,7 +68,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     server_manager = new ServerManager({
       duck_db: databases.duck_db,
       inbox_dir: path.join(storage_base, 'visit_inbox'),
-      storage_base
+      storage_base,
+      // One-time Chromium download on first content fetch (packaged installs
+      // ship no browser). Surfaced as a progress notification; never blocks
+      // activation — the fetch path serves 503 until the download completes.
+      on_browser_provisioning: (done: Promise<void>): void => {
+        void vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: 'Bergamot: downloading the content fetcher (one-time, ~150 MB)…',
+          },
+          async (): Promise<void> => {
+            await done.catch((): void => undefined);
+          }
+        );
+        void done.catch((error: unknown): void => {
+          void vscode.window.showWarningMessage(
+            `Bergamot: content-fetcher download failed — it will retry on the next fetch. ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        });
+      }
     });
 
     const port = await server_manager.start();

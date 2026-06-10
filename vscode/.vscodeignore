@@ -9,7 +9,6 @@ vsc-extension-quickstart.md
 **/eslintrc.json
 **/*.map
 **/*.ts
-**/node_modules/**
 **/.git/**
 **/.DS_Store
 **/jest.config.js
@@ -20,3 +19,15 @@ vsc-extension-quickstart.md
 tsconfig.json.backup
 .claude/**
 ../**
+scripts/**
+builds/**
+coverage/**
+PUBLISHING.md
+tsconfig.*.json
+
+# Release packaging does NOT run vsce in this directory: scripts/
+# build-production.js bundles the entrypoints (scripts/bundle.mjs) and
+# packages from a clean staging dir holding exactly the unbundleable runtime
+# externals (see docs/decisions/native-dep-packaging.md). This file only
+# guards an ad-hoc `vsce package` run here from shipping the dev tree.
+node_modules/**

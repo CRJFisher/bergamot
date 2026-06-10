@@ -48,6 +48,8 @@ Re-download is the system's one routine egress surface: it re-fetches stored URL
 
 **Defenses and bounds:** fetches go only to URLs the user already visited; they carry **no cookies and no credentials** (the login wall is the privacy filter — principle 3); rate-limiting, backoff, and retry discipline bound the traffic (re-download is polite egress). Capture metadata itself never leaves the machine.
 
+One additional first-run egress: the headless browser itself is provisioned by a one-time download of Chromium from Playwright's CDN into `~/.bergamot/ms-playwright` (a packaged install ships no browser). The download discloses nothing about browsing — only that Bergamot is installed — and never recurs once cached.
+
 ### D. Developer-controlled or third-party servers
 
 **Defense: architecture.** There is no telemetry, no cloud store, and no developer server in any data path. Metadata sync, when built (task-37), travels only over user-owned channels; its additional surface (device authentication, channel trust, conflict handling) is assessed when that channel is designed, per the constitution's deferred-decision list.

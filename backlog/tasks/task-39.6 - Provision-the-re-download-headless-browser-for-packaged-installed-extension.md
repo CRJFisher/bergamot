@@ -1,9 +1,11 @@
 ---
 id: TASK-39.6
 title: Provision the re-download headless browser for packaged/installed extension
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - claude
 created_date: '2026-06-09 12:02'
+updated_date: '2026-06-10 07:53'
 labels:
   - packaging
   - privacy
@@ -44,3 +46,18 @@ Out of scope: pointing patchright at a user's system Chrome (loses the stealth-p
 - [ ] #4 Provisioning never blocks extension activation; a one-time progress notification is surfaced, and until the browser exists the read path reports the existing 503 'unavailable' rather than crashing
 - [ ] #5 The VSIX size stays within marketplace limits (the browser binary is NOT bundled in the package)
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Two gaps, one shared decision.
+
+PACKAGING (gap 1 + the shared native-dep decision, AC#2): esbuild-bundle the three entrypoints (extension.ts, mcp_server_standalone.ts, server/server_standalone.ts) into self-contained CJS files in out/, externalizing exactly three things: `vscode` (host-provided), `@duckdb/node-api` (native binding), `patchright` (browser asset descriptors + dynamic requires make it unbundleable). All pure-JS deps (express, cors, zod, @modelcontextprotocol/sdk) are inlined — this also solves the workspace-hoisting problem (vsce cannot see root-hoisted deps, which is why express/patchright were never shipped). The externals ship inside the VSIX: .vscodeignore flips from blanket `**/node_modules/**` to a negation whitelist (`node_modules/@duckdb/**`, `node_modules/patchright/**`, `node_modules/patchright-core/**`); the production build stages root-hoisted patchright + patchright-core into vscode/node_modules before `vsce package --no-dependencies` (vsce's npm dep walk is useless under workspaces — the flag plus explicit whitelist is the recorded strategy). The VSIX is platform-specific by construction (the installed @duckdb binding is the build host's); release builds target `vsce package --target <platform>`. Decision recorded in docs/decisions/native-dep-packaging.md.
+
+PROVISIONING (gap 2): new vscode/src/redownload/browser_provisioner.ts — resolves PLAYWRIGHT_BROWSERS_PATH (respect a pre-set env var, else pin to ~/.bergamot/ms-playwright and set it before patchright loads), checks chromium's executablePath on disk, and provisions once via `node patchright/cli.js install chromium` with that env (singleton in-flight promise, surfaced through an injectable on_provisioning callback). browser_pool.ts imports patchright lazily (the env must be decided before playwright-core computes its registry dir) and ensures provisioning before launch: while the download runs, fetches throw a "provisioning" error and the read path keeps serving its existing 503 — activation is never blocked. extension.ts wires the callback to a one-time vscode.window.withProgress notification.
+
+VERIFICATION (AC#1/#5 best-effort on this machine): package the VSIX, unzip to a temp dir, resolve patchright/@duckdb from the unzipped layout with node (no repo node_modules), run the bundled server_standalone from it against a fresh PLAYWRIGHT_BROWSERS_PATH, provision, and fetch a public page through /query/capture_content; record VSIX size (browser binary not bundled).
+
+Docs: decision record; threat model §C gains the first-run browser download (Playwright CDN) as a named egress; architecture docs touched where stale.
+After implementation: five Fable subagent reviews, apply recommendations, then finalize.
+<!-- SECTION:PLAN:END -->

@@ -53,6 +53,12 @@ export interface ServerConfig {
    * headless re-download corpus over the stored URLs; injectable for tests.
    */
   content_corpus?: ContentCorpus;
+  /**
+   * Surfaced once when the re-download browser's one-time download starts
+   * (packaged installs ship no Chromium); the host shows a progress
+   * notification. Until it completes the read path serves 503 "unavailable".
+   */
+  on_browser_provisioning?: (done: Promise<void>) => void;
 }
 
 /**
@@ -91,7 +97,9 @@ export class ServerManager {
    * {@link stop}.
    */
   private build_redownload_corpus(): ContentCorpus {
-    this.browser_pool = new BrowserPool();
+    this.browser_pool = new BrowserPool({
+      on_provisioning: this.config.on_browser_provisioning,
+    });
     const fetcher = new HeadlessFetcher(this.browser_pool, new PolitenessGate());
     return new ReDownloadCorpus(this.config.duck_db, fetcher);
   }

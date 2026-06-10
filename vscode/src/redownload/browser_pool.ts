@@ -14,7 +14,11 @@
  * reused, and each fetch gets a fresh page that is always closed. The browser is
  * closed on server shutdown to avoid leaking a Chromium process.
  */
-import { chromium, Browser, BrowserContext, Page } from "patchright";
+import type { Browser, BrowserContext, Page } from "patchright";
+import {
+  ensure_browser_provisioned,
+  resolve_browsers_path,
+} from "./browser_provisioner";
 
 /** Resource types aborted on every request: never needed to read text + `<meta>`. */
 const BLOCKED_RESOURCE_TYPES = new Set(["image", "media", "font"]);
@@ -25,6 +29,13 @@ const ignore_error = (): void => undefined;
 export interface BrowserPoolOptions {
   /** Run with a visible window (debugging only). Defaults to headless. */
   headless?: boolean;
+  /**
+   * Surfaced once when a fetch finds no Chromium on disk and the one-time
+   * download starts; receives the install's completion promise (the host
+   * shows a progress notification). Fetches keep failing fast — and the read
+   * path keeps serving 503 — until the install completes.
+   */
+  on_provisioning?: (done: Promise<void>) => void;
 }
 
 /** The page-running capability the fetcher depends on (injectable in tests). */
@@ -83,6 +94,15 @@ export class BrowserPool implements PageRunner {
     if (this.launching) return this.launching;
 
     this.launching = (async () => {
+      // The browsers directory must be pinned before patchright first loads
+      // (its registry reads PLAYWRIGHT_BROWSERS_PATH at module load), which
+      // is why the import is lazy and lives behind the resolver.
+      resolve_browsers_path();
+      const { chromium } = await import("patchright");
+      ensure_browser_provisioned(
+        chromium.executablePath(),
+        this.options.on_provisioning
+      );
       const browser = await chromium.launch({
         headless: this.options.headless ?? true,
       });
@@ -118,6 +138,15 @@ export class BrowserPool implements PageRunner {
       return context;
     })();
 
-    return this.launching;
+    // A failed launch (e.g. Chromium still being provisioned) must not pin
+    // every later fetch to the same cached rejection — clear it so the next
+    // fetch retries, succeeding once the browser exists.
+    const launch = this.launching;
+    launch.catch(() => {
+      if (this.launching === launch) {
+        this.launching = null;
+      }
+    });
+    return launch;
   }
 }
