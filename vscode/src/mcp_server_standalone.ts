@@ -76,14 +76,17 @@ async function main() {
       {
         name: "get_webpage_content",
         description:
-          "Retrieve the re-downloaded public content for a page session id. Content " +
-          "is fetched server-side from the page's public URL, not from local " +
-          "storage, so it may differ from the page as originally viewed (dynamic " +
-          "content or drift). It is unavailable for pages behind a login wall or " +
-          "paywall, or that are dead or redirected: those return an outcome with no " +
-          "content. The result is a discriminated object whose `outcome` is `ok` " +
-          "(with `content`) or an exclusion (`auth_redirect`, `forbidden`, " +
-          "`paywall`, `dead_link`, `non_html`) with a `reason`.",
+          "Retrieve the extracted main-content (markdown) of a page session's " +
+          "public URL. The content is re-downloaded from the public URL and its " +
+          "main content extracted (nav/boilerplate removed); it is served from " +
+          "the encrypted local cache when previously read, otherwise re-downloaded " +
+          "live and cached. Because it reflects a re-download (see `fetched_at`), " +
+          "it may differ from the page as originally viewed (dynamic content or " +
+          "drift). It is unavailable for pages behind a login wall or paywall, or " +
+          "that are dead or redirected: those return an outcome with no content. " +
+          "The result is a discriminated object whose `outcome` is `ok` (with " +
+          "`content`) or an exclusion (`auth_redirect`, `forbidden`, `paywall`, " +
+          "`dead_link`, `non_html`) with a `reason`.",
         inputSchema: {
           type: "object",
           properties: {

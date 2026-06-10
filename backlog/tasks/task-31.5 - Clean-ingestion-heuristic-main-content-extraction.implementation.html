@@ -1,0 +1,1014 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Task 31.5 — Clean ingestion: one Defuddle parse at the corpus boundary</title>
+<style>
+  :root {
+    --ivory:#f7f4ed; --slate:#2f3032; --clay:#b4633e; --olive:#6f7a3f;
+    --oat:#e7ded0; --rust:#9c3a26;
+    --g1:#3a3b3d; --g2:#6b6c6e; --g3:#9a9794; --g4:#cfc8bd;
+    --serif: ui-serif, Georgia, "Iowan Old Style", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin:0; background:var(--ivory); color:var(--slate);
+    font-family:var(--sans); line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* ---- top cross-doc nav ---- */
+  nav.top {
+    position:sticky; top:0; z-index:10;
+    background:var(--ivory); border-bottom:1px solid var(--g4);
+    display:flex; flex-wrap:wrap; align-items:center; gap:.5rem;
+    padding:.55rem 5%;
+  }
+  nav.top .home { font-family:var(--mono); font-size:.7rem; text-transform:uppercase;
+    letter-spacing:.12em; color:var(--g2); }
+  nav.top a.doc-link {
+    font-family:var(--mono); font-size:.72rem; text-decoration:none;
+    color:var(--slate); background:var(--oat); border:1px solid var(--g4);
+    padding:.25rem .6rem; border-radius:999px;
+  }
+  nav.top a.doc-link:hover { background:#dfd4c2; }
+  nav.top .here {
+    font-family:var(--mono); font-size:.72rem; color:var(--ivory);
+    background:var(--slate); padding:.25rem .6rem; border-radius:999px;
+  }
+  /* ---- in-page outline ---- */
+  nav.toc {
+    position:sticky; top:48px; z-index:9;
+    background:#fbf9f4; border-bottom:1px solid var(--g4);
+    display:flex; flex-wrap:wrap; gap:.4rem; padding:.45rem 5%;
+  }
+  nav.toc a {
+    font-family:var(--mono); font-size:.68rem; text-decoration:none;
+    color:var(--g1); padding:.18rem .5rem; border-radius:999px;
+    display:inline-flex; align-items:center; gap:.35rem;
+  }
+  nav.toc a:hover { background:var(--oat); }
+  .dot { width:7px; height:7px; border-radius:50%; display:inline-block; }
+  .d-new{background:var(--olive);} .d-key{background:var(--clay);} .d-warn{background:var(--rust);} .d-base{background:var(--g3);}
+
+  main { width:90%; max-width:1600px; margin-inline:auto; padding:2rem 0 5rem; }
+  section { scroll-margin-top:108px; padding-top:1.6rem; }
+  .eyebrow { font-family:var(--mono); font-size:.7rem; text-transform:uppercase;
+    letter-spacing:.16em; color:var(--clay); margin:0 0 .4rem; }
+  h1 { font-family:var(--serif); font-weight:600; font-size:2.1rem; margin:.1rem 0 .6rem; line-height:1.15; }
+  h2 { font-family:var(--serif); font-weight:600; font-size:1.4rem; margin:0 0 .2rem; }
+  h3 { font-family:var(--serif); font-weight:600; font-size:1.05rem; margin:1.1rem 0 .4rem; }
+  figcaption { font-family:var(--sans); font-size:.82rem; color:var(--g2);
+    max-width:68ch; margin:.55rem 0 0; }
+  .meta { display:flex; flex-wrap:wrap; gap:.5rem; margin:.6rem 0 0; }
+  .chip { font-family:var(--mono); font-size:.72rem; background:#fff; border:1px solid var(--g4);
+    padding:.22rem .55rem; border-radius:999px; }
+  .chip strong { color:var(--clay); }
+  .prompt-box { border:1px solid var(--g4); border-left:4px solid var(--g3);
+    background:#fbf9f4; padding:.7rem .9rem; border-radius:8px; margin:1rem 0 0; }
+  .prompt-box .label { font-family:var(--mono); font-size:.65rem; text-transform:uppercase;
+    letter-spacing:.12em; color:var(--g2); }
+  .prompt-box code { font-family:var(--mono); font-size:.74rem; color:var(--g1); }
+  .prompt-box ul { margin:.4rem 0 0; padding-left:1.1rem; }
+  .prompt-box li { font-size:.78rem; margin:.15rem 0; }
+
+  /* ---- four-part strip ---- */
+  .parts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.8rem; margin-top:1rem; }
+  .part { border:1px solid var(--g4); border-radius:10px; background:#fff; padding:.7rem .8rem; }
+  .part .num { font-family:var(--mono); font-size:.62rem; color:var(--ivory); background:var(--olive);
+    border-radius:999px; padding:.12rem .5rem; }
+  .part.del .num { background:var(--rust); }
+  .part.priv .num { background:var(--rust); }
+  .part h3 { margin:.45rem 0 .25rem; font-size:.92rem; }
+  .part p { margin:0; font-size:.76rem; color:var(--g2); }
+  .part .owner { display:block; font-family:var(--mono); font-size:.62rem; color:var(--g3); margin-top:.45rem; }
+
+  /* ---- before/after ---- */
+  .ba { display:grid; grid-template-columns:1fr auto 1fr; gap:0; align-items:stretch;
+    border:1px solid var(--g4); border-radius:12px; overflow:hidden; background:#fff; }
+  .ba .panel { padding:1rem; }
+  .ba .panel.after { background:#fbfaf5; }
+  .ba .arrow { display:flex; align-items:center; justify-content:center;
+    background:var(--oat); padding:0 .6rem; }
+  .ba .arrow span { font-family:var(--mono); font-size:.7rem; color:var(--clay);
+    writing-mode:vertical-rl; transform:rotate(180deg); letter-spacing:.1em; }
+  .ptitle { font-family:var(--mono); font-size:.68rem; text-transform:uppercase;
+    letter-spacing:.14em; color:var(--g2); margin:0 0 .6rem; }
+  .legend { display:flex; flex-wrap:wrap; gap:1rem; margin:.7rem 0 0; }
+  .legend span { font-family:var(--mono); font-size:.7rem; color:var(--g1);
+    display:inline-flex; align-items:center; gap:.4rem; }
+
+  svg { display:block; width:100%; height:auto; }
+  .figure { margin:1rem 0 0; }
+
+  /* ---- decision cards ---- */
+  .decisions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; margin-top:1rem; }
+  .dcard { border:1px solid var(--g4); border-left:4px solid var(--clay); border-radius:10px;
+    background:#fff; padding:.9rem 1rem; }
+  .dcard.priv { border-left-color:var(--rust); }
+  .dcard .tag { font-family:var(--mono); font-size:.62rem; text-transform:uppercase;
+    letter-spacing:.1em; color:var(--clay); }
+  .dcard.priv .tag { color:var(--rust); }
+  .dcard h3 { margin:.25rem 0 .45rem; font-size:1rem; }
+  .dcard .rule { display:grid; grid-template-columns:auto 1fr; gap:.45rem .6rem;
+    font-size:.82rem; align-items:start; }
+  .dcard .rule b { font-family:var(--mono); font-size:.63rem; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--g2); white-space:nowrap; padding-top:.1rem; }
+
+  /* ---- code ---- */
+  .code { background:#26282b; border-radius:10px; overflow:hidden; margin:.8rem 0 0; }
+  .code .file-label { font-family:var(--mono); font-size:.7rem; color:#b9b4ab;
+    padding:.5rem .9rem; border-bottom:1px solid #3a3d41; background:#1f2123; }
+  .code pre { margin:0; padding:.9rem 1rem; overflow-x:auto; }
+  .code code { font-family:var(--mono); font-size:.78rem; line-height:1.55; color:#d8d3c9; white-space:pre; }
+  .kw{color:#cf8e6d;} .str{color:#a9b665;} .cm{color:#6b6f73;font-style:italic;}
+  .fn{color:#83b3c9;} .hl{background:#3a3d2a;display:inline-block;width:100%;}
+  .mark{background:#3a3d2a;border-radius:3px;padding:0 .15em;}
+  .add{background:#2c3a23;display:inline-block;width:100%;}
+  .del{background:#3d2622;display:inline-block;width:100%;text-decoration:line-through;color:#9a8077;}
+  .dim{color:#6b6f73;}
+
+  /* ---- delete list ---- */
+  .dels { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem; }
+  .dels .box { border:1px solid var(--g4); border-radius:10px; background:#fff; padding:.9rem 1rem; }
+  .dels .box.gone { border-left:4px solid var(--rust); }
+  .dels .box.kept { border-left:4px solid var(--olive); }
+  .dels .box h3 { margin:0 0 .5rem; font-size:.92rem; font-family:var(--mono); text-transform:uppercase;
+    letter-spacing:.08em; font-weight:600; }
+  .dels .box.gone h3 { color:var(--rust); } .dels .box.kept h3 { color:var(--olive); }
+  .dels ul { margin:0; padding-left:0; list-style:none; }
+  .dels li { font-size:.82rem; padding:.3rem 0; border-top:1px solid #efe9df; }
+  .dels li:first-child { border-top:none; }
+  .dels li code { font-family:var(--mono); font-size:.76rem; }
+  .dels .gone li::before { content:"✕ "; color:var(--rust); font-family:var(--mono); }
+  .dels .kept li::before { content:"↻ "; color:var(--olive); font-family:var(--mono); }
+  .dels li .why { display:block; font-size:.74rem; color:var(--g3); margin-left:1.1rem; }
+
+  /* ---- before/after text example ---- */
+  .io { display:grid; grid-template-columns:1fr auto 1fr; gap:0; margin-top:1rem;
+    border:1px solid var(--g4); border-radius:10px; overflow:hidden; }
+  .io .col { background:#fff; }
+  .io .col.out { background:#fbfaf5; }
+  .io .col h3 { margin:0; padding:.55rem .8rem; font-family:var(--mono); font-size:.66rem;
+    text-transform:uppercase; letter-spacing:.1em; color:var(--g2);
+    border-bottom:1px solid var(--g4); }
+  .io pre { margin:0; padding:.8rem; font-family:var(--mono); font-size:.72rem;
+    line-height:1.5; white-space:pre-wrap; word-break:break-word; max-height:280px; overflow:auto; }
+  .io .gut { background:var(--oat); display:flex; align-items:center; justify-content:center; padding:0 .5rem; }
+  .io .gut span { font-family:var(--mono); font-size:.7rem; color:var(--clay); }
+  .strike { color:var(--g3); text-decoration:line-through; }
+  .keep { color:var(--olive); }
+
+  /* ---- AC table ---- */
+  table.ac { width:100%; border-collapse:collapse; margin-top:1rem; background:#fff;
+    border:1px solid var(--g4); border-radius:10px; overflow:hidden; }
+  table.ac th, table.ac td { text-align:left; padding:.6rem .8rem; border-bottom:1px solid var(--g4);
+    font-size:.84rem; vertical-align:top; }
+  table.ac th { font-family:var(--mono); font-size:.66rem; text-transform:uppercase;
+    letter-spacing:.08em; color:var(--g2); background:#fbf9f4; }
+  table.ac tr:last-child td { border-bottom:none; }
+  table.ac td .st { font-family:var(--mono); font-size:.66rem; padding:.16rem .5rem; border-radius:999px;
+    display:inline-block; }
+  table.ac td .own { font-family:var(--mono); font-size:.66rem; color:var(--g3); white-space:nowrap; }
+  .st.done{background:#e6ecd6;color:#475226;} .st.def{background:#f0e3da;color:var(--rust);}
+  .st.new{background:#efe6d6;color:#7a4326;}
+
+  /* ---- task split ---- */
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem; }
+  .split .box { border:1px solid var(--g4); border-radius:10px; background:#fff; padding:.9rem 1rem; }
+  .split .box .pill { font-family:var(--mono); font-size:.64rem; text-transform:uppercase;
+    letter-spacing:.08em; padding:.16rem .55rem; border-radius:999px; }
+  .split .box.a .pill { background:#e6ecd6; color:#475226; }
+  .split .box.b .pill { background:#efe6d6; color:#7a4326; }
+  .split .box h3 { margin:.4rem 0 .35rem; font-size:1rem; }
+  .split .box ul { margin:.2rem 0 0; padding-left:1.1rem; }
+  .split .box li { font-size:.82rem; margin:.18rem 0; }
+  .split .box li code { font-family:var(--mono); font-size:.76rem; }
+
+  /* ---- scope ---- */
+  .scope { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem; }
+  .scope .box { border:1px solid var(--g4); border-radius:10px; background:#fff; padding:.9rem 1rem; }
+  .scope .box.out { background:#fbf9f4; }
+  .scope .box h3 { margin:0 0 .5rem; font-size:.95rem; display:flex; align-items:center; gap:.4rem; }
+  .scope ul { margin:0; padding-left:0; list-style:none; }
+  .scope li { font-size:.83rem; padding:.28rem 0; display:flex; gap:.5rem; align-items:baseline;
+    border-top:1px solid #efe9df; }
+  .scope li:first-child { border-top:none; }
+  .scope li .m { font-family:var(--mono); font-size:.66rem; color:var(--g3); }
+  .scope .in li::before { content:"+"; color:var(--olive); font-family:var(--mono); font-weight:700; }
+  .scope .out li::before { content:"−"; color:var(--rust); font-family:var(--mono); font-weight:700; }
+
+  aside.callout { border:1px solid var(--g4); border-left:4px solid var(--olive);
+    background:#fbfaf5; border-radius:10px; padding:.9rem 1.1rem; margin-top:1.2rem; }
+  aside.callout.warn { border-left-color:var(--rust); }
+  aside.callout .label { font-family:var(--mono); font-size:.65rem; text-transform:uppercase;
+    letter-spacing:.12em; color:var(--olive); }
+  aside.callout.warn .label { color:var(--rust); }
+  aside.callout p { margin:.35rem 0 0; font-size:.9rem; max-width:72ch; }
+  aside.callout code { font-family:var(--mono); font-size:.82rem; background:#efe9df; padding:.05rem .3rem; border-radius:4px; }
+  aside.callout ul { margin:.4rem 0 0; padding-left:1.1rem; }
+  aside.callout li { font-size:.85rem; margin:.2rem 0; max-width:72ch; }
+
+  footer { margin-top:3rem; padding:1rem 5%; border-top:1px solid var(--g4);
+    font-family:var(--mono); font-size:.68rem; color:var(--g3); }
+
+  @media (max-width:820px) {
+    .ba, .io, .decisions, .scope, .dels, .split { grid-template-columns:1fr; }
+    .parts { grid-template-columns:1fr 1fr; }
+    .ba .arrow, .io .gut { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <span class="home">backlog / tasks /</span>
+  <span class="here">task-31.5 · implementation</span>
+  <a class="doc-link" href="../docs/rag-explainers/05-clean-ingestion.html">concept: clean ingestion ↗</a>
+  <a class="doc-link" href="../docs/rag-explainers/index.html">rag explainers index ↗</a>
+</nav>
+
+<nav class="toc">
+  <a href="#why"><span class="dot d-key"></span>one parse, four changes</a>
+  <a href="#flow"><span class="dot d-new"></span>data flow</a>
+  <a href="#deleted"><span class="dot d-warn"></span>what's deleted</a>
+  <a href="#privacy"><span class="dot d-warn"></span>cache posture</a>
+  <a href="#decisions"><span class="dot d-key"></span>decisions</a>
+  <a href="#code"><span class="dot d-base"></span>wiring</a>
+  <a href="#example"><span class="dot d-new"></span>before / after</a>
+  <a href="#split"><span class="dot d-base"></span>task split</a>
+  <a href="#ac"><span class="dot d-base"></span>acceptance</a>
+  <a href="#scope"><span class="dot d-base"></span>scope</a>
+</nav>
+
+<main>
+
+  <header>
+    <p class="eyebrow">Task 31.5 · RAG pipeline · Phase B — shipped together with task-39.10 (STORE)</p>
+    <h1>Clean ingestion: one Defuddle parse at the corpus boundary</h1>
+    <div class="meta">
+      <span class="chip">module <strong>main_content.ts</strong></span>
+      <span class="chip">deleted <strong>read_metadata.ts</strong></span>
+      <span class="chip">cache <strong>scope "default"</strong></span>
+      <span class="chip">body <strong>brotli q5 BLOB</strong></span>
+      <span class="chip">LLM <strong>none — deterministic</strong></span>
+      <span class="chip">shipped <strong>75cf45b · f1d175d</strong></span>
+    </div>
+    <div class="prompt-box">
+      <span class="label">Ground truth — the shipped source</span>
+      <ul>
+        <li><code>vscode/src/redownload/main_content.ts</code> — <code>parse_page</code>; <code>defuddle/node</code> loaded by absolute-path require</li>
+        <li><code>vscode/src/redownload/corpus.ts</code> — one branch on the <code>ok</code> outcome; parse against the post-redirect <code>final_url</code></li>
+        <li><code>vscode/src/redownload/content_cache.ts</code> — brotli quality-5 BLOB body; <code>open_content_cache</code> releases the handle on schema failure</li>
+        <li><code>vscode/src/redownload/cached_corpus.ts</code> — the default-path wrap; cache failures isolated; forget-race re-check before caching</li>
+        <li><code>vscode/src/server/server_manager.ts</code> — <code>enable_default_path_caching()</code> inside async <code>prepare()</code></li>
+        <li><code>main_content_eval.test.ts</code> + <code>__fixtures__/main_content_pages/</code> — the deterministic, offline metadata + pruning eval</li>
+        <li><code>docs/decisions/default-path-content-cache.md</code> — the user-authored cache-posture amendment</li>
+      </ul>
+    </div>
+  </header>
+
+  <!-- ================= WHY ================= -->
+  <section id="why">
+    <h2>One parse, four coupled changes</h2>
+    <figcaption>
+      Capture stores browsing metadata only — never the page body. The re-download corpus fetches public
+      HTML on demand; one Defuddle parse at that boundary yields BOTH the clean markdown body and the
+      page metadata, and the result is persisted to the encrypted content cache on the default read path,
+      brotli-compressed. Four changes, one cause: a single parse where the content enters the system.
+    </figcaption>
+
+    <div class="parts">
+      <article class="part">
+        <span class="num">1 · extract</span>
+        <h3>Clean markdown body</h3>
+        <p><code>parse_page(html, url)</code> runs <code>defuddle/node</code> once; the pruned markdown becomes <code>CorpusContent.content</code>.</p>
+        <span class="owner">task-31.5 · UNDERSTAND</span>
+      </article>
+      <article class="part del">
+        <span class="num">2 · enrich</span>
+        <h3>Defuddle metadata</h3>
+        <p>The same parse yields title · author · published_at · site_name · lang — <code>read_metadata.ts</code> (regex) is deleted.</p>
+        <span class="owner">task-31.5 · UNDERSTAND</span>
+      </article>
+      <article class="part priv">
+        <span class="num">3 · cache</span>
+        <h3>Default-path caching</h3>
+        <p>The server wraps the live corpus in <code>CachedCorpus</code> under scope <code>"default"</code> during <code>prepare()</code> — every ok re-download persists, encrypted.</p>
+        <span class="owner">task-39.10 · STORE</span>
+      </article>
+      <article class="part">
+        <span class="num">4 · compress</span>
+        <h3>Brotli body column</h3>
+        <p>The cache's <code>content</code> column is a BLOB of brotli (quality 5) output with a size hint; decompressed on read.</p>
+        <span class="owner">task-39.10 · STORE</span>
+      </article>
+    </div>
+
+    <div class="figure">
+      <figure>
+        <div class="ba">
+          <div class="panel before">
+            <p class="ptitle">Before — two parsers, raw HTML, cache opt-in only</p>
+            <svg viewBox="0 0 300 258" role="img" aria-label="Before: regex metadata in the fetcher, raw HTML to consumers, cache populated only by opt-in scopes">
+              <defs>
+                <marker id="a1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                  <path d="M0,0 L6,3 L0,6 Z" fill="#6b6c6e"/>
+                </marker>
+              </defs>
+              <rect x="55" y="8" width="190" height="34" rx="9" fill="#e7ded0" stroke="#cfc8bd"/>
+              <text x="150" y="29" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="#2f3032">Fetcher: fetch · classify · hash</text>
+              <rect x="70" y="46" width="160" height="26" rx="8" fill="#fbeae5" stroke="#9c3a26"/>
+              <text x="150" y="63" text-anchor="middle" font-family="var(--mono)" font-size="9.5" fill="#9c3a26">+ read_metadata (regex)</text>
+              <line x1="150" y1="72" x2="150" y2="92" stroke="#6b6c6e" stroke-width="1.5" marker-end="url(#a1)"/>
+              <rect x="62" y="94" width="176" height="34" rx="9" fill="#3d2622" stroke="#9c3a26"/>
+              <text x="150" y="115" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="#f0d7cf">raw boilerplate HTML</text>
+              <line x1="150" y1="128" x2="150" y2="148" stroke="#6b6c6e" stroke-width="1.5" marker-end="url(#a1)"/>
+              <rect x="70" y="150" width="160" height="30" rx="9" fill="#fff" stroke="#cfc8bd"/>
+              <text x="150" y="169" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#2f3032">CorpusContent.content</text>
+              <line x1="150" y1="180" x2="55" y2="212" stroke="#9c3a26" stroke-width="1.5" marker-end="url(#a1)"/>
+              <line x1="150" y1="180" x2="150" y2="212" stroke="#9c3a26" stroke-width="1.5" marker-end="url(#a1)"/>
+              <line x1="150" y1="180" x2="245" y2="212" stroke="#9c3a26" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#a1)"/>
+              <rect x="6" y="214" width="88" height="38" rx="8" fill="#fbeae5" stroke="#9c3a26"/>
+              <text x="50" y="229" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#9c3a26">MCP — live fetch</text>
+              <text x="50" y="241" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#9c3a26">every read</text>
+              <rect x="106" y="214" width="88" height="38" rx="8" fill="#fbeae5" stroke="#9c3a26"/>
+              <text x="150" y="237" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#9c3a26">TDT / RAG</text>
+              <rect x="206" y="214" width="88" height="38" rx="8" fill="#fff" stroke="#9a9794" stroke-dasharray="4 3"/>
+              <text x="250" y="229" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#6b6c6e">cache: opt-in</text>
+              <text x="250" y="241" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#6b6c6e">scopes only</text>
+            </svg>
+          </div>
+          <div class="arrow"><span>ONE PARSE →</span></div>
+          <div class="panel after">
+            <p class="ptitle">Shipped — one parse, clean markdown, default-scope cache</p>
+            <svg viewBox="0 0 300 258" role="img" aria-label="Shipped flow: slimmed fetcher, one Defuddle parse yielding body and metadata, brotli-compressed default-scope cache">
+              <defs>
+                <marker id="a2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                  <path d="M0,0 L6,3 L0,6 Z" fill="#6b6c6e"/>
+                </marker>
+              </defs>
+              <rect x="55" y="8" width="190" height="34" rx="9" fill="#e7ded0" stroke="#cfc8bd"/>
+              <text x="150" y="23" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="#2f3032">Fetcher: fetch · classify · hash</text>
+              <text x="150" y="36" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#6b6c6e">raw HTML + fidelity only</text>
+              <line x1="150" y1="42" x2="150" y2="62" stroke="#6f7a3f" stroke-width="1.8" marker-end="url(#a2)"/>
+              <rect x="48" y="64" width="204" height="44" rx="10" fill="#6f7a3f" stroke="#5b6534"/>
+              <text x="150" y="82" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#f4f1e6">parse_page — Defuddle ×1</text>
+              <text x="150" y="97" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="#dfe4cd">body_markdown + metadata</text>
+              <line x1="150" y1="108" x2="150" y2="128" stroke="#6f7a3f" stroke-width="1.8" marker-end="url(#a2)"/>
+              <rect x="48" y="130" width="204" height="40" rx="9" fill="#fff" stroke="#6f7a3f" stroke-width="1.5"/>
+              <text x="150" y="146" text-anchor="middle" font-family="var(--mono)" font-size="9.5" fill="#475226">content = clean markdown</text>
+              <text x="150" y="160" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#6f7a3f">+ Defuddle-enriched metadata</text>
+              <line x1="150" y1="170" x2="55" y2="212" stroke="#6f7a3f" stroke-width="1.5" marker-end="url(#a2)"/>
+              <line x1="150" y1="170" x2="150" y2="212" stroke="#6f7a3f" stroke-width="1.5" marker-end="url(#a2)"/>
+              <line x1="150" y1="170" x2="245" y2="212" stroke="#6f7a3f" stroke-width="1.8" marker-end="url(#a2)"/>
+              <rect x="6" y="214" width="88" height="38" rx="8" fill="#eef2e2" stroke="#6f7a3f"/>
+              <text x="50" y="229" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#475226">MCP — cache hit</text>
+              <text x="50" y="241" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#475226">serves, no network</text>
+              <rect x="106" y="214" width="88" height="38" rx="8" fill="#eef2e2" stroke="#6f7a3f"/>
+              <text x="150" y="237" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#475226">TDT / RAG</text>
+              <rect x="206" y="214" width="88" height="38" rx="8" fill="#eef2e2" stroke="#6f7a3f" stroke-width="1.5"/>
+              <text x="250" y="229" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#475226">cache "default"</text>
+              <text x="250" y="241" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#475226">brotli · encrypted</text>
+            </svg>
+          </div>
+        </div>
+        <figcaption>
+          The regex metadata parser left the fetcher; one Defuddle parse at the corpus boundary feeds body,
+          metadata, the fidelity log, the cache, and every consumer. The cache moved from opt-in scopes to the
+          default read path — a posture change amended into the constitution first (see <a href="#privacy">cache posture</a>).
+        </figcaption>
+      </figure>
+      <div class="legend">
+        <span><span class="dot d-new"></span>added — the parse, clean output, default cache</span>
+        <span><span class="dot d-warn"></span>removed / before — regex path, raw HTML, live-only reads</span>
+        <span><span class="dot d-base"></span>unchanged — fetch, classify, hash, exclusions</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FLOW ================= -->
+  <section id="flow">
+    <h2>End-to-end: where the parse sits and what it feeds</h2>
+    <figcaption>
+      The fetcher slims to fetch + classify + hash. The corpus does the single parse, then fans the result
+      three ways: served content, the <code>webpage_fetch</code> fidelity record, and the brotli-compressed
+      cache row. Excluded pages (auth / paywall / dead / non-HTML) carry no content and never enter the cache —
+      the login wall stays the privacy filter.
+    </figcaption>
+    <div class="figure">
+      <figure>
+        <svg viewBox="0 0 1000 330" role="img" aria-label="Shipped end-to-end data flow: stored metadata row, slimmed fetcher, single Defuddle parse at the corpus boundary, brotli-compressed default-scope cache, and served consumers">
+          <defs>
+            <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
+              <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#6b6c6e"/>
+            </marker>
+            <marker id="ag" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
+              <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#6f7a3f"/>
+            </marker>
+            <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3.2" orient="auto">
+              <path d="M0,0 L7,3.2 L0,6.4 Z" fill="#9c3a26"/>
+            </marker>
+          </defs>
+
+          <!-- metadata row -->
+          <rect x="10" y="142" width="106" height="52" rx="10" fill="#e7ded0" stroke="#cfc8bd"/>
+          <text x="63" y="164" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#2f3032">stored metadata</text>
+          <text x="63" y="178" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#2f3032">row (URL)</text>
+
+          <line x1="116" y1="168" x2="142" y2="168" stroke="#6b6c6e" stroke-width="1.6" marker-end="url(#ah)"/>
+
+          <!-- slimmed fetcher -->
+          <rect x="144" y="136" width="126" height="64" rx="10" fill="#fff" stroke="#cfc8bd"/>
+          <text x="207" y="156" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="#2f3032">Fetcher</text>
+          <text x="207" y="170" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#6b6c6e">fetch · classify · sha-256</text>
+          <text x="207" y="184" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#9c3a26">no metadata parse</text>
+
+          <line x1="270" y1="168" x2="296" y2="168" stroke="#6b6c6e" stroke-width="1.6" marker-end="url(#ah)"/>
+
+          <!-- raw html transient -->
+          <rect x="298" y="144" width="104" height="48" rx="9" fill="#efe6d6" stroke="#cfc8bd" stroke-dasharray="4 3"/>
+          <text x="350" y="163" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="#6b6c6e">raw HTML +</text>
+          <text x="350" y="176" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="#6b6c6e">fidelity · transient</text>
+
+          <line x1="402" y1="168" x2="428" y2="168" stroke="#6f7a3f" stroke-width="2" marker-end="url(#ag)"/>
+
+          <!-- corpus boundary container -->
+          <rect x="430" y="78" width="280" height="226" rx="12" fill="none" stroke="#6f7a3f" stroke-dasharray="6 4"/>
+          <text x="570" y="96" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="#6f7a3f" letter-spacing="0.08em">CORPUS BOUNDARY — corpus.ts · ONE PARSE</text>
+
+          <!-- parse_page -->
+          <rect x="444" y="110" width="156" height="68" rx="11" fill="#6f7a3f" stroke="#5b6534" stroke-width="1.5"/>
+          <text x="522" y="130" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="#f4f1e6" font-weight="600">parse_page</text>
+          <text x="522" y="145" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="#f4f1e6">Defuddle ×1 → markdown</text>
+          <text x="522" y="160" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="#dfe4cd">useAsync:false · final_url base</text>
+
+          <!-- outputs -->
+          <line x1="600" y1="128" x2="616" y2="122" stroke="#6f7a3f" stroke-width="1.6" marker-end="url(#ag)"/>
+          <rect x="618" y="104" width="80" height="34" rx="8" fill="#fff" stroke="#6f7a3f"/>
+          <text x="658" y="118" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#475226">body_markdown</text>
+          <text x="658" y="130" text-anchor="middle" font-family="var(--mono)" font-size="8" fill="#6f7a3f">boilerplate pruned</text>
+
+          <line x1="600" y1="158" x2="616" y2="168" stroke="#6f7a3f" stroke-width="1.6" marker-end="url(#ag)"/>
+          <rect x="618" y="156" width="80" height="46" rx="8" fill="#fff" stroke="#6f7a3f"/>
+          <text x="658" y="171" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#475226">metadata</text>
+          <text x="658" y="183" text-anchor="middle" font-family="var(--mono)" font-size="7.5" fill="#6f7a3f">title · author · published</text>
+          <text x="658" y="194" text-anchor="middle" font-family="var(--mono)" font-size="7.5" fill="#6f7a3f">site_name · lang</text>
+
+          <!-- fidelity log -->
+          <line x1="630" y1="202" x2="580" y2="240" stroke="#6f7a3f" stroke-width="1.4" marker-end="url(#ag)"/>
+          <rect x="448" y="242" width="150" height="46" rx="9" fill="#fff" stroke="#cfc8bd"/>
+          <text x="523" y="260" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="#2f3032">webpage_fetch log</text>
+          <text x="523" y="274" text-anchor="middle" font-family="var(--mono)" font-size="8" fill="#6b6c6e">fidelity + parsed metadata</text>
+
+          <!-- to CorpusContent -->
+          <line x1="710" y1="150" x2="736" y2="150" stroke="#6f7a3f" stroke-width="2" marker-end="url(#ag)"/>
+          <rect x="738" y="116" width="118" height="72" rx="10" fill="#fff" stroke="#6f7a3f" stroke-width="1.6"/>
+          <text x="797" y="136" text-anchor="middle" font-family="var(--mono)" font-size="9.5" fill="#475226">CorpusContent</text>
+          <text x="797" y="151" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#475226">.content = markdown</text>
+          <text x="797" y="165" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#475226">+ enriched metadata</text>
+          <text x="797" y="179" text-anchor="middle" font-family="var(--mono)" font-size="7.5" fill="#6f7a3f">content_hash = sha-256(HTML)</text>
+
+          <!-- consumers -->
+          <line x1="856" y1="132" x2="882" y2="84" stroke="#6f7a3f" stroke-width="1.5" marker-end="url(#ag)"/>
+          <rect x="876" y="38" width="116" height="44" rx="9" fill="#eef2e2" stroke="#6f7a3f"/>
+          <text x="934" y="56" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#475226">/query/</text>
+          <text x="934" y="69" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#475226">capture_content</text>
+
+          <line x1="856" y1="152" x2="882" y2="152" stroke="#6f7a3f" stroke-width="1.5" marker-end="url(#ag)"/>
+          <rect x="876" y="130" width="116" height="44" rx="9" fill="#eef2e2" stroke="#6f7a3f"/>
+          <text x="934" y="148" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#475226">TDT (36) /</text>
+          <text x="934" y="161" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#475226">RAG (31)</text>
+
+          <!-- cache path -->
+          <line x1="797" y1="188" x2="780" y2="234" stroke="#6f7a3f" stroke-width="1.8" marker-end="url(#ag)"/>
+          <rect x="724" y="236" width="104" height="34" rx="8" fill="#6f7a3f" stroke="#5b6534"/>
+          <text x="776" y="251" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#f4f1e6">brotli q5 compress</text>
+          <text x="776" y="263" text-anchor="middle" font-family="var(--mono)" font-size="7.5" fill="#dfe4cd">zlib built-in · sync</text>
+          <line x1="828" y1="253" x2="872" y2="253" stroke="#6f7a3f" stroke-width="1.8" marker-end="url(#ag)"/>
+          <rect x="876" y="226" width="116" height="58" rx="9" fill="#eef2e2" stroke="#6f7a3f" stroke-width="1.6"/>
+          <text x="934" y="244" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="#475226">ContentCache</text>
+          <text x="934" y="258" text-anchor="middle" font-family="var(--mono)" font-size="8" fill="#475226">encrypted · BLOB body</text>
+          <text x="934" y="272" text-anchor="middle" font-family="var(--mono)" font-size="8" fill="#475226">scope "default" · deletable</text>
+
+          <!-- deleted read_metadata -->
+          <rect x="280" y="244" width="140" height="44" rx="9" fill="#fbeae5" stroke="#9c3a26" stroke-dasharray="5 3"/>
+          <text x="350" y="262" text-anchor="middle" font-family="var(--mono)" font-size="9" fill="#9c3a26" text-decoration="line-through">read_metadata.ts</text>
+          <text x="350" y="276" text-anchor="middle" font-family="var(--mono)" font-size="8" fill="#9c3a26">✕ regex path — deleted</text>
+
+          <!-- exclusion branch -->
+          <line x1="207" y1="200" x2="207" y2="242" stroke="#9c3a26" stroke-width="1.4" stroke-dasharray="5 3" marker-end="url(#ar)"/>
+          <rect x="84" y="244" width="184" height="44" rx="9" fill="#fbeae5" stroke="#9c3a26"/>
+          <text x="176" y="262" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#9c3a26">auth / paywall / dead / non-HTML</text>
+          <text x="176" y="276" text-anchor="middle" font-family="var(--mono)" font-size="8.5" fill="#9c3a26">→ exclusion · no content · never cached</text>
+        </svg>
+        <figcaption>
+          A cache hit on a later read serves the stored markdown without touching the network; a forgotten
+          metadata row invalidates its cache row on sight, and a fresh ok page is re-checked against the
+          metadata row <em>before</em> it is cached — a forget that completes mid-fetch cannot re-cache
+          forgotten content (the 39.5 cascade's backstop, in <code>CachedCorpus</code>). The parse resolves
+          relative links against the post-redirect <code>final_url</code>; the <code>content_hash</code>
+          stays the SHA-256 of the rendered HTML — fetch fidelity, independent of the compressed markdown
+          the cache stores.
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ================= DELETED ================= -->
+  <section id="deleted">
+    <h2>What's deleted, what's repurposed</h2>
+    <figcaption>
+      Two metadata parsers for the same pages is surplus. The destructive-delete plan, executed: the regex
+      path is gone; its eval and fixtures live on as <code>main_content_eval.test.ts</code> and hold the
+      Defuddle parse to the same bar.
+    </figcaption>
+    <div class="dels">
+      <div class="box gone">
+        <h3>Deleted — no shims, no re-exports</h3>
+        <ul>
+          <li><code>redownload/read_metadata.ts</code><span class="why">the regex head-parser — superseded by the same Defuddle parse that extracts the body</span></li>
+          <li><code>redownload/read_metadata.test.ts</code><span class="why">unit tests of the deleted parser</span></li>
+          <li><code>headless_fetcher.ts</code> <code>read_metadata</code> call + <code>FetchResult.metadata</code><span class="why">the fetcher slims to fetch · classify · hash; metadata is the corpus's concern now</span></li>
+          <li><code>corpus.ts</code> regex fallback (<code>result.metadata ?? read_metadata(...)</code>)<span class="why">one parse, one source of metadata</span></li>
+        </ul>
+      </div>
+      <div class="box kept">
+        <h3>Repurposed — same fixtures, new subject</h3>
+        <ul>
+          <li><code>read_metadata_eval.test.ts</code> → <code>main_content_eval.test.ts</code><span class="why">the committed fixture pages (article, docs_with_nav, nav_heavy, aggregator) assert the Defuddle-derived title · author · published_at · site_name · lang AND that named boilerplate strings are pruned from the body — the measurable acceptance check, deterministic and offline</span></li>
+          <li><code>__fixtures__/read_metadata/</code> → <code>__fixtures__/main_content_pages/</code> + <code>main_content_fixtures.ts</code><span class="why">raw pages and expected metadata stay; expectations updated where Defuddle is richer than the regex was</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="code">
+      <div class="file-label">vscode/src/redownload/headless_fetcher.ts — the fetcher slimmed to fetch · classify · hash</div>
+<pre><code> <span class="kw">export interface</span> FetchResult {
+   outcome: FetchOutcome;
+   fidelity: FetchFidelity;
+<span class="del">   /** `&lt;meta&gt;`-derived fields parsed from the re-downloaded page; null if excluded. */</span>
+<span class="del">   metadata: PageMetadata | null;</span>
+   retry_after_ms: <span class="kw">number</span> | <span class="kw">null</span>;
+ }
+ <span class="dim">// fetch_once():</span>
+       <span class="dim">const content_hash = outcome.kind === "ok" ? sha256_hex(outcome.html) : null;</span>
+<span class="del">       const metadata = outcome.kind === "ok" ? read_metadata(outcome.html, observation.final_url) : null;</span>
+       <span class="dim">return { outcome, retry_after_ms: ..., fidelity: { ... } };</span></code></pre>
+    </div>
+  </section>
+
+  <!-- ================= PRIVACY ================= -->
+  <section id="privacy">
+    <h2>The cache posture change</h2>
+    <aside class="callout warn">
+      <span class="label">Privacy posture — the most important decision, amended first</span>
+      <p>
+        The encrypted content cache moved from <strong>opt-in, scope-named population only</strong> to
+        <strong>populated on the default read path</strong>: <code>server_manager</code> opens the cache
+        during <code>prepare()</code> and wraps the live corpus in a <code>CachedCorpus</code> under scope
+        <code>"default"</code>, so every successful re-download persists its clean markdown body locally.
+      </p>
+      <ul>
+        <li><strong>What does not change:</strong> the cache stays its own encrypted DuckDB file with its own
+          OS-keystore key; every row is deletable and rides the right-to-forget cascade (task-39.5); the
+          metadata record remains the only source of truth — the cache is derived, rebuildable, droppable.</li>
+        <li><strong>What changed:</strong> content presence is now the norm rather than the exception. The
+          <strong>user-authored amendment landed first</strong> —
+          <code>docs/decisions/default-path-content-cache.md</code> — and <code>docs/constitution.md</code>
+          and <code>CLAUDE.md</code> now describe the cache as default-populated, encrypted, derived.</li>
+        <li><strong>Never load-bearing:</strong> a cache-open failure degrades the read path to live-only
+          (the capture server still starts); per-page cache read/write failures are isolated and fall through
+          to a live re-download. A degrade can never re-key the cache.</li>
+        <li><strong>Why:</strong> the hero loop (TDT, then RAG) reads the corpus repeatedly; re-downloading
+          the same public page on every read is slower, noisier toward remote hosts, and loses fetch-time
+          fidelity. One politeness-gated fetch, then local encrypted reads.</li>
+      </ul>
+    </aside>
+  </section>
+
+  <!-- ================= DECISIONS ================= -->
+  <section id="decisions">
+    <h2>Key design decisions</h2>
+    <figcaption>Each decision below is shipped; the rule and its why are what review verified against the source.</figcaption>
+
+    <div class="decisions">
+      <article class="dcard">
+        <span class="tag">Decision · one parse</span>
+        <h3>One Defuddle parse yields body AND metadata</h3>
+        <div class="rule">
+          <b>do</b><div><code>parse_page(html, url)</code> returns <code>{ body_markdown, metadata }</code>; <code>read_metadata.ts</code> is deleted, not wrapped.</div>
+          <b>why</b><div>Defuddle already parses the full document to extract the body; its metadata (title, author, published, site, language) is richer than the regex head-scan. Two parsers over the same bytes is surplus.</div>
+          <b>honors</b><div>Constitution: no shims, no duplicate code paths. The fetcher slims to fetch · classify · hash.</div>
+        </div>
+      </article>
+
+      <article class="dcard priv">
+        <span class="tag">Decision · privacy-critical</span>
+        <h3>Force <code>useAsync: false</code></h3>
+        <div class="rule">
+          <b>do</b><div>Pass <code>{ markdown: true, useAsync: false }</code> to Defuddle explicitly.</div>
+          <b>why</b><div>Defuddle's async extractors default to fetching content from third-party APIs when local extraction is thin.</div>
+          <b>honors</b><div>Bergamot is strictly local-only. This is a privacy gate, not a tuning default — it must never silently flip on.</div>
+        </div>
+      </article>
+
+      <article class="dcard priv">
+        <span class="tag">Decision · privacy posture</span>
+        <h3>Cache on the default path, scope <code>"default"</code></h3>
+        <div class="rule">
+          <b>do</b><div><code>enable_default_path_caching()</code> (run from async <code>prepare()</code>) opens the encrypted <code>ContentCache</code> and wraps the live corpus in <code>CachedCorpus(db, live, cache, "default")</code>; <code>ServerConfig</code> gains optional <code>secrets</code> + <code>storage_base</code> — absent (headless standalone, tests), the read path stays live-only and caches nothing.</div>
+          <b>why</b><div>Repeated corpus reads (TDT, RAG, MCP) should not re-fetch public pages they already pulled. Exclusions still never enter the cache.</div>
+          <b>amended</b><div><code>docs/decisions/default-path-content-cache.md</code> — the user-authored constitution amendment landed before this shipped (<a href="#privacy">cache posture</a>).</div>
+        </div>
+      </article>
+
+      <article class="dcard">
+        <span class="tag">Decision · storage format</span>
+        <h3>Brotli quality-5 BLOB body, not zstd, not plaintext</h3>
+        <div class="rule">
+          <b>do</b><div><code>content</code> is <code>BLOB NOT NULL</code> holding <code>brotliCompressSync</code> output at <code>BROTLI_PARAM_QUALITY: 5</code> with a <code>SIZE_HINT</code>; reads decompress a <code>DuckDBBlobValue</code> (anything else is a stale pre-brotli file — wipe, never ALTER).</div>
+          <b>why</b><div>The VS Code extension host runs Node 20 — built-in zstd lands only in Node 22.15. Brotli is always present, zero-dependency, synchronous. Quality 5, not the default 11: the compress runs on the extension-host event loop per put, and the degrade path can hand it multi-MB raw HTML — q5 is ~10x faster with near-identical prose ratios.</div>
+          <b>note</b><div><code>content_hash</code> stays the SHA-256 of the rendered HTML (fetch fidelity) — deliberately independent of the stored compressed body.</div>
+        </div>
+      </article>
+
+      <article class="dcard">
+        <span class="tag">Decision · integration mechanic</span>
+        <h3>Absolute-path require of <code>defuddle/node</code></h3>
+        <div class="rule">
+          <b>do</b><div><code>require.resolve("defuddle")</code> finds the package main; the sibling <code>node.js</code> is then <code>require</code>d by absolute path, cached once per process (<code>load_defuddle</code>).</div>
+          <b>why</b><div><code>defuddle/node</code> exposes only an ESM <code>import</code> export condition, so a CommonJS <code>require("defuddle/node")</code> is rejected by the exports map — and a dynamic <code>import()</code> is no escape: under the CommonJS module target (the extension host and jest) it transpiles to that same rejected require.</div>
+          <b>note</b><div>The package's <code>"."</code> export carries a <code>require</code> condition, so its main resolves; the sibling <code>node.js</code> file is itself CommonJS — requiring it by absolute path sidesteps the exports gate in both the extension host and jest.</div>
+        </div>
+      </article>
+
+      <article class="dcard">
+        <span class="tag">Decision · failure mode</span>
+        <h3>Degrade to raw HTML, never lose the page</h3>
+        <div class="rule">
+          <b>do</b><div>On an empty extraction or a parser throw, <code>body_markdown</code> is the raw HTML — not markdown — with URL-as-title metadata. Via the default-path cache, that raw HTML is what gets compressed and cached.</div>
+          <b>why</b><div>A noisy page is still better than a dropped page; extraction is an improvement, not a gate.</div>
+          <b>log</b><div><code>console.error("main-content extraction failed:", error)</code> — generic and URL-free; the extension-host console persists to plaintext logs and URLs are sensitive browsing metadata, per <code>corpus.ts</code>'s convention.</div>
+        </div>
+      </article>
+
+      <article class="dcard priv">
+        <span class="tag">Decision · derived tier</span>
+        <h3>Cache failures isolated; the forget race closed</h3>
+        <div class="rule">
+          <b>do</b><div><code>CachedCorpus</code> treats the cache as derived: a read failure logs (session id only) and falls through to a live re-download; a write failure is non-fatal. Before caching a fresh ok page, the metadata row is re-checked (<code>cache_ok</code>).</div>
+          <b>why</b><div>A forget can complete during the seconds-long live fetch; writing the page back afterwards would re-encode forgotten content — a right-to-forget violation. And a corrupt or pre-brotli store must never deny a page the live corpus can still serve.</div>
+          <b>note</b><div>A page whose metadata row is gone has its stale cache row deleted on sight — the 39.5 cascade's backstop, not its replacement.</div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ================= CODE / WIRING ================= -->
+  <section id="code">
+    <h2>The wiring, concretely</h2>
+    <figcaption>
+      API verified empirically against the live package: the <code>Defuddle</code> named export from
+      <code>defuddle/node</code> is a <em>function</em> — <code>Defuddle(input, url?, options?)</code> returning
+      <code>Promise&lt;DefuddleResponse&gt;</code> — and with <code>{ markdown: true }</code> the markdown lives
+      on <code>result.content</code>, alongside <code>title</code> / <code>author</code> / <code>published</code> /
+      <code>site</code> / <code>language</code> — <code>language</code> carries the <code>&lt;html lang&gt;</code>
+      attribute (verified: <code>lang="fr"</code> returns <code>language: "fr"</code>), so the single parse yields
+      all five metadata fields directly.
+    </figcaption>
+
+    <div class="code">
+      <div class="file-label">vscode/src/redownload/main_content.ts — the one parse, as shipped</div>
+<pre><code><span class="cm">// defuddle/node exposes only an ESM "import" export condition: a CommonJS</span>
+<span class="cm">// require("defuddle/node") is rejected by the exports map, and a dynamic</span>
+<span class="cm">// import() is no escape — under the CommonJS target (extension host and jest)</span>
+<span class="cm">// it transpiles to that same rejected require. The package main ("." has a</span>
+<span class="cm">// require condition) resolves; its sibling node.js is itself CommonJS —</span>
+<span class="cm">// requiring it by absolute path sidesteps the exports gate.</span>
+<span class="kw">function</span> <span class="fn">load_defuddle</span>(): DefuddleModule {
+  <span class="kw">if</span> (!defuddle_module) {
+    <span class="mark"><span class="kw">const</span> main_path = require.<span class="fn">resolve</span>(<span class="str">"defuddle"</span>);</span>
+    <span class="mark"><span class="kw">const</span> node_path = path.<span class="fn">join</span>(path.<span class="fn">dirname</span>(main_path), <span class="str">"node.js"</span>);</span>
+    defuddle_module = <span class="fn">require</span>(node_path) <span class="kw">as</span> DefuddleModule; <span class="cm">// cached per process</span>
+  }
+  <span class="kw">return</span> defuddle_module;
+}
+
+<span class="kw">export async function</span> <span class="fn">parse_page</span>(html: <span class="kw">string</span>, url: <span class="kw">string</span>): <span class="kw">Promise</span>&lt;ParsedPage&gt; {
+  <span class="kw">try</span> {
+    <span class="kw">const</span> { Defuddle } = <span class="fn">load_defuddle</span>();
+    <span class="kw">const</span> response = <span class="kw">await</span> <span class="fn">Defuddle</span>(html, url, { markdown: <span class="kw">true</span>, <span class="mark">useAsync: <span class="kw">false</span></span> });
+    <span class="kw">const</span> body = response.content.<span class="fn">trim</span>();
+    <span class="kw">return</span> {
+      body_markdown: body.length &gt; 0 ? body : html, <span class="cm">// empty extraction → raw HTML</span>
+      metadata: {
+        title: response.title.<span class="fn">trim</span>() || url,
+        site_name: <span class="fn">or_null</span>(response.site),
+        author: <span class="fn">or_null</span>(response.author),
+        published_at: <span class="fn">or_null</span>(response.published),
+        lang: <span class="fn">or_null</span>(response.language), <span class="cm">// &lt;html lang&gt; — surfaced by Defuddle directly</span>
+      },
+    };
+  } <span class="kw">catch</span> (error) {
+    <span class="cm">// Degrade rather than lose the page. Log without the URL — the extension</span>
+    <span class="cm">// host console persists to plaintext and URLs are sensitive metadata.</span>
+    console.<span class="fn">error</span>(<span class="str">"main-content extraction failed:"</span>, error);
+    <span class="kw">return</span> { body_markdown: html, metadata: { title: url, site_name: <span class="kw">null</span>,
+      author: <span class="kw">null</span>, published_at: <span class="kw">null</span>, lang: <span class="kw">null</span> } };
+  }
+}</code></pre>
+    </div>
+
+    <div class="code">
+      <div class="file-label">vscode/src/redownload/corpus.ts — one branch on the ok outcome; the parse feeds content, metadata, and the fidelity log</div>
+<pre><code>  <span class="dim">// get_content():</span>
+    <span class="dim">const result = await this.fetcher.fetch(capture.url);</span>
+    <span class="kw">if</span> (result.outcome.kind === <span class="str">"ok"</span>) {
+      <span class="cm">// Relative links resolve against the post-redirect final URL the</span>
+      <span class="cm">// content was actually served from.</span>
+      <span class="kw">const</span> parsed = <span class="kw">await</span> <span class="fn">parse_page</span>(result.outcome.html, <span class="mark">result.outcome.final_url</span>);
+      <span class="kw">await</span> <span class="kw">this</span>.<span class="fn">record</span>(page_session_id, capture.url, result, parsed.metadata);
+      <span class="kw">return</span> { outcome: <span class="str">"ok"</span>, content: {
+        <span class="dim">page_session_id, url: capture.url,</span>
+        title: parsed.metadata.title,
+        content: parsed.body_markdown, <span class="cm">// markdown (raw HTML if extraction degraded)</span>
+        <span class="dim">site_name, author, published_at, lang,  // Defuddle-derived</span>
+        <span class="dim">content_hash: result.fidelity.content_hash,  // still sha-256 of rendered HTML</span>
+      } };
+    }
+    <span class="cm">// Excluded outcomes carry no content to parse; the log records the exclusion.</span>
+    <span class="kw">await</span> <span class="kw">this</span>.<span class="fn">record</span>(page_session_id, capture.url, result, <span class="kw">null</span>);
+    <span class="dim">return { outcome: result.outcome.kind, ... };</span></code></pre>
+    </div>
+
+    <div class="code">
+      <div class="file-label">vscode/src/redownload/content_cache.ts — BLOB column, brotli q5 round-trip, lock-safe open</div>
+<pre><code><span class="cm">// Quality 5, not the default 11: the compress is synchronous on the extension-</span>
+<span class="cm">// host event loop per put, and the degrade path can hand it multi-MB raw HTML —</span>
+<span class="cm">// q5 is ~10x faster with near-identical prose ratios.</span>
+<span class="kw">function</span> <span class="fn">compress_content</span>(markdown: <span class="kw">string</span>): DuckDBBlobValue {
+  <span class="kw">const</span> bytes = Buffer.<span class="fn">from</span>(markdown, <span class="str">"utf8"</span>);
+  <span class="kw">const</span> compressed = zlib.<span class="fn">brotliCompressSync</span>(bytes, { params: {
+    <span class="mark">[zlib.constants.BROTLI_PARAM_QUALITY]: 5,</span>
+    [zlib.constants.BROTLI_PARAM_SIZE_HINT]: bytes.length,
+  } });
+  <span class="kw">return</span> <span class="fn">blobValue</span>(compressed);
+}
+  <span class="dim">// schema: "content BLOB NOT NULL"  — brotli-compressed markdown (raw HTML if degraded)</span>
+  <span class="dim">// get(): zlib.brotliDecompressSync(value.bytes).toString("utf8") — a non-BLOB read</span>
+  <span class="dim">//        means a stale pre-brotli cache file: wipe, never ALTER</span>
+
+<span class="cm">// open_content_cache(): release the handle if schema creation fails — a leaked</span>
+<span class="cm">// file lock would block the right-to-forget cascade's later open of the same file.</span>
+  <span class="kw">await</span> db.<span class="fn">init</span>();
+  <span class="kw">try</span> { <span class="kw">await</span> <span class="fn">create_content_cache_schema</span>(db); }
+  <span class="kw">catch</span> (error) { <span class="kw">await</span> db.<span class="fn">close</span>(); <span class="kw">throw</span> error; }
+  <span class="kw">return new</span> <span class="fn">ContentCache</span>(db);</code></pre>
+    </div>
+
+    <div class="code">
+      <div class="file-label">vscode/src/redownload/cached_corpus.ts — the default-path wrap: hit, miss, degrade, and the forget race</div>
+<pre><code><span class="kw">async</span> <span class="fn">get_content</span>(page_session_id: <span class="kw">string</span>): <span class="kw">Promise</span>&lt;CorpusEntry | <span class="kw">null</span>&gt; {
+  <span class="kw">const</span> capture = <span class="kw">await</span> <span class="fn">get_webpage_capture</span>(<span class="kw">this</span>.metadata_db, page_session_id);
+  <span class="kw">if</span> (!capture) { <span class="kw">await</span> <span class="kw">this</span>.<span class="fn">evict_stale</span>(page_session_id); <span class="kw">return null</span>; } <span class="cm">// 39.5 backstop</span>
+  <span class="kw">const</span> cached = <span class="kw">await</span> <span class="kw">this</span>.<span class="fn">read_cache</span>(page_session_id); <span class="cm">// read failure → logged miss → live</span>
+  <span class="kw">if</span> (cached) <span class="kw">return</span> { outcome: <span class="str">"ok"</span>, content: cached };  <span class="cm">// hit: no network</span>
+  <span class="kw">const</span> entry = <span class="kw">await</span> <span class="kw">this</span>.corpus.<span class="fn">get_content</span>(page_session_id);
+  <span class="kw">if</span> (entry &amp;&amp; entry.outcome === <span class="str">"ok"</span>) <span class="kw">await</span> <span class="kw">this</span>.<span class="fn">cache_ok</span>(page_session_id, entry.content);
+  <span class="kw">return</span> entry; <span class="cm">// exclusions re-classify on every read — never cached</span>
+}
+<span class="kw">private async</span> <span class="fn">cache_ok</span>(page_session_id: <span class="kw">string</span>, content: CorpusContent): <span class="kw">Promise</span>&lt;<span class="kw">void</span>&gt; {
+  <span class="cm">// A forget can complete during the seconds-long live fetch; writing the page</span>
+  <span class="cm">// back afterwards would re-encode forgotten content. Re-check the metadata row.</span>
+  <span class="mark"><span class="kw">const</span> still_present = <span class="kw">await</span> <span class="fn">get_webpage_capture</span>(<span class="kw">this</span>.metadata_db, page_session_id);</span>
+  <span class="kw">if</span> (!still_present) <span class="kw">return</span>;
+  <span class="kw">try</span> { <span class="kw">await</span> <span class="kw">this</span>.cache.<span class="fn">put</span>(content, <span class="kw">this</span>.scope); }
+  <span class="kw">catch</span> (error) { console.<span class="fn">warn</span>(<span class="str">`content cache write failed for ${page_session_id}:`</span>, error); } <span class="cm">// non-fatal</span>
+}</code></pre>
+    </div>
+
+    <div class="code">
+      <div class="file-label">vscode/src/server/server_manager.ts — the default read path opens the cache during prepare()</div>
+<pre><code> <span class="kw">export interface</span> ServerConfig {
+   duck_db: DuckDB;
+   <span class="cm">/** Source of the cache's encryption key. Set with storage_base and no injected</span>
+<span class="cm">       corpus → the default read path caches under scope "default". Absent</span>
+<span class="cm">       (headless standalone, tests) → the read path stays live-only. */</span>
+   secrets?: vscode.SecretStorage;
+   storage_base?: <span class="kw">string</span>;
+   <span class="dim">...</span>
+ }
+ <span class="dim">// constructor: this.base_corpus = config.content_corpus ?? this.build_redownload_corpus();</span>
+ <span class="dim">//              this.content_corpus = this.base_corpus;   // the wrap is reversible</span>
+
+ <span class="kw">private async</span> <span class="fn">enable_default_path_caching</span>(): <span class="kw">Promise</span>&lt;<span class="kw">void</span>&gt; {
+   <span class="kw">if</span> (<span class="kw">this</span>.config.content_corpus) <span class="kw">return</span>;                  <span class="cm">// injected corpus: bypass</span>
+   <span class="kw">if</span> (!<span class="kw">this</span>.config.secrets || !<span class="kw">this</span>.config.storage_base) <span class="kw">return</span>;
+   <span class="kw">if</span> (<span class="kw">this</span>.content_cache) <span class="kw">return</span>;                          <span class="cm">// idempotent</span>
+   <span class="kw">try</span> {
+     <span class="cm">// Lazy import: content_cache.ts pulls in `vscode`, absent in the standalone.</span>
+     <span class="kw">const</span> { open_content_cache } = <span class="kw">await import</span>(<span class="str">"../redownload/content_cache"</span>);
+     <span class="kw">this</span>.content_cache = <span class="kw">await</span> <span class="fn">open_content_cache</span>(<span class="kw">this</span>.config.secrets, <span class="kw">this</span>.config.storage_base);
+     <span class="mark"><span class="kw">this</span>.content_corpus = <span class="kw">new</span> <span class="fn">CachedCorpus</span>(<span class="kw">this</span>.config.duck_db, <span class="kw">this</span>.base_corpus, <span class="kw">this</span>.content_cache, <span class="str">"default"</span>);</span>
+   } <span class="kw">catch</span> (error) {
+     <span class="cm">// Cache-open failure degrades to the uncached live corpus — the cache is a</span>
+     <span class="cm">// derived tier, and a degrade can never re-key anything.</span>
+     console.<span class="fn">warn</span>(<span class="str">"Bergamot: content cache unavailable; serving re-downloads live without caching."</span>, ...);
+   }
+ }
+
+ <span class="kw">async</span> <span class="fn">prepare</span>(): <span class="kw">Promise</span>&lt;<span class="kw">void</span>&gt; {
+   <span class="kw">await this</span>.<span class="fn">enable_default_path_caching</span>(); <span class="cm">// start() awaits prepare()</span>
+   <span class="kw">this</span>.<span class="fn">setup_routes</span>();
+   <span class="kw">this</span>.<span class="fn">setup_queue_processor</span>();
+ }
+ <span class="dim">// start(): no port bound → release_content_cache() — a failed start cannot leak the lock</span>
+ <span class="dim">// stop():  server, browser pool, then release_content_cache() — the forget command's</span>
+ <span class="dim">//          later open can attach the file; the swap back to base_corpus is restored</span></code></pre>
+    </div>
+    <figcaption>
+      Caching is enabled inside async <code>prepare()</code>, which <code>start()</code> awaits; the constructor
+      keeps the unwrapped <code>base_corpus</code> so enabling is idempotent and teardown restores the live path.
+      A failed <code>start()</code> and <code>stop()</code> both close the cache handle (releasing its DuckDB file
+      lock), and <code>get_content_cache()</code> exposes the one open handle to the right-to-forget cascade.
+      Injected test corpora (<code>config.content_corpus</code>) bypass the wrap entirely.
+    </figcaption>
+  </section>
+
+  <!-- ================= EXAMPLE ================= -->
+  <section id="example">
+    <h2>Before / after — a noisy page through the parse</h2>
+    <figcaption>
+      A real input→output pair, run through Defuddle and reproduced verbatim: header/nav and footer
+      are pruned; the article body survives as markdown. This — not the raw HTML — is what gets
+      brotli-compressed into the cache and served to every consumer. The one exception: when extraction
+      comes back empty or the parser throws, the body is the raw HTML instead, and that raw HTML is
+      what gets cached.
+    </figcaption>
+    <div class="io">
+      <div class="col in">
+        <h3>in — raw re-downloaded HTML</h3>
+<pre><span class="strike">&lt;header&gt;&lt;nav&gt;Home About&lt;/nav&gt;&lt;/header&gt;</span>
+&lt;main&gt;&lt;article&gt;&lt;h1&gt;<span class="keep">The Real Title</span>&lt;/h1&gt;
+&lt;p&gt;<span class="keep">This is the substantive first paragraph of the actual article body that matters.</span>&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;<span class="keep">bullet one</span>&lt;/li&gt;&lt;li&gt;<span class="keep">bullet two</span>&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;<span class="keep">Second paragraph with</span> &lt;a href="/y"&gt;<span class="keep">a link</span>&lt;/a&gt; <span class="keep">and</span> &lt;strong&gt;<span class="keep">bold</span>&lt;/strong&gt;.&lt;/p&gt;
+&lt;/article&gt;&lt;/main&gt;
+<span class="strike">&lt;footer&gt;Copyright 2026&lt;/footer&gt;</span></pre>
+      </div>
+      <div class="gut"><span>→</span></div>
+      <div class="col out">
+        <h3>out — clean markdown (verbatim Defuddle output)</h3>
+<pre><span class="keep">## The Real Title</span>
+
+<span class="keep">This is the substantive first paragraph of the actual article body that matters.</span>
+
+<span class="keep">- bullet one</span>
+<span class="keep">- bullet two</span>
+
+<span class="keep">Second paragraph with [a link](https://example.com/y) and **bold**.</span></pre>
+      </div>
+    </div>
+    <figcaption>
+      Three behaviors to notice: Defuddle demotes the title heading, so the <code>&lt;h1&gt;</code> emerges as
+      <code>##</code>; nav and footer are pruned; links and emphasis are preserved, with the relative
+      <code>/y</code> resolved against the post-redirect <code>final_url</code>. This is what TDT, RAG, the
+      cache, and the MCP tool now read.
+    </figcaption>
+  </section>
+
+  <!-- ================= SPLIT ================= -->
+  <section id="split">
+    <h2>Task split — two tasks, two commits, one review</h2>
+    <figcaption>
+      The parse (extraction + metadata) advances UNDERSTAND; the cache posture and storage format advance
+      STORE. They landed as consecutive commits — <code>75cf45b feat(31.5)</code> then
+      <code>f1d175d feat(39.10)</code> — because the cache stores what the parse produces; each task carries
+      its own intention-tree justification and acceptance checks.
+    </figcaption>
+    <div class="split">
+      <div class="box a">
+        <span class="pill">task-31.5 · understand</span>
+        <h3>Parts 1 + 2 — the parse</h3>
+        <ul>
+          <li><code>main_content.ts</code> — <code>parse_page</code>: Defuddle ×1 → <code>body_markdown</code> + metadata; absolute-path require of <code>defuddle/node</code></li>
+          <li><code>corpus.ts</code> wiring: one branch on <code>ok</code>; content + metadata + <code>webpage_fetch</code> record from the one parse, against <code>final_url</code></li>
+          <li>Deleted <code>read_metadata.ts</code>; slimmed <code>FetchResult</code> / the fetcher</li>
+          <li><code>main_content_eval.test.ts</code> + <code>__fixtures__/main_content_pages/</code> hold <code>parse_page</code>'s metadata and pruning to the fixture bar</li>
+        </ul>
+      </div>
+      <div class="box b">
+        <span class="pill">task-39.10 · store</span>
+        <h3>Parts 3 + 4 — persist it</h3>
+        <ul>
+          <li><code>server_manager.ts</code>: <code>enable_default_path_caching()</code> in <code>prepare()</code>; wraps the live corpus in <code>CachedCorpus</code>, scope <code>"default"</code>; releases the handle on <code>stop()</code> and failed <code>start()</code></li>
+          <li><code>ServerConfig</code> gains optional <code>secrets</code> + <code>storage_base</code>; absent → live-only</li>
+          <li><code>content_cache.ts</code>: <code>content</code> → BLOB, brotli quality-5 compress/decompress round-trip</li>
+          <li>Constitution amended first: <code>docs/decisions/default-path-content-cache.md</code> (user-authored); <code>CLAUDE.md</code> updated to match</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= AC ================= -->
+  <section id="ac">
+    <h2>Acceptance criteria mapping</h2>
+    <table class="ac">
+      <thead><tr><th>Owner</th><th>Criterion</th><th>How it is met</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="own">31.5 · AC#1</span></td>
+          <td>Re-downloaded HTML passes through main-content extraction (prune nav/footer/aside/ad/social) before any LLM step</td>
+          <td>The parse lands in <code>corpus.ts</code>'s <code>get_content</code>, ahead of every consumer. No LLM step exists upstream of it.</td>
+          <td><span class="st done">met — 31.5</span></td>
+        </tr>
+        <tr>
+          <td><span class="own">31.5 · AC#2</span></td>
+          <td>Extracted markdown measurably cleaner (less boilerplate) than raw-HTML output on sample noisy pages</td>
+          <td><code>main_content_eval.test.ts</code> asserts, per committed fixture page, that the article body survives in the markdown and named boilerplate strings are pruned — deterministic and offline (<code>useAsync: false</code>).</td>
+          <td><span class="st done">met — 31.5</span></td>
+        </tr>
+        <tr>
+          <td><span class="own">31.5 · AC#3</span></td>
+          <td>Neutral-or-better retrieval quality on the harness</td>
+          <td>The RAG eval harness (task-31.1) does not exist yet and is gated later. Carried forward as a post-harness verification under 31.1.</td>
+          <td><span class="st def">deferred → 31.1</span></td>
+        </tr>
+        <tr>
+          <td><span class="own">31.5 · enrich</span></td>
+          <td>Defuddle-derived metadata at least matches the regex parser on the committed fixture set</td>
+          <td>The same eval asserts title · author · published_at · site_name · lang for every fixture page (article, docs_with_nav, nav_heavy, aggregator) against <code>parse_page</code>'s output.</td>
+          <td><span class="st done">met — 31.5</span></td>
+        </tr>
+        <tr>
+          <td><span class="own">39.10</span></td>
+          <td>Default read path populates and serves the cache</td>
+          <td><code>cached_corpus.test.ts</code>: the second read is served from the cache without a live fetch; exclusions never write a row and re-classify on every read; a forgotten page's stale row is purged on sight; rows attribute to scope <code>"default"</code>.</td>
+          <td><span class="st done">met — 39.10</span></td>
+        </tr>
+        <tr>
+          <td><span class="own">39.10</span></td>
+          <td>Body round-trips through brotli byte-identically, encrypted at rest</td>
+          <td><code>content_cache.test.ts</code>: <code>put</code> then <code>get</code> returns the exact markdown string (incl. multi-byte UTF-8 and 1MB+ bodies); the stored column is a brotli BLOB; no plaintext page content appears in the cache file or WAL; <code>content_hash</code> still equals the sha-256 of the rendered HTML.</td>
+          <td><span class="st done">met — 39.10</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <figcaption>Everything except AC#3 is proven by deterministic, offline, colocated tests; AC#3 waits for the harness (31.1) and is explicitly carried forward.</figcaption>
+  </section>
+
+  <!-- ================= SCOPE ================= -->
+  <section id="scope">
+    <h2>Scope boundaries</h2>
+    <div class="scope">
+      <div class="box in">
+        <h3><span class="dot d-new"></span>IN — these two tasks</h3>
+        <ul class="in">
+          <li>The parse module <span class="m">main_content.ts · parse_page</span></li>
+          <li>Corpus wiring: content + metadata + fidelity log from one parse <span class="m">corpus.ts · final_url base</span></li>
+          <li>Delete the regex metadata path <span class="m">read_metadata.ts · fetcher slimming</span></li>
+          <li>Default-scope cache on the read path <span class="m">server_manager.ts · CachedCorpus "default"</span></li>
+          <li>Brotli quality-5 BLOB body column <span class="m">content_cache.ts · zlib built-in</span></li>
+          <li>Dependencies <span class="m">defuddle · linkedom</span></li>
+          <li>Repurposed metadata + pruning eval, colocated tests <span class="m">__fixtures__/main_content_pages/</span></li>
+        </ul>
+      </div>
+      <div class="box out">
+        <h3><span class="dot d-warn"></span>OUT — YAGNI / other tasks</h3>
+        <ul class="out">
+          <li>Structure-aware chunking <span class="m">task-31.3</span></li>
+          <li>The LLM contextual-situating step <span class="m">task-31.3</span></li>
+          <li>Embeddings &amp; the vector store <span class="m">task-31</span></li>
+          <li>The RAG eval harness <span class="m">task-31.1</span></li>
+          <li>Cache eviction / size budgets — rows are deletable; budgets wait for evidence <span class="m">YAGNI</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <aside class="callout">
+      <span class="label">Shipped</span>
+      <p>
+        One Defuddle parse at the corpus boundary produces the clean markdown body and the page metadata,
+        deletes the duplicate regex parser, and — via the default-scope <code>CachedCorpus</code> — persists
+        every ok re-download as an encrypted, brotli-compressed (quality 5), deletable cache row. The three
+        sign-offs held: <code>useAsync: false</code> (privacy gate), the default-populated cache (user-authored
+        constitution amendment, <code>docs/decisions/default-path-content-cache.md</code>, landed first), and
+        the brotli BLOB format (Node 20 extension host — no built-in zstd). AC#3 ships later with the harness.
+      </p>
+    </aside>
+  </section>
+
+  <footer>
+    Implementation companion for task-31.5 + task-39.10 · Bergamot RAG pipeline Phase B ·
+    shipped: 75cf45b feat(31.5), f1d175d feat(39.10) · sources: main_content.ts, corpus.ts,
+    headless_fetcher.ts, content_cache.ts, cached_corpus.ts, server_manager.ts,
+    main_content_eval.test.ts, docs/decisions/default-path-content-cache.md · refreshed 2026-06-10
+  </footer>
+
+</main>
+</body>
+</html>

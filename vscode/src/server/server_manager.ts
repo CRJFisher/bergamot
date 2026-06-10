@@ -20,7 +20,7 @@ import { dev_log, is_dev_log_enabled, is_browser_dev_stage, format_error_detail 
 import { persist_replay_visit } from '../visit_replay';
 import { BrowserPool } from '../redownload/browser_pool';
 import { PolitenessGate } from '../redownload/politeness_gate';
-import { HeadlessFetcher } from '../redownload/headless_fetcher';
+import { HeadlessFetcher, Fetcher } from '../redownload/headless_fetcher';
 import { ReDownloadCorpus, ContentCorpus } from '../redownload/corpus';
 import { CachedCorpus } from '../redownload/cached_corpus';
 // Type-only: the value side of content_cache.ts imports `vscode`, which the
@@ -69,6 +69,12 @@ export interface ServerConfig {
    */
   content_corpus?: ContentCorpus;
   /**
+   * Fetcher backing the default re-download corpus. Defaults to a stealth
+   * headless browser fetcher; injectable so tests can drive the cached read
+   * path without launching Chromium. Ignored when {@link content_corpus} is set.
+   */
+  fetcher?: Fetcher;
+  /**
    * Surfaced once when the re-download browser's one-time download starts
    * (packaged installs ship no Chromium); the host shows a progress
    * notification. Until it completes the read path serves 503 "unavailable".
@@ -96,8 +102,11 @@ export class ServerManager {
   private server?: Server;
   private queue_processor?: VisitQueueProcessor;
   private app: express.Application;
-  // Reassigned once during start() when the default read path is wrapped in the
-  // caching corpus; route handlers read it per-request, so the swap is safe.
+  /** The unwrapped live (or injected) read path. */
+  private readonly base_corpus: ContentCorpus;
+  // The active read path: base_corpus, or a CachedCorpus over it once default-
+  // path caching is enabled. Route handlers read it per-request, so the swap
+  // (and its reversal on teardown) is safe.
   private content_corpus: ContentCorpus;
   /** Set only when this manager owns the default re-download browser. */
   private browser_pool?: BrowserPool;
@@ -110,16 +119,20 @@ export class ServerManager {
 
   constructor(private config: ServerConfig) {
     this.app = express();
-    this.content_corpus = config.content_corpus ?? this.build_redownload_corpus();
+    this.base_corpus = config.content_corpus ?? this.build_redownload_corpus();
+    this.content_corpus = this.base_corpus;
     this.setup_middleware();
   }
 
   /**
    * Builds the default content read path: a stealth headless re-download corpus.
    * The browser launches lazily on the first content request and is closed on
-   * {@link stop}.
+   * {@link stop}. An injected fetcher (tests) drives the corpus without a browser.
    */
   private build_redownload_corpus(): ContentCorpus {
+    if (this.config.fetcher) {
+      return new ReDownloadCorpus(this.config.duck_db, this.config.fetcher);
+    }
     this.browser_pool = new BrowserPool({
       on_browser_provisioning: this.config.on_browser_provisioning,
     });
@@ -130,14 +143,15 @@ export class ServerManager {
   /**
    * Opens the encrypted content cache and wraps the default read path so every
    * ok re-download persists under the `"default"` scope. A no-op when a corpus
-   * is injected (tests) or the cache prerequisites are absent (the headless
-   * standalone has no SecretStorage). Cache-open failure degrades to the
-   * uncached live corpus rather than failing the capture server — the cache is
-   * a derived tier, and a degrade can never re-key anything.
+   * is injected (tests), the cache prerequisites are absent (the headless
+   * standalone has no SecretStorage), or caching is already enabled. Cache-open
+   * failure degrades to the uncached live corpus rather than failing the capture
+   * server — the cache is a derived tier, and a degrade can never re-key anything.
    */
-  private async init_default_content_cache(): Promise<void> {
+  private async enable_default_path_caching(): Promise<void> {
     if (this.config.content_corpus) return;
     if (!this.config.secrets || !this.config.storage_base) return;
+    if (this.content_cache) return;
     try {
       // Lazy import: content_cache.ts pulls in `vscode`, absent in the bundled
       // standalone. This path only runs in the extension host (secrets set).
@@ -148,7 +162,7 @@ export class ServerManager {
       );
       this.content_corpus = new CachedCorpus(
         this.config.duck_db,
-        this.content_corpus,
+        this.base_corpus,
         this.content_cache,
         'default'
       );
@@ -157,6 +171,19 @@ export class ServerManager {
         'Bergamot: content cache unavailable; serving re-downloads live without caching.',
         format_error_detail(error)
       );
+    }
+  }
+
+  /**
+   * Closes the content cache (releasing its DuckDB file lock) and restores the
+   * uncached read path. Used by {@link stop} and by {@link start} when no port
+   * binds, so a failed start cannot leak the lock.
+   */
+  private async release_content_cache(): Promise<void> {
+    if (this.content_cache) {
+      await this.content_cache.close();
+      this.content_cache = undefined;
+      this.content_corpus = this.base_corpus;
     }
   }
 
@@ -348,12 +375,14 @@ export class ServerManager {
       );
     });
 
-    // Content read path: re-download the stored public URL on demand and serve
-    // its content. Authenticated/paywalled/dead/non-HTML pages report unavailable
-    // with no content — the login wall is the privacy filter. Returns the
-    // discriminated corpus entry, or null when no metadata row exists for the id.
-    // The MCP get_webpage_content tool routes here, as does TDT/RAG via the
-    // corpus interface directly.
+    // Content read path: serve the stored public URL's extracted main-content
+    // markdown — from the encrypted content cache when previously read, else by
+    // re-downloading live and caching the result under the "default" scope.
+    // Authenticated/paywalled/dead/non-HTML pages report unavailable with no
+    // content — the login wall is the privacy filter. Returns the discriminated
+    // corpus entry, or null when no metadata row exists for the id. The MCP
+    // get_webpage_content tool routes here, as does TDT/RAG via the corpus
+    // interface directly.
     this.app.get('/query/capture_content', async (req, res) => {
       const page_session_id = String(req.query.page_session_id ?? '');
       if (!page_session_id) {
@@ -436,19 +465,20 @@ export class ServerManager {
    * ```
    */
   /**
-   * Mounts routes and starts the queue processor without binding a port.
-   * Separated from {@link start} so the pipeline can be driven in-process
-   * (e.g. integration tests via supertest) without contending for a port or
-   * clobbering the shared `~/.bergamot/port.json`.
+   * Enables default-path caching, mounts routes, and starts the queue processor
+   * without binding a port. Separated from {@link start} so the pipeline can be
+   * driven in-process (e.g. integration tests via supertest) without contending
+   * for a port or clobbering the shared `~/.bergamot/port.json` — and so a test
+   * exercises the same cached read path the running server serves.
    */
-  prepare(): void {
+  async prepare(): Promise<void> {
+    await this.enable_default_path_caching();
     this.setup_routes();
     this.setup_queue_processor();
   }
 
   async start(): Promise<number> {
-    await this.init_default_content_cache();
-    this.prepare();
+    await this.prepare();
 
     let last_error: unknown;
     for (const port of SERVER_PORT_RANGE) {
@@ -462,6 +492,9 @@ export class ServerManager {
       }
     }
 
+    // No port bound: release the cache opened above so its file lock does not
+    // leak — activation will not call stop() on a failed start.
+    await this.release_content_cache();
     throw new Error(
       `Could not bind any port in range ${SERVER_PORT_RANGE[0]}-` +
         `${SERVER_PORT_RANGE[SERVER_PORT_RANGE.length - 1]}`,
@@ -485,29 +518,29 @@ export class ServerManager {
       this.queue_processor.stop();
     }
 
-    if (this.browser_pool) {
-      // Close the re-download Chromium so no headless process is leaked.
-      await this.browser_pool.close();
-    }
-
-    if (this.content_cache) {
-      // Release the cache's DuckDB file lock (checkpoints the WAL) so a later
-      // on-demand open (e.g. the forget command after shutdown) can attach it.
-      await this.content_cache.close();
-      this.content_cache = undefined;
-    }
-
+    // Stop accepting requests before tearing down the resources their handlers
+    // use, so no in-flight read lands on a closed cache or browser.
     if (this.server) {
       // Drop idle keep-alive connections so close()'s callback can fire promptly
       // instead of waiting for clients to disconnect (which can hang shutdown).
       this.server.closeAllConnections();
-      return new Promise((resolve) => {
+      await new Promise<void>((resolve) => {
         this.server!.close(() => {
           console.log('Server stopped');
           resolve();
         });
       });
+      this.server = undefined;
     }
+
+    if (this.browser_pool) {
+      // Close the re-download Chromium so no headless process is leaked.
+      await this.browser_pool.close();
+    }
+
+    // Release the cache's DuckDB file lock (checkpoints the WAL) so a later
+    // on-demand open (e.g. the forget command after shutdown) can attach it.
+    await this.release_content_cache();
   }
 
   /**

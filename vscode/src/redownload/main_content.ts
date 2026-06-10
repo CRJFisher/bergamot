@@ -49,6 +49,8 @@ let defuddle_module: DefuddleModule | null = null;
  * Loads `defuddle/node` once, cached for the process. That subpath carries the
  * HTML→markdown path but exposes only an ESM `import` export condition, so a
  * CommonJS `require("defuddle/node")` is rejected by the package's exports map.
+ * A dynamic `import()` is no escape either: under the CommonJS module target
+ * (the extension host and jest) it transpiles to that same rejected require.
  * Resolving the package's main entry (its `.` export has a `require` condition)
  * and requiring the sibling `node.js` by absolute path sidesteps the exports
  * restriction — the file itself is CommonJS — in both the extension host and jest.
@@ -79,7 +81,7 @@ export interface PageMetadata {
 
 /** The clean body and derived metadata of one parsed page. */
 export interface ParsedPage {
-  /** Main-content markdown, boilerplate pruned. */
+  /** Main-content markdown (boilerplate pruned); the raw HTML when extraction degrades. */
   body_markdown: string;
   metadata: PageMetadata;
 }

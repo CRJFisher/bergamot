@@ -44,8 +44,15 @@ export const MAIN_CONTENT_FIXTURES: MainContentFixture[] = [
       "Zstandard, usually shortened to zstd",
       "Dictionaries are another important feature",
     ],
-    // The header nav (Home / Blog) is pruned, so its hrefs never reach the body.
-    expected_pruned: ["/blog"],
+    // Nav (header), aside (newsletter), ad container, social-share widget, and
+    // footer are all pruned — none of their boilerplate reaches the body.
+    expected_pruned: [
+      "/blog",
+      "NEWSLETTER_BOILERPLATE",
+      "AD_BOILERPLATE",
+      "twitter.com/intent",
+      "FOOTER_BOILERPLATE",
+    ],
   },
   {
     name: "docs_with_nav",

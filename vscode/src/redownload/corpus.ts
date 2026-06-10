@@ -32,7 +32,7 @@ export interface CorpusContent {
   page_session_id: string;
   url: string;
   title: string;
-  /** The extracted main-content markdown (boilerplate pruned). */
+  /** Extracted main-content markdown (boilerplate pruned); raw HTML when extraction degrades. */
   content: string;
   site_name: string | null;
   author: string | null;
@@ -41,6 +41,7 @@ export interface CorpusContent {
   /** Fidelity: when it was fetched, the status, and the content hash. */
   fetched_at: string;
   http_status: number;
+  /** sha-256 of the rendered HTML the body was extracted from; does not hash the stored body. */
   content_hash: string;
 }
 
@@ -125,26 +126,27 @@ export class ReDownloadCorpus implements ContentCorpus {
     if (!capture) return null;
 
     const result = await this.fetcher.fetch(capture.url);
-    // One heuristic parse per ok re-download yields both the clean main-content
-    // markdown and the page's derived metadata; excluded outcomes carry neither.
-    const parsed =
-      result.outcome.kind === "ok"
-        ? await parse_page(result.outcome.html, capture.url)
-        : null;
-    await this.record(page_session_id, capture.url, result, parsed?.metadata ?? null);
 
     if (result.outcome.kind === "ok") {
+      // One heuristic parse per ok re-download yields both the clean
+      // main-content markdown and the page's derived metadata. Relative links
+      // resolve against the post-redirect final URL the content was served from.
+      const parsed = await parse_page(
+        result.outcome.html,
+        result.outcome.final_url
+      );
+      await this.record(page_session_id, capture.url, result, parsed.metadata);
       return {
         outcome: "ok",
         content: {
           page_session_id,
           url: capture.url,
-          title: parsed!.metadata.title,
-          content: parsed!.body_markdown,
-          site_name: parsed!.metadata.site_name,
-          author: parsed!.metadata.author,
-          published_at: parsed!.metadata.published_at,
-          lang: parsed!.metadata.lang,
+          title: parsed.metadata.title,
+          content: parsed.body_markdown,
+          site_name: parsed.metadata.site_name,
+          author: parsed.metadata.author,
+          published_at: parsed.metadata.published_at,
+          lang: parsed.metadata.lang,
           fetched_at: result.fidelity.fetched_at,
           http_status: result.outcome.http_status,
           // The hash stays the sha-256 of the rendered HTML the markdown was
@@ -154,6 +156,8 @@ export class ReDownloadCorpus implements ContentCorpus {
       };
     }
 
+    // Excluded outcomes carry no content to parse; the log records the exclusion.
+    await this.record(page_session_id, capture.url, result, null);
     return {
       outcome: result.outcome.kind,
       page_session_id,

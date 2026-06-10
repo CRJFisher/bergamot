@@ -5,11 +5,11 @@
  * for packaging. This is the JS half of the native-dep packaging strategy
  * (docs/decisions/native-dep-packaging.md): every pure-JS dependency —
  * including the ones npm hoists to the workspace root, which vsce can never
- * see — is inlined; only three modules stay external:
- *
- *  - vscode               (provided by the extension host)
- *  - @duckdb/node-api     (native .node binding — cannot be inlined)
- *  - patchright           (browser asset descriptors + dynamic requires)
+ * see — is inlined; only the modules in `EXTERNALS` (bundle_manifest.mjs) stay
+ * external — `vscode` (provided by the extension host), `@duckdb/node-api` (a
+ * native .node binding), `patchright` (browser asset descriptors + dynamic
+ * requires), and `defuddle`/`linkedom`/`turndown` (loaded by absolute-path
+ * require). See bundle_manifest.mjs for the authoritative list and rationale.
  *
  * The externals ship inside the VSIX via the clean staging directory:
  * scripts/build-production.js copies the bundled out/ plus the externals'

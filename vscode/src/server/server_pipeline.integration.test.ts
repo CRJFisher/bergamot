@@ -42,7 +42,7 @@ describe('server pipeline integration (real DuckDB, capture pipeline)', () => {
       storage_base: storage_dir,
     });
     // Mount routes + queue without binding a port or touching the shared port file.
-    server.prepare();
+    await server.prepare();
     app = (server as object as { app: Application }).app;
   }, 60000);
 

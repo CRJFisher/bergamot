@@ -62,7 +62,7 @@ describe("/query/capture_content read path", () => {
     await db.init();
     await create_metadata_schema(db);
     server = new ServerManager({ duck_db: db, content_corpus: fake_corpus });
-    server.prepare();
+    await server.prepare();
     app = (server as object as { app: Application }).app;
   });
 

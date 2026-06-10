@@ -196,6 +196,9 @@ describe("ContentCache at-rest encryption (real file)", () => {
     expect(fs.existsSync(wal_path)).toBe(true);
     const wal_bytes = fs.readFileSync(wal_path);
     expect(wal_bytes.includes(marker)).toBe(false);
+    // The title is plaintext TEXT (compression does not hide it), so its absence
+    // in the WAL is the load-bearing proof that WAL encryption covers TEXT columns.
+    expect(wal_bytes.includes("Title of canary")).toBe(false);
 
     await db.exec("CHECKPOINT");
     await db.close();

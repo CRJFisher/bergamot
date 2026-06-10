@@ -186,6 +186,80 @@ describe("CachedCorpus", () => {
     expect(await cache.get("p1")).toBeNull();
   });
 
+  it("does not cache an ok page whose metadata was forgotten during the live fetch", async () => {
+    // A forget can complete while the seconds-long live fetch is in flight.
+    // Writing the page back afterwards would re-encode forgotten content, so the
+    // metadata row is re-checked before the cache write.
+    await seed_capture("p1");
+    const fake = new FakeCorpus(
+      new Map([
+        ["p1", { outcome: "ok", content: corpus_content("p1", "<html>x</html>") }],
+      ])
+    );
+    const inner = fake.get_content.bind(fake);
+    fake.get_content = async (id: string) => {
+      // The forget cascade deletes the metadata row mid-fetch.
+      await metadata_db.execute(
+        "DELETE FROM webpage_capture WHERE page_session_id = $id",
+        { id }
+      );
+      return inner(id);
+    };
+    const corpus = new CachedCorpus(metadata_db, fake, cache, "default");
+
+    const entry = await corpus.get_content("p1");
+    // The live result is still returned to the caller...
+    expect(entry?.outcome).toBe("ok");
+    // ...but it is not written back to the cache — forgotten content stays gone.
+    expect(await cache.get("p1")).toBeNull();
+  });
+
+  it("degrades to the live result when a cache write fails", async () => {
+    await seed_capture("p1");
+    const fake = new FakeCorpus(
+      new Map([
+        ["p1", { outcome: "ok", content: corpus_content("p1", "<html>live</html>") }],
+      ])
+    );
+    cache.put = async () => {
+      throw new Error("simulated cache write failure");
+    };
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const corpus = new CachedCorpus(metadata_db, fake, cache, "default");
+
+    const entry = await corpus.get_content("p1");
+    warn.mockRestore();
+    // A cache write failure must not deny a page the live corpus served.
+    expect(entry?.outcome).toBe("ok");
+    if (entry?.outcome === "ok") {
+      expect(entry.content.content).toBe("<html>live</html>");
+    }
+  });
+
+  it("degrades to a live fetch when a cache read fails", async () => {
+    await seed_capture("p1");
+    await cache.put(corpus_content("p1", "<html>cached</html>"), "default");
+    cache.get = async () => {
+      throw new Error("simulated cache read failure");
+    };
+    const fake = new FakeCorpus(
+      new Map([
+        ["p1", { outcome: "ok", content: corpus_content("p1", "<html>live</html>") }],
+      ])
+    );
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const corpus = new CachedCorpus(metadata_db, fake, cache, "default");
+
+    const entry = await corpus.get_content("p1");
+    warn.mockRestore();
+    // A corrupt/unreadable cache must fall through to a live re-download.
+    expect(entry?.outcome).toBe("ok");
+    if (entry?.outcome === "ok") {
+      expect(entry.content.content).toBe("<html>live</html>");
+    }
+    expect(fake.live_reads).toEqual(["p1"]);
+  });
+
   it("attributes cached rows to the wrapper's scope (delete_scope empties the pass)", async () => {
     await seed_capture("p1");
     const fake = new FakeCorpus(

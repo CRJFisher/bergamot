@@ -46,21 +46,72 @@ export class CachedCorpus implements ContentCorpus {
   async get_content(page_session_id: string): Promise<CorpusEntry | null> {
     const capture = await get_webpage_capture(this.metadata_db, page_session_id);
     if (!capture) {
-      const stale = await this.cache.get(page_session_id);
-      if (stale) {
-        await this.cache.delete_item(page_session_id);
-      }
+      await this.evict_stale(page_session_id);
       return null;
     }
-    const cached = await this.cache.get(page_session_id);
+    const cached = await this.read_cache(page_session_id);
     if (cached) {
       return { outcome: "ok", content: cached };
     }
     const entry = await this.corpus.get_content(page_session_id);
     if (entry && entry.outcome === "ok") {
-      await this.cache.put(entry.content, this.scope);
+      await this.cache_ok(page_session_id, entry.content);
     }
     return entry;
+  }
+
+  /**
+   * Serves a cache hit. The cache is a derived tier: a read failure (a corrupt
+   * or pre-brotli store) must not deny a page the live corpus can still serve,
+   * so it logs (session id only) and reports a miss, falling through to a live
+   * re-download.
+   */
+  private async read_cache(page_session_id: string): Promise<CorpusContent | null> {
+    try {
+      return await this.cache.get(page_session_id);
+    } catch (error) {
+      console.warn(`content cache read failed for ${page_session_id}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Persists a freshly re-downloaded ok page. Re-checks that the metadata row
+   * still exists first: a forget can complete during the seconds-long live fetch,
+   * and writing the page back afterwards would re-encode forgotten content (a
+   * right-to-forget violation). A write failure is non-fatal — the live entry is
+   * already being returned.
+   */
+  private async cache_ok(
+    page_session_id: string,
+    content: CorpusContent
+  ): Promise<void> {
+    const still_present = await get_webpage_capture(
+      this.metadata_db,
+      page_session_id
+    );
+    if (!still_present) return;
+    try {
+      await this.cache.put(content, this.scope);
+    } catch (error) {
+      console.warn(`content cache write failed for ${page_session_id}:`, error);
+    }
+  }
+
+  /**
+   * Backstop to the right-to-forget cascade: a page whose metadata row has been
+   * forgotten must not remain servable from the cache, so its stale row is
+   * deleted on sight. Cache failures here are swallowed — eviction is best-effort.
+   */
+  private async evict_stale(page_session_id: string): Promise<void> {
+    try {
+      const stale = await this.cache.get(page_session_id);
+      if (stale) {
+        await this.cache.delete_item(page_session_id);
+      }
+    } catch (error) {
+      console.warn(`content cache eviction failed for ${page_session_id}:`, error);
+    }
   }
 
   /**

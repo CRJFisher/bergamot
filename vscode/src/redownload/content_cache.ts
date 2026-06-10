@@ -1,12 +1,14 @@
 /**
- * The encrypted on-demand re-download content cache: a separate, quarantined
- * tier holding re-downloaded public page content for consumers that need to
- * read it repeatedly (Temporal Topic Detection, RAG, a research project).
+ * The encrypted re-download content cache: a separate, quarantined tier holding
+ * the extracted main-content markdown of re-downloaded public pages (or the raw
+ * HTML when extraction degrades — see `parse_page`), brotli-compressed.
  *
  * The cache is never the source of truth — the metadata record is. Content
  * enters through `CachedCorpus`: the default content read path populates it
  * under the `"default"` scope as pages are re-downloaded, and a scoped consumer
- * (a TDT run, a research project) caches under its own scope. The store is its
+ * (a TDT run, a research project) caches under its own scope. The `"default"`
+ * scope is expected to own most rows; it is bounded only by the right-to-forget
+ * cascade. The store is its
  * own encrypted DuckDB file with its own OS-keystore key (separate from the
  * metadata store's, so destroying the cache key destroys only the cache), and
  * every item is deletable for the right-to-forget cascade (`right_to_forget.ts`).
@@ -54,10 +56,20 @@ const CACHED_CONTENT_COLUMNS = [
 /**
  * Compresses the markdown body for storage. Brotli is built into the Node 20
  * extension host (zstd is not), needs no dependency, and compresses prose well.
- * Returns a DuckDB BLOB value so the bind layer stores raw bytes, not text.
+ * Quality 5 (not the default 11) keeps this synchronous call off the slow path:
+ * it runs on the extension-host event loop per put, and the degrade path can
+ * hand it multi-MB raw HTML — q5 is ~10x faster with near-identical prose
+ * ratios. Returns a DuckDB BLOB value so the bind layer stores raw bytes.
  */
 function compress_content(markdown: string): DuckDBBlobValue {
-  return blobValue(zlib.brotliCompressSync(Buffer.from(markdown, "utf8")));
+  const bytes = Buffer.from(markdown, "utf8");
+  const compressed = zlib.brotliCompressSync(bytes, {
+    params: {
+      [zlib.constants.BROTLI_PARAM_QUALITY]: 5,
+      [zlib.constants.BROTLI_PARAM_SIZE_HINT]: bytes.length,
+    },
+  });
+  return blobValue(compressed);
 }
 
 /**
@@ -85,14 +97,14 @@ export async function create_content_cache_schema(db: DuckDB): Promise<void> {
     "url TEXT NOT NULL", // the public URL the content was re-downloaded from
     "scope TEXT NOT NULL", // the named consumer that requested caching
     "title TEXT NOT NULL",
-    "content BLOB NOT NULL", // extracted main-content markdown, brotli-compressed
+    "content BLOB NOT NULL", // main-content markdown (raw HTML if extraction degraded), brotli-compressed
     "author TEXT", // Defuddle-derived metadata, as parsed at re-download time
     "site_name TEXT",
     "published_at TEXT",
     "lang TEXT",
     "fetched_at TEXT NOT NULL", // fidelity of the cached fetch
     "http_status INTEGER NOT NULL",
-    "content_hash TEXT NOT NULL",
+    "content_hash TEXT NOT NULL", // sha-256 of the rendered HTML, not of the stored body
     "cached_at TEXT NOT NULL", // when the entry was written to the cache
   ].join(", ");
   await db.create_table(CACHED_CONTENT_TABLE, cached_content_schema);
@@ -123,7 +135,15 @@ export async function open_content_cache(
   );
   const db = new DuckDB({ database_path, encryption_key });
   await db.init();
-  await create_content_cache_schema(db);
+  try {
+    await create_content_cache_schema(db);
+  } catch (error) {
+    // The DuckDB file is attached once db.init() succeeds; release it on a
+    // schema-stage failure so the file lock cannot leak (a leaked lock would
+    // block the right-to-forget cascade's later open of the same file).
+    await db.close();
+    throw error;
+  }
   return new ContentCache(db);
 }
 
