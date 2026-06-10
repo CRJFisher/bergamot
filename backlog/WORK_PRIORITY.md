@@ -25,6 +25,9 @@ The data-model reorientation; everything else builds on it. Status: 39.1–39.6 
 5. **TASK-39.5** — Cascading right-to-forget — _after 39.3; extends as derived stores land_
 6. **TASK-39.6** — Provision the re-download headless browser for a packaged install — _shipped; the packaged extension provisions Chromium on first fetch_
 7. **TASK-39.7** — Surface Linux keyring degradation of SecretStorage-backed store keys — _runtime signal for the threat-model gap; macOS/Windows need nothing_
+8. **TASK-39.8** — Close the plaintext visit-inbox gap — _the encrypted store's front door is still plaintext; the threat model's biggest at-rest side-channel_
+9. **TASK-39.9** — Bound the dev-observability plaintext side-channels (dev-log + replay ring) — _dev-only, default-off; forget should delete the dev log wholesale_
+10. **TASK-40** — Per-extension capability token on the local server — _constitution principle 7 (inviolable); the threat model's largest open gap against hostile local processes_
 
 - **TASK-34** (empty/degraded-content handling) folds into TASK-39.2's fetch-outcome classifier.
 - **TASK-39.6** also resolved the shared native-dep packaging gap (workspace hoisting hid runtime deps from vsce; see docs/decisions/native-dep-packaging.md).
