@@ -16,18 +16,18 @@ The mobile work is an independent track that can run in parallel once task-39 is
 
 ## Phase 0 — Privacy-core capture & storage foundation (task-39) · HIGH
 
-The data-model reorientation; everything else builds on it.
+The data-model reorientation; everything else builds on it. Status: 39.1–39.6 shipped; 39.7 remains.
 
 1. **TASK-39.2** — Re-download fetcher + content read path — _keystone; build first; unblocks all content work_
 2. **TASK-39.1** — Stop ambient content capture + metadata-only schema reset — _after 39.2's read-path swap_
 3. **TASK-39.4** — At-rest encryption of the metadata store — _parallel; coordinate with 39.1's reset_
 4. **TASK-39.3** — Encrypted on-demand content cache — _after 39.2_
 5. **TASK-39.5** — Cascading right-to-forget — _after 39.3; extends as derived stores land_
-6. **TASK-39.6** — Provision the re-download headless browser for a packaged install — _release-gating; the fetcher runs only in dev until this lands_
+6. **TASK-39.6** — Provision the re-download headless browser for a packaged install — _shipped; the packaged extension provisions Chromium on first fetch_
 7. **TASK-39.7** — Surface Linux keyring degradation of SecretStorage-backed store keys — _runtime signal for the threat-model gap; macOS/Windows need nothing_
 
 - **TASK-34** (empty/degraded-content handling) folds into TASK-39.2's fetch-outcome classifier.
-- **TASK-39.6** also resolves the shared native-dep packaging gap (`@duckdb/node-api` has the same `--no-dependencies` problem).
+- **TASK-39.6** also resolved the shared native-dep packaging gap (workspace hoisting hid runtime deps from vsce; see docs/decisions/native-dep-packaging.md).
 
 ## Phase 1 — Content quality over the re-downloaded corpus
 

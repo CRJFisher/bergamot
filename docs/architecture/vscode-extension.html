@@ -37,7 +37,7 @@
     <li><strong>Database</strong> — <code>DatabaseManager.initialize_all()</code> opens DuckDB (the metadata store — the durable source of truth). No vector store is opened at ingest.</li>
     <li><strong>Ingest server</strong> — <code>ServerManager.start()</code> binds the first free port in 5000–5009 and writes it to <code>~/.bergamot/port.json</code>.</li>
     <li><strong>Commands</strong> — <code>CommandManager.register_all()</code> registers the webpage hover provider, the right-to-forget command (<code>Bergamot: Forget</code> — delete by URL, origin, or time range, cascading across the metadata store and the encrypted content cache), and the dev observability/replay commands.</li>
-    <li><strong>Re-download / post-processing</strong> — the content subsystem reads stored URLs, re-downloads the public pages (login-walled pages fail and are excluded), and feeds Temporal Topic Detection then the RAG-prep pipeline.</li>
+    <li><strong>Re-download / post-processing</strong> — the content subsystem reads stored URLs, re-downloads the public pages (login-walled pages fail and are excluded), and feeds Temporal Topic Detection then the RAG-prep pipeline. It drives a stealth-patched headless Chromium (patchright), provisioned once on first fetch into <code>~/.bergamot/ms-playwright</code> (~250&nbsp;MB one-time download); until it exists the content read path reports 503 unavailable.</li>
     <li><strong>MCP server</strong> — <code>MCPServerManager.start_deferred(2000)</code> spawns the standalone MCP subprocess after 2 s (non-blocking).</li>
   </ul>
 

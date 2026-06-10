@@ -62,12 +62,14 @@ describe('MCPServerManager', () => {
       
       await start_promise;
 
-      // No env is passed: the MCP child serves queries over the extension
-      // server's HTTP endpoints and holds no store of its own.
+      // Spawned via the host's own binary (a packaged install cannot assume
+      // a node on PATH); the child serves queries over HTTP and holds no
+      // store of its own.
       expect(child_process.spawn).toHaveBeenCalledWith(
-        'node',
+        process.execPath,
         ['/test/extension/out/mcp_server_standalone.js'],
         {
+          env: expect.objectContaining({ ELECTRON_RUN_AS_NODE: '1' }),
           stdio: ['pipe', 'pipe', 'pipe', 'ipc']
         }
       );

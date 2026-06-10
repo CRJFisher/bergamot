@@ -11,27 +11,21 @@
  *  - @duckdb/node-api     (native .node binding — cannot be inlined)
  *  - patchright           (browser asset descriptors + dynamic requires)
  *
- * The externals ship inside the VSIX via the .vscodeignore whitelist; the
- * production build stages the root-hoisted ones into vscode/node_modules
- * first (scripts/build-production.js).
+ * The externals ship inside the VSIX via the clean staging directory:
+ * scripts/build-production.js copies the bundled out/ plus the externals'
+ * transitive closure into builds/staging/node_modules and runs vsce there
+ * (see docs/decisions/native-dep-packaging.md).
  *
  * Bundles OVERWRITE the tsc-emitted entrypoints in out/ (same paths, so
- * package.json `main` and the MCP child spawn path are unchanged). tsc keeps
- * running first for type-checking and the unbundled dev/e2e layout.
+ * package.json `main` and the MCP child spawn path are unchanged). tsc runs
+ * first for type-checking and the unbundled dev/e2e layout.
  */
 import { build } from 'esbuild';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { ENTRYPOINTS, EXTERNALS } from './bundle_manifest.mjs';
 
 const root_dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-
-const ENTRYPOINTS = [
-  { entry: 'src/extension.ts', out: 'out/extension.js' },
-  { entry: 'src/mcp_server_standalone.ts', out: 'out/mcp_server_standalone.js' },
-  { entry: 'src/server/server_standalone.ts', out: 'out/server/server_standalone.js' },
-];
-
-const EXTERNALS = ['vscode', '@duckdb/node-api', 'patchright'];
 
 for (const { entry, out } of ENTRYPOINTS) {
   await build({

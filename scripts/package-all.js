@@ -59,8 +59,8 @@ async function packageAll() {
     execSync('npm run compile', { stdio: 'inherit' });
     printStatus('TypeScript compiled');
     
-    printInfo('Running vsce package...');
-    execSync('npm run package', { stdio: 'inherit' });
+    printInfo('Running the production build (bundle + stage + vsce)...');
+    execSync('npm run build:production', { stdio: 'inherit' });
     printStatus('VS Code extension packaged');
     
     // Find the created VSIX file
@@ -146,7 +146,7 @@ try {
   async function simplePackage() {
     try {
       process.chdir(path.join(ROOT_DIR, 'vscode'));
-      execSync('npm run compile && npm run package', { stdio: 'inherit' });
+      execSync('npm run build:production', { stdio: 'inherit' });
       
       process.chdir(path.join(ROOT_DIR, 'browser'));
       execSync('npm run build', { stdio: 'inherit' });

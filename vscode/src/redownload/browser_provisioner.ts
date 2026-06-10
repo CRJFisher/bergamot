@@ -1,8 +1,9 @@
 /**
  * Provisions the re-download headless browser on a machine that has never
- * had one — a packaged install ships patchright's JS but not the ~150 MB
- * Chromium build, which is downloaded once, on first use, into an app-owned
- * directory and cached across sessions and extension updates.
+ * had one — a packaged install ships patchright's JS but not the browser
+ * (~250 MB download, ~570 MB on disk with the headless shell), which is
+ * downloaded once, on first use, into an app-owned directory and cached
+ * across sessions and extension updates.
  *
  * The browsers directory is pinned through `PLAYWRIGHT_BROWSERS_PATH`, which
  * patchright's registry reads when its module loads — so this module must
@@ -16,7 +17,10 @@
  * host, from Playwright's CDN — a named first-run egress in the threat
  * model) and fails fast with {@link BrowserProvisioningError}; the read path
  * keeps reporting its normal 503 "unavailable" until the install completes.
- * Extension activation is never blocked.
+ * Extension activation is never blocked. The single-flight guard is
+ * per-process: two processes provisioning the same directory concurrently
+ * (extension host + headless server) are not coordinated — in practice only
+ * one process runs a browser pool.
  */
 import { spawn } from "child_process";
 import * as fs from "fs";
@@ -72,17 +76,26 @@ export function ensure_browser_provisioned(
   executable_path: string,
   on_provisioning?: (done: Promise<void>) => void
 ): void {
+  // The in-flight check comes FIRST: the installer extracts into the final
+  // directory as it goes, so mid-install the executable can exist while the
+  // tree is still incomplete — launching against it would fail confusingly
+  // instead of with the clean provisioning signal.
+  if (provisioning) {
+    throw new BrowserProvisioningError();
+  }
   if (fs.existsSync(executable_path)) {
     return;
   }
-  if (!provisioning) {
-    provisioning = install_chromium().finally(() => {
-      // Allow a retry on failure; on success the executable now exists and
-      // this path is never reached again.
-      provisioning = null;
-    });
-    on_provisioning?.(provisioning);
-  }
+  provisioning = install_chromium().finally(() => {
+    // Allow a retry on failure; on success the executable now exists and
+    // this path is never reached again.
+    provisioning = null;
+  });
+  // The host callback is optional (the headless server passes none); a
+  // failed install must degrade to per-fetch retry, never become an
+  // unhandled rejection that kills the process.
+  void provisioning.catch((): undefined => undefined);
+  on_provisioning?.(provisioning);
   throw new BrowserProvisioningError();
 }
 

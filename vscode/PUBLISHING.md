@@ -136,8 +136,7 @@ Ensure these fields are properly set:
 
 ```bash
 cd vscode
-npm run compile        # Compile TypeScript
-npm run package       # Create VSIX package
+npm run package        # The production build — the only packaging path
 ```
 
 ### Production Build
@@ -147,15 +146,15 @@ cd vscode
 npm run build:production  # Full production build with validation
 ```
 
-This will:
+The packaging mechanism (esbuild bundles + a clean staging directory holding
+the runtime externals; platform-targeted VSIX) is recorded in
+[docs/decisions/native-dep-packaging.md](../docs/decisions/native-dep-packaging.md). The build:
 
-- Clean previous builds
-- Run linting
-- Run tests
-- Compile TypeScript
-- Package as VSIX
-- Validate package
-- Generate metadata
+- Cleans previous builds and the staging directory
+- Runs linting and tests (failures abort the build)
+- Compiles TypeScript, bundles the entrypoints, and checks the bundle externals
+- Stages the runtime dependencies and packages a platform-targeted VSIX
+- Validates the package and generates metadata
 
 ### Version Management
 
@@ -356,16 +355,11 @@ Before publishing, ensure:
 
 #### Large Package Size
 
-```bash
-# Check what's included
-npx vsce ls
+The staged `node_modules` (the runtime externals — `@duckdb`, `patchright`)
+must ship; do not exclude them. To inspect what the package contains:
 
-# Add to .vscodeignore:
-node_modules
-*.map
-.git
-tests/
-coverage/
+```bash
+unzip -l builds/v<version>/bergamot-<version>-<target>.vsix
 ```
 
 #### Invalid README URLs

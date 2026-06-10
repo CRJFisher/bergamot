@@ -1,4 +1,11 @@
 import { BrowserPool } from "./browser_pool";
+
+// Never let an integration test trigger a real browser download; the pool
+// still launches the real (already provisioned) Chromium.
+jest.mock("./browser_provisioner", () => ({
+  ...jest.requireActual("./browser_provisioner"),
+  ensure_browser_provisioned: jest.fn(),
+}));
 import { HeadlessFetcher } from "./headless_fetcher";
 import { PolitenessGate, PolitenessConfig } from "./politeness_gate";
 import {

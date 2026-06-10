@@ -4,6 +4,21 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { ENTRYPOINTS, SHIPPED_EXTERNALS } from './bundle_manifest.mjs';
+
+/**
+ * vsce target for the build host. The staged @duckdb binding (and any
+ * fsevents) is the host's platform, so every VSIX is platform-targeted —
+ * an untargeted package would install anywhere and die at require time.
+ */
+const VSCE_TARGETS = {
+  'darwin-x64': 'darwin-x64',
+  'darwin-arm64': 'darwin-arm64',
+  'linux-x64': 'linux-x64',
+  'linux-arm64': 'linux-arm64',
+  'win32-x64': 'win32-x64',
+  'win32-arm64': 'win32-arm64',
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +53,10 @@ class VSCodeExtensionBuilder {
     if (fs.existsSync(out_dir)) {
       fs.rmSync(out_dir, { recursive: true });
     }
+    fs.rmSync(path.join(root_dir, 'builds', 'staging'), {
+      recursive: true,
+      force: true,
+    });
     
     vsix_files.forEach(file => {
       fs.unlinkSync(path.join(root_dir, file));
@@ -63,6 +82,10 @@ class VSCodeExtensionBuilder {
   bundle_entrypoints() {
     console.log('📦 Bundling runtime entrypoints (esbuild)...');
     execSync('node scripts/bundle.mjs', { cwd: root_dir, stdio: 'inherit' });
+    execSync('node scripts/check-bundle-externals.mjs', {
+      cwd: root_dir,
+      stdio: 'inherit',
+    });
     console.log('✅ Entrypoints bundled');
   }
 
@@ -82,13 +105,17 @@ class VSCodeExtensionBuilder {
     fs.rmSync(staging_dir, { recursive: true, force: true });
     fs.mkdirSync(staging_dir, { recursive: true });
 
-    // Bundled entrypoints (the tsc module files alongside them are unused by
-    // the bundles; the bundle overwrote the entry files in place).
-    fs.cpSync(path.join(root_dir, 'out'), path.join(staging_dir, 'out'), {
-      recursive: true,
-    });
+    // Exactly the bundled entrypoints — the tsc module tree is the dev/test
+    // layout and cannot even run in the package (its deps were inlined into
+    // the bundles, not staged). server_standalone ships as the in-package
+    // verification harness (see docs/decisions/native-dep-packaging.md).
+    for (const { out } of ENTRYPOINTS) {
+      const target = path.join(staging_dir, out);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(path.join(root_dir, out), target);
+    }
 
-    for (const file of ['README.md', 'LICENSE.txt', 'CHANGELOG.md']) {
+    for (const file of ['README.md', 'LICENSE', 'LICENSE.txt', 'CHANGELOG.md']) {
       const source = path.join(root_dir, file);
       if (fs.existsSync(source)) {
         fs.copyFileSync(source, path.join(staging_dir, file));
@@ -99,10 +126,9 @@ class VSCodeExtensionBuilder {
     // bundle leaves unresolved; everything else was inlined by esbuild.
     // Scripts are dropped so vsce does not re-run vscode:prepublish.
     const manifest = { ...this.package_json };
-    manifest.dependencies = {
-      '@duckdb/node-api': this.package_json.dependencies['@duckdb/node-api'],
-      patchright: this.package_json.dependencies['patchright'],
-    };
+    manifest.dependencies = Object.fromEntries(
+      SHIPPED_EXTERNALS.map((pkg) => [pkg, this.package_json.dependencies[pkg]])
+    );
     delete manifest.devDependencies;
     delete manifest.scripts;
     fs.writeFileSync(
@@ -141,15 +167,20 @@ class VSCodeExtensionBuilder {
       console.log(`  staged ${pkg}`);
       const manifest_path = path.join(source, 'package.json');
       const pkg_manifest = JSON.parse(fs.readFileSync(manifest_path, 'utf8'));
-      for (const dep of Object.keys(pkg_manifest.dependencies ?? {})) {
-        stage_with_dependencies(dep, false);
-      }
-      for (const dep of Object.keys(pkg_manifest.optionalDependencies ?? {})) {
-        stage_with_dependencies(dep, true);
+      for (const [dep, is_optional] of [
+        ...Object.keys(pkg_manifest.dependencies ?? {}).map((d) => [d, false]),
+        ...Object.keys(pkg_manifest.optionalDependencies ?? {}).map((d) => [d, true]),
+      ]) {
+        // A copy nested inside the parent (copied wholesale above) already
+        // satisfies node resolution — staging a top-level duplicate would
+        // ship a second, possibly different, version.
+        if (fs.existsSync(path.join(source, 'node_modules', dep))) continue;
+        stage_with_dependencies(dep, is_optional);
       }
     };
-    stage_with_dependencies('@duckdb/node-api', false);
-    stage_with_dependencies('patchright', false);
+    for (const pkg of SHIPPED_EXTERNALS) {
+      stage_with_dependencies(pkg, false);
+    }
 
     console.log('✅ Staging directory ready');
     return staging_dir;
@@ -157,31 +188,21 @@ class VSCodeExtensionBuilder {
   
   run_tests() {
     console.log('🧪 Running tests...');
-    try {
-      execSync('npm test', { 
-        cwd: root_dir, 
-        stdio: 'inherit',
-        env: { ...process.env, CI: 'true' }
-      });
-      console.log('✅ All tests passed');
-    } catch (error) {
-      console.error('⚠️  Tests failed, continuing with build...');
-      // Continue even if tests fail for now
-    }
+    execSync('npm test', { 
+      cwd: root_dir, 
+      stdio: 'inherit',
+      env: { ...process.env, CI: 'true' }
+    });
+    console.log('✅ All tests passed');
   }
   
   run_linter() {
     console.log('🔍 Running linter...');
-    try {
-      execSync('npm run lint', { 
-        cwd: root_dir, 
-        stdio: 'inherit' 
-      });
-      console.log('✅ Linting passed');
-    } catch (error) {
-      console.error('⚠️  Linting issues found, continuing with build...');
-      // Continue even if linting fails for now
-    }
+    execSync('npm run lint', { 
+      cwd: root_dir, 
+      stdio: 'inherit' 
+    });
+    console.log('✅ Linting passed');
   }
   
   ensure_vsce() {
@@ -196,22 +217,30 @@ class VSCodeExtensionBuilder {
     }
   }
   
-  ensure_ovsx() {
-    try {
-      execSync('npx ovsx --version', { stdio: 'ignore' });
-    } catch {
-      console.log('📦 Installing ovsx...');
-      execSync('npm install -D ovsx', { 
-        cwd: root_dir, 
-        stdio: 'inherit' 
-      });
-    }
-  }
-  
   package_extension(staging_dir) {
     console.log('📦 Packaging VS Code extension...');
     
     this.ensure_vsce();
+    
+    const target = VSCE_TARGETS[`${process.platform}-${process.arch}`];
+    if (!target) {
+      throw new Error(
+        `No vsce target mapping for ${process.platform}-${process.arch}`
+      );
+    }
+    // Cross-compilation is impossible with host-resolved staging: the staged
+    // duckdb binding must be the target's.
+    const staged_binding = path.join(
+      staging_dir,
+      'node_modules',
+      '@duckdb',
+      `node-bindings-${target}`
+    );
+    if (!fs.existsSync(staged_binding)) {
+      throw new Error(
+        `Staged @duckdb binding does not match target ${target} — build on the target platform`
+      );
+    }
     
     // Create builds directory
     const builds_dir = path.join(root_dir, 'builds');
@@ -219,14 +248,14 @@ class VSCodeExtensionBuilder {
     this.ensure_directory(version_dir);
     
     // Package the extension
-    const vsix_name = `${this.name}-${this.version}.vsix`;
+    const vsix_name = `${this.name}-${this.version}-${target}.vsix`;
     const vsix_path = path.join(version_dir, vsix_name);
     
     try {
       // Packaged from the staging dir: vsce ships exactly the staged
-      // node_modules (the runtime externals). The @duckdb binding is the
-      // build host's platform, so a published VSIX is platform-targeted.
-      execSync(`npx vsce package --out "${vsix_path}"`, { 
+      // node_modules (the runtime externals), targeted at the build host's
+      // platform.
+      execSync(`npx vsce package --target ${target} --out "${vsix_path}"`, { 
         cwd: staging_dir, 
         stdio: 'inherit' 
       });

@@ -98,7 +98,7 @@ export class ServerManager {
    */
   private build_redownload_corpus(): ContentCorpus {
     this.browser_pool = new BrowserPool({
-      on_provisioning: this.config.on_browser_provisioning,
+      on_browser_provisioning: this.config.on_browser_provisioning,
     });
     const fetcher = new HeadlessFetcher(this.browser_pool, new PolitenessGate());
     return new ReDownloadCorpus(this.config.duck_db, fetcher);

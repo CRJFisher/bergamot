@@ -76,7 +76,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         void vscode.window.withProgress(
           {
             location: vscode.ProgressLocation.Notification,
-            title: 'Bergamot: downloading the content fetcher (one-time, ~150 MB)…',
+            title: 'Bergamot: one-time download of the content-fetch browser (~250 MB, ~570 MB on disk)…',
           },
           async (): Promise<void> => {
             await done.catch((): void => undefined);

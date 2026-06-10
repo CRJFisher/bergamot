@@ -16,6 +16,8 @@ All persistent stores live under the resolved storage base (`get_storage_base`, 
 
 During F5 debugging `BERGAMOT_STORAGE_PATH` points the storage base at the repo-local `.dev-storage/` (see `.vscode/launch.json`). An installed extension uses the per-extension `globalStorageUri` instead.
 
+Bergamot also keeps the provisioned headless browser in `~/.bergamot/ms-playwright`. It holds no user data and is never part of a reset; deleting it only forces the one-time re-download on the next content fetch.
+
 ### The encryption key is not part of a reset
 
 Each encrypted store has its own key in the OS keystore via VS Code `SecretStorage` (`bergamot.metadata_db_encryption_key` for the metadata store, `bergamot.content_cache_encryption_key` for the content cache; see `database/encryption_key.ts`). Deleting a store file does **not** require touching its key: the next open reads the keystore entry and creates a fresh encrypted store with the same key. Deleting the key as well is harmless once the file is gone (a new key is generated on first run) — but deleting a key while keeping its file makes that file permanently unreadable, by design (no plaintext fallback; see `docs/threat-model.md`).

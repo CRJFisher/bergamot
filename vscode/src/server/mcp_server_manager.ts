@@ -72,9 +72,16 @@ export class MCPServerManager {
         // The MCP child holds no store of its own: it serves queries over the
         // extension server's HTTP endpoints (discovered via ~/.bergamot/port.json),
         // so it needs no storage path and never touches the encrypted DB file.
-        this.mcp_process = child_process.spawn('node', [mcp_script_path], {
-          stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-        });
+        // Spawned via the host's own binary (Electron run as node) — a
+        // packaged install cannot assume a `node` on the user's PATH.
+        this.mcp_process = child_process.spawn(
+          process.execPath,
+          [mcp_script_path],
+          {
+            env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+            stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+          }
+        );
 
         this.mcp_process.on('error', (error) => {
           console.error('MCP server process error:', error);

@@ -16,6 +16,10 @@ module.exports = {
       'e2e/',
       '\\.spec\\.(ts|js)$'
     ],
+    // Keep haste-map mock resolution away from compiled/staged copies of
+    // src/__mocks__ (out/ from tsc, builds/staging from the production
+    // build) — a stale staged mock must never shadow the live one.
+    modulePathIgnorePatterns: ['<rootDir>/out/', '<rootDir>/builds/'],
     testMatch: [
       '<rootDir>/src/**/*.test.ts',
       '<rootDir>/src/**/*.test.js'

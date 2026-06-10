@@ -44,16 +44,12 @@ echo "📦 Packaging VS Code Extension..."
 echo "--------------------------------"
 cd "$ROOT_DIR/vscode"
 
-print_info "Compiling TypeScript..."
-npm run compile || { print_error "VS Code compilation failed"; exit 1; }
-print_status "TypeScript compiled"
-
-print_info "Running vsce package..."
-npm run package || { print_error "VS Code packaging failed"; exit 1; }
+print_info "Running the production build (bundle + stage + vsce)..."
+npm run build:production || { print_error "VS Code packaging failed"; exit 1; }
 print_status "VS Code extension packaged"
 
-# Find the created VSIX file
-VSIX_FILE=$(ls *.vsix 2>/dev/null | head -1)
+# Find the created VSIX file (platform-targeted, under builds/v<version>/)
+VSIX_FILE=$(ls builds/v*/*.vsix 2>/dev/null | head -1)
 if [ -n "$VSIX_FILE" ]; then
     print_status "Created: vscode/$VSIX_FILE"
 else

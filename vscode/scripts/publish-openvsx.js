@@ -220,7 +220,7 @@ class OpenVSXPublisher {
         
         // First ensure we have a package
         console.log('📦 Packaging extension...');
-        execSync('npx vsce package', {
+        execSync('node scripts/build-production.js', {
           cwd: root_dir,
           stdio: 'inherit'
         });

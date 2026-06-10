@@ -60,7 +60,7 @@
     "lint": "eslint src --ext ts",
     "test": "jest",
     "clean": "rm -rf out",
-    "package": "vsce package",
+    "package": "node scripts/build-production.js",
     "build:production": "node scripts/build-production.js",
     "version:patch": "node scripts/version-bump.js patch",
     "version:minor": "node scripts/version-bump.js minor",

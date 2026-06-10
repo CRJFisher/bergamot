@@ -35,7 +35,7 @@ export interface BrowserPoolOptions {
    * shows a progress notification). Fetches keep failing fast — and the read
    * path keeps serving 503 — until the install completes.
    */
-  on_provisioning?: (done: Promise<void>) => void;
+  on_browser_provisioning?: (done: Promise<void>) => void;
 }
 
 /** The page-running capability the fetcher depends on (injectable in tests). */
@@ -101,7 +101,7 @@ export class BrowserPool implements PageRunner {
       const { chromium } = await import("patchright");
       ensure_browser_provisioned(
         chromium.executablePath(),
-        this.options.on_provisioning
+        this.options.on_browser_provisioning
       );
       const browser = await chromium.launch({
         headless: this.options.headless ?? true,

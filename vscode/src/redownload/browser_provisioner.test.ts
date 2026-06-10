@@ -100,6 +100,26 @@ describe("ensure_browser_provisioned", () => {
     await expect(surfaced[0]).resolves.toBeUndefined();
   });
 
+  it("a failed install with no observer does not raise an unhandled rejection", async () => {
+    // The headless server passes no on_provisioning callback; a failed
+    // download must degrade to per-fetch retry, never crash the process.
+    const child = fake_install_child();
+    (child_process.spawn as jest.Mock).mockReturnValue(child);
+    const missing = path.join(temp_dir, "missing", "chromium");
+    const unhandled = jest.fn();
+    process.once("unhandledRejection", unhandled);
+
+    expect(() => ensure_browser_provisioned(missing)).toThrow(
+      BrowserProvisioningError
+    );
+    child.emit("exit", 1);
+    await new Promise(setImmediate); // flush rejection delivery
+    await new Promise(setImmediate);
+
+    expect(unhandled).not.toHaveBeenCalled();
+    process.removeListener("unhandledRejection", unhandled);
+  });
+
   it("a failed install rejects the surfaced promise and a later call retries", async () => {
     const first_child = fake_install_child();
     const second_child = fake_install_child();

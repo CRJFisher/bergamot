@@ -74,6 +74,9 @@ Bergamot captures the metadata of the pages you visit, stores that metadata loca
 3. **No API key required**
    - Capture runs locally and deterministically; no API tokens are needed.
 
+4. **First content fetch — one-time browser download**
+   - Bergamot re-downloads pages with a dedicated headless Chromium. The first content fetch triggers a one-time ~250 MB download (~570 MB on disk) from Playwright's CDN into `~/.bergamot/ms-playwright`; a progress notification is shown and content reads report unavailable until it completes. The directory holds only the browser binary — no user data (see [docs/threat-model.md](docs/threat-model.md)).
+
 ## Usage
 
 ### Building Your Knowledge Base

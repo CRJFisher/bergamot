@@ -40,16 +40,15 @@ npm run release:prepare
 
 After running the packaging scripts, you'll find:
 
-- **VS Code Extension**: `vscode/bergamot-*.vsix`
+- **VS Code Extension**: `vscode/builds/v<version>/bergamot-<version>-<target>.vsix` (platform-targeted; a copy lands at `vscode/bergamot-*.vsix`)
 - **Chrome Extension**: `browser/chrome-extension.zip`
 
 ## Publishing Instructions
 
 ### VS Code Marketplace
 
-1. Install vsce globally: `npm install -g @vscode/vsce`
-2. Create a Personal Access Token on Azure DevOps
-3. Publish: `vsce publish -p <token>`
+1. Create a Personal Access Token on Azure DevOps
+2. Publish the built artifact: `npx vsce publish --packagePath <vsix> -p <token>` (the VSIX comes from `npm run build:production`; packaging mechanics are recorded in docs/decisions/native-dep-packaging.md)
 
 ### Chrome Web Store
 

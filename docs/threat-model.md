@@ -48,7 +48,7 @@ Re-download is the system's one routine egress surface: it re-fetches stored URL
 
 **Defenses and bounds:** fetches go only to URLs the user already visited; they carry **no cookies and no credentials** (the login wall is the privacy filter — principle 3); rate-limiting, backoff, and retry discipline bound the traffic (re-download is polite egress). Capture metadata itself never leaves the machine.
 
-One additional first-run egress: the headless browser itself is provisioned by a one-time download of Chromium from Playwright's CDN into `~/.bergamot/ms-playwright` (a packaged install ships no browser). The download discloses nothing about browsing — only that Bergamot is installed — and never recurs once cached.
+One additional first-run egress: the headless browser is provisioned by a one-time download of Chromium from Playwright's CDN into `~/.bergamot/ms-playwright` (a packaged install ships no browser). The CDN — and any on-path observer — learns the machine's IP address and that a Playwright-compatible Chromium was installed at that moment: nothing about browsing, and indistinguishable from any other Playwright-based tool. The download never recurs once cached, and the directory holds only the browser binary, no user data.
 
 ### D. Developer-controlled or third-party servers
 

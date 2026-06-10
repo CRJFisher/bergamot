@@ -5,7 +5,7 @@
  * whose outcome is an exclusion. The login wall is the privacy filter, applied
  * by {@link classify_fetch} over what the anonymous browser actually saw.
  */
-import { Page, Response } from "patchright";
+import type { Page, Response } from "patchright";
 import { PageMetadata, read_metadata } from "./read_metadata";
 import {
   classify_fetch,
