@@ -1,0 +1,7 @@
+# Amendment: principle 4 atomicity is per store, ordered and idempotent across stores
+
+**What changes:** Constitution Section 2, principle 4 (right-to-forget). The phrase "atomically removes the metadata row AND every derived artifact" becomes: deletion is **atomic per store**; across stores the cascade is **ordered derived-content-first and idempotent**, so no derived artifact can survive its metadata.
+
+**Why:** The forget cascade spans multiple database files (the metadata store, the encrypted content cache, and future vector/cluster stores) plus plaintext buffer files. A single transaction across separate files does not exist — no mechanism can provide it. The implemented semantics preserve what the principle protects: each store's deletes run in one transaction; derived content is always deleted before the metadata that addresses it, so any partial failure can only leave metadata without content (the privacy-safe direction); and re-running the same forget completes a partial. The previous wording demanded a property that is physically unavailable, and Section 7 says a disagreement between this document and the code is fixed at the root, not papered over.
+
+**Authored by:** the user, 2026-06-10, reviewing the task-39.5 finalization (which left its atomicity acceptance criterion unchecked pending exactly this decision). Implementation: `vscode/src/right_to_forget.ts`; honest bounds in `docs/threat-model.md` (Standing decisions).

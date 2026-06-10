@@ -7,7 +7,7 @@ status: Done
 assignee:
   - claude
 created_date: '2026-06-08 13:30'
-updated_date: '2026-06-10 07:49'
+updated_date: '2026-06-10 09:46'
 labels:
   - privacy
   - storage
@@ -30,7 +30,7 @@ Forgetting is deletion, not hiding: no derived artifact may continue to encode f
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 Delete-by-URL, delete-by-origin, and delete-by-time-range are available
-- [ ] #2 A delete atomically removes the metadata row(s), the encrypted content-cache entries, derived vectors, and cluster memberships
+- [x] #2 A delete atomically removes the metadata row(s), the encrypted content-cache entries, derived vectors, and cluster memberships
 - [x] #3 Deletion is real, not a tombstone — verified that no derived artifact still encodes the forgotten content
 - [x] #4 The cascade is covered by tests across all derived stores that exist
 <!-- AC:END -->
@@ -64,6 +64,8 @@ AC#2 deliberately left unchecked pending a user decision: constitution principle
 Known accepted bounds (documented in threat-model.md and the module header): dev-log.jsonl is never rewritten; plaintext buffer files that existed before a forget remain forensically recoverable after unlinking; freed-block ciphertext persists inside the encrypted stores until reused; a visit arriving concurrently with a forget can land after the referrer scrub (the queue purge closes most of that window).
 
 Verification: tsc clean, eslint clean, 275/275 jest, full-pipeline e2e green.
+
+2026-06-10: the user authored the principle-4 amendment (docs/decisions/principle-4-per-store-atomicity.md) — deletion is atomic per store, ordered derived-content-first and idempotent across stores. The constitution wording and the shipped semantics now agree, so AC#2 is checked: the cascade removes metadata, content-cache entries, and (vacuously, until they exist) vectors and cluster memberships under the amended atomicity definition.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
