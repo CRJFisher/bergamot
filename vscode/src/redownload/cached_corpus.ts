@@ -1,11 +1,10 @@
 /**
- * The opt-in, scope-named cached read path over the re-download corpus. This
- * is the ONLY population path into the encrypted content cache: a consumer
- * that needs repeated content reads (a TDT run, a research project) wraps the
- * live corpus in a `CachedCorpus` with its scope name, and only the pages it
- * actually reads enter the cache. The default content read path
- * (`/query/capture_content`) stays uncached and re-downloads live — nothing
- * populates the cache ambiently.
+ * The scope-named cached read path over the re-download corpus — the single
+ * population path into the encrypted content cache. The server wraps the default
+ * read path (`/query/capture_content`) in a `CachedCorpus` under the `"default"`
+ * scope at start, so ok re-downloads persist as they are served; a consumer that
+ * needs repeated reads (a TDT run, a research project) wraps the live corpus
+ * under its own scope. Only pages actually read enter the cache.
  */
 import { DuckDB, get_webpage_capture } from "../duck_db";
 import {
@@ -14,7 +13,7 @@ import {
   CorpusEntry,
   iter_public_pages_via,
 } from "./corpus";
-import { ContentCache } from "./content_cache";
+import type { ContentCache } from "./content_cache";
 
 export class CachedCorpus implements ContentCorpus {
   /**

@@ -69,6 +69,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       duck_db: databases.duck_db,
       inbox_dir: path.join(storage_base, 'visit_inbox'),
       storage_base,
+      // Source of the content cache's encryption key; enables default-path
+      // caching of re-downloaded public content under the "default" scope.
+      secrets: context.secrets,
       // One-time Chromium download on first content fetch (packaged installs
       // ship no browser). Surfaced as a progress notification; never blocks
       // activation — the fetch path serves 503 until the download completes.

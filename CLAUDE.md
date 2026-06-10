@@ -22,9 +22,10 @@ ROOT — local, durable, queryable knowledge base from passive browsing
 │
 ├── STORE  (shipped — encrypted metadata store + encrypted content-cache tier)
 │     Durable, local-only persistence of the metadata record. DuckDB
-│     metadata store + derived stores; no raw-content capture row. Any
-│     content cached after re-download is a separate, on-demand, encrypted,
-│     scoped, deletable tier — never the source of truth.
+│     metadata store + derived stores; no raw-content capture row. Content
+│     cached after re-download is a separate encrypted, scoped, deletable tier
+│     — populated by default as public pages are re-downloaded (extracted
+│     main-content markdown, brotli-compressed), never the source of truth.
 │
 └── UNDERSTAND / SURFACE  (in progress — the hero loop)
       Post-process re-downloads public page content from stored URLs

@@ -22,6 +22,12 @@ import { BrowserPool } from '../redownload/browser_pool';
 import { PolitenessGate } from '../redownload/politeness_gate';
 import { HeadlessFetcher } from '../redownload/headless_fetcher';
 import { ReDownloadCorpus, ContentCorpus } from '../redownload/corpus';
+import { CachedCorpus } from '../redownload/cached_corpus';
+// Type-only: the value side of content_cache.ts imports `vscode`, which the
+// headless standalone (bundled, no extension host) cannot require. The runtime
+// open is a lazy dynamic import inside init_default_content_cache.
+import type * as vscode from 'vscode';
+import type { ContentCache } from '../redownload/content_cache';
 
 /**
  * Candidate ports the server tries to bind, in order. The browser extension
@@ -49,8 +55,17 @@ export interface ServerConfig {
   /** Storage base; used to persist raw captures for replay in dev mode */
   storage_base?: string;
   /**
+   * VS Code SecretStorage, source of the content cache's encryption key. When
+   * set together with {@link storage_base} and no injected {@link content_corpus},
+   * the default read path persists every ok re-download into the encrypted
+   * content cache under the `"default"` scope. Absent (the headless standalone,
+   * tests) the read path stays live-only and caches nothing.
+   */
+  secrets?: vscode.SecretStorage;
+  /**
    * Content read path backing `/query/capture_content`. Defaults to a stealth
    * headless re-download corpus over the stored URLs; injectable for tests.
+   * An injected corpus bypasses the default-path content cache entirely.
    */
   content_corpus?: ContentCorpus;
   /**
@@ -81,9 +96,17 @@ export class ServerManager {
   private server?: Server;
   private queue_processor?: VisitQueueProcessor;
   private app: express.Application;
-  private readonly content_corpus: ContentCorpus;
+  // Reassigned once during start() when the default read path is wrapped in the
+  // caching corpus; route handlers read it per-request, so the swap is safe.
+  private content_corpus: ContentCorpus;
   /** Set only when this manager owns the default re-download browser. */
   private browser_pool?: BrowserPool;
+  /**
+   * The encrypted content cache, owned for the server's lifetime and exposed via
+   * {@link get_content_cache} so the right-to-forget cascade reuses this single
+   * DuckDB handle (one instance may attach the file at a time).
+   */
+  private content_cache?: ContentCache;
 
   constructor(private config: ServerConfig) {
     this.app = express();
@@ -102,6 +125,39 @@ export class ServerManager {
     });
     const fetcher = new HeadlessFetcher(this.browser_pool, new PolitenessGate());
     return new ReDownloadCorpus(this.config.duck_db, fetcher);
+  }
+
+  /**
+   * Opens the encrypted content cache and wraps the default read path so every
+   * ok re-download persists under the `"default"` scope. A no-op when a corpus
+   * is injected (tests) or the cache prerequisites are absent (the headless
+   * standalone has no SecretStorage). Cache-open failure degrades to the
+   * uncached live corpus rather than failing the capture server — the cache is
+   * a derived tier, and a degrade can never re-key anything.
+   */
+  private async init_default_content_cache(): Promise<void> {
+    if (this.config.content_corpus) return;
+    if (!this.config.secrets || !this.config.storage_base) return;
+    try {
+      // Lazy import: content_cache.ts pulls in `vscode`, absent in the bundled
+      // standalone. This path only runs in the extension host (secrets set).
+      const { open_content_cache } = await import('../redownload/content_cache');
+      this.content_cache = await open_content_cache(
+        this.config.secrets,
+        this.config.storage_base
+      );
+      this.content_corpus = new CachedCorpus(
+        this.config.duck_db,
+        this.content_corpus,
+        this.content_cache,
+        'default'
+      );
+    } catch (error) {
+      console.warn(
+        'Bergamot: content cache unavailable; serving re-downloads live without caching.',
+        format_error_detail(error)
+      );
+    }
   }
 
   /**
@@ -391,6 +447,7 @@ export class ServerManager {
   }
 
   async start(): Promise<number> {
+    await this.init_default_content_cache();
     this.prepare();
 
     let last_error: unknown;
@@ -433,6 +490,13 @@ export class ServerManager {
       await this.browser_pool.close();
     }
 
+    if (this.content_cache) {
+      // Release the cache's DuckDB file lock (checkpoints the WAL) so a later
+      // on-demand open (e.g. the forget command after shutdown) can attach it.
+      await this.content_cache.close();
+      this.content_cache = undefined;
+    }
+
     if (this.server) {
       // Drop idle keep-alive connections so close()'s callback can fire promptly
       // instead of waiting for clients to disconnect (which can hang shutdown).
@@ -462,5 +526,15 @@ export class ServerManager {
    */
   get_queue_processor(): VisitQueueProcessor | undefined {
     return this.queue_processor;
+  }
+
+  /**
+   * The server-owned content cache handle, or null when the default path is
+   * uncached (standalone, tests, or a cache-open degrade). The right-to-forget
+   * cascade reuses this rather than opening its own — DuckDB attaches the cache
+   * file from one instance at a time.
+   */
+  get_content_cache(): ContentCache | null {
+    return this.content_cache ?? null;
   }
 }

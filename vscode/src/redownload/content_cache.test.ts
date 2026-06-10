@@ -1,7 +1,9 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import * as zlib from "zlib";
 import * as vscode from "vscode";
+import { DuckDBBlobValue } from "@duckdb/node-api";
 import { DuckDB } from "../duck_db";
 import { CONTENT_CACHE_KEY_SECRET } from "../database/encryption_key";
 import { CorpusContent } from "./corpus";
@@ -63,6 +65,35 @@ describe("ContentCache (in-memory)", () => {
     expect(hit?.content).toBe("<html>hello</html>");
     expect(hit?.url).toBe("https://example.com/p1");
     expect(hit?.http_status).toBe(200);
+  });
+
+  it("stores the body brotli-compressed as a BLOB and round-trips it", async () => {
+    const markdown = "# Heading\n\n" + "lorem ipsum dolor sit amet ".repeat(5_000);
+    await cache.put(corpus_content("zip", markdown), "scope");
+
+    // Round-trips back to the identical markdown string.
+    expect((await cache.get("zip"))?.content).toBe(markdown);
+
+    // Stored as a BLOB, materially smaller than the raw UTF-8 body, and the
+    // bytes are real brotli (not driver-mangled text).
+    const row = await db.query_first<{ content: unknown; n: number }>(
+      `SELECT content, octet_length(content)::INTEGER AS n
+       FROM cached_content WHERE page_session_id = $id`,
+      { id: "zip" }
+    );
+    expect(row?.content).toBeInstanceOf(DuckDBBlobValue);
+    expect(Number(row?.n)).toBeLessThan(Buffer.byteLength(markdown, "utf8") / 2);
+    if (row?.content instanceof DuckDBBlobValue) {
+      expect(zlib.brotliDecompressSync(row.content.bytes).toString("utf8")).toBe(
+        markdown
+      );
+    }
+  });
+
+  it("round-trips multi-byte UTF-8 content through brotli", async () => {
+    const md = "# Café\n\n— ünïcode ✓ — 日本語テキスト — emoji 🌿";
+    await cache.put(corpus_content("utf8", md), "scope");
+    expect((await cache.get("utf8"))?.content).toBe(md);
   });
 
   it("replaces the entry on re-cache (fresher fetch wins, newest writer owns the scope)", async () => {
@@ -151,6 +182,9 @@ describe("ContentCache at-rest encryption (real file)", () => {
     const marker = "CACHE_PLAINTEXT_CANARY_BODY";
     const { db, cache } = await open_cache(TEST_KEY);
     await cache.put(
+      // The body is brotli-compressed before storage, so a byte scan never sees
+      // its plaintext; the title is stored as TEXT, so encryption is the only
+      // thing hiding "Title of canary" — that absence is the load-bearing check.
       corpus_content("canary", `<html><body>${marker}</body></html>`),
       "canary-scope"
     );
@@ -207,16 +241,17 @@ describe("ContentCache at-rest encryption (real file)", () => {
     await second.db.close();
   });
 
-  it("control: an unencrypted cache-shaped row DOES expose its content to a byte scan", async () => {
-    // Proves the canary scan can see a leak in this table's exact shape —
-    // long HTML in a `content` column. If DuckDB's string compression ever
-    // makes content non-verbatim on disk, this fails loudly instead of the
-    // canary passing vacuously. The wrapper has no plaintext path, so this
-    // uses the raw driver.
-    const { DuckDBInstance } = jest.requireActual("@duckdb/node-api");
+  it("control: an unencrypted cache-shaped row DOES expose its title to a byte scan", async () => {
+    // Proves the canary scan can see a plaintext leak in this table's real
+    // shape — a TEXT `title` beside a compressed-BLOB `content`. The body is
+    // opaque to a byte scan even unencrypted (brotli), so the title is the
+    // plaintext field encryption must hide; this shows the scan detects it when
+    // encryption is absent, so the canary's title assertion cannot pass
+    // vacuously. The wrapper has no plaintext path, so this uses the raw driver.
+    const { DuckDBInstance, blobValue } = jest.requireActual("@duckdb/node-api");
     const plain_path = path.join(temp_dir, "control-plain.db");
-    const marker = "CACHE_PLAINTEXT_CANARY_BODY";
-    const html = `<html><body>${"lorem ipsum ".repeat(2000)}${marker}</body></html>`;
+    const marker = "CACHE_PLAINTEXT_CANARY_TITLE";
+    const body = zlib.brotliCompressSync(Buffer.from("# compressed body\n", "utf8"));
 
     const instance = await DuckDBInstance.create(":memory:");
     const connection = await instance.connect();
@@ -225,16 +260,16 @@ describe("ContentCache at-rest encryption (real file)", () => {
     await connection.run(
       `CREATE TABLE cached_content (
          page_session_id TEXT PRIMARY KEY, url TEXT NOT NULL,
-         scope TEXT NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL,
+         scope TEXT NOT NULL, title TEXT NOT NULL, content BLOB NOT NULL,
          author TEXT, site_name TEXT, published_at TEXT, lang TEXT,
          fetched_at TEXT NOT NULL, http_status INTEGER NOT NULL,
          content_hash TEXT NOT NULL, cached_at TEXT NOT NULL)`
     );
     await connection.run(
       `INSERT INTO cached_content VALUES (
-         'canary', 'https://example.com/c', 'scope', 'Title', $content,
+         'canary', 'https://example.com/c', 'scope', $title, $content,
          NULL, NULL, NULL, NULL, '2026-06-09T12:00:00Z', 200, 'hash', '2026-06-09T12:00:00Z')`,
-      { content: html }
+      { title: marker, content: blobValue(body) }
     );
     await connection.run("CHECKPOINT");
     connection.disconnectSync();

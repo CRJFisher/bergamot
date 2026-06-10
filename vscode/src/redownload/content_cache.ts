@@ -3,10 +3,11 @@
  * tier holding re-downloaded public page content for consumers that need to
  * read it repeatedly (Temporal Topic Detection, RAG, a research project).
  *
- * The cache is never the source of truth — the metadata record is — and it is
- * never populated ambiently: content enters only when a consumer explicitly
- * caches a page under a named scope (see `CachedCorpus`). The store is its own
- * encrypted DuckDB file with its own OS-keystore key (separate from the
+ * The cache is never the source of truth — the metadata record is. Content
+ * enters through `CachedCorpus`: the default content read path populates it
+ * under the `"default"` scope as pages are re-downloaded, and a scoped consumer
+ * (a TDT run, a research project) caches under its own scope. The store is its
+ * own encrypted DuckDB file with its own OS-keystore key (separate from the
  * metadata store's, so destroying the cache key destroys only the cache), and
  * every item is deletable for the right-to-forget cascade (`right_to_forget.ts`).
  *
@@ -18,7 +19,9 @@
  */
 import * as fs from "fs";
 import * as path from "path";
+import * as zlib from "zlib";
 import * as vscode from "vscode";
+import { blobValue, DuckDBBlobValue } from "@duckdb/node-api";
 import { DuckDB } from "../duck_db";
 import {
   CONTENT_CACHE_KEY_SECRET,
@@ -49,6 +52,30 @@ const CACHED_CONTENT_COLUMNS = [
 ] as const;
 
 /**
+ * Compresses the markdown body for storage. Brotli is built into the Node 20
+ * extension host (zstd is not), needs no dependency, and compresses prose well.
+ * Returns a DuckDB BLOB value so the bind layer stores raw bytes, not text.
+ */
+function compress_content(markdown: string): DuckDBBlobValue {
+  return blobValue(zlib.brotliCompressSync(Buffer.from(markdown, "utf8")));
+}
+
+/**
+ * Reverses {@link compress_content}. A BLOB column reads back as a
+ * {@link DuckDBBlobValue}; decoding its bytes yields the original markdown.
+ * Anything else means a pre-brotli cache file — the dev reset (wipe, never
+ * ALTER) recreates the store with the current schema.
+ */
+function decompress_content(value: unknown): string {
+  if (!(value instanceof DuckDBBlobValue)) {
+    throw new Error(
+      "cached content is not a BLOB — stale content_cache.db; wipe it (see backlog/docs/dev-db-reset.md)"
+    );
+  }
+  return zlib.brotliDecompressSync(value.bytes).toString("utf8");
+}
+
+/**
  * Creates the content-cache schema (idempotent). Called once after
  * {@link DuckDB.init} by the owner of the cache store.
  */
@@ -58,8 +85,8 @@ export async function create_content_cache_schema(db: DuckDB): Promise<void> {
     "url TEXT NOT NULL", // the public URL the content was re-downloaded from
     "scope TEXT NOT NULL", // the named consumer that requested caching
     "title TEXT NOT NULL",
-    "content TEXT NOT NULL", // the re-downloaded public HTML
-    "author TEXT", // <meta>-derived fields, as parsed at fetch time
+    "content BLOB NOT NULL", // extracted main-content markdown, brotli-compressed
+    "author TEXT", // Defuddle-derived metadata, as parsed at re-download time
     "site_name TEXT",
     "published_at TEXT",
     "lang TEXT",
@@ -145,7 +172,7 @@ export class ContentCache {
       page_session_id: String(row.page_session_id),
       url: String(row.url),
       title: String(row.title),
-      content: String(row.content),
+      content: decompress_content(row.content),
       site_name: text(row.site_name),
       author: text(row.author),
       published_at: text(row.published_at),
@@ -187,7 +214,7 @@ export class ContentCache {
         url: content.url,
         scope,
         title: content.title,
-        content: content.content,
+        content: compress_content(content.content),
         site_name: content.site_name,
         author: content.author,
         published_at: content.published_at,

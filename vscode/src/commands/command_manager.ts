@@ -111,7 +111,11 @@ export class CommandManager {
     );
     if (confirmed !== 'Forget') return;
 
-    let content_cache: ContentCache | null = null;
+    // Prefer the server-owned cache handle: DuckDB attaches the cache file from
+    // one instance at a time, so opening a second one here while the server holds
+    // it would deadlock on the file lock. Only when the server has none (cache
+    // unavailable, or a post-shutdown forget) do we open — and close — our own.
+    let owned_cache: ContentCache | null = null;
     try {
       // Purge matching visits from the live in-memory pipeline first, so a
       // queued or orphan-parked visit cannot re-insert the forgotten rows
@@ -122,10 +126,14 @@ export class CommandManager {
           selector_matches(selector, visit.url, visit.page_loaded_at ?? null)
         );
 
-      content_cache = await open_content_cache_if_exists(
-        this.config.context.secrets,
-        this.config.storage_base
-      );
+      let content_cache = this.config.server_manager.get_content_cache();
+      if (!content_cache) {
+        owned_cache = await open_content_cache_if_exists(
+          this.config.context.secrets,
+          this.config.storage_base
+        );
+        content_cache = owned_cache;
+      }
       const report = await forget(this.config.duck_db, content_cache, selector, {
         storage_base: this.config.storage_base,
       });
@@ -145,8 +153,9 @@ export class CommandManager {
       const message = error instanceof Error ? error.message : String(error);
       vscode.window.showErrorMessage(`Bergamot: forget failed — ${message}`);
     } finally {
-      if (content_cache) {
-        await content_cache.close();
+      // Close only a cache this method opened; never the server-owned handle.
+      if (owned_cache) {
+        await owned_cache.close();
       }
     }
   }
