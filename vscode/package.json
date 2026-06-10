@@ -1,7 +1,7 @@
 {
   "name": "bergamot",
   "displayName": "Bergamot",
-  "description": "Steep knowledge from your browsing patterns in VS Code",
+  "description": "",
   "version": "0.1.0",
   "publisher": "bergamot",
   "engines": {

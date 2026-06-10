@@ -23,6 +23,7 @@ The data-model reorientation; everything else builds on it. Status: 39.1–39.6 
 3. **TASK-39.4** — At-rest encryption of the metadata store — _parallel; coordinate with 39.1's reset_
 4. **TASK-39.3** — Encrypted on-demand content cache — _after 39.2_
 5. **TASK-39.5** — Cascading right-to-forget — _after 39.3; extends as derived stores land_
+   - **TASK-39.5.1** — Count-aware 'Are you sure' confirmation for `Bergamot: Forget` — _the modal shows the resolved blast radius before deleting_
 6. **TASK-39.6** — Provision the re-download headless browser for a packaged install — _shipped; the packaged extension provisions Chromium on first fetch_
 7. **TASK-39.7** — Surface Linux keyring degradation of SecretStorage-backed store keys — _runtime signal for the threat-model gap; macOS/Windows need nothing_
 
