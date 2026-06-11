@@ -83,7 +83,7 @@ flowchart TB
   stored.</p>
   <div class="cards">
     <div class="card"><h3>Metadata source of truth</h3><p>Visit metadata (URL, title, timestamp, navigation graph) is stored losslessly in DuckDB and is the durable source of truth. Page content is acquired later by re-downloading the public URL.</p></div>
-    <div class="card"><h3>Title from the tab</h3><p>Title and URL are read directly from the tab at capture — no page body needed. The <code>&lt;meta&gt;</code>-derived fields (site, author, published, language) are parsed later from the re-downloaded page.</p></div>
+    <div class="card"><h3>Title from the tab</h3><p>Title and URL are read directly from the tab at capture — no page body needed. The derived fields (site, author, published, language) come later from main-content extraction over the re-downloaded page.</p></div>
     <div class="card"><h3>Zero LLM, zero failure surface</h3><p>Ingestion makes no network call and cannot fail on auth, prompt-length, or non-JSON. It is the cheapest, most robust path; all model cost lives in the RAG pipeline where it is gated.</p></div>
   </div>
 
@@ -116,20 +116,21 @@ classDiagram
       +string content_type
       +string captured_at
     }
-    note for PageCapture "Metadata only — no page content.\nThe &lt;meta&gt;-derived fields (site, author,\npublished, lang) live in webpage_fetch,\nfilled from re-download, not here.\nContent is re-downloaded on demand."
+    note for PageCapture "Metadata only — no page content.\nThe derived fields (site, author,\npublished, lang) live in webpage_fetch,\nfilled by extraction at re-download, not here.\nContent is re-downloaded on demand."
     </pre>
   </div>
   <ul class="clean">
-    <li><strong>Write</strong>: <code>run_page_capture()</code> builds the metadata record (URL, title, timestamp) and upserts it via <code>insert_webpage_capture()</code> (<code>ON CONFLICT (page_session_id) DO UPDATE</code>, so a re-capture overwrites cleanly), then records the stored outcome. The <code>&lt;meta&gt;</code>-derived fields (site, author, published, lang) are not stored here — they are parsed from the re-downloaded page and logged to <code>webpage_fetch</code>. The metadata view is <code>PageCapture</code> (<code>page_capture_models.ts</code>); navigation-tree queries read the title from <code>webpage_capture</code>.</li>
-    <li><strong>Read (content)</strong>: page content is acquired by re-downloading the stored URL live; the read path is exposed over HTTP as <code>/query/capture_content</code> and surfaced by the MCP <code>get_webpage_content</code> tool, and is unavailable for login-walled or dead pages. Consumers that need repeated reads (TDT, RAG) opt into the encrypted content cache via <code>CachedCorpus</code>; the default read path stays live.</li>
+    <li><strong>Write</strong>: <code>run_page_capture()</code> builds the metadata record (URL, title, timestamp) and upserts it via <code>insert_webpage_capture()</code> (<code>ON CONFLICT (page_session_id) DO UPDATE</code>, so a re-capture overwrites cleanly), then records the stored outcome. The derived fields (site, author, published, lang) are not stored here — they come from main-content extraction over the re-downloaded page and are logged to <code>webpage_fetch</code>. The metadata view is <code>PageCapture</code> (<code>page_capture_models.ts</code>); navigation-tree queries read the title from <code>webpage_capture</code>.</li>
+    <li><strong>Read (content)</strong>: page content is acquired by re-downloading the stored URL; a single <code>parse_page</code> pass (heuristic main-content extraction, task-31.5) turns the raw HTML into clean markdown — nav, footer, aside, ad, and social boilerplate pruned — plus derived metadata (title, author, published, site, lang). The read path is exposed over HTTP as <code>/query/capture_content</code> and surfaced by the MCP <code>get_webpage_content</code> tool, and is unavailable for login-walled or dead pages. Re-download runs <em>eagerly</em>: once a visit's metadata is committed, the visit queue kicks off the fetch off the capture path (fire-and-forget, politeness-gated), so the content cache warms without waiting for a read. A read of a still-uncached page re-downloads on demand. Either path is wrapped in <code>CachedCorpus</code> under the <code>"default"</code> scope, so ok re-downloads are persisted (brotli-compressed, encrypted) to the content cache (task-39.10); scoped consumers (TDT, research projects) cache under their own scope.</li>
   </ul>
 
   <h2><span class="num">4</span>What ingest does <em>not</em> do</h2>
-  <p>Ingestion writes only metadata to DuckDB <code>webpage_capture</code>. It reads no page content, performs
-  no re-download, no main-content extraction, no chunking, no embedding, no summarisation, and
-  <strong>nothing is written to any vector store</strong>. Content acquisition (re-download), Temporal Topic
-  Detection, and the <a href="rag-pipeline.html">RAG-prep pipeline (task-31)</a> all run downstream over the
-  re-downloaded public corpus, on their own schedule, tuned against a retrieval harness rather than baked
+  <p>The capture step itself writes only metadata to DuckDB <code>webpage_capture</code>. It reads no page
+  content, performs no re-download, no main-content extraction, no chunking, no embedding, no summarisation,
+  and <strong>nothing is written to any vector store</strong>. Content acquisition (re-download) is triggered
+  separately — the visit queue fires it off the capture path once the metadata row is committed (see §3) —
+  while Temporal Topic Detection and the <a href="rag-pipeline.html">RAG-prep pipeline (task-31)</a> run
+  downstream over the re-downloaded public corpus, tuned against a retrieval harness rather than baked
   irreversibly into capture.</p>
   <div class="diagram">
     <p class="cap">Metadata capture feeds re-download → TDT → RAG-prep</p>
@@ -164,7 +165,7 @@ flowchart LR
   <table>
     <tr><th>Module</th><th>Responsibility</th></tr>
     <tr><td><code>workflow/page_capture_pipeline.ts</code></td><td><code>run_page_capture(db, inputs)</code> — builds the metadata record, upserts via <code>insert_webpage_capture</code>, records the outcome (no gate)</td></tr>
-    <tr><td><code>redownload/read_metadata.ts</code></td><td><code>read_metadata(html, url) → PageMetadata</code> — cheap <code>&lt;meta&gt;</code> parse over re-downloaded content (used by the re-download corpus, not capture)</td></tr>
+    <tr><td><code>redownload/main_content.ts</code></td><td><code>parse_page(html, url) → ParsedPage</code> — heuristic main-content extraction over re-downloaded HTML (Defuddle, local-only, deterministic), yielding clean markdown + derived metadata (used by the re-download corpus, not capture)</td></tr>
     <tr><td><code>page_capture_models.ts</code></td><td><code>PageCapture</code> / <code>PageActivitySessionWithMeta</code> schemas</td></tr>
     <tr><td><code>duck_db.ts</code></td><td><code>webpage_capture</code> table + <code>insert_webpage_capture</code> / <code>get_webpage_capture</code> + tree queries</td></tr>
   </table>

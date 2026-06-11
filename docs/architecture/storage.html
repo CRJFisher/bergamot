@@ -28,8 +28,8 @@
   <section class="hero">
     <h1>💾 Storage Layer</h1>
     <p class="tagline">Ingestion uses one store: DuckDB. It holds the browsing-metadata record — the durable
-    source of truth. Any re-downloaded content is a separate encrypted on-demand tier; vector search is
-    the job of the RAG-prep pipeline (task-31).</p>
+    source of truth. Re-downloaded content is a separate encrypted, brotli-compressed tier, populated by
+    default as public pages are re-downloaded; vector search is the job of the RAG-prep pipeline (task-31).</p>
     <span class="pill">duck_db.ts · webpage_categorizations.db · content_cache.db</span>
   </section>
 
@@ -47,8 +47,8 @@
     </div>
     <div class="card">
       <h3>Content cache — separate encrypted tier</h3>
-      <p>Content is obtained later by re-downloading the public URL. Cached re-downloaded content lives in its own encrypted DuckDB store (<code>content_cache.db</code>) under the storage base, with its own OS-keystore key — never the source of truth and never inside the syncable metadata store; in dev it lives in the gitignored, unpackaged <code>.dev-storage/</code>, and if the surrounding directory is ever backed up or synced the file rides along as ciphertext — encryption, not location, is the load-bearing defense. It is populated only when a consumer opts in through <code>CachedCorpus</code> with a named scope (TDT, task-36.3, when it lands); the default read path re-downloads live. The right-to-forget cascade (<code>right_to_forget.ts</code>, surfaced as <code>Bergamot: Forget</code>) deletes from the cache — by session id, by URL, and by origin — and never creates or populates it. Scopes attribute entries, they do not partition them — re-caching under a new scope reassigns the row. Every item is per-item deletable for the right-to-forget cascade.</p>
-      <span class="tag">content_cache.db · on-demand · encrypted · scoped</span>
+      <p>Content is obtained later by re-downloading the public URL, then reduced to clean main-content markdown by extraction (task-31.5). It is stored brotli-compressed in its own encrypted DuckDB store (<code>content_cache.db</code>) under the storage base, with its own OS-keystore key — never the source of truth and never inside the syncable metadata store; in dev it lives in the gitignored, unpackaged <code>.dev-storage/</code>, and if the surrounding directory is ever backed up or synced the file rides along as ciphertext — encryption, not location, is the load-bearing defense. The cache is populated by default (task-39.10): the default content read path is wrapped in <code>CachedCorpus</code> under the <code>"default"</code> scope, so every ok re-download it serves is cached as a side effect; scoped consumers (TDT, research projects) cache under their own scope. Only pages actually read enter the cache. The right-to-forget cascade (<code>right_to_forget.ts</code>, surfaced as <code>Bergamot: Forget</code>) deletes from the cache — by session id, by URL, and by origin — and never creates or populates it. Scopes attribute entries, they do not partition them — re-caching under a new scope reassigns the row. Every item is per-item deletable for the right-to-forget cascade.</p>
+      <span class="tag">content_cache.db · default-populated · brotli · encrypted · scoped</span>
     </div>
     <div class="card">
       <h3>Vector search — deferred</h3>
@@ -128,19 +128,19 @@ erDiagram
     <tr><td><code>webpage_trees</code></td><td>1 row / browsing session</td><td>Tree id + first/last activity timestamps.</td></tr>
     <tr><td><code>webpage_activity_sessions</code></td><td>1 row / page visit</td><td>URL, referrer + referrer session id, load time, owning tree.</td></tr>
     <tr><td><code>webpage_capture</code></td><td>1 row / visit</td><td>Per-visit metadata only: <code>page_session_id</code>, URL, title (captured directly from the tab), content type, and capture timestamp. No page content. The canonical per-page metadata record.</td></tr>
-    <tr><td><code>webpage_fetch</code></td><td>1 row / re-download attempt</td><td>Append-only fidelity log of the re-download fetcher: outcome classification (<code>ok</code> / auth_redirect / forbidden / paywall / dead_link / non_html), final URL, HTTP status, content hash, fetch timestamp, and the <code>&lt;meta&gt;</code>-derived fields. No page content.</td></tr>
+    <tr><td><code>webpage_fetch</code></td><td>1 row / re-download attempt</td><td>Append-only fidelity log of the re-download fetcher: outcome classification (<code>ok</code> / auth_redirect / forbidden / paywall / dead_link / non_html), final URL, HTTP status, content hash, fetch timestamp, and the extraction-derived fields (site, author, published, lang). No page content.</td></tr>
   </table>
   <p><code>webpage_capture</code> has no foreign key on <code>page_session_id</code>, so a capture can be written
   before (or independently of) its activity-session row. Tree queries <code>LEFT JOIN webpage_capture</code> to
   read a page's title. The title and URL are captured directly from the tab; the
-  <code>&lt;meta&gt;</code>-derived fields (site, author, published, lang) are <em>not</em> stored here — they are
-  parsed from the re-downloaded page and logged to <code>webpage_fetch</code>.</p>
+  derived fields (site, author, published, lang) are <em>not</em> stored here — they come from main-content
+  extraction over the re-downloaded page and are logged to <code>webpage_fetch</code>.</p>
 
   <div class="note green">
     <strong>Canonical record:</strong> <code>webpage_capture</code> is the single per-page <em>metadata</em>
     record — <code>page_session_id</code>, URL, title, content type, and capture timestamp. It holds no page
-    content and no <code>&lt;meta&gt;</code>-derived fields; content and those fields come from re-download
-    (logged to <code>webpage_fetch</code>), and any content cache is a separate encrypted tier. Schema changes
+    content and no derived fields; content and those fields come from re-download
+    (logged to <code>webpage_fetch</code>), and the content cache is a separate encrypted tier. Schema changes
     are applied by a destructive dev-DB reset (<code>backlog/docs/dev-db-reset.md</code>) — no migrations, no
     backwards-compatibility shims.
   </div>

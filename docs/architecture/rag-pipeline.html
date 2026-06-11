@@ -58,7 +58,7 @@ flowchart LR
     <li><strong>Input:</strong> the re-downloadable public subset — visits whose pages fail to re-download (auth-walled, dead) are excluded from clustering and retrieval and remain as trail/metadata only.</li>
     <li><strong>Ordering:</strong> TDT first, then RAG; both run over the same re-downloaded public corpus and share one local embedding model.</li>
     <li><strong>Chunking / embedding / retrieval / reranking:</strong> none yet — all introduced by the phases below.</li>
-    <li><strong>Parent document:</strong> the re-downloaded page content (a separate encrypted on-demand tier), keyed by <code>page_session_id</code>; may be unavailable for login-walled or dead pages.</li>
+    <li><strong>Parent document:</strong> the re-downloaded page's extracted main-content markdown (a separate encrypted, brotli-compressed cache tier, populated by default as pages are re-downloaded), keyed by <code>page_session_id</code>; may be unavailable for login-walled or dead pages.</li>
   </ul>
   <div class="note">
     <strong>Re-download fidelity caveat.</strong> A re-downloaded page is not guaranteed to equal the page as
