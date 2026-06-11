@@ -112,6 +112,34 @@ const set_post_status_badge = (ok: boolean): void => {
   }
 };
 
+// Posts to the live Bergamot server, finding it wherever it bound in the
+// candidate range. Tries the cached/seed URL first; on failure the cached port
+// is stale or the server bound elsewhere in the range, so it re-discovers once
+// (a discovered URL has passed the /status health check) and retries. Updates
+// the shared cache so visits and dev signals converge on the same server, and
+// throws only when neither the seed nor any discovered server accepts the post.
+const post_with_rediscovery = async (
+  endpoint: string,
+  data: unknown,
+  seed_url: string
+): Promise<void> => {
+  const target = cached_server_url ?? seed_url;
+  try {
+    await send_to_server(target, endpoint, data);
+    cached_server_url = target;
+    return;
+  } catch (error) {
+    const discovered = await discover_server_url();
+    if (discovered) {
+      await send_to_server(discovered, endpoint, data);
+      cached_server_url = discovered;
+      return;
+    }
+    cached_server_url = null;
+    throw error;
+  }
+};
+
 export const handle_server_request = async (
   endpoint: string,
   data: unknown,
@@ -119,51 +147,30 @@ export const handle_server_request = async (
 ): Promise<MessageResponse> => {
   console.log(`🌐 Forwarding to Bergamot server:`, endpoint, data);
 
-  const target = cached_server_url ?? api_base_url;
   try {
-    await send_to_server(target, endpoint, data);
-    cached_server_url = target;
+    await post_with_rediscovery(endpoint, data, api_base_url);
     set_post_status_badge(true);
     return { success: true };
   } catch (error) {
-    // The cached/default port may be stale, or the server bound a different
-    // port in the candidate range. Re-discover once and retry. A rediscovered
-    // URL has passed the /status health check, so always retry it — even if it
-    // matches the target, the first failure may have been transient (server
-    // just coming up).
-    const discovered = await discover_server_url();
-    if (discovered) {
-      try {
-        await send_to_server(discovered, endpoint, data);
-        cached_server_url = discovered;
-        set_post_status_badge(true);
-        return { success: true };
-      } catch (retry_error) {
-        cached_server_url = null;
-        set_post_status_badge(false);
-        return { success: false, error: error_message(retry_error) };
-      }
-    }
-    cached_server_url = null;
     set_post_status_badge(false);
     return { success: false, error: error_message(error) };
   }
 };
 
-// Relays a browser-side dev signal to the server's dev-log sink. Best-effort:
-// reuses the cached server URL (so it never triggers a discovery storm) and
-// swallows failures, since dev observability must never disrupt the pipeline.
+// Relays a browser-side dev signal to the server's dev-log sink. Shares the same
+// discovery + cache as visits, so `capture_attempted` reaches the server even
+// when it bound a non-default port in the range. Best-effort: swallows failures,
+// since dev observability must never disrupt the pipeline.
 export const forward_dev_signal = async (
   stage: string,
   fields: Record<string, unknown>,
   api_base_url: string
 ): Promise<void> => {
-  const target = cached_server_url ?? api_base_url;
-  if (!stage || !target) {
+  if (!stage) {
     return;
   }
   try {
-    await send_to_server(target, '/dev_signal', { stage, fields });
+    await post_with_rediscovery('/dev_signal', { stage, fields }, api_base_url);
   } catch {
     // Dev observability is best-effort.
   }

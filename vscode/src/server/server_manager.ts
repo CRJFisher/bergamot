@@ -38,6 +38,36 @@ export const SERVER_PORT_RANGE: readonly number[] = [
   5000, 5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009,
 ];
 
+/** The `/status` service marker that identifies a Bergamot capture server. */
+const SERVICE_MARKER = 'bergamot';
+
+const delay = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Returns true if `base_url` is a running Bergamot capture server (its `/status`
+ * reports the expected service marker). Mirrors the browser extension's probe.
+ */
+const is_bergamot_server = async (base_url: string): Promise<boolean> => {
+  try {
+    const response = await fetch(`${base_url}/status`, { method: 'GET' });
+    if (!response.ok) return false;
+    const body = (await response.json()) as { service?: string };
+    return body.service === SERVICE_MARKER;
+  } catch {
+    // Connection refused / nothing listening / non-JSON — not our server.
+    return false;
+  }
+};
+
+/** Polls until `base_url` stops responding as a Bergamot server, or times out. */
+const wait_for_port_release = async (base_url: string): Promise<void> => {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if (!(await is_bergamot_server(base_url))) return;
+    await delay(100);
+  }
+};
+
 /** Maximum number of rows any read-only /query endpoint will return. */
 const MAX_QUERY_LIMIT = 100;
 
@@ -54,6 +84,15 @@ export interface ServerConfig {
   inbox_dir?: string;
   /** Storage base; used to persist raw captures for replay in dev mode */
   storage_base?: string;
+  /**
+   * When true, {@link ServerManager.start} shuts down any other Bergamot capture
+   * server in the candidate range before binding, so this instance becomes the
+   * single server the browser reaches (see {@link ServerManager.evict_stale_servers}).
+   * Off by default: this is a destructive cross-process action, enabled only by
+   * the real extension activation — never in tests or the headless harness, where
+   * it would shut down a developer's live server or a sibling jest worker.
+   */
+  reclaim_port?: boolean;
   /**
    * VS Code SecretStorage, source of the content cache's encryption key. When
    * set together with {@link storage_base} and no injected {@link content_corpus},
@@ -247,6 +286,18 @@ export class ServerManager {
         status: 'running',
         version: '1.0.0',
         uptime: process.uptime(),
+      });
+    });
+
+    // Graceful shutdown: lets a newly-activating Bergamot host evict an older one
+    // squatting on a candidate port (see evict_stale_servers), releasing the port
+    // WITHOUT killing the extension-host process. Loopback-bound like every route.
+    this.app.post('/shutdown', (req, res) => {
+      res.json({ status: 'shutting_down' });
+      // Tear down only after the reply flushes, so the evicting host sees a clean
+      // response before the socket closes.
+      setImmediate(() => {
+        void this.stop();
       });
     });
 
@@ -477,8 +528,38 @@ export class ServerManager {
     this.setup_queue_processor();
   }
 
+  /**
+   * Shuts down any other Bergamot capture server already bound in the candidate
+   * range, so this instance can claim the lowest free port — the one the browser
+   * extension probes first. Without this, a leftover host (e.g. a debug host that
+   * outlived its window) keeps the low port and silently receives the captures
+   * meant for this instance, while this one hides on a higher port the browser
+   * may never reach. Non-Bergamot processes on a port are left untouched; the
+   * bind loop simply skips past them and the browser discovers the bound port.
+   */
+  private async evict_stale_servers(): Promise<void> {
+    for (const port of SERVER_PORT_RANGE) {
+      const base_url = `http://127.0.0.1:${port}`;
+      if (!(await is_bergamot_server(base_url))) continue;
+      console.log(`Evicting stale Bergamot server on port ${port}`);
+      try {
+        await fetch(`${base_url}/shutdown`, { method: 'POST' });
+      } catch {
+        // The server may drop the socket before replying — that is success.
+      }
+      await wait_for_port_release(base_url);
+    }
+  }
+
   async start(): Promise<number> {
     await this.prepare();
+
+    // Reclaim the candidate range from any stale Bergamot server before binding,
+    // so this instance becomes the single server the browser reaches. Gated:
+    // only the real extension activation opts in (see ServerConfig.reclaim_port).
+    if (this.config.reclaim_port) {
+      await this.evict_stale_servers();
+    }
 
     let last_error: unknown;
     for (const port of SERVER_PORT_RANGE) {

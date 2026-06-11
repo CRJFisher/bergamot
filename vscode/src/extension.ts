@@ -69,6 +69,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       duck_db: databases.duck_db,
       inbox_dir: path.join(storage_base, 'visit_inbox'),
       storage_base,
+      // Claim the candidate port range from any stale Bergamot server (e.g. a
+      // debug host that outlived its window) so this instance is the single
+      // server the browser reaches. Only the real activation does this.
+      reclaim_port: true,
       // Source of the content cache's encryption key; enables default-path
       // caching of re-downloaded public content under the "default" scope.
       secrets: context.secrets,

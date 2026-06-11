@@ -116,6 +116,26 @@ describe('ServerManager', () => {
       });
     });
 
+    describe('POST /shutdown', () => {
+      it('acknowledges and tears the server down so a newer host can claim the port', async () => {
+        // Stub the teardown so the scheduled shutdown does not race afterEach's
+        // real stop(); afterEach (post-restore) performs the actual teardown.
+        const stop_spy = jest
+          .spyOn(server_manager, 'stop')
+          .mockResolvedValue(undefined);
+
+        const response = await request(app).post('/shutdown').expect(200);
+        expect(response.body).toEqual({ status: 'shutting_down' });
+
+        // The teardown is scheduled after the reply flushes; let the setImmediate
+        // run, then confirm the server stopped itself.
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(stop_spy).toHaveBeenCalled();
+
+        stop_spy.mockRestore();
+      });
+    });
+
     describe('POST /dev_signal', () => {
       it('logs a recognized browser stage to the dev-log sink', async () => {
         const response = await request(app)
