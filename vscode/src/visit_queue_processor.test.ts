@@ -228,6 +228,68 @@ describe("VisitQueueProcessor", () => {
       expect(mockOrphanManager.get_orphans_for_tab).toHaveBeenCalledWith(42);
     });
 
+    it("fires on_captured with the page_session_id once a visit is captured", async () => {
+      const on_captured = jest.fn();
+      const eager_processor = new VisitQueueProcessor(
+        mockDuckDb,
+        mockOrphanManager,
+        { batch_size: 3, batch_timeout: 100, on_captured }
+      );
+      const visit: ExtendedPageVisit = {
+        id: "visit-eager-1",
+        visit_id: "v-visit-eager-1",
+        url: "https://example.com",
+        referrer: null,
+        page_loaded_at: "2024-01-01T12:00:00Z",
+        title: "<html>Test</html>",
+        tab_id: 42,
+      };
+
+      mockInsertPageActivitySession.mockResolvedValue({
+        tree_id: "tree-123",
+        was_tree_changed: true,
+        referrer_session_id: null,
+      });
+
+      await eager_processor.process_single_visit(visit);
+      eager_processor.stop();
+
+      // The hook fires with the captured page's id (the re-download corpus key),
+      // and only after the metadata row is committed.
+      expect(on_captured).toHaveBeenCalledWith("visit-eager-1");
+      expect(mockRunPageCapture).toHaveBeenCalled();
+    });
+
+    it("does not fire on_captured for an orphaned visit (nothing captured)", async () => {
+      const on_captured = jest.fn();
+      const eager_processor = new VisitQueueProcessor(
+        mockDuckDb,
+        mockOrphanManager,
+        { batch_size: 3, batch_timeout: 100, on_captured }
+      );
+      const visit: ExtendedPageVisit = {
+        id: "orphan-eager-1",
+        visit_id: "v-orphan-eager-1",
+        url: "https://example.com/child",
+        referrer: "https://example.com/parent",
+        page_loaded_at: "2024-01-01T12:00:00Z",
+        title: "<html>Child</html>",
+        opener_tab_id: 10,
+        tab_id: 20,
+      };
+
+      mockInsertPageActivitySession.mockResolvedValue({
+        tree_id: "tree-456",
+        was_tree_changed: true,
+        referrer_session_id: null,
+      });
+
+      await eager_processor.process_single_visit(visit);
+      eager_processor.stop();
+
+      expect(on_captured).not.toHaveBeenCalled();
+    });
+
     it("should handle orphaned visit", async () => {
       const visit: ExtendedPageVisit = {
         id: "orphan-1",

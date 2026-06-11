@@ -214,6 +214,30 @@ export class ServerManager {
   }
 
   /**
+   * Eagerly re-downloads a freshly captured page so its public content is
+   * extracted and cached before anything reads it — the push half of the
+   * otherwise pull-only content path. Fire-and-forget: it runs off the capture
+   * queue (never awaited), is throttled by the fetcher's politeness gate, and
+   * resolves to an exclusion (nothing cached) for auth/paywall/dead pages.
+   *
+   * Gated on the content cache being active: without it the re-download would
+   * persist nothing, so the work would be pure egress with no benefit (and the
+   * headless standalone and corpus-injecting tests have no cache, so eager
+   * re-download stays off there). A failure is isolated — re-download is
+   * fallible by nature and must never disturb capture; the page stays
+   * re-downloadable on read regardless.
+   */
+  private trigger_eager_redownload(page_session_id: string): void {
+    if (!this.content_cache) return;
+    void this.content_corpus.get_content(page_session_id).catch((error) => {
+      console.warn(
+        `Bergamot: eager re-download failed for ${page_session_id}:`,
+        format_error_detail(error)
+      );
+    });
+  }
+
+  /**
    * Closes the content cache (releasing its DuckDB file lock) and restores the
    * uncached read path. Used by {@link stop} and by {@link start} when no port
    * binds, so a failed start cannot leak the lock.
@@ -265,7 +289,9 @@ export class ServerManager {
         batch_size: 3,
         batch_timeout: 1000,
         orphan_retry_interval: 5000,
-        inbox_dir: this.config.inbox_dir
+        inbox_dir: this.config.inbox_dir,
+        on_captured: (page_session_id) =>
+          this.trigger_eager_redownload(page_session_id),
       }
     );
     this.queue_processor.start();

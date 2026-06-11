@@ -65,6 +65,14 @@ export interface QueueProcessorConfig {
   orphan_retry_interval?: number;
   /** Directory of the durable visit inbox; entries are removed once persisted to DuckDB */
   inbox_dir?: string;
+  /**
+   * Called with the `page_session_id` of each visit the moment its metadata is
+   * captured. The server wires this to an eager re-download, so a page's public
+   * content is fetched and cached as it is captured rather than lazily on first
+   * read. Fire-and-forget by contract — the queue never awaits it, so a slow or
+   * failing re-download cannot stall capture throughput.
+   */
+  on_captured?: (page_session_id: string) => void;
 }
 
 /**
@@ -117,6 +125,7 @@ export class VisitQueueProcessor {
   private readonly batch_timeout: number;
   private readonly orphan_retry_interval: number;
   private readonly inbox_dir?: string;
+  private readonly on_captured?: (page_session_id: string) => void;
 
   constructor(
     private readonly duck_db: DuckDB,
@@ -127,6 +136,7 @@ export class VisitQueueProcessor {
     this.batch_timeout = config.batch_timeout ?? 1000;
     this.orphan_retry_interval = config.orphan_retry_interval ?? 5000;
     this.inbox_dir = config.inbox_dir;
+    this.on_captured = config.on_captured;
   }
 
   /**
@@ -270,6 +280,12 @@ export class VisitQueueProcessor {
       title: visit.title,
       visit_id: visit.visit_id,
     });
+
+    // The metadata row is now committed — the id the re-download corpus resolves
+    // against. Kick off the eager re-download of this freshly captured page.
+    // Fire-and-forget by contract: it runs off the capture path so a slow or
+    // failing fetch never stalls the queue (page_session_id === the visit id).
+    this.on_captured?.(page_with_tree_id.id);
 
     // Process any orphaned children waiting for this page
     await this.process_orphaned_children(visit);
