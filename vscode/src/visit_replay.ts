@@ -9,7 +9,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { ExtendedPageVisit } from './visit_queue_processor';
+import { ExtendedPageVisit, is_complete_visit } from './visit_queue_processor';
 
 const REPLAY_DIRNAME = 'captures';
 const MAX_REPLAY_VISITS = 20;
@@ -67,15 +67,18 @@ function prune(dir: string): void {
 export function list_replay_visits(storage_base: string): ReplayVisitSummary[] {
   const dir = replay_dir(storage_base);
   if (!fs.existsSync(dir)) return [];
-  return json_files_by_mtime(dir).map((f) => {
-    const visit = JSON.parse(
-      fs.readFileSync(path.join(dir, f), 'utf-8')
-    ) as ExtendedPageVisit;
-    return {
-      visit_id: visit.visit_id,
-      url: visit.url,
-      page_loaded_at: visit.page_loaded_at,
-    };
+  return json_files_by_mtime(dir).flatMap((f) => {
+    const visit: unknown = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf-8'));
+    // Skip entries written by an earlier capture model that lack the fields the
+    // replay pipeline requires — they cannot be replayed (see load_replay_visit).
+    if (!is_complete_visit(visit)) return [];
+    return [
+      {
+        visit_id: visit.visit_id,
+        url: visit.url,
+        page_loaded_at: visit.page_loaded_at,
+      },
+    ];
   });
 }
 
@@ -86,5 +89,8 @@ export function load_replay_visit(
 ): ExtendedPageVisit | null {
   const file = replay_file(storage_base, visit_id);
   if (!fs.existsSync(file)) return null;
-  return JSON.parse(fs.readFileSync(file, 'utf-8')) as ExtendedPageVisit;
+  const visit: unknown = JSON.parse(fs.readFileSync(file, 'utf-8'));
+  // A capture persisted by an earlier model can be missing required fields
+  // (e.g. `title`); treat it as un-replayable rather than crashing the pipeline.
+  return is_complete_visit(visit) ? visit : null;
 }

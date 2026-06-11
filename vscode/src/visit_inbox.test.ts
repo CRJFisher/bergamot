@@ -4,14 +4,14 @@ import * as path from "path";
 import { ensure_inbox, persist_visit, remove_visit, load_inbox } from "./visit_inbox";
 import { ExtendedPageVisit } from "./visit_queue_processor";
 
-const make_visit = (id: string, url: string): ExtendedPageVisit =>
-  ({
-    id,
-    url,
-    referrer: "",
-    page_loaded_at: "2026-06-02T00:00:00.000Z",
-    title: "<html></html>",
-  } as ExtendedPageVisit);
+const make_visit = (id: string, url: string): ExtendedPageVisit => ({
+  id,
+  url,
+  referrer: "",
+  page_loaded_at: "2026-06-02T00:00:00.000Z",
+  visit_id: `visit-${id}`,
+  title: "<html></html>",
+});
 
 describe("visit_inbox", () => {
   let dir: string;
@@ -43,6 +43,26 @@ describe("visit_inbox", () => {
     remove_visit(dir, "a");
 
     expect(load_inbox(dir).map((v) => v.id)).toEqual(["b"]);
+  });
+
+  it("drops and deletes a malformed entry missing required fields", () => {
+    ensure_inbox(dir);
+    persist_visit(dir, make_visit("good", "https://good.com"));
+    // An entry written by an earlier capture model: no `title`/`visit_id`.
+    const legacy = path.join(dir, "legacy.json");
+    fs.writeFileSync(
+      legacy,
+      JSON.stringify({
+        id: "legacy",
+        url: "https://legacy.com",
+        referrer: "",
+        page_loaded_at: "2026-06-02T00:00:00.000Z",
+      })
+    );
+
+    expect(load_inbox(dir).map((v) => v.id)).toEqual(["good"]);
+    // The poison-pill file is removed so it cannot wedge the queue on restart.
+    expect(fs.existsSync(legacy)).toBe(false);
   });
 
   it("returns an empty list for a missing inbox and tolerates double-remove", () => {

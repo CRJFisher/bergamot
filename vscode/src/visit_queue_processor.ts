@@ -32,6 +32,28 @@ export interface ExtendedPageVisit extends PageActivitySessionWithoutTree {
 }
 
 /**
+ * Narrows an unknown value — typically JSON deserialized from the durable inbox
+ * or the replay ring — to a complete {@link ExtendedPageVisit}.
+ *
+ * The capture pipeline binds every field to DuckDB, which rejects `undefined`
+ * with an opaque `Cannot create values of type ANY` error. A persisted entry
+ * written by an earlier capture model can be missing required fields (notably
+ * `title`), so callers validate before feeding a visit into the pipeline and
+ * drop anything that fails rather than letting it detonate at the DB bind.
+ */
+export function is_complete_visit(value: unknown): value is ExtendedPageVisit {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.id === "string" &&
+    typeof v.url === "string" &&
+    typeof v.page_loaded_at === "string" &&
+    typeof v.visit_id === "string" &&
+    typeof v.title === "string"
+  );
+}
+
+/**
  * Configuration options for the visit queue processor
  */
 export interface QueueProcessorConfig {

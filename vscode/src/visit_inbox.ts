@@ -10,7 +10,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { ExtendedPageVisit } from "./visit_queue_processor";
+import { ExtendedPageVisit, is_complete_visit } from "./visit_queue_processor";
 
 export const ensure_inbox = (dir: string): void => {
   fs.mkdirSync(dir, { recursive: true });
@@ -41,11 +41,22 @@ export const load_inbox = (dir: string): ExtendedPageVisit[] => {
   // rest of the durable inbox.
   return entries.flatMap((f) => {
     const file_path = path.join(dir, f);
+    let parsed: unknown;
     try {
-      return [JSON.parse(fs.readFileSync(file_path, "utf8")) as ExtendedPageVisit];
+      parsed = JSON.parse(fs.readFileSync(file_path, "utf8"));
     } catch {
       console.warn(`Skipping unreadable inbox entry: ${file_path}`);
       return [];
     }
+    if (!is_complete_visit(parsed)) {
+      // An entry missing required capture fields (e.g. written by an earlier
+      // capture model) is a permanent failure: re-queuing it would crash the
+      // DB bind and wedge the inbox on every restart, since failures are kept
+      // for retry. Delete it so the inbox can drain.
+      console.warn(`Dropping malformed inbox entry: ${file_path}`);
+      remove_visit(dir, f.replace(/\.json$/, ""));
+      return [];
+    }
+    return [parsed];
   });
 };
