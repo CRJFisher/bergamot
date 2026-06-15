@@ -51,7 +51,7 @@ flowchart TB
     subgraph RECV["Reception"]
       direction TB
       srv["ServerManager (Express)<br/>POST /visit · GET /query/*"]
-      inbox["visit_inbox.ts<br/>durable JSON queue"]
+      inbox["visit_inbox.ts<br/>encrypted inbox table (DuckDB)"]
       qp["VisitQueueProcessor<br/>batch=3 · timeout 1 s · retry"]
       srv --> inbox --> qp
     end
@@ -107,9 +107,9 @@ flowchart TB
   <table>
     <tr><th>Stage</th><th>What happens</th></tr>
     <tr><td><code>POST /visit</code></td><td>Hash <code>url:page_loaded_at</code> → session ID; validate the metadata payload against a Zod schema.</td></tr>
-    <tr><td>Inbox</td><td>Write the visit to <code>{globalStorage}/visit_inbox/{id}.json</code> (durable) before returning 200.</td></tr>
+    <tr><td>Inbox</td><td>Insert a row into the encrypted <code>visit_inbox</code> table (inside the DuckDB metadata store) before returning 200 — no plaintext files written to disk.</td></tr>
     <tr><td>Queue</td><td><code>VisitQueueProcessor</code> drains the inbox in batches (size 3 or 1 s timeout) with retry.</td></tr>
-    <tr><td>Cleanup</td><td>Once the visit is persisted to DuckDB, its inbox JSON file is removed. Orphans are reloaded on startup.</td></tr>
+    <tr><td>Cleanup</td><td>Once the visit is persisted to DuckDB, its inbox row is deleted. Orphans are reloaded on startup by querying the table.</td></tr>
   </table>
 
   <h2><span class="num">4</span>Capture: <code>run_page_capture</code></h2>

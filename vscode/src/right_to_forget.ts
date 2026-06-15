@@ -3,16 +3,18 @@
  * Forgetting — by URL, by origin, or by time-range — deletes the metadata
  * rows AND every artifact that encodes the forgotten pages: the fetch log
  * (matched by stored URL and by post-redirect final URL), the encrypted
- * content cache, the plaintext visit-inbox and dev replay files buffered
- * under the storage base, and the in-memory visit-outcome ring. Forgetting
- * is deletion, not hiding: surviving visits' referrer fields are scrubbed
- * and navigation trees left empty are removed.
+ * content cache, the visit_inbox table rows buffered under the metadata store,
+ * the plaintext dev-replay files buffered under the storage base, and the
+ * in-memory visit-outcome ring. Forgetting is deletion, not hiding: surviving
+ * visits' referrer fields are scrubbed and navigation trees left empty are
+ * removed.
  *
  * THIS MODULE IS THE CASCADE'S SINGLE HOME: every derived store joins it as
- * it lands. Today that is the metadata tables, the encrypted content cache
- * (task-39.3), and the plaintext visit buffers; TDT cluster tables (task-36)
- * and RAG vectors (task-31) are added here when those stores exist (both
- * tasks carry an acceptance criterion pointing back at this module).
+ * it lands. Today that is the metadata tables (including the visit_inbox
+ * buffer, task-39.8), the encrypted content cache (task-39.3), and the
+ * plaintext dev-replay ring; TDT cluster tables (task-36) and RAG vectors
+ * (task-31) are added here when those stores exist (both tasks carry an
+ * acceptance criterion pointing back at this module).
  *
  * Ordering and atomicity, honestly: the metadata-side deletes run in one
  * transaction on a dedicated connection (the empty-tree sweep necessarily
@@ -45,6 +47,7 @@ import {
   WEBPAGE_CAPTURE_TABLE,
   WEBPAGE_FETCH_TABLE,
   WEBPAGE_TREES_TABLE,
+  VISIT_INBOX_TABLE,
 } from "./duck_db";
 import { ContentCache } from "./redownload/content_cache";
 import { purge_outcomes } from "./dev_log";
@@ -63,7 +66,7 @@ export interface ForgetReport {
   urls: number;
   /** Whether the content-cache cascade ran (false when no cache exists). */
   content_cache_swept: boolean;
-  /** Plaintext buffer files (visit inbox + dev replay ring) removed. */
+  /** Plaintext dev-replay files (captures/) removed from the storage base. */
   files_removed: number;
 }
 
@@ -189,45 +192,71 @@ async function resolve_targets(
 }
 
 /**
- * Sweeps the plaintext visit buffers under the storage base — the durable
- * visit inbox (`visit_inbox/`) and the dev replay ring (`captures/`) — both
- * of which hold full visit JSON (url, title, referrer, timestamps) for
- * exactly the visits a forget targets. Matching is by the file's own
- * url/page_loaded_at, not by resolved ids: a buffered visit may never have
- * reached the database. Unreadable files are left alone.
+ * Sweeps visit_inbox table rows in the encrypted metadata store that match the
+ * selector. A buffered visit may not yet have a resolved session id (it was
+ * accepted over HTTP but not yet captured), so matching is by the stored
+ * url/page_loaded_at rather than by id. Returns the count of rows deleted.
  */
-function sweep_visit_files(
+async function sweep_visit_inbox(
+  metadata_db: DuckDB,
+  selector: ForgetSelector
+): Promise<number> {
+  const rows = await metadata_db.query<{
+    id: string;
+    url: string;
+    page_loaded_at: string | null;
+  }>(`SELECT id, url, page_loaded_at FROM ${VISIT_INBOX_TABLE}`);
+
+  const to_delete = rows.filter((r) =>
+    selector_matches(selector, r.url, r.page_loaded_at ?? null)
+  );
+  if (to_delete.length === 0) return 0;
+
+  const { placeholders, params } = in_list(
+    to_delete.map((r) => r.id),
+    "iid"
+  );
+  await metadata_db.execute(
+    `DELETE FROM ${VISIT_INBOX_TABLE} WHERE id IN (${placeholders})`,
+    params
+  );
+  return to_delete.length;
+}
+
+/**
+ * Sweeps plaintext dev-replay files under `<storage_base>/captures/` that
+ * match the selector. Matching is by the file's url/page_loaded_at — a replay
+ * file may reference a URL not yet in the database. Unreadable files are left
+ * alone. Returns the count of files removed.
+ */
+function sweep_replay_captures(
   storage_base: string,
   selector: ForgetSelector
 ): number {
+  const dir = path.join(storage_base, "captures");
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
+  } catch {
+    return 0; // Directory does not exist — nothing buffered.
+  }
   let removed = 0;
-  for (const dir_name of ["visit_inbox", "captures"]) {
-    const dir = path.join(storage_base, dir_name);
-    let entries: string[];
+  for (const entry of entries) {
+    const file_path = path.join(dir, entry);
     try {
-      entries = fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
-    } catch {
-      continue; // Directory does not exist — nothing buffered.
-    }
-    for (const entry of entries) {
-      const file_path = path.join(dir, entry);
-      try {
-        const visit = JSON.parse(fs.readFileSync(file_path, "utf8")) as {
-          url?: unknown;
-          page_loaded_at?: unknown;
-        };
-        if (typeof visit.url !== "string") continue;
-        const at =
-          typeof visit.page_loaded_at === "string"
-            ? visit.page_loaded_at
-            : null;
-        if (selector_matches(selector, visit.url, at)) {
-          fs.unlinkSync(file_path);
-          removed++;
-        }
-      } catch {
-        // Unreadable or already-removed entry — not this sweep's problem.
+      const visit = JSON.parse(fs.readFileSync(file_path, "utf8")) as {
+        url?: unknown;
+        page_loaded_at?: unknown;
+      };
+      if (typeof visit.url !== "string") continue;
+      const at =
+        typeof visit.page_loaded_at === "string" ? visit.page_loaded_at : null;
+      if (selector_matches(selector, visit.url, at)) {
+        fs.unlinkSync(file_path);
+        removed++;
       }
+    } catch {
+      // Unreadable or already-removed entry — not this sweep's problem.
     }
   }
   return removed;
@@ -240,8 +269,8 @@ function sweep_visit_files(
  * @param content_cache - The encrypted content cache, or `null` when no cache
  *   store exists yet — forgetting must not create one
  * @param selector - What to forget
- * @param options.storage_base - When given, the plaintext visit buffers
- *   (visit inbox, dev replay ring) under it are swept too
+ * @param options.storage_base - When given, the plaintext dev-replay files
+ *   (`captures/`) under it are swept too
  */
 export async function forget(
   metadata_db: DuckDB,
@@ -254,8 +283,13 @@ export async function forget(
   const started_at = new Date().toISOString();
   const targets = await resolve_targets(metadata_db, selector);
 
+  // Sweep the encrypted inbox buffer first — before the metadata transaction
+  // removes the resolved sessions, so a concurrent persist cannot resurrect a
+  // forgotten visit after the metadata rows are gone.
+  await sweep_visit_inbox(metadata_db, selector);
+
   const files_removed = options.storage_base
-    ? sweep_visit_files(options.storage_base, selector)
+    ? sweep_replay_captures(options.storage_base, selector)
     : 0;
 
   // Derived content before metadata (see module header).

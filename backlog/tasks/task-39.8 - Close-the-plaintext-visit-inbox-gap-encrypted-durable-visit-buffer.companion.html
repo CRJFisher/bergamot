@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Task 39.8 — Encrypted Visit Inbox</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; color: #1a1a1a; }
+  h1 { font-size: 1.4rem; border-bottom: 2px solid #e74c3c; padding-bottom: 0.4rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; color: #2c3e50; border-bottom: 1px solid #ddd; padding-bottom: 0.2rem; }
+  h3 { font-size: 0.95rem; margin-top: 1.4rem; color: #555; }
+  code { background: #f5f5f5; padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: #f8f8f8; border: 1px solid #e0e0e0; border-radius: 4px; padding: 1rem; overflow-x: auto; font-size: 0.85rem; }
+  .danger { background: #fff5f5; border-left: 4px solid #e74c3c; padding: 0.6rem 1rem; margin: 0.8rem 0; }
+  .safe { background: #f0fff4; border-left: 4px solid #27ae60; padding: 0.6rem 0.8rem; margin: 0.8rem 0; }
+  .note { background: #fffbf0; border-left: 4px solid #f39c12; padding: 0.6rem 0.8rem; margin: 0.8rem 0; }
+  .flow { display: flex; gap: 0; align-items: stretch; margin: 1rem 0; }
+  .box { border: 1px solid #bbb; border-radius: 4px; padding: 0.6rem 0.8rem; flex: 1; font-size: 0.85rem; }
+  .box.red { background: #fff0f0; border-color: #e74c3c; }
+  .box.green { background: #f0fff4; border-color: #27ae60; }
+  .box.gray { background: #f5f5f5; border-color: #999; }
+  .arrow { display: flex; align-items: center; padding: 0 0.4rem; color: #666; font-size: 1.2rem; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.87rem; margin: 0.8rem 0; }
+  th { background: #f0f0f0; text-align: left; padding: 0.4rem 0.6rem; border: 1px solid #ccc; }
+  td { padding: 0.35rem 0.6rem; border: 1px solid #ccc; vertical-align: top; }
+  .badge { display: inline-block; padding: 0.1em 0.4em; border-radius: 3px; font-size: 0.75em; font-weight: 600; }
+  .badge.remove { background: #fce; color: #a00; }
+  .badge.add { background: #cfc; color: #060; }
+  .badge.change { background: #fef0c0; color: #660; }
+  .badge.keep { background: #e8e8e8; color: #444; }
+  details { margin: 0.6rem 0; }
+  summary { cursor: pointer; font-weight: 600; color: #2c3e50; }
+</style>
+</head>
+<body>
+<h1>Task 39.8 — Close the plaintext visit-inbox gap</h1>
+<p style="color:#666; font-size:0.9em;">Pre-build comprehension companion · <code>privacy-overhaul</code> branch</p>
+
+<h2>1. The gap</h2>
+<div class="danger">
+  <strong>The problem in one sentence:</strong> Between HTTP accept and the DuckDB write, every visit is persisted as a plaintext JSON file at <code>&lt;storage_base&gt;/visit_inbox/&lt;id&gt;.json</code>. The file contains URL, referrer, title, and timestamps — the same data the encrypted DuckDB protects. The "front door" is unencrypted.
+</div>
+
+<p>Current data flow on <code>POST /visit</code>:</p>
+<div class="flow">
+  <div class="box gray"><strong>Browser</strong><br>POST /visit</div>
+  <div class="arrow">→</div>
+  <div class="box gray"><strong>server_manager.ts</strong><br>parse + validate</div>
+  <div class="arrow">→</div>
+  <div class="box red"><strong>visit_inbox/&lt;id&gt;.json</strong><br>⚠ PLAINTEXT on disk<br>URL · referrer · title · timestamps</div>
+  <div class="arrow">→</div>
+  <div class="box gray"><strong>VisitQueueProcessor</strong><br>enqueue</div>
+  <div class="arrow">→</div>
+  <div class="box green"><strong>DuckDB (encrypted)</strong><br>webpage_activity_sessions</div>
+</div>
+<p>After the DuckDB write succeeds, <code>remove_visit</code> deletes the file. But: the delete is <em>not</em> instantaneous, the file is forensically recoverable after deletion, and if the extension crashes mid-ingest the file stays indefinitely.</p>
+
+<h2>2. The fix — Option A: inbox table in the encrypted DuckDB</h2>
+<div class="safe">
+  <strong>Chosen approach:</strong> Add a <code>visit_inbox</code> table inside the existing encrypted metadata DuckDB. Rows are inserted before returning 200; deleted once the capture pipeline commits the visit. No files on disk.
+</div>
+
+<p>New data flow on <code>POST /visit</code>:</p>
+<div class="flow">
+  <div class="box gray"><strong>Browser</strong><br>POST /visit</div>
+  <div class="arrow">→</div>
+  <div class="box gray"><strong>server_manager.ts</strong><br>parse + validate</div>
+  <div class="arrow">→</div>
+  <div class="box green"><strong>visit_inbox table</strong><br>✓ ENCRYPTED in DuckDB<br>(same key as metadata store)</div>
+  <div class="arrow">→</div>
+  <div class="box gray"><strong>VisitQueueProcessor</strong><br>enqueue</div>
+  <div class="arrow">→</div>
+  <div class="box green"><strong>webpage_activity_sessions</strong><br>DELETE from visit_inbox</div>
+</div>
+
+<p>Restart recovery now reads the <code>visit_inbox</code> table instead of the directory. The property is preserved: visits written before a crash are re-enqueued on startup and processed exactly once (ids are content-hashed, insertion is idempotent).</p>
+
+<h3>Why Option A over Option B (encrypt the files)?</h3>
+<table>
+  <tr><th></th><th>Option A: DuckDB table</th><th>Option B: Encrypt the files</th></tr>
+  <tr><td>Encryption</td><td>Free — same key as the store</td><td>New SecretStorage key + per-file encrypt/decrypt</td></tr>
+  <tr><td>Forget cascade</td><td>SQL DELETE, same path as metadata</td><td>Must decrypt, match, re-encrypt or delete</td></tr>
+  <tr><td>Artifacts</td><td>Removes the <code>visit_inbox/</code> directory entirely</td><td>Directory and per-file logic remain</td></tr>
+  <tr><td>Cost</td><td>One schema addition + API change</td><td>New crypto layer + key management</td></tr>
+</table>
+
+<h2>3. New table schema</h2>
+<pre>
+-- Added to create_metadata_schema() in duck_db.ts
+CREATE TABLE IF NOT EXISTS visit_inbox (
+  id             TEXT PRIMARY KEY,  -- md5(url:page_loaded_at) — same as visit.id
+  url            TEXT NOT NULL,     -- for forget cascade selector matching
+  page_loaded_at TEXT,              -- for time-range selector matching
+  visit_json     TEXT NOT NULL      -- full JSON of ExtendedPageVisit for reload
+)
+</pre>
+<p>The <code>url</code> and <code>page_loaded_at</code> columns exist <em>only</em> for the forget cascade — they let the cascade SELECT + DELETE without parsing JSON. The full visit rides in <code>visit_json</code> for the reload path.</p>
+
+<h2>4. Module dependency change</h2>
+
+<div class="danger">
+  <strong>Pre-existing circular dependency</strong> (exists today, must be broken):
+  <br><code>visit_inbox.ts</code> imports <code>ExtendedPageVisit, is_complete_visit</code> from <code>./visit_queue_processor</code>
+  <br><code>visit_queue_processor.ts</code> imports <code>load_inbox, remove_visit</code> from <code>./visit_inbox</code>
+</div>
+
+<p>After the change, <code>visit_inbox.ts</code> also needs to import <code>DuckDB</code> from <code>./duck_db</code>. If we keep the types in <code>visit_queue_processor.ts</code>, the cycle gets worse. The fix: extract the shared types to a new module.</p>
+
+<pre>
+BEFORE (circular):
+
+  visit_queue_processor.ts
+    ↓ imports (load_inbox, remove_visit)
+  visit_inbox.ts
+    ↓ imports (ExtendedPageVisit, is_complete_visit)
+  visit_queue_processor.ts   ← CYCLE
+
+AFTER (clean):
+
+  visit_types.ts                     ← NEW: ExtendedPageVisit, is_complete_visit
+    ↑ imported by
+  visit_inbox.ts + visit_queue_processor.ts
+
+  visit_inbox.ts
+    ← imports DuckDB from duck_db.ts
+    ← imports ExtendedPageVisit, is_complete_visit from visit_types.ts
+    ↑ imported by
+  visit_queue_processor.ts
+    ← imports DuckDB from duck_db.ts
+    ← imports ExtendedPageVisit, is_complete_visit from visit_types.ts
+</pre>
+
+<h2>5. API surface changes</h2>
+
+<table>
+  <tr><th>Function</th><th>Before</th><th>After</th><th>Notes</th></tr>
+  <tr>
+    <td><code>ensure_inbox</code></td>
+    <td><code>ensure_inbox(dir: string)</code></td>
+    <td><span class="badge remove">REMOVED</span></td>
+    <td>Table created in <code>create_metadata_schema()</code></td>
+  </tr>
+  <tr>
+    <td><code>persist_visit</code></td>
+    <td><code>(dir: string, visit) → void</code> (sync)</td>
+    <td><code>(db: DuckDB, visit) → Promise&lt;void&gt;</code></td>
+    <td>Awaited in <code>/visit</code> handler before returning 200</td>
+  </tr>
+  <tr>
+    <td><code>remove_visit</code></td>
+    <td><code>(dir: string, id: string) → void</code> (sync)</td>
+    <td><code>(db: DuckDB, id: string) → Promise&lt;void&gt;</code></td>
+    <td>Awaited in <code>process_queue</code> and <code>retry_orphans</code></td>
+  </tr>
+  <tr>
+    <td><code>load_inbox</code></td>
+    <td><code>(dir: string) → ExtendedPageVisit[]</code> (sync)</td>
+    <td><code>(db: DuckDB) → Promise&lt;ExtendedPageVisit[]&gt;</code></td>
+    <td>Malformed rows deleted in-place (same semantics)</td>
+  </tr>
+</table>
+
+<h3>QueueProcessorConfig change</h3>
+<pre>
+// BEFORE
+interface QueueProcessorConfig {
+  batch_size?: number;
+  batch_timeout?: number;
+  orphan_retry_interval?: number;
+  inbox_dir?: string;           // ← REMOVED
+  on_captured?: (page_session_id: string) => void;
+}
+
+// AFTER
+interface QueueProcessorConfig {
+  batch_size?: number;
+  batch_timeout?: number;
+  orphan_retry_interval?: number;
+  // inbox uses the existing duck_db constructor arg — no new field needed
+  on_captured?: (page_session_id: string) => void;
+}
+</pre>
+
+<h3>ServerConfig change</h3>
+<pre>
+// BEFORE
+export interface ServerConfig {
+  duck_db: DuckDB;
+  inbox_dir?: string;   // ← REMOVED
+  storage_base?: string;
+  ...
+}
+
+// AFTER: inbox_dir removed; persist_visit always called with config.duck_db
+</pre>
+
+<h2>6. Async cascade</h2>
+<p>All inbox operations are now async. The key change is in <code>VisitQueueProcessor.start()</code>:</p>
+<pre>
+// BEFORE
+start(): void {
+  this.reload_persisted_visits();   // sync
+  this.start_orphan_retry_timer();
+  this.schedule_batch_processing();
+}
+
+// AFTER
+async start(): Promise<void> {
+  await this.reload_persisted_visits();   // async load from DB
+  this.start_orphan_retry_timer();
+  this.schedule_batch_processing();
+}
+</pre>
+<p>The reload must complete before processing begins — firing-and-forgetting is not safe (the batch timer fires at 1 second; a slow DB load could miss it, but the correctness guarantee requires the reload to finish first).</p>
+<p><code>setup_queue_processor()</code> in <code>server_manager.ts</code> becomes <code>async</code> and awaits <code>queue_processor.start()</code>.</p>
+
+<h2>7. Right-to-forget cascade change</h2>
+
+<p>The cascade currently calls <code>sweep_visit_files(storage_base, selector)</code> which sweeps both <code>visit_inbox/</code> and <code>captures/</code> directories. After this change:</p>
+<ul>
+  <li><code>visit_inbox/</code> is gone → add a <strong>DB table sweep</strong> instead</li>
+  <li><code>captures/</code> stays (dev replay ring — explicitly out of scope)</li>
+</ul>
+
+<pre>
+// IN right_to_forget.ts — new function:
+async function sweep_visit_inbox(
+  metadata_db: DuckDB,
+  selector: ForgetSelector
+): Promise<number> {
+  const rows = await metadata_db.query&lt;{ id: string; url: string; page_loaded_at: string | null }&gt;(
+    `SELECT id, url, page_loaded_at FROM ${VISIT_INBOX_TABLE}`
+  );
+  const to_delete = rows.filter(r => selector_matches(selector, r.url, r.page_loaded_at));
+  if (to_delete.length === 0) return 0;
+  const { placeholders, params } = in_list(to_delete.map(r => r.id), "iid");
+  await metadata_db.execute(
+    `DELETE FROM ${VISIT_INBOX_TABLE} WHERE id IN (${placeholders})`,
+    params
+  );
+  return to_delete.length;
+}
+</pre>
+
+<p>This runs between the plaintext <code>captures/</code> sweep and the content-cache sweep — preserving the cascade ordering (transient/derived before durable metadata).</p>
+
+<div class="note">
+  <strong>Transaction note:</strong> The inbox sweep does NOT run inside <code>forget_metadata</code>'s isolated transaction because <code>isolated_transaction</code>'s callback only provides a no-return <code>run</code> function. The inbox DELETE runs on the main connection, immediately before the transaction — the same atomicity bound as the rest of the cross-store cascade (re-running is idempotent).
+</div>
+
+<h2>8. Test coverage plan</h2>
+
+<table>
+  <tr><th>AC</th><th>Test</th><th>File</th></tr>
+  <tr>
+    <td>#1 — No plaintext on disk</td>
+    <td>Create encrypted temp-file DuckDB, call <code>persist_visit</code>, scan directory for <code>*.json</code> files — expect none</td>
+    <td><code>visit_inbox.test.ts</code></td>
+  </tr>
+  <tr>
+    <td>#2 — Restart recovery</td>
+    <td>persist → close DB → reopen → <code>load_inbox</code> → verify visits present; after <code>remove_visit</code> → reload → verify gone</td>
+    <td><code>visit_inbox.test.ts</code></td>
+  </tr>
+  <tr>
+    <td>#3 — Forget cascade</td>
+    <td>Persist a visit, call <code>forget(selector)</code>, verify <code>visit_inbox</code> table is empty for that URL</td>
+    <td><code>right_to_forget.test.ts</code> (extend)</td>
+  </tr>
+  <tr>
+    <td>#4 — Docs</td>
+    <td>Manual — threat-model and dev-db-reset updated in the same commit</td>
+    <td>—</td>
+  </tr>
+</table>
+
+<h2>9. Files changed at a glance</h2>
+<table>
+  <tr><th>File</th><th>Change</th></tr>
+  <tr><td><code>vscode/src/visit_types.ts</code></td><td><span class="badge add">NEW</span> ExtendedPageVisit, is_complete_visit</td></tr>
+  <tr><td><code>vscode/src/duck_db.ts</code></td><td><span class="badge change">EDIT</span> Add VISIT_INBOX_TABLE + schema in create_metadata_schema</td></tr>
+  <tr><td><code>vscode/src/visit_inbox.ts</code></td><td><span class="badge change">REWRITE</span> Filesystem → DuckDB (all fns async, take DuckDB not dir)</td></tr>
+  <tr><td><code>vscode/src/visit_inbox.test.ts</code></td><td><span class="badge change">REWRITE</span> New DuckDB-backed tests including AC#1 byte-scan</td></tr>
+  <tr><td><code>vscode/src/visit_queue_processor.ts</code></td><td><span class="badge change">EDIT</span> Import from visit_types; remove inbox_dir; start() async</td></tr>
+  <tr><td><code>vscode/src/right_to_forget.ts</code></td><td><span class="badge change">EDIT</span> Replace inbox file sweep with DB sweep; captures/ stays</td></tr>
+  <tr><td><code>vscode/src/server/server_manager.ts</code></td><td><span class="badge change">EDIT</span> Remove inbox_dir; await persist_visit(duck_db, visit)</td></tr>
+  <tr><td><code>vscode/src/extension.ts</code></td><td><span class="badge change">EDIT</span> Remove inbox_dir from ServerManager config</td></tr>
+  <tr><td><code>docs/threat-model.md</code></td><td><span class="badge change">EDIT</span> Visit inbox no longer listed as plaintext side-channel</td></tr>
+  <tr><td><code>backlog/docs/dev-db-reset.md</code></td><td><span class="badge change">EDIT</span> Remove visit_inbox/ bullet; note it's in the metadata store</td></tr>
+</table>
+
+<details>
+<summary>Risks and sharp edges</summary>
+<ul>
+  <li><strong>Double-enqueue on restart</strong>: <code>persist_visit</code> uses <code>ON CONFLICT (id) DO NOTHING</code> — a duplicate persist (e.g. if the `/visit` handler retries) is a no-op. The reload path is safe.</li>
+  <li><strong>Partial ingest crash</strong>: If the extension crashes after the DB write but before <code>remove_visit</code>, the visit stays in <code>visit_inbox</code>. On restart, <code>load_inbox</code> re-enqueues it. The DuckDB insertion is idempotent (<code>ON CONFLICT DO NOTHING</code>), so re-processing is safe.</li>
+  <li><strong>Malformed rows</strong>: <code>load_inbox</code> deletes rows whose <code>visit_json</code> fails <code>is_complete_visit</code> (same semantics as the file-based inbox). These are rows written by an older model; the delete-on-load is intentional.</li>
+  <li><strong>Transaction scope</strong>: The inbox DELETE in the forget cascade runs on the main connection (not inside the isolated transaction), same as the content cache sweep. Cross-store atomicity is impossible; the ordering (inbox before metadata) keeps failures in the safe direction.</li>
+  <li><strong>Dev replay ring</strong>: <code>captures/</code> remains plaintext — this is documented as out of scope and confirmed by the task description. The forget cascade continues to sweep it.</li>
+</ul>
+</details>
+
+</body>
+</html>

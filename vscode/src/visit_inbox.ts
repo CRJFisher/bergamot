@@ -1,62 +1,69 @@
 /**
- * Durable visit inbox.
+ * Durable visit inbox — encrypted at rest.
  *
  * A visit is persisted here the moment it is accepted over HTTP, before the
  * server returns 200 to the browser. The browser will not resend, so if the
  * extension restarts before the in-memory queue drains the visit would
  * otherwise be lost. The queue processor removes each entry once the visit has
  * been written to DuckDB, and reloads any leftovers on startup.
+ *
+ * The inbox lives as a table inside the encrypted DuckDB metadata store, so
+ * visits-in-flight are never plaintext on disk. The table schema is defined in
+ * create_metadata_schema (duck_db.ts, VISIT_INBOX_TABLE). The right-to-forget
+ * cascade that sweeps matching rows lives in right_to_forget.ts (sweep_visit_inbox).
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import { ExtendedPageVisit, is_complete_visit } from "./visit_queue_processor";
+import { DuckDB, VISIT_INBOX_TABLE } from "./duck_db";
+import { ExtendedPageVisit, is_complete_visit } from "./visit_types";
 
-export const ensure_inbox = (dir: string): void => {
-  fs.mkdirSync(dir, { recursive: true });
+export const persist_visit = async (
+  db: DuckDB,
+  visit: ExtendedPageVisit
+): Promise<void> => {
+  await db.execute(
+    `INSERT INTO ${VISIT_INBOX_TABLE} (id, url, page_loaded_at, visit_json)
+     VALUES ($id, $url, $page_loaded_at, $visit_json)
+     ON CONFLICT (id) DO NOTHING`,
+    {
+      id: visit.id,
+      url: visit.url,
+      page_loaded_at: visit.page_loaded_at ?? null,
+      visit_json: JSON.stringify(visit),
+    }
+  );
 };
 
-export const persist_visit = (dir: string, visit: ExtendedPageVisit): void => {
-  fs.writeFileSync(path.join(dir, `${visit.id}.json`), JSON.stringify(visit));
+export const remove_visit = async (
+  db: DuckDB,
+  id: string
+): Promise<void> => {
+  await db.execute(
+    `DELETE FROM ${VISIT_INBOX_TABLE} WHERE id = $id`,
+    { id }
+  );
 };
 
-export const remove_visit = (dir: string, id: string): void => {
-  try {
-    fs.unlinkSync(path.join(dir, `${id}.json`));
-  } catch {
-    // Already removed — nothing to do.
-  }
-};
-
-export const load_inbox = (dir: string): ExtendedPageVisit[] => {
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(dir).filter((f) => f.endsWith(".json"));
-  } catch {
-    // Inbox directory does not exist yet — nothing to reload.
-    return [];
-  }
-
-  // Read each entry independently so a single corrupt file does not discard the
-  // rest of the durable inbox.
-  return entries.flatMap((f) => {
-    const file_path = path.join(dir, f);
+export const load_inbox = async (db: DuckDB): Promise<ExtendedPageVisit[]> => {
+  const rows = await db.query<{ id: string; visit_json: string }>(
+    `SELECT id, visit_json FROM ${VISIT_INBOX_TABLE}`
+  );
+  const valid: ExtendedPageVisit[] = [];
+  for (const row of rows) {
     let parsed: unknown;
     try {
-      parsed = JSON.parse(fs.readFileSync(file_path, "utf8"));
+      parsed = JSON.parse(row.visit_json);
     } catch {
-      console.warn(`Skipping unreadable inbox entry: ${file_path}`);
-      return [];
+      console.warn(`Skipping unreadable inbox entry: ${row.id}`);
+      continue;
     }
     if (!is_complete_visit(parsed)) {
-      // An entry missing required capture fields (e.g. written by an earlier
-      // capture model) is a permanent failure: re-queuing it would crash the
-      // DB bind and wedge the inbox on every restart, since failures are kept
-      // for retry. Delete it so the inbox can drain.
-      console.warn(`Dropping malformed inbox entry: ${file_path}`);
-      remove_visit(dir, f.replace(/\.json$/, ""));
-      return [];
+      // An entry written by an earlier capture model is missing required fields.
+      // Re-queuing it would crash the DB bind; delete it so the inbox can drain.
+      console.warn(`Dropping malformed inbox entry: ${row.id}`);
+      await remove_visit(db, row.id);
+      continue;
     }
-    return [parsed];
-  });
+    valid.push(parsed);
+  }
+  return valid;
 };

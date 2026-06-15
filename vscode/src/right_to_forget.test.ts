@@ -522,18 +522,32 @@ describe("right-to-forget cascade", () => {
     expect(await get_webpage_capture(metadata_db, "broken")).not.toBeNull();
   });
 
-  it("sweeps matching plaintext visit-inbox and replay files under the storage base", async () => {
+  it("sweeps matching visit_inbox rows from the encrypted store (AC#3)", async () => {
+    // Seed two inbox rows directly into the metadata store.
+    await metadata_db.execute(
+      `INSERT INTO visit_inbox (id, url, page_loaded_at, visit_json) VALUES
+         ('inbox-match', 'https://example.com/a', '2026-06-01T10:00:00Z', '{"id":"inbox-match","url":"https://example.com/a"}'),
+         ('inbox-keep',  'https://kept.com/x',    '2026-06-01T10:00:00Z', '{"id":"inbox-keep","url":"https://kept.com/x"}')`
+    );
+
+    await forget(metadata_db, cache, { kind: "url", url: "https://example.com/a" });
+
+    const remaining = await metadata_db.query<{ id: string }>(
+      `SELECT id FROM visit_inbox`
+    );
+    expect(remaining.map((r) => r.id)).toEqual(["inbox-keep"]);
+  });
+
+  it("sweeps matching replay files under the storage base and does not touch visit_inbox dir (AC#3)", async () => {
     const storage_base = fs.mkdtempSync(path.join(os.tmpdir(), "bergamot-sweep-"));
-    fs.mkdirSync(path.join(storage_base, "visit_inbox"));
     fs.mkdirSync(path.join(storage_base, "captures"));
-    const write = (dir: string, name: string, url: string, at: string) =>
+    const write_capture = (name: string, url: string, at: string) =>
       fs.writeFileSync(
-        path.join(storage_base, dir, name),
+        path.join(storage_base, "captures", name),
         JSON.stringify({ id: name, url, page_loaded_at: at, title: "t" })
       );
-    write("visit_inbox", "match.json", "https://example.com/a", "2026-06-01T10:00:00Z");
-    write("visit_inbox", "keep.json", "https://kept.com/x", "2026-06-01T10:00:00Z");
-    write("captures", "replay-match.json", "https://example.com/a", "2026-06-01T10:00:00Z");
+    write_capture("replay-match.json", "https://example.com/a", "2026-06-01T10:00:00Z");
+    write_capture("replay-keep.json", "https://kept.com/x", "2026-06-01T10:00:00Z");
 
     const report = await forget(
       metadata_db,
@@ -542,10 +556,11 @@ describe("right-to-forget cascade", () => {
       { storage_base }
     );
 
-    expect(report.files_removed).toBe(2);
-    expect(fs.existsSync(path.join(storage_base, "visit_inbox", "match.json"))).toBe(false);
+    expect(report.files_removed).toBe(1);
     expect(fs.existsSync(path.join(storage_base, "captures", "replay-match.json"))).toBe(false);
-    expect(fs.existsSync(path.join(storage_base, "visit_inbox", "keep.json"))).toBe(true);
+    expect(fs.existsSync(path.join(storage_base, "captures", "replay-keep.json"))).toBe(true);
+    // No visit_inbox directory is created — the inbox is now in the DB.
+    expect(fs.existsSync(path.join(storage_base, "visit_inbox"))).toBe(false);
 
     fs.rmSync(storage_base, { recursive: true, force: true });
   });

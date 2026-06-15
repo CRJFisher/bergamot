@@ -9,7 +9,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { ExtendedPageVisit, is_complete_visit } from './visit_queue_processor';
+import { ExtendedPageVisit, is_complete_visit } from './visit_types';
 
 const REPLAY_DIRNAME = 'captures';
 const MAX_REPLAY_VISITS = 20;

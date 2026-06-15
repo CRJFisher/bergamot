@@ -13,8 +13,9 @@ import {
   get_last_modified_trees_with_members,
 } from '../duck_db';
 import { OrphanedVisitsManager } from '../orphaned_visits';
-import { VisitQueueProcessor, ExtendedPageVisit } from '../visit_queue_processor';
-import { ensure_inbox, persist_visit } from '../visit_inbox';
+import { VisitQueueProcessor } from '../visit_queue_processor';
+import { ExtendedPageVisit } from '../visit_types';
+import { persist_visit } from '../visit_inbox';
 import { PageActivitySessionWithoutTreeSchema } from '../duck_db_models';
 import { dev_log, is_dev_log_enabled, is_browser_dev_stage, format_error_detail } from '../dev_log';
 import { persist_replay_visit } from '../visit_replay';
@@ -80,8 +81,6 @@ const MAX_QUERY_LIMIT = 100;
  */
 export interface ServerConfig {
   duck_db: DuckDB;
-  /** Directory for the durable visit inbox (defaults off if unset) */
-  inbox_dir?: string;
   /** Storage base; used to persist raw captures for replay in dev mode */
   storage_base?: string;
   /**
@@ -277,10 +276,7 @@ export class ServerManager {
    * Initializes batch processing for efficient handling of multiple webpage visits.
    * @private
    */
-  private setup_queue_processor(): void {
-    if (this.config.inbox_dir) {
-      ensure_inbox(this.config.inbox_dir);
-    }
+  private async setup_queue_processor(): Promise<void> {
     const orphan_manager = new OrphanedVisitsManager();
     this.queue_processor = new VisitQueueProcessor(
       this.config.duck_db,
@@ -289,12 +285,11 @@ export class ServerManager {
         batch_size: 3,
         batch_timeout: 1000,
         orphan_retry_interval: 5000,
-        inbox_dir: this.config.inbox_dir,
         on_captured: (page_session_id) =>
           this.trigger_eager_redownload(page_session_id),
       }
     );
-    this.queue_processor.start();
+    await this.queue_processor.start();
   }
 
   /**
@@ -390,8 +385,12 @@ export class ServerManager {
       };
       // Persist durably before acknowledging: the browser will not resend, so
       // the visit must survive an extension restart before it reaches DuckDB.
-      if (this.config.inbox_dir) {
-        persist_visit(this.config.inbox_dir, extended_visit);
+      try {
+        await persist_visit(this.config.duck_db, extended_visit);
+      } catch (error) {
+        dev_log('capture_failed', { visit_id, url: payload.url, error: format_error_detail(error) });
+        res.status(500).json({ error: 'Failed to persist visit' });
+        return;
       }
       // In dev, keep a bounded ring of visits so a page can be replayed through
       // the pipeline (bergamot.replayVisit) without re-browsing.
@@ -551,7 +550,7 @@ export class ServerManager {
   async prepare(): Promise<void> {
     await this.enable_default_path_caching();
     this.setup_routes();
-    this.setup_queue_processor();
+    await this.setup_queue_processor();
   }
 
   /**

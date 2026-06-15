@@ -60,7 +60,7 @@ flowchart TB
     subgraph VSCODE["🧩 VS Code Extension &nbsp;(backend host)"]
       direction TB
       server["Express server<br/>POST /visit · GET /query/*<br/>port 5000–5009"]
-      inbox["Durable visit inbox<br/>(one JSON file per visit)"]
+      inbox["Durable visit inbox<br/>(encrypted table in DuckDB)"]
       queue["Visit queue processor<br/>(batched, retrying)"]
       workflow["run_page_capture<br/>gate · store visit metadata"]
       server --> inbox --> queue --> workflow
@@ -157,13 +157,13 @@ sequenceDiagram
     C->>B: sendMessage(visit metadata)
     B->>B: enrich with referrer, group_id, opener
     B->>S: HTTP POST /visit (discover port 5000–5009)
-    S->>Q: persist to inbox, enqueue, return 200
+    S->>Q: persist to inbox (encrypted DB row), enqueue, return 200
     Note over B,S: browser is acknowledged immediately
     Q->>Q: assign to navigation tree (webpage_tree)
     Q->>W: run_page_capture(visit metadata)
     W->>W: deterministic gate (keep/drop, no LLM)
     W->>DB: store visit metadata (source of truth)
-    W-->>Q: remove inbox file (durably ingested)
+    W-->>Q: delete inbox row (durably ingested)
     R->>DB: read stored URLs
     R->>R: re-download public page (login wall excludes private) → TDT → RAG
     </pre>

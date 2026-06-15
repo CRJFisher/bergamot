@@ -1,4 +1,5 @@
-import { VisitQueueProcessor, ExtendedPageVisit } from "./visit_queue_processor";
+import { VisitQueueProcessor } from "./visit_queue_processor";
+import { ExtendedPageVisit } from "./visit_types";
 import { OrphanedVisitsManager } from "./orphaned_visits";
 import { DuckDB } from "./duck_db";
 import * as pipeline from "./workflow/page_capture_pipeline";
@@ -9,6 +10,11 @@ import { record_outcome } from "./dev_log";
 jest.mock("./duck_db");
 jest.mock("./webpage_tree");
 jest.mock("./workflow/page_capture_pipeline");
+jest.mock("./visit_inbox", () => ({
+  load_inbox: jest.fn().mockResolvedValue([]),
+  persist_visit: jest.fn().mockResolvedValue(undefined),
+  remove_visit: jest.fn().mockResolvedValue(undefined),
+}));
 // Keep the real dev_log module (so format_error_detail renders actual stacks)
 // and stub only the side-effecting outcome recorder we assert against. The real
 // dev_log() is a no-op here because logging is never enabled in the test.
@@ -549,10 +555,10 @@ describe("VisitQueueProcessor", () => {
       expect(mockOrphanManager.increment_retry_count).not.toHaveBeenCalled();
     });
 
-    it("should not retry when no orphans available", () => {
+    it("should not retry when no orphans available", async () => {
       mockOrphanManager.get_orphans_for_retry.mockReturnValue([]);
 
-      processor.start();
+      await processor.start();
 
       jest.advanceTimersByTime(1000);
 
@@ -608,29 +614,29 @@ describe("VisitQueueProcessor", () => {
   });
 
   describe("lifecycle", () => {
-    it("should start and stop cleanly", () => {
-      processor.start();
-      
+    it("should start and stop cleanly", async () => {
+      await processor.start();
+
       // Should set up retry timer
       jest.advanceTimersByTime(1000);
       expect(mockOrphanManager.get_orphans_for_retry).toHaveBeenCalled();
-      
+
       processor.stop();
-      
+
       // Should clear timers
       jest.clearAllTimers();
       jest.advanceTimersByTime(1000);
-      
+
       // Should not be called after stop
       expect(mockOrphanManager.get_orphans_for_retry).toHaveBeenCalledTimes(1);
     });
 
-    it("should handle multiple start calls gracefully", () => {
-      processor.start();
-      processor.start(); // Second call should be ignored
-      
+    it("should handle multiple start calls gracefully", async () => {
+      await processor.start();
+      await processor.start(); // Second call should be ignored
+
       jest.advanceTimersByTime(1000);
-      
+
       // Should only set up one timer
       expect(mockOrphanManager.get_orphans_for_retry).toHaveBeenCalledTimes(1);
     });

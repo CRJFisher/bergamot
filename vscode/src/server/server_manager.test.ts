@@ -12,6 +12,11 @@ import { dev_log } from '../dev_log';
 jest.mock('../duck_db');
 jest.mock('../orphaned_visits');
 jest.mock('../visit_queue_processor');
+jest.mock('../visit_inbox', () => ({
+  persist_visit: jest.fn().mockResolvedValue(undefined),
+  remove_visit: jest.fn().mockResolvedValue(undefined),
+  load_inbox: jest.fn().mockResolvedValue([]),
+}));
 jest.mock('fs');
 jest.mock('../hash_utils', () => ({
   md5_hash: jest.fn().mockReturnValue('test-hash-id')
