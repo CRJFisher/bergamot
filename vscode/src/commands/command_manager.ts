@@ -1,6 +1,4 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
 import { DuckDB } from '../duck_db';
 import { register_webpage_hover_provider } from '../webpage_hover_provider';
 import { ServerManager } from '../server/server_manager';
@@ -11,6 +9,7 @@ import {
   open_content_cache_if_exists,
 } from '../redownload/content_cache';
 import { ForgetSelector, forget, selector_matches } from '../right_to_forget';
+import { load_inbox } from '../visit_inbox';
 
 /**
  * Configuration for command registration.
@@ -254,9 +253,9 @@ export class CommandManager {
    * reveals the live "Bergamot Dev Log" channel.
    * @private
    */
-  private show_visit_outcomes(): void {
+  private async show_visit_outcomes(): Promise<void> {
     const stats = this.config.server_manager.get_queue_processor()?.get_stats();
-    const inbox_count = this.count_inbox();
+    const inbox_count = await this.count_inbox();
     const outcomes = get_recent_outcomes();
 
     const lines: string[] = [];
@@ -293,10 +292,9 @@ export class CommandManager {
    * Counts unprocessed visits remaining in the durable inbox.
    * @private
    */
-  private count_inbox(): number {
-    const inbox = path.join(this.config.storage_base, 'visit_inbox');
-    if (!fs.existsSync(inbox)) return 0;
-    return fs.readdirSync(inbox).filter((f) => f.endsWith('.json')).length;
+  private async count_inbox(): Promise<number> {
+    const rows = await load_inbox(this.config.duck_db);
+    return rows.length;
   }
 
   /**

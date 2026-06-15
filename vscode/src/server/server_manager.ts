@@ -385,7 +385,13 @@ export class ServerManager {
       };
       // Persist durably before acknowledging: the browser will not resend, so
       // the visit must survive an extension restart before it reaches DuckDB.
-      await persist_visit(this.config.duck_db, extended_visit);
+      try {
+        await persist_visit(this.config.duck_db, extended_visit);
+      } catch (error) {
+        dev_log('capture_failed', { visit_id, url: payload.url, error: format_error_detail(error) });
+        res.status(500).json({ error: 'Failed to persist visit' });
+        return;
+      }
       // In dev, keep a bounded ring of visits so a page can be replayed through
       // the pipeline (bergamot.replayVisit) without re-browsing.
       if (this.config.storage_base && is_dev_log_enabled()) {

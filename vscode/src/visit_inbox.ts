@@ -8,7 +8,9 @@
  * been written to DuckDB, and reloads any leftovers on startup.
  *
  * The inbox lives as a table inside the encrypted DuckDB metadata store, so
- * visits-in-flight are never plaintext on disk.
+ * visits-in-flight are never plaintext on disk. The table schema is defined in
+ * create_metadata_schema (duck_db.ts, VISIT_INBOX_TABLE). The right-to-forget
+ * cascade that sweeps matching rows lives in right_to_forget.ts (sweep_visit_inbox).
  */
 
 import { DuckDB, VISIT_INBOX_TABLE } from "./duck_db";

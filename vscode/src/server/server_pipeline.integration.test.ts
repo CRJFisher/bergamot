@@ -38,7 +38,6 @@ describe('server pipeline integration (real DuckDB, capture pipeline)', () => {
 
     server = new ServerManager({
       duck_db,
-      inbox_dir: path.join(storage_dir, 'visit_inbox'),
       storage_base: storage_dir,
     });
     // Mount routes + queue without binding a port or touching the shared port file.

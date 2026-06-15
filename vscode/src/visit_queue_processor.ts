@@ -303,10 +303,12 @@ export class VisitQueueProcessor {
 
     if (inserted.tree_id && inserted.was_tree_changed) {
       await this.handle_successful_visit(visit, inserted.tree_id);
-      return true;
     }
-
-    return false;
+    // Not a parked orphan: the visit is either newly captured (was_tree_changed)
+    // or already durably present in the metadata store. In both cases, remove
+    // from the inbox — re-insertion of an already-present session is idempotent
+    // and the durable row must not accumulate across restarts.
+    return true;
   }
 
   /**

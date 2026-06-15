@@ -1,3 +1,12 @@
+/**
+ * Shared visit types extracted from the capture pipeline.
+ *
+ * ExtendedPageVisit and is_complete_visit live here so the durable inbox
+ * (visit_inbox.ts) and the capture pipeline (visit_queue_processor.ts) can
+ * both depend on them without forming an import cycle. Consumers: visit_inbox.ts
+ * (persist/reload), visit_queue_processor.ts (processing), visit_replay.ts
+ * (dev replay ring), right_to_forget.ts (cascade validation).
+ */
 import { PageActivitySessionWithoutTree } from "./duck_db_models";
 
 export interface ExtendedPageVisit extends PageActivitySessionWithoutTree {
