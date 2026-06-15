@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Task-40: Per-extension capability token — pairing flow &amp; design</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; line-height: 1.6; }
+  h1 { border-bottom: 3px solid #2563eb; padding-bottom: .5rem; }
+  h2 { color: #2563eb; margin-top: 2.5rem; }
+  h3 { color: #374151; }
+  .ac { background: #f0fdf4; border-left: 4px solid #22c55e; padding: .75rem 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0; }
+  .warn { background: #fffbeb; border-left: 4px solid #f59e0b; padding: .75rem 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0; }
+  .code { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 1rem; font-family: 'Menlo', monospace; font-size: .85rem; overflow-x: auto; white-space: pre; margin: .5rem 0; }
+  .flow { display: grid; gap: 0; }
+  .step { display: flex; align-items: flex-start; gap: 1rem; padding: .6rem 1rem; }
+  .step:nth-child(odd) { background: #f8fafc; }
+  .step-num { min-width: 28px; height: 28px; background: #2563eb; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: .8rem; flex-shrink: 0; }
+  .step-body { flex: 1; }
+  .step-who { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; }
+  .step-what { margin-top: .15rem; }
+  .badge { display: inline-block; padding: .15rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+  .badge-ext { background: #dbeafe; color: #1d4ed8; }
+  .badge-browser { background: #f3e8ff; color: #6d28d9; }
+  .badge-mcp { background: #dcfce7; color: #166534; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th { background: #2563eb; color: white; text-align: left; padding: .6rem .8rem; font-size: .85rem; }
+  td { border-bottom: 1px solid #e2e8f0; padding: .55rem .8rem; font-size: .85rem; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8fafc; }
+  .tick { color: #22c55e; font-weight: bold; }
+  .cross { color: #ef4444; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<h1>Task-40: Per-extension capability token<br><small style="font-size:.6em;color:#6b7280">Constitution principle 7 — local server authentication</small></h1>
+
+<p><strong>What this doc covers:</strong> the three-way design decision (browser pairing, MCP auth, token lifecycle), the full pairing sequence, honest limits of the defense, and how each file changes.</p>
+
+<h2>Why this exists</h2>
+<p>The local Express server is loopback-bound and CORS-filtered, but CORS is not authentication. Any process running as the user can POST to <code>/visit</code> (injecting fake browsing history) or GET from <code>/query/capture_content</code> (reading re-downloaded page text). Constitution principle 7 names a per-extension capability token as the required fix. This task ships that token.</p>
+
+<h2>Acceptance criteria</h2>
+<div class="ac"><strong>AC1</strong> — <code>/visit</code>, <code>/query/*</code>, <code>/dev_signal</code>: rejected without token; succeed with it — server tests cover this.</div>
+<div class="ac"><strong>AC2</strong> — Token generated on first run, persisted in <code>SecretStorage</code>, delivered to browser via explicit pairing step. Mechanism + honest limits documented.</div>
+<div class="ac"><strong>AC3</strong> — MCP standalone authenticates without weakening the scheme. Token NOT in a world-readable file.</div>
+<div class="ac"><strong>AC4</strong> — CORS stays; loopback stays; neither is treated as authentication.</div>
+<div class="ac"><strong>AC5</strong> — <code>docs/threat-model.md</code> adversary B section reflects the shipped mechanism instead of "largest open gap".</div>
+
+<h2>System components</h2>
+<table>
+  <tr><th>Component</th><th>Role</th><th>Can read files?</th></tr>
+  <tr><td><strong>VS Code Extension</strong><br>(extension host process)</td><td>Runs the Express server; owns SecretStorage; spawns MCP</td><td>Yes — full filesystem access</td></tr>
+  <tr><td><strong>Browser Extension</strong><br>(Chromium service worker)</td><td>Sends <code>/visit</code> and <code>/dev_signal</code> POSTs</td><td>No — no filesystem access at all</td></tr>
+  <tr><td><strong>MCP Standalone</strong><br>(Node child process)</td><td>GETs <code>/query/*</code> to serve AI tools</td><td>Yes — reads <code>~/.bergamot/port.json</code></td></tr>
+</table>
+
+<h2>Token design</h2>
+<h3>Capability token (the long-lived credential)</h3>
+<ul>
+  <li>32 random bytes, hex-encoded (64 chars). Same pattern as the metadata-store encryption key.</li>
+  <li>Stored in <code>SecretStorage</code> as <code>bergamot.capability_token</code>.</li>
+  <li>Generated on first run; persists across extension restarts. The browser pairs once and keeps the token.</li>
+  <li>Presented as <code>Authorization: Bearer &lt;token&gt;</code> on every protected request.</li>
+</ul>
+
+<h3>Pairing secret (the short-lived bootstrap credential)</h3>
+<ul>
+  <li>16 random bytes, hex-encoded (32 chars). In-memory only — never persisted, never written to disk.</li>
+  <li>Generated fresh each server start.</li>
+  <li>Returned in <code>/status</code> as <code>pair_secret</code> — but only once, until the browser calls <code>POST /pair</code>. After that, <code>/status</code> no longer includes it and <code>/pair</code> returns 401 forever (until next restart).</div>
+</ul>
+
+<h2>Pairing flow — browser extension</h2>
+<p>The browser has no filesystem access, so it cannot read the token from <code>port.json</code>. Instead it gets it via <code>/pair</code>:</p>
+
+<div class="flow">
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <div class="step-who"><span class="badge badge-ext">Extension</span></div>
+      <div class="step-what">On startup: load (or generate) <code>capability_token</code> from SecretStorage. Generate fresh <code>pairing_secret</code> in memory.</div>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <div class="step-who"><span class="badge badge-browser">Browser</span></div>
+      <div class="step-what">Probes port range: <code>GET /status</code>. Response includes <code>pair_secret</code> (since pairing hasn't happened yet).</div>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <div class="step-who"><span class="badge badge-browser">Browser</span></div>
+      <div class="step-what">Checks <code>chrome.storage.local</code> for a stored token. No token found → calls <code>POST /pair</code> with body <code>{"secret":"&lt;pairing_secret&gt;"}</code>.</div>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <div class="step-who"><span class="badge badge-ext">Extension</span></div>
+      <div class="step-what">Validates secret matches in-memory <code>pairing_secret</code>. Returns <code>{"token":"&lt;capability_token&gt;"}</code>. Clears <code>pairing_secret</code> to null — one-time use.</div>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <div class="step-who"><span class="badge badge-browser">Browser</span></div>
+      <div class="step-what">Stores <code>capability_token</code> in <code>chrome.storage.local</code> (survives service-worker eviction). All future requests include <code>Authorization: Bearer &lt;token&gt;</code>.</div>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">6</div>
+    <div class="step-body">
+      <div class="step-who"><span class="badge badge-browser">Browser</span></div>
+      <div class="step-what">On 401 from any request: clears stored token, re-discovers server (next server start will have a new pairing secret). Token is stable across restarts so 401 only occurs if the user reinstalled the extension.</div>
+    </div>
+  </div>
+</div>
+
+<h2>MCP standalone authentication</h2>
+<p>The MCP process runs as the same user and has filesystem access. It authenticates by reading the token from <code>~/.bergamot/port.json</code>:</p>
+<ul>
+  <li>The extension writes <code>port.json</code> with <strong>mode 0600</strong> (owner-read/write only). Any process running as the user can read it — but not other users or world.</li>
+  <li><code>port.json</code> now includes <code>token</code>: <code>{ "port": 5000, "pid": 12345, "token": "&lt;capability_token&gt;" }</code>.</li>
+  <li>MCP reads the token and sends <code>Authorization: Bearer &lt;token&gt;</code> on all requests.</li>
+</ul>
+<div class="warn"><strong>Why file not env var?</strong> The spawn in <code>mcp_server_manager.ts</code> could pass the token via <code>BERGAMOT_TOKEN</code>. But env vars are visible via <code>/proc/&lt;pid&gt;/environ</code> on Linux — no better than a 0600 file. Using <code>port.json</code> is consistent with how MCP already discovers the port, and avoids widening the spawn API.</div>
+
+<h2>Honest limits of this defense</h2>
+<table>
+  <tr><th>Attack</th><th>Before task-40</th><th>After task-40</th></tr>
+  <tr>
+    <td>Local process POSTs fake visits</td>
+    <td class="cross">✗ Succeeds</td>
+    <td class="tick">✓ Rejected — 401 without token</td>
+  </tr>
+  <tr>
+    <td>Local process reads query API / page content</td>
+    <td class="cross">✗ Succeeds</td>
+    <td class="tick">✓ Rejected — 401 without token</td>
+  </tr>
+  <tr>
+    <td>Local process races /status before browser and steals pairing_secret</td>
+    <td>N/A</td>
+    <td>⚠ Narrow window (milliseconds at startup). After browser pairs, secret is consumed and /pair returns 401 forever.</td>
+  </tr>
+  <tr>
+    <td>Local process reads port.json to get token</td>
+    <td>N/A</td>
+    <td>⚠ Possible for any process running as the user — file is 0600, not encrypted. This is the same bound as the OS keystore ACLs (adversary B: bounded, not solved).</td>
+  </tr>
+  <tr>
+    <td>Local process reads chrome.storage.local</td>
+    <td>N/A</td>
+    <td>✓ Requires Chrome internals access — non-trivial for typical malware</td>
+  </tr>
+</table>
+<div class="warn"><strong>Net assessment:</strong> This defense permanently closes the "any local process can call the API" gap. It does not stop a determined adversary B that can read files owned by the user — that is explicitly out of scope per the threat model.</div>
+
+<h2>Files changed</h2>
+<table>
+  <tr><th>File</th><th>Change</th></tr>
+  <tr><td><code>vscode/src/database/encryption_key.ts</code></td><td>Add <code>CAPABILITY_TOKEN_SECRET</code> constant; reuse <code>get_or_create_store_key()</code> (no new file-exists guard needed — token has no associated file)</td></tr>
+  <tr><td><code>vscode/src/server/server_manager.ts</code></td><td>Add <code>capability_token</code> to <code>ServerConfig</code>; auth middleware; <code>/pair</code> endpoint; <code>pair_secret</code> in <code>/status</code>; <code>port.json</code> mode 0600 + token</td></tr>
+  <tr><td><code>vscode/src/server/server_manager.test.ts</code></td><td>Tests: 401 without token, 200 with token, pairing flow, pairing secret consumed after first use</td></tr>
+  <tr><td><code>vscode/src/extension.ts</code></td><td>Load/generate capability token via SecretStorage; pass to <code>ServerManager</code></td></tr>
+  <tr><td><code>vscode/src/mcp_server_standalone.ts</code></td><td>Read token from <code>port.json</code>; add <code>Authorization: Bearer</code> header to all requests</td></tr>
+  <tr><td><code>browser/src/core/api_client.ts</code></td><td>Accept <code>auth_token</code> param; include <code>Authorization: Bearer</code> header</td></tr>
+  <tr><td><code>browser/src/core/server_discovery.ts</code></td><td>Return <code>pair_secret</code> from <code>/status</code> alongside the discovered URL</td></tr>
+  <tr><td><code>browser/src/core/token_storage.ts</code></td><td>New — <code>load_token()</code> / <code>save_token()</code> / <code>clear_token()</code> via <code>chrome.storage.local</code></td></tr>
+  <tr><td><code>browser/src/core/message_router.ts</code></td><td>Pair on first discovery if no token stored; inject token into requests; clear + re-pair on 401</td></tr>
+  <tr><td><code>docs/threat-model.md</code></td><td>Adversary B: replace "not yet implemented / largest open gap" with shipped mechanism + honest limits</td></tr>
+</table>
+
+<h2>What is NOT in scope</h2>
+<ul>
+  <li>Token rotation / revocation command — YAGNI.</li>
+  <li>Securing <code>/shutdown</code> with the token — it's used by <code>evict_stale_servers()</code> which runs before the browser has paired; adding auth would break that flow.</li>
+  <li>Inbox encryption — tracked under task-39.</li>
+</ul>
+
+</body>
+</html>
