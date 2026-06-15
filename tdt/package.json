@@ -1,0 +1,24 @@
+{
+  "name": "@bergamot/tdt",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Temporal Topic Detection — pure, dependency-injected clustering library for Bergamot browsing data.",
+  "main": "./out/index.js",
+  "types": "./out/index.d.ts",
+  "scripts": {
+    "build": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "tsc -p ./ --noEmit",
+    "test": "jest",
+    "clean": "rm -rf out"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "20.x",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.9.2"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>task-36 — Temporal Topic Detection (micro tier) — Overview</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --bg-alt: #161b22;
+    --bg-code: #0c0f14;
+    --fg: #d7dde4;
+    --fg-dim: #9aa6b2;
+    --accent: #f0a35e;
+    --accent-2: #6cb6ff;
+    --green: #7ee787;
+    --red: #ff7b72;
+    --purple: #d2a8ff;
+    --border: #2a313a;
+    --com: #768390;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 2rem 1.5rem 6rem; }
+  header.page { border-bottom: 1px solid var(--border); padding-bottom: 1.2rem; margin-bottom: 2rem; }
+  .crumb { color: var(--fg-dim); font-size: .82rem; letter-spacing: .04em; text-transform: uppercase; }
+  h1 { font-size: 1.95rem; margin: .4rem 0 .3rem; line-height: 1.2; }
+  h2 { font-size: 1.35rem; margin: 2.6rem 0 .8rem; padding-top: .6rem; border-top: 1px solid var(--border); color: var(--accent); }
+  h3 { font-size: 1.08rem; margin: 1.4rem 0 .5rem; color: var(--accent-2); }
+  p { margin: .6rem 0; }
+  a { color: var(--accent-2); }
+  code { font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace; font-size: .88em; }
+  p code, li code, td code { background: var(--bg-code); padding: .1em .38em; border-radius: 4px; border: 1px solid var(--border); color: var(--accent); }
+  pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.1rem; overflow-x: auto; font-size: .85rem; line-height: 1.55; margin: 1rem 0; color: var(--fg-dim); }
+  .lead { font-size: 1.05rem; }
+  .summary-box { background: var(--bg-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 6px; padding: 1rem 1.2rem; margin: 1.4rem 0; }
+  .summary-box .label { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-weight: 600; }
+  .note { background: rgba(108,182,255,.08); border-left: 4px solid var(--accent-2); border-radius: 6px; padding: .8rem 1rem; margin: 1rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .9rem; }
+  th, td { border: 1px solid var(--border); padding: .55rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--bg-alt); color: var(--accent); font-weight: 600; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: .35rem 0; }
+  /* build-order steps */
+  .steps { list-style: none; padding-left: 0; counter-reset: step; }
+  .steps > li {
+    position: relative; padding: .75rem 1rem .75rem 3.2rem; margin: .5rem 0;
+    background: var(--bg-alt); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .steps > li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: .8rem; top: .75rem;
+    width: 1.7rem; height: 1.7rem; border-radius: 50%;
+    background: var(--bg-code); border: 1px solid var(--border);
+    color: var(--accent-2); font-weight: 700; font-size: .9rem;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .steps > li.current {
+    border-color: var(--accent); border-left: 4px solid var(--accent);
+    background: rgba(240,163,94,.08);
+  }
+  .steps > li.current::before { background: var(--accent); color: #1a1208; border-color: var(--accent); }
+  .steps .task-ref { font-size: .78rem; color: var(--fg-dim); }
+  .badge { display:inline-block; font-size:.68rem; font-weight:700; letter-spacing:.04em; padding:.1em .5em; border-radius:999px; margin-left:.4rem; }
+  .badge.now { background: var(--accent); color:#1a1208; }
+  .badge.done { background: rgba(126,231,135,.16); color: var(--green); border:1px solid rgba(126,231,135,.3); }
+  .badge.dep { background: rgba(255,123,114,.14); color: var(--red); border:1px solid rgba(255,123,114,.3); }
+  .cta {
+    display:inline-block; margin:.4rem 0; padding:.6rem 1.1rem; background: var(--accent-2); color:#0a0f14;
+    border-radius:6px; text-decoration:none; font-weight:600;
+  }
+  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <div class="crumb">Bergamot · Understand / Surface spine node · task-36</div>
+  <h1>Temporal Topic Detection — windowed HDBSCAN clustering (micro tier)</h1>
+  <p class="lead">Turn the user's timestamped, passively-captured browsing into coherent <strong>projects / research threads</strong> — groups of highly-related pages — and reject one-off pages as noise. This is the first content consumer in the pipeline and the first slice of the TDT subsystem.</p>
+</header>
+
+<div class="summary-box">
+  <div class="label">The one question this answers for the user</div>
+  <p style="margin:.4rem 0 0; font-size:1.05rem">"What projects have I been working on, and which pages belong to each?"</p>
+</div>
+
+<!-- ============================================================ -->
+<h2>Parent intention: why the micro tier exists</h2>
+
+<p>Bergamot's spine is <em>capture → store → understand/surface</em>. Capture stores <strong>browsing metadata only, never page content</strong>. The understand/surface node re-downloads the stored public URLs and makes sense of them. TDT is the <strong>first consumer of that re-download corpus</strong> — it runs ahead of the RAG pipeline (task-31).</p>
+
+<p>The micro tier ships <strong>windowed HDBSCAN clustering</strong>. For each time window it groups page visits by <strong>embedding similarity</strong> (doc↔doc cosine over page vectors), producing clusters that read as candidate projects, and rejects one-off pages as noise rather than forcing them into a topic. <strong>A cluster = a set of pages = one candidate research thread.</strong></p>
+
+<p>Two axes are kept strictly separate:</p>
+<ul>
+  <li><strong>Embedding axis</strong> — the only thing HDBSCAN clusters on (cosine over page vectors).</li>
+  <li><strong>Time axis</strong> — used only for <em>windowing</em> (and later <em>tracking</em>). Time is never fused into the embedding.</li>
+</ul>
+
+<div class="note">
+<p style="margin:0"><strong>The privacy filter is the login wall.</strong> Visits whose pages fail to re-download (auth-walled, paywalled, dead links) have no embedding and are <strong>excluded</strong> from clustering — they remain trail/metadata only. The clusterable corpus is the re-downloadable public subset. No ingestion-time content heuristic decides this; the re-download outcome does.</p>
+</div>
+
+<p>TDT is a <strong>new top-level npm workspace package <code>@bergamot/tdt</code></strong> (sibling of <code>vscode/</code> and <code>browser/</code>): a pure dependency-injected library plus thin adapters, depending only on injected port contracts and the <code>clustering-tfjs</code> library. It is <strong>independent of the RAG pipeline</strong> — it embeds pages with its own local model and never waits on task-31. The only nominal overlap with RAG is "both embed text," which is not a shared dependency.</p>
+
+<!-- ============================================================ -->
+<h2>Key architectural decisions</h2>
+
+<table>
+  <thead><tr><th>Decision</th><th>What it means</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Dependency-injection pattern</strong></td>
+      <td>TDT is a pure library. Four injected port contracts — <code>RelationalReader</code>, <code>EmbedFn</code>, <code>VectorStore</code>, <code>ClusterSink</code> — express every external need. The extension supplies the concrete implementations; tests supply in-memory fakes.</td>
+      <td>Makes the whole pipeline unit-testable without VS Code, DuckDB, or a network, and keeps <code>clustering-tfjs</code> and the embedding model swappable.</td>
+    </tr>
+    <tr>
+      <td><strong>DuckDB single-writer constraint</strong></td>
+      <td>DuckDB is single-writer per file across processes. While the extension holds the file read-write (its whole lifetime), no other process can open it — even read-only. The extension is the only writer.</td>
+      <td>This is the load-bearing fact that drives the port design: TDT never opens the DB file. Reads go through the <code>RelationalReader</code> port (in-process fns or HTTP <code>/query/*</code>); writes go through the extension's single-writer transaction behind <code>ClusterSink</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>No imports from <code>vscode/src</code></strong></td>
+      <td>The <code>@bergamot/tdt</code> package never imports VS Code internals. The dependency arrow is one-way: <code>vscode/</code> supplies deps to and calls into <code>tdt/</code>, never the reverse.</td>
+      <td>Keeps TDT a clean, portable, testable library; the extension is just one possible host. Enforced by AC and a grep.</td>
+    </tr>
+    <tr>
+      <td><strong><code>clustering-tfjs</code> dependency</strong></td>
+      <td>The HDBSCAN engine. v1 needs <code>pairwise_distance_matrix(X,'cosine')</code> (shipped), the <code>HDBSCAN</code> estimator with <code>metric='precomputed'</code> emitting <code>labels_</code>/<code>probabilities_</code>/<code>exemplarIndices_</code> (Phase 2), and <code>select_medoids</code> (Phase 3).</td>
+      <td>It is an <strong>external prerequisite</strong>: the HDBSCAN upgrade is planned in the separate clustering-tfjs repo (its tasks 49–55) and gates the clustering sub-task. All library calls are isolated in one stage; the camelCase↔snake_case translation is quarantined at that boundary.</td>
+    </tr>
+    <tr>
+      <td><strong>Cluster tables in the same DuckDB file</strong></td>
+      <td><code>topic_run</code> / <code>topic_cluster</code> / <code>topic_cluster_member</code> / <code>topic_page_vector</code> live in the capture DB, written only by the extension's writer.</td>
+      <td>Windowed selection and the MCP read path become plain single-DuckDB JOINs, consistent with the existing tools. A separate <code>topics.db</code> is deferred (YAGNI).</td>
+    </tr>
+    <tr>
+      <td><strong>Determinism is a contract</strong></td>
+      <td>Stable fetch order, fixed-order float64 segment accumulation, and a pinned tf backend with a bitwise reproducibility regression test.</td>
+      <td>Same captures + pinned model must produce identical clusters (parent AC #3). HDBSCAN is fit-only with no RNG on this path.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2>The 9-step build order (design §11)</h2>
+
+<p>A phased, independently-verifiable delivery sequence for the module. Each step maps to a sub-task. <span style="color:var(--accent);font-weight:600">task-36.1 is the current step</span>.</p>
+
+<ol class="steps">
+  <li class="current">
+    <strong>Scaffold the package + ports</strong> <span class="badge now">YOU ARE HERE</span>
+    <div>Create <code>tdt/</code> workspace, add <code>"tdt"</code> to root <code>workspaces</code>, define <code>ports.ts</code> contracts (with the clustering-tfjs camelCase↔snake_case translation quarantined here), config + types, and fakes for every port. <em>Verify:</em> <code>tsc</code> + a no-op <code>run_tdt</code> round-trips fakes.</div>
+    <div class="task-ref">task-36.1 — Scaffold @bergamot/tdt package: ports, config, types, fakes</div>
+  </li>
+  <li>
+    <strong>Scale + window resolution</strong>
+    <div>Run the §5 SQL against the live DuckDB to fix the window default and confirm the ~5k ceiling reality. Implement <code>windowing.ts</code> (calendar + count-guard + gap/calendar subdivision). <em>Verify:</em> window boundaries are a pure function of timestamps; oversized windows subdivide deterministically.</div>
+    <div class="task-ref">task-36.2 — Windowing and data-scale resolution</div>
+  </li>
+  <li>
+    <strong>Page vectorisation (TDT-owned)</strong>
+    <div>Implement <code>build_page_vector</code> (re-download URL, build page text, embed via injected local <code>EmbedFn</code>, L2-normalize, cache in <code>topic_page_vector</code>), re-download outcome classification, dispersion/degenerate/no-text/failed guards, dedupe, fixed-order float64 segment accumulation. <em>Verify:</em> determinism, auth-walled exclusion, cache hit/invalidation on model change.</div>
+    <div class="task-ref">task-36.3 — Page vectorisation: TDT-owned embedding of captured pages</div>
+  </li>
+  <li>
+    <strong>Distance + HDBSCAN integration</strong>
+    <div><code>build_cosine_distance_matrix</code> (clamp/diag/symmetrize) + the isolated <code>cluster_window.ts</code> call (the ONLY <code>clustering-tfjs</code> call). <em>Verify:</em> bitwise reproducibility (same window twice → identical <code>labels_</code> and <code>probabilities_</code>); pinned tf backend.</div>
+    <div class="task-ref">task-36.4 — Cosine distance matrix and HDBSCAN clustering core</div>
+  </li>
+  <li>
+    <strong>Representations + deterministic labeler</strong>
+    <div>Exemplar/medoid representative, frozen representative vector, headline + domain scope + title keyphrases (no LLM). <em>Verify:</em> labels recompose; noise has no representative.</div>
+    <div class="task-ref">task-36.5 — Cluster representations and deterministic labeler</div>
+  </li>
+  <li>
+    <strong>Persistence</strong>
+    <div><code>topic_run</code> / <code>topic_cluster</code> / <code>topic_cluster_member</code>, run-id hashing, idempotency (no-op / atomic-replace / supersede), <code>is_noise</code> coverage. <em>Verify:</em> re-run same key+fingerprint is a no-op; re-embed bumps <code>input_fingerprint</code> and re-clusters.</div>
+    <div class="task-ref">task-36.6 — Persistence: cluster tables, run keying, idempotency</div>
+  </li>
+  <li>
+    <strong>Validation harness + parameter sweep</strong>
+    <div>Sweep window × <code>minClusterSize</code> × <code>minSamples</code> × <code>epsilon</code> on real windows; score by HDBSCAN-native validity + noise rate; A/B raw-dim vs PCA-50; confirm a known project recovers. <strong>Persist the chosen operating point as config.</strong> <em>Verify:</em> noise-rate guardrail trips → PCA promotion works.</div>
+    <div class="task-ref">task-36.7 — Validation harness and parameter sweep</div>
+  </li>
+  <li>
+    <strong>MCP surface</strong>
+    <div>Three <code>/query/topic_*</code> routes + the <code>visits_in_window</code> route + three read-only MCP tools (<code>list_topic_clusters</code>, <code>get_topic_cluster</code>, <code>list_clusters_for_page</code>). <em>Verify:</em> tools return JSON mirroring the existing five; read-only.</div>
+    <div class="task-ref">task-36.8 — MCP surface for topic clusters</div>
+  </li>
+  <li>
+    <strong>Trigger</strong>
+    <div>One VS Code command <code>bergamot.tdt.rebuildClusters</code> over a pure <code>rebuild_clusters(window_spec)</code> function. <strong>Compute runs OFF the extension-host event loop</strong> (worker/child process) so a dense <code>O(n²)</code> <code>fit</code> never freezes the UI or stalls capture; the writer persists results in one short transaction. No scheduler (YAGNI). <em>Verify:</em> clustering a real month produces browsable clusters via MCP without blocking capture.</div>
+    <div class="task-ref">task-36.9 — Trigger and off-thread orchestration</div>
+  </li>
+</ol>
+
+<!-- ============================================================ -->
+<h2>Sub-task map</h2>
+
+<table>
+  <thead><tr><th>Sub-task</th><th>Title</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td><strong>36.1</strong></td><td>Scaffold @bergamot/tdt package: ports, config, types, fakes</td><td><span class="badge now">CURRENT</span></td></tr>
+    <tr><td>36.2</td><td>Windowing and data-scale resolution</td><td>To Do</td></tr>
+    <tr><td>36.3</td><td>Page vectorisation: TDT-owned embedding of captured pages</td><td>To Do</td></tr>
+    <tr><td>36.4</td><td>Cosine distance matrix and HDBSCAN clustering core <span class="badge dep">needs clustering-tfjs Phase 2</span></td><td>To Do</td></tr>
+    <tr><td>36.5</td><td>Cluster representations and deterministic labeler</td><td>To Do</td></tr>
+    <tr><td>36.6</td><td>Persistence: cluster tables, run keying, idempotency</td><td>To Do</td></tr>
+    <tr><td>36.7</td><td>Validation harness and parameter sweep</td><td>To Do</td></tr>
+    <tr><td>36.8</td><td>MCP surface for topic clusters</td><td>To Do</td></tr>
+    <tr><td>36.9</td><td>Trigger and off-thread orchestration</td><td>To Do</td></tr>
+  </tbody>
+</table>
+
+<div class="note">
+<p style="margin:0"><strong>External dependency.</strong> The clustering core (36.4) requires the clustering-tfjs HDBSCAN upgrade — its Phases 0, 2, 3: an HDBSCAN estimator with <code>metric='precomputed'</code> emitting <code>labels_</code>/<code>probabilities_</code>/<code>exemplarIndices_</code>, plus <code>select_medoids</code>. That work is planned in the separate clustering-tfjs repo (tasks 49–55). Sub-tasks 36.1–36.3 do not depend on it and can proceed now.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2>Parent acceptance criteria (task-36)</h2>
+<ol>
+  <li>A <code>@bergamot/tdt</code> workspace clusters a real time window of re-downloaded public pages into project groups end-to-end, browsable via MCP, without blocking capture; auth-walled / failed-re-download visits are excluded.</li>
+  <li>TDT embeds pages with its own model and has no build-time or runtime dependency on the RAG pipeline (task-31).</li>
+  <li>Clustering is deterministic and reproducible — same captures + pinned model produce identical clusters, verified by a regression test.</li>
+  <li>One-off pages are surfaced as noise rather than forced into clusters; per-window cluster coverage / noise rate is queryable.</li>
+  <li>Operating parameters are selected by a validation sweep on real data and persisted as config rather than hardcoded.</li>
+  <li>The design draft remains the canonical reference and stays in sync with what ships.</li>
+  <li>Every cluster/persistence store joins the right-to-forget cascade in <code>vscode/src/right_to_forget.ts</code> (constitution principle 4), with cascade tests extended.</li>
+</ol>
+
+<!-- ============================================================ -->
+<h2>Start here</h2>
+<p>The current sub-task is the foundation everything else slots into. Read its comprehension companion:</p>
+<p><a class="cta" href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html">Open the task-36.1 scaffold companion →</a></p>
+
+<footer>
+  Overview for <code>task-36</code> (Temporal Topic Detection, micro tier). Canonical reference: <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code>. Broader two-tier vision (macro SOM tier, cross-window tracking, LLM linkage — later slices): <code>backlog/drafts/tdt-temporal-topic-architecture.md</code>.
+</footer>
+
+</div>
+</body>
+</html>

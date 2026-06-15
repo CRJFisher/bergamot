@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>task-36.1 — Scaffold @bergamot/tdt — Comprehension Companion</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --bg-alt: #161b22;
+    --bg-code: #0c0f14;
+    --fg: #d7dde4;
+    --fg-dim: #9aa6b2;
+    --accent: #f0a35e;        /* bergamot orange */
+    --accent-2: #6cb6ff;
+    --green: #7ee787;
+    --red: #ff7b72;
+    --purple: #d2a8ff;
+    --border: #2a313a;
+    --kw: #ff7b72;
+    --str: #a5d6ff;
+    --com: #768390;
+    --typ: #d2a8ff;
+    --fn: #d2a8ff;
+    --num: #f0a35e;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 2rem 1.5rem 6rem; }
+  header.page {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1.2rem;
+    margin-bottom: 2rem;
+  }
+  .crumb { color: var(--fg-dim); font-size: .82rem; letter-spacing: .04em; text-transform: uppercase; }
+  h1 { font-size: 1.9rem; margin: .4rem 0 .3rem; line-height: 1.2; }
+  h2 {
+    font-size: 1.35rem; margin: 2.6rem 0 .8rem; padding-top: .6rem;
+    border-top: 1px solid var(--border); color: var(--accent);
+  }
+  h3 { font-size: 1.08rem; margin: 1.6rem 0 .5rem; color: var(--accent-2); }
+  h4 { font-size: .98rem; margin: 1.1rem 0 .4rem; color: var(--purple); }
+  p { margin: .6rem 0; }
+  a { color: var(--accent-2); }
+  code { font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace; font-size: .88em; }
+  p code, li code, td code {
+    background: var(--bg-code); padding: .1em .38em; border-radius: 4px;
+    border: 1px solid var(--border); color: var(--accent);
+  }
+  pre {
+    background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.1rem; overflow-x: auto; font-size: .85rem; line-height: 1.55;
+    margin: 1rem 0;
+  }
+  pre code { background: none; border: none; padding: 0; color: var(--fg); font-size: 1em; }
+  .lead { font-size: 1.05rem; color: var(--fg); }
+  .summary-box {
+    background: var(--bg-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+    border-radius: 6px; padding: 1rem 1.2rem; margin: 1.4rem 0;
+  }
+  .summary-box .label { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-weight: 600; }
+  .note { background: rgba(108,182,255,.08); border-left: 4px solid var(--accent-2); border-radius: 6px; padding: .8rem 1rem; margin: 1rem 0; }
+  .warn { background: rgba(255,123,114,.08); border-left: 4px solid var(--red); border-radius: 6px; padding: .8rem 1rem; margin: 1rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .9rem; }
+  th, td { border: 1px solid var(--border); padding: .55rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--bg-alt); color: var(--accent); font-weight: 600; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: .3rem 0; }
+  .pill { display: inline-block; font-size: .7rem; padding: .12em .55em; border-radius: 999px; font-weight: 600; letter-spacing: .03em; }
+  .pill.prod { background: rgba(126,231,135,.16); color: var(--green); border: 1px solid rgba(126,231,135,.3); }
+  .pill.test { background: rgba(210,168,255,.16); color: var(--purple); border: 1px solid rgba(210,168,255,.3); }
+  .toc { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.6rem 0; }
+  .toc ol { margin: .3rem 0; columns: 2; }
+  .toc a { text-decoration: none; }
+  .ascii { color: var(--fg-dim); }
+  .filetree .dir { color: var(--accent-2); }
+  .filetree .new { color: var(--green); }
+  .filetree .c { color: var(--com); }
+  .check { list-style: none; padding-left: 0; }
+  .check li { padding-left: 1.8rem; position: relative; margin: .8rem 0; }
+  .check li::before { content: "☐"; position: absolute; left: 0; color: var(--accent); font-size: 1.1rem; }
+  .ac-id { font-weight: 700; color: var(--accent); }
+  /* syntax highlight tokens */
+  .tok-kw { color: var(--kw); }
+  .tok-str { color: var(--str); }
+  .tok-com { color: var(--com); font-style: italic; }
+  .tok-typ { color: var(--typ); }
+  .tok-fn { color: var(--accent-2); }
+  .tok-num { color: var(--num); }
+  .tok-punc { color: var(--fg-dim); }
+  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <div class="crumb">Bergamot · Temporal Topic Detection · Sub-task 36.1</div>
+  <h1>Scaffold <code>@bergamot/tdt</code>: ports, config, types, fakes</h1>
+  <p class="lead">A comprehension companion for the foundational sub-task of the TDT micro-tier. This task creates the workspace skeleton and the dependency-injection seams every later sub-task builds on. No clustering happens here — this is the contract layer.</p>
+  <p style="margin-top:.6rem">Parent overview: <a href="task-36.overview.html">task-36.overview.html</a> &nbsp;·&nbsp; Design reference: <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> (§3, §4, §5, §6, §11)</p>
+</header>
+
+<div class="summary-box">
+  <div class="label">What this task delivers (one breath)</div>
+  <p style="margin:.4rem 0 0">A new top-level npm workspace <code>tdt/</code> containing four injected <strong>port contracts</strong> (no <code>vscode/src</code> imports), the <strong>shared stage types</strong>, the <strong>default config</strong>, an <strong>in-memory fake</strong> for each port, and a <strong>no-op <code>run_tdt(deps, args)</code></strong> that round-trips the fakes in a passing unit test. <code>tsc</code> builds clean. A README documents the module boundary.</p>
+</div>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#place">The module's place in the system</a></li>
+    <li><a href="#ports">The four port contracts</a></li>
+    <li><a href="#types">Shared stage types (§6)</a></li>
+    <li><a href="#config">Config shapes (§5)</a></li>
+    <li><a href="#layout">Proposed file layout</a></li>
+    <li><a href="#noop">"No-op run_tdt round-trips fakes"</a></li>
+    <li><a href="#casing">camelCase ↔ snake_case boundary</a></li>
+    <li><a href="#ac">Acceptance criteria checklist</a></li>
+  </ol>
+</nav>
+
+<!-- ====================================================================== -->
+<h2 id="place">1. The module's place in the system</h2>
+
+<p><code>@bergamot/tdt</code> is a <strong>new top-level npm workspace package</strong>, a sibling of <code>vscode/</code> and <code>browser/</code>. It is a <strong>pure, dependency-injected library</strong> plus thin adapters. It depends <em>only</em> on its injected port contracts and on <code>clustering-tfjs</code>. It <strong>NEVER imports <code>vscode/src</code> internals.</strong></p>
+
+<p>The root <code>package.json</code> <code>workspaces</code> array today is <code>["vscode", "browser"]</code>; this slice adds <code>"tdt"</code>.</p>
+
+<h3>The dependency wall</h3>
+
+<pre class="ascii"><code>┌─────────────────────────────────────────────────────────────────────┐
+│  vscode/  (the VS Code extension — the SINGLE WRITER of the DB file)  │
+│                                                                       │
+│   • owns the DuckDB file read-write for its whole lifetime            │
+│   • supplies the CONCRETE port implementations                        │
+│   • triggers run_tdt(...) and persists results in one transaction     │
+└───────────────────────────────┬───────────────────────────────────────┘
+                                 │  supplies deps (ports), calls run_tdt
+                                 │  ── NEVER imported BY tdt ──►  (one-way)
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  @bergamot/tdt  (pure, dependency-injected library)                   │
+│                                                                       │
+│   depends ONLY on:                                                    │
+│     • its own ports.ts contracts                                      │
+│       (RelationalReader · EmbedFn · VectorStore · ClusterSink)        │
+│     • clustering-tfjs   (HDBSCAN + pairwise cosine distance)          │
+│                                                                       │
+│   knows NOTHING about: VS Code APIs, the HTTP broker, the writer.     │
+└─────────────────────────────────────────────────────────────────────┘
+                                 │  depends on
+                                 ▼
+                  clustering-tfjs  (HDBSCAN, pairwise cosine)</code></pre>
+
+<h3>Why the wall exists: the DuckDB single-writer constraint</h3>
+
+<div class="warn">
+<p style="margin:0"><strong>DuckDB is single-writer per file across processes.</strong> While the VS Code extension holds the database read-write (it does, for its whole lifetime), <strong>no other process can open the file — even read-only</strong>. The extension is the <em>only</em> writer. This constraint drives the entire port design.</p>
+</div>
+
+<p>If TDT opened the DuckDB file directly, the file open would be <strong>refused</strong> (an availability failure, not corruption — but it still breaks the batch job). So TDT never touches the file. Instead it expresses its data needs as <strong>ports</strong>, and the extension supplies implementations that go through the writer it already owns:</p>
+
+<ul>
+  <li><strong>Relational reads</strong> go through a <code>RelationalReader</code> port. Production: in-process reader fns when TDT runs inside an extension command; HTTP <code>/query/*</code> when TDT runs as the batch CLI. Never a direct file open.</li>
+  <li><strong>Page vectors are TDT's own</strong>, cached in a TDT-owned <code>topic_page_vector</code> table in the <em>same</em> DuckDB file — read/written through the extension's writer, behind the <code>VectorStore</code> port. No second vector store, no LanceDB.</li>
+  <li><strong>Cluster writes</strong> go through a <code>ClusterSink</code> port. The write path is owned by the extension's single writer — TDT's compute hands results back, the extension persists them. The batch CLI does read+compute only.</li>
+</ul>
+
+<p>The result is a clean inversion: TDT is testable in pure memory (fakes satisfy the ports), and production wiring lives entirely on the <code>vscode/</code> side of the wall.</p>
+
+<!-- ====================================================================== -->
+<h2 id="ports">2. The four port contracts</h2>
+
+<p>The ports are the injected seams. Every later sub-task is implemented against these interfaces, never against a concrete reader or writer. This is the heart of AC #2: <em>"ports.ts defines RelationalReader, EmbedFn, VectorStore, and ClusterSink with documented contracts, and contains no import from <code>vscode/src</code>."</em></p>
+
+<table>
+  <thead>
+    <tr><th>Port</th><th>What it does</th><th>Production supplier</th><th>Test supplier</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>RelationalReader</code></td>
+      <td>Reads captured visit metadata (URL, title, timestamp, tree id) for a time window from DuckDB. Stage 1 of the pipeline.</td>
+      <td><span class="pill prod">vscode/</span> in-process reader fns, or HTTP <code>/query/visits_in_window</code> from the batch CLI</td>
+      <td><span class="pill test">in-memory fake</span> over a fixed array of <code>VisitRow</code></td>
+    </tr>
+    <tr>
+      <td><code>EmbedFn</code></td>
+      <td>TDT's <em>own</em> local text-embedding model. Maps page text → a raw vector. Has <strong>no dependency on the RAG pipeline</strong> (task-31).</td>
+      <td><span class="pill prod">vscode/</span> a local model adapter (e.g. a 384-d sentence encoder via <code>@xenova/transformers</code>)</td>
+      <td><span class="pill test">in-memory fake</span> deterministic hash/stub vectors</td>
+    </tr>
+    <tr>
+      <td><code>VectorStore</code></td>
+      <td>The page-vector cache: get/put one L2-normalized vector per <code>(page_session_id, embedding_model_id)</code>. Backs the <code>topic_page_vector</code> table so re-runs skip re-embedding and a model change invalidates cleanly.</td>
+      <td><span class="pill prod">vscode/</span> DuckDB-backed cache through the writer</td>
+      <td><span class="pill test">in-memory fake</span> a <code>Map</code></td>
+    </tr>
+    <tr>
+      <td><code>ClusterSink</code></td>
+      <td>The write port: accepts <code>(run, clusters, members)</code> and persists them. TDT computes; the sink owns the actual DuckDB write transaction.</td>
+      <td><span class="pill prod">vscode/</span> the single-writer transaction over <code>topic_run</code> / <code>topic_cluster</code> / <code>topic_cluster_member</code></td>
+      <td><span class="pill test">in-memory fake</span> records the last write for assertions</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>The shape these contracts take in <code>ports.ts</code></h3>
+
+<p>The task spec fixes the names and responsibilities; the exact method signatures are this sub-task's design work, constrained by the stage types in §3 and the data flow in the design doc. A faithful skeleton:</p>
+
+<pre><code><span class="tok-com">// ports.ts — NO import from vscode/src. Pure contracts.</span>
+<span class="tok-kw">import</span> { VisitRow, RepresentedCluster } <span class="tok-kw">from</span> <span class="tok-str">"./types"</span>;
+
+<span class="tok-com">/** Reads captured visit metadata for a window (Stage 1).</span>
+<span class="tok-com"> *  Production: in-process DuckDB reader OR HTTP /query/visits_in_window.</span>
+<span class="tok-com"> *  Rows MUST arrive ORDER BY page_loaded_at, page_session_id (determinism anchor). */</span>
+<span class="tok-kw">export interface</span> <span class="tok-typ">RelationalReader</span> {
+  <span class="tok-fn">listVisitsInWindow</span>(start: <span class="tok-typ">string</span>, end: <span class="tok-typ">string</span>): <span class="tok-typ">Promise</span>&lt;<span class="tok-typ">VisitRow</span>[]&gt;;
+}
+
+<span class="tok-com">/** TDT's own local embedding model (NOT RAG's). page text -> raw vector. */</span>
+<span class="tok-kw">export type</span> <span class="tok-typ">EmbedFn</span> = (texts: <span class="tok-typ">string</span>[]) => <span class="tok-typ">Promise</span>&lt;<span class="tok-typ">Float32Array</span>[]&gt;;
+
+<span class="tok-com">/** Page-vector cache, keyed (page_session_id, embedding_model_id). */</span>
+<span class="tok-kw">export interface</span> <span class="tok-typ">VectorStore</span> {
+  <span class="tok-fn">get</span>(pageSessionId: <span class="tok-typ">string</span>, modelId: <span class="tok-typ">string</span>): <span class="tok-typ">Promise</span>&lt;<span class="tok-typ">Float32Array</span> | <span class="tok-kw">null</span>&gt;;
+  <span class="tok-fn">put</span>(pageSessionId: <span class="tok-typ">string</span>, modelId: <span class="tok-typ">string</span>, vector: <span class="tok-typ">Float32Array</span>, repr: <span class="tok-typ">string</span>): <span class="tok-typ">Promise</span>&lt;<span class="tok-typ">void</span>&gt;;
+}
+
+<span class="tok-com">/** Write port. TDT computes; the sink owns the single-writer transaction. */</span>
+<span class="tok-kw">export interface</span> <span class="tok-typ">ClusterSink</span> {
+  <span class="tok-fn">write</span>(run: <span class="tok-typ">TopicRun</span>, clusters: <span class="tok-typ">RepresentedCluster</span>[], members: <span class="tok-typ">ClusterMember</span>[]): <span class="tok-typ">Promise</span>&lt;<span class="tok-typ">void</span>&gt;;
+}</code></pre>
+
+<div class="note">
+<p style="margin:0">The exact field set on <code>TopicRun</code> / <code>ClusterMember</code> is shaped by the persistence schema (design doc §8) and finalised when persistence lands (task-36.6). For 36.1 they need only be sufficient for the fake sink to record a no-op write. The four <em>names and roles</em> above are the load-bearing commitment.</p>
+</div>
+
+<!-- ====================================================================== -->
+<h2 id="types">3. The shared stage types (§6)</h2>
+
+<p>These are the data shapes that flow between pipeline stages. They live in <code>types.ts</code> and are part of AC #4. Reproduced <strong>exactly as specified in design doc §6</strong>:</p>
+
+<pre><code><span class="tok-com">// types.ts</span>
+<span class="tok-kw">export interface</span> <span class="tok-typ">VisitRow</span> {
+  <span class="tok-com">// Stage 1</span>
+  page_session_id: <span class="tok-typ">string</span>;
+  url: <span class="tok-typ">string</span>;
+  title: <span class="tok-typ">string</span> | <span class="tok-kw">null</span>;
+  site_name: <span class="tok-typ">string</span> | <span class="tok-kw">null</span>;
+  page_loaded_at: <span class="tok-typ">string</span>; <span class="tok-com">// ISO TEXT</span>
+  tree_id: <span class="tok-typ">string</span>;
+}
+<span class="tok-kw">export interface</span> <span class="tok-typ">PageVector</span> {
+  <span class="tok-com">// Stage 2 (order preserved from Stage 1)</span>
+  page_session_id: <span class="tok-typ">string</span>;
+  vector: <span class="tok-typ">Float32Array</span>; <span class="tok-com">// L2-normalized page vector</span>
+  low_confidence: <span class="tok-typ">boolean</span>; <span class="tok-com">// multi-topic dispersion / fell back to dominant segment</span>
+}
+<span class="tok-kw">export type</span> <span class="tok-typ">DistanceMatrix</span> = <span class="tok-typ">number</span>[][]; <span class="tok-com">// Stage 4: dense (n,n), D[i][i]=0, symmetric, [0,2]</span>
+
+<span class="tok-kw">export interface</span> <span class="tok-typ">HdbscanRaw</span> {
+  <span class="tok-com">// Stage 5</span>
+  labels: <span class="tok-typ">number</span>[]; <span class="tok-com">// -1 = noise</span>
+  probabilities: <span class="tok-typ">number</span>[]; <span class="tok-com">// [0,1], 0 for noise</span>
+  exemplar_indices: <span class="tok-typ">Map</span>&lt;<span class="tok-typ">number</span>, <span class="tok-typ">number</span>&gt;; <span class="tok-com">// clusterId -> single row index (eom + storeExemplars)</span>
+}
+<span class="tok-kw">export interface</span> <span class="tok-typ">RepresentedCluster</span> {
+  <span class="tok-com">// Stage 7</span>
+  local_label: <span class="tok-typ">number</span>;
+  member_indices: <span class="tok-typ">number</span>[];
+  representative_index: <span class="tok-typ">number</span>; <span class="tok-com">// exemplar (eom) else medoid</span>
+  representative_vector: <span class="tok-typ">Float32Array</span>; <span class="tok-com">// FROZEN: L2-normalized mean of member vectors</span>
+  size: <span class="tok-typ">number</span>;
+  time_span: { start: <span class="tok-typ">string</span>; end: <span class="tok-typ">string</span> };
+}</code></pre>
+
+<div class="note">
+<p style="margin:0">Note the deliberate <strong>snake_case</strong> on these field names. These are <em>our</em> types — they match the repo's DuckDB column convention. The clustering library speaks camelCase; §7 explains where that translation gets quarantined.</p>
+</div>
+
+<!-- ====================================================================== -->
+<h2 id="config">4. The config shapes (§5)</h2>
+
+<p>AC #4 requires <code>config.ts</code> to expose <code>DEFAULT_WINDOW_CONFIG</code> and <code>DEFAULT_HDBSCAN_CONFIG</code>. The window config is fixed exactly by design doc §5:</p>
+
+<h4>WindowConfig + DEFAULT_WINDOW_CONFIG (§5, verbatim)</h4>
+
+<pre><code><span class="tok-kw">export interface</span> <span class="tok-typ">WindowConfig</span> {
+  unit: <span class="tok-str">"month"</span> | <span class="tok-str">"days"</span>;
+  days?: <span class="tok-typ">number</span>; <span class="tok-com">// when unit==='days'</span>
+  tz: <span class="tok-str">"UTC"</span>;
+  max_samples: <span class="tok-typ">number</span>; <span class="tok-com">// 4000: hard count guard, headroom under ~5k</span>
+  subdivide_order: (<span class="tok-str">"gap"</span> | <span class="tok-str">"half_month"</span> | <span class="tok-str">"iso_week"</span>)[];
+  min_window_visits: <span class="tok-typ">number</span>; <span class="tok-com">// 8</span>
+}
+<span class="tok-kw">export const</span> <span class="tok-typ">DEFAULT_WINDOW_CONFIG</span>: <span class="tok-typ">WindowConfig</span> = {
+  unit: <span class="tok-str">"month"</span>,
+  tz: <span class="tok-str">"UTC"</span>,
+  max_samples: <span class="tok-num">4000</span>,
+  subdivide_order: [<span class="tok-str">"gap"</span>, <span class="tok-str">"half_month"</span>, <span class="tok-str">"iso_week"</span>],
+  min_window_visits: <span class="tok-num">8</span>,
+};</code></pre>
+
+<h4>HdbscanConfig + DEFAULT_HDBSCAN_CONFIG (from §6 parameters)</h4>
+
+<p>The design doc §6 fixes the HDBSCAN defaults as starting points selected by the validation sweep (task-36.7) and persisted as config — <strong>not magic constants</strong>. The shape derives directly from the parameter section:</p>
+
+<pre><code><span class="tok-kw">export interface</span> <span class="tok-typ">HdbscanConfig</span> {
+  min_cluster_size: <span class="tok-typ">number</span>;        <span class="tok-com">// pages; a 3-page thread is a real project</span>
+  min_samples: <span class="tok-typ">number</span>;             <span class="tok-com">// DECOUPLED from min_cluster_size</span>
+  method: <span class="tok-str">"eom"</span> | <span class="tok-str">"leaf"</span>;          <span class="tok-com">// eom = stable + has defined exemplars</span>
+  epsilon: <span class="tok-typ">number</span>;                 <span class="tok-com">// cosine-distance units</span>
+}
+<span class="tok-kw">export const</span> <span class="tok-typ">DEFAULT_HDBSCAN_CONFIG</span>: <span class="tok-typ">HdbscanConfig</span> = {
+  min_cluster_size: <span class="tok-num">3</span>,   <span class="tok-com">// §6: a 3-page thread is a real personal-scale project</span>
+  min_samples: <span class="tok-num">5</span>,        <span class="tok-com">// §6: decoupled; under-smoothing causes chaining + label flips</span>
+  method: <span class="tok-str">"eom"</span>,        <span class="tok-com">// §6: most stable; the method exemplars are defined under</span>
+  epsilon: <span class="tok-num">0.0</span>,        <span class="tok-com">// §6: swept {0.0, 0.10, 0.20}</span>
+};</code></pre>
+
+<div class="warn">
+<p style="margin:0"><strong>Why these are defaults, not constants.</strong> Per §6, the operating point is chosen by the validation sweep (task-36.7) on real data and persisted as config, <em>parameterized by window size</em>. Re-tuning as history grows is a data change, not a code change. 36.1 only establishes the <em>shape</em> and a sane starting value.</p>
+</div>
+
+<!-- ====================================================================== -->
+<h2 id="layout">5. Proposed file layout</h2>
+
+<p>The full module layout from design doc §3 is below; <span class="new" style="color:var(--green)">green</span> marks what <strong>this sub-task (36.1)</strong> creates. The greyed entries are scaffolded by later sub-tasks (36.2–36.9).</p>
+
+<pre class="filetree"><code><span class="dir">tdt/</span>
+  <span class="new">package.json</span>            <span class="c"># deps: clustering-tfjs, @xenova/transformers; dev: @duckdb/node-api, jest</span>
+  <span class="new">tsconfig.json</span>           <span class="c"># extends ../tsconfig.base.json</span>
+  <span class="new">README.md</span>               <span class="c"># AC #5: documents module boundary + DI contracts</span>
+  <span class="dir">src/</span>
+    <span class="new">index.ts</span>              <span class="c"># public API: run_tdt(deps, args) — NO-OP in 36.1</span>
+    <span class="new">ports.ts</span>              <span class="c"># RelationalReader, EmbedFn, VectorStore, ClusterSink (AC #2)</span>
+    <span class="new">config.ts</span>             <span class="c"># DEFAULT_WINDOW_CONFIG, DEFAULT_HDBSCAN_CONFIG (AC #4)</span>
+    <span class="new">types.ts</span>              <span class="c"># shared stage types (AC #4)</span>
+    <span class="dir new">fakes/</span>
+      <span class="new">index.ts</span>            <span class="c"># in-memory fakes for every port (AC #3)</span>
+    <span class="c">windowing.ts          # 36.2</span>
+    <span class="c">page_vectors.ts       # 36.3</span>
+    <span class="c">cluster_window.ts     # 36.4 — the ONLY clustering-tfjs call</span>
+    <span class="c">representations.ts    # 36.5</span>
+    <span class="c">labeling/deterministic_labeler.ts  # 36.5</span>
+    <span class="c">persist.ts            # 36.6</span>
+    <span class="c">validation.ts         # 36.7</span>
+    <span class="c">cli/run_batch.ts      # 36.9 headless entrypoint</span>
+  <span class="dir new">test/</span>
+    <span class="new">run_tdt.noop.test.ts</span>  <span class="c"># AC #3: no-op run_tdt round-trips the fakes</span></code></pre>
+
+<h3>tdt/package.json</h3>
+<pre><code>{
+  <span class="tok-str">"name"</span>: <span class="tok-str">"@bergamot/tdt"</span>,
+  <span class="tok-str">"version"</span>: <span class="tok-str">"0.0.0"</span>,
+  <span class="tok-str">"private"</span>: <span class="tok-kw">true</span>,
+  <span class="tok-str">"main"</span>: <span class="tok-str">"out/index.js"</span>,
+  <span class="tok-str">"types"</span>: <span class="tok-str">"out/index.d.ts"</span>,
+  <span class="tok-str">"scripts"</span>: {
+    <span class="tok-str">"build"</span>: <span class="tok-str">"tsc -p tsconfig.json"</span>,
+    <span class="tok-str">"test"</span>: <span class="tok-str">"jest"</span>,
+    <span class="tok-str">"clean"</span>: <span class="tok-str">"rm -rf out"</span>
+  },
+  <span class="tok-str">"dependencies"</span>: {
+    <span class="tok-str">"clustering-tfjs"</span>: <span class="tok-str">"..."</span>,
+    <span class="tok-str">"@xenova/transformers"</span>: <span class="tok-str">"..."</span>
+  },
+  <span class="tok-str">"devDependencies"</span>: {
+    <span class="tok-str">"@duckdb/node-api"</span>: <span class="tok-str">"..."</span>,
+    <span class="tok-str">"jest"</span>: <span class="tok-str">"..."</span>
+  }
+}</code></pre>
+
+<h3>tdt/tsconfig.json (mirrors the vscode/ extends pattern)</h3>
+<pre><code>{
+  <span class="tok-str">"extends"</span>: <span class="tok-str">"../tsconfig.base.json"</span>,
+  <span class="tok-str">"compilerOptions"</span>: {
+    <span class="tok-str">"outDir"</span>: <span class="tok-str">"./out"</span>,
+    <span class="tok-str">"rootDir"</span>: <span class="tok-str">"./src"</span>,
+    <span class="tok-str">"lib"</span>: [<span class="tok-str">"ES2022"</span>],
+    <span class="tok-str">"types"</span>: [<span class="tok-str">"node"</span>, <span class="tok-str">"jest"</span>]
+  },
+  <span class="tok-str">"include"</span>: [<span class="tok-str">"src/**/*"</span>],
+  <span class="tok-str">"exclude"</span>: [<span class="tok-str">"node_modules"</span>, <span class="tok-str">"out"</span>, <span class="tok-str">"**/*.test.ts"</span>]
+}</code></pre>
+
+<div class="note">
+<p style="margin:0">Unlike <code>vscode/tsconfig.json</code> (which loosens <code>strict</code> and drops <code>strictNullChecks</code>), <code>@bergamot/tdt</code> should keep the <strong>strict</strong> defaults from <code>tsconfig.base.json</code> — it is greenfield with no legacy to accommodate, and determinism/correctness is the whole point of the module. It notably does <strong>not</strong> include <code>"vscode"</code> in <code>types</code> — another expression of the wall.</p>
+</div>
+
+<h3>Root package.json change (AC #1)</h3>
+<pre><code>  <span class="tok-str">"workspaces"</span>: [
+    <span class="tok-str">"vscode"</span>,
+    <span class="tok-str">"browser"</span>,
+    <span class="tok-str">"tdt"</span>          <span class="tok-com">// &lt;-- added by this task</span>
+  ],</code></pre>
+
+<!-- ====================================================================== -->
+<h2 id="noop">6. What "no-op run_tdt round-trips fakes" means</h2>
+
+<p>This is AC #3, the central acceptance test of 36.1. It proves the seams compose <em>before</em> any real stage exists. Concretely:</p>
+
+<ol>
+  <li>Construct a <code>deps</code> object built entirely from the in-memory fakes: a fake <code>RelationalReader</code> (returns a fixed array of <code>VisitRow</code>), a fake <code>EmbedFn</code> (returns deterministic stub vectors), a fake <code>VectorStore</code> (a <code>Map</code>), and a fake <code>ClusterSink</code> (records what it was asked to write).</li>
+  <li>Call <code>run_tdt(deps, args)</code> with some minimal <code>args</code> (e.g. a window range + default config).</li>
+  <li>The <strong>no-op</strong> orchestrator wires the ports together in the right <em>shape</em> — it accepts the deps, can touch each port without throwing, and returns a well-typed result — but performs <strong>no real clustering</strong>. Later sub-tasks fill in the stages; 36.1 just proves the plumbing type-checks and runs.</li>
+  <li>The test asserts the round-trip completes: the reader was consulted, the sink was reached (even with an empty/trivial payload), and the return type matches.</li>
+</ol>
+
+<pre><code><span class="tok-com">// test/run_tdt.noop.test.ts (sketch)</span>
+<span class="tok-kw">import</span> { run_tdt } <span class="tok-kw">from</span> <span class="tok-str">"../src"</span>;
+<span class="tok-kw">import</span> { makeFakeDeps } <span class="tok-kw">from</span> <span class="tok-str">"../src/fakes"</span>;
+
+<span class="tok-fn">test</span>(<span class="tok-str">"no-op run_tdt round-trips the fakes"</span>, <span class="tok-kw">async</span> () => {
+  <span class="tok-kw">const</span> deps = <span class="tok-fn">makeFakeDeps</span>({ visits: [<span class="tok-com">/* a few VisitRow */</span>] });
+  <span class="tok-kw">const</span> result = <span class="tok-kw">await</span> <span class="tok-fn">run_tdt</span>(deps, { window: { start: <span class="tok-str">"2026-05-01"</span>, end: <span class="tok-str">"2026-06-01"</span> } });
+  <span class="tok-fn">expect</span>(result).<span class="tok-fn">toBeDefined</span>();
+  <span class="tok-fn">expect</span>(deps.sink.lastWrite).<span class="tok-fn">not</span>.<span class="tok-fn">toBeNull</span>();  <span class="tok-com">// the sink was reached</span>
+});</code></pre>
+
+<div class="summary-box">
+  <div class="label">The point</div>
+  <p style="margin:.4rem 0 0">The DI seams are <em>real and composable</em> from day one. Every later stage slots in behind a port that already has a fake, so each sub-task is unit-testable in isolation without VS Code, DuckDB, or a network.</p>
+</div>
+
+<!-- ====================================================================== -->
+<h2 id="casing">7. The camelCase ↔ snake_case boundary</h2>
+
+<p>The task description says: <em>"Quarantine the clustering-tfjs camelCase↔snake_case naming translation inside this package boundary."</em> Here is exactly what that means.</p>
+
+<p>Two naming worlds meet at <code>@bergamot/tdt</code>:</p>
+
+<table>
+  <thead><tr><th>World</th><th>Convention</th><th>Examples</th></tr></thead>
+  <tbody>
+    <tr><td><code>clustering-tfjs</code> (the library)</td><td><strong>camelCase</strong></td><td><code>minClusterSize</code>, <code>minSamples</code>, <code>clusterSelectionMethod</code>, <code>clusterSelectionEpsilon</code>, <code>storeExemplars</code>, <code>labels_</code>, <code>probabilities_</code>, <code>exemplarIndices_</code></td></tr>
+    <tr><td>Bergamot / TDT (our types & DuckDB)</td><td><strong>snake_case</strong></td><td><code>min_cluster_size</code>, <code>page_session_id</code>, <code>page_loaded_at</code>, <code>exemplar_indices</code>, <code>representative_vector</code></td></tr>
+  </tbody>
+</table>
+
+<p><strong>Quarantine</strong> means: the camelCase ↔ snake_case translation happens in <em>exactly one place</em> — the boundary inside this package where TDT calls the library — and <strong>nowhere else</strong>. Our config (<code>DEFAULT_HDBSCAN_CONFIG</code> with <code>min_cluster_size</code>), our types (<code>HdbscanRaw.exemplar_indices</code>), and our persistence are all snake_case. The only spot that knows the library's camelCase is the call site, which maps our snake_case config into the library's camelCase options and maps the library's camelCase results back into our snake_case types.</p>
+
+<pre class="ascii"><code>   our snake_case world                  the ONE quarantine boundary           clustering-tfjs camelCase world
+ ───────────────────────                ─────────────────────────────         ───────────────────────────────
+ DEFAULT_HDBSCAN_CONFIG  ──┐
+   min_cluster_size: 3      │  translate snake_case -> camelCase
+   min_samples: 5           ├──────────────────────────────────────►  new HDBSCAN({ minClusterSize, minSamples,
+   method: "eom"            │  (cluster_window.ts, task-36.4)               clusterSelectionMethod, ... })
+   epsilon: 0.0            ─┘                                                       │
+                                                                                    │ model.fit(D)
+                                                                                    ▼
+ HdbscanRaw          ◄──────  translate camelCase -> snake_case  ◄────────  labels_, probabilities_, exemplarIndices_
+   labels                    (same boundary)
+   probabilities
+   exemplar_indices</code></pre>
+
+<p>For <strong>this</strong> sub-task (36.1) the actual <code>fit</code> call lands later (36.4), but the <em>contract</em> that quarantines the translation is established now: <code>ports.ts</code> and the config/types are pure snake_case, and they document that the only camelCase the package ever speaks is at the eventual <code>cluster_window.ts</code> call site. Nothing outside that file imports the library or sees a camelCase field.</p>
+
+<div class="note">
+<p style="margin:0"><strong>Why it matters:</strong> if camelCase leaked across the package — into persistence, MCP responses, or our types — every consumer would have to know the library's naming, and a library rename would ripple everywhere. Quarantining it keeps <code>clustering-tfjs</code> a swappable detail behind one translation layer.</p>
+</div>
+
+<!-- ====================================================================== -->
+<h2 id="ac">8. Acceptance criteria checklist</h2>
+
+<p>The five ACs from the task doc, with what "done" concretely looks like for each:</p>
+
+<ul class="check">
+  <li>
+    <span class="ac-id">#1</span> &nbsp;<strong>A new <code>tdt/</code> workspace is added to the root <code>package.json</code> workspaces array and <code>tsc</code> builds it clean.</strong>
+    <div style="color:var(--fg-dim);font-size:.92em;margin-top:.2rem">Done = root <code>workspaces</code> is <code>["vscode","browser","tdt"]</code>; <code>tdt/package.json</code> + <code>tdt/tsconfig.json</code> (extending <code>../tsconfig.base.json</code>) exist; <code>npm run build</code> in <code>tdt/</code> compiles with zero errors under strict TypeScript.</div>
+  </li>
+  <li>
+    <span class="ac-id">#2</span> &nbsp;<strong><code>ports.ts</code> defines <code>RelationalReader</code>, <code>EmbedFn</code>, <code>VectorStore</code>, and <code>ClusterSink</code> with documented contracts, and contains no import from <code>vscode/src</code>.</strong>
+    <div style="color:var(--fg-dim);font-size:.92em;margin-top:.2rem">Done = all four exported with doc comments stating responsibility + production/test supplier; a grep for <code>vscode/src</code> (or any <code>vscode</code> import) in <code>tdt/src</code> returns nothing.</div>
+  </li>
+  <li>
+    <span class="ac-id">#3</span> &nbsp;<strong>In-memory fakes exist for every port and a no-op <code>run_tdt(deps, args)</code> round-trips them in a unit test.</strong>
+    <div style="color:var(--fg-dim);font-size:.92em;margin-top:.2rem">Done = a fake for each of the four ports; <code>run_tdt</code> exported from <code>index.ts</code> as the public API; a passing Jest test that builds deps from fakes, calls <code>run_tdt</code>, and asserts the round-trip (reader consulted, sink reached). See §6.</div>
+  </li>
+  <li>
+    <span class="ac-id">#4</span> &nbsp;<strong><code>config.ts</code> exposes <code>DEFAULT_WINDOW_CONFIG</code> and <code>DEFAULT_HDBSCAN_CONFIG</code> and <code>types.ts</code> defines the shared stage types.</strong>
+    <div style="color:var(--fg-dim);font-size:.92em;margin-top:.2rem">Done = <code>config.ts</code> exports both defaults with the §5/§6 shapes; <code>types.ts</code> exports <code>VisitRow</code>, <code>PageVector</code>, <code>DistanceMatrix</code>, <code>HdbscanRaw</code>, <code>RepresentedCluster</code> exactly as in §3 above.</div>
+  </li>
+  <li>
+    <span class="ac-id">#5</span> &nbsp;<strong>A package README documents the module boundary and the dependency-injection contracts.</strong>
+    <div style="color:var(--fg-dim);font-size:.92em;margin-top:.2rem">Done = <code>tdt/README.md</code> explains: the wall (no <code>vscode/src</code> imports), the DuckDB single-writer rationale, the four ports and who supplies each, and the camelCase↔snake_case quarantine. Written canonically (present tense, system-as-it-is).</div>
+  </li>
+</ul>
+
+<div class="warn">
+<p style="margin:0"><strong>Scope discipline (constitution / YAGNI).</strong> 36.1 builds <em>only</em> the seams. No windowing, no embedding, no distance matrix, no <code>fit</code> call, no persistence schema, no MCP routes. Those are 36.2–36.9. The temptation to "stub in a little real logic" is surplus — the no-op orchestrator is intentionally empty of behavior.</p>
+</div>
+
+<footer>
+  Comprehension companion for <code>task-36.1</code>. Canonical reference: <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> (§3 architecture, §4 page vectors, §5 windowing, §6 pipeline/types, §11 build order). Parent: <a href="task-36.overview.html">task-36.overview.html</a>.
+</footer>
+
+</div>
+</body>
+</html>
