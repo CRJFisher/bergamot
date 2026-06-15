@@ -6,52 +6,13 @@
  */
 
 import { DuckDB } from "./duck_db";
-import {
-  PageActivitySessionWithoutTree,
-  PageActivitySession
-} from "./duck_db_models";
+import { PageActivitySession } from "./duck_db_models";
 import { OrphanedVisitsManager } from "./orphaned_visits";
 import { insert_page_activity_session_with_tree_management } from "./webpage_tree";
 import { run_page_capture } from "./workflow/page_capture_pipeline";
 import { load_inbox, remove_visit } from "./visit_inbox";
 import { record_outcome, format_error_detail } from "./dev_log";
-
-/**
- * Extended visit type that includes the page title (captured from the browser
- * tab) and tab metadata.
- */
-export interface ExtendedPageVisit extends PageActivitySessionWithoutTree {
-  /** Correlation token threaded through the pipeline for end-to-end tracing */
-  visit_id: string;
-  /** Page title, captured from the browser tab */
-  title: string;
-  /** Browser tab ID that opened this page */
-  opener_tab_id?: number;
-  /** Browser tab ID of this page */
-  tab_id?: number;
-}
-
-/**
- * Narrows an unknown value — typically JSON deserialized from the durable inbox
- * or the replay ring — to a complete {@link ExtendedPageVisit}.
- *
- * The capture pipeline binds every field to DuckDB, which rejects `undefined`
- * with an opaque `Cannot create values of type ANY` error. A persisted entry
- * written by an earlier capture model can be missing required fields (notably
- * `title`), so callers validate before feeding a visit into the pipeline and
- * drop anything that fails rather than letting it detonate at the DB bind.
- */
-export function is_complete_visit(value: unknown): value is ExtendedPageVisit {
-  if (typeof value !== "object" || value === null) return false;
-  const v = value as Record<string, unknown>;
-  return (
-    typeof v.id === "string" &&
-    typeof v.url === "string" &&
-    typeof v.page_loaded_at === "string" &&
-    typeof v.visit_id === "string" &&
-    typeof v.title === "string"
-  );
-}
+import { ExtendedPageVisit } from "./visit_types";
 
 /**
  * Configuration options for the visit queue processor
@@ -63,8 +24,6 @@ export interface QueueProcessorConfig {
   batch_timeout?: number;
   /** Interval for retrying orphaned visits (milliseconds) */
   orphan_retry_interval?: number;
-  /** Directory of the durable visit inbox; entries are removed once persisted to DuckDB */
-  inbox_dir?: string;
   /**
    * Called with the `page_session_id` of each visit the moment its metadata is
    * captured. The server wires this to an eager re-download, so a page's public
@@ -124,7 +83,6 @@ export class VisitQueueProcessor {
   private readonly batch_size: number;
   private readonly batch_timeout: number;
   private readonly orphan_retry_interval: number;
-  private readonly inbox_dir?: string;
   private readonly on_captured?: (page_session_id: string) => void;
 
   constructor(
@@ -135,7 +93,6 @@ export class VisitQueueProcessor {
     this.batch_size = config.batch_size ?? 3;
     this.batch_timeout = config.batch_timeout ?? 1000;
     this.orphan_retry_interval = config.orphan_retry_interval ?? 5000;
-    this.inbox_dir = config.inbox_dir;
     this.on_captured = config.on_captured;
   }
 
@@ -167,8 +124,8 @@ export class VisitQueueProcessor {
    * Drops every queued and orphan-parked visit the predicate matches — the
    * right-to-forget cascade calls this before deleting stored rows, so a
    * forgotten visit sitting in the in-memory pipeline cannot be re-inserted
-   * after the forget. Matching visits' durable inbox files are removed by
-   * the cascade's own file sweep.
+   * after the forget. Matching visits' durable inbox rows are removed by
+   * the cascade's own visit_inbox table sweep.
    *
    * @returns How many in-memory visits were dropped
    */
@@ -185,8 +142,8 @@ export class VisitQueueProcessor {
   /**
    * Starts the queue processor and orphan retry timer.
    */
-  start(): void {
-    this.reload_persisted_visits();
+  async start(): Promise<void> {
+    await this.reload_persisted_visits();
     this.start_orphan_retry_timer();
     this.schedule_batch_processing();
   }
@@ -196,9 +153,8 @@ export class VisitQueueProcessor {
    * extension restarted before they were written to DuckDB). Reprocessing is
    * safe: visit ids are deterministic, so insertion is idempotent.
    */
-  private reload_persisted_visits(): void {
-    if (!this.inbox_dir) return;
-    const persisted = load_inbox(this.inbox_dir);
+  private async reload_persisted_visits(): Promise<void> {
+    const persisted = await load_inbox(this.duck_db);
     if (persisted.length > 0) {
       console.log(`📥 Reloading ${persisted.length} visit(s) from the durable inbox`);
       this.request_queue.push(...persisted);
@@ -381,8 +337,8 @@ export class VisitQueueProcessor {
           // Only drop the durable copy once the visit is fully processed. A
           // visit parked as an orphan still needs to survive a restart so it can
           // be re-linked to its parent and processed later.
-          if (completed && this.inbox_dir) {
-            remove_visit(this.inbox_dir, visit.id);
+          if (completed) {
+            await remove_visit(this.duck_db, visit.id);
           }
         } catch (error) {
           record_outcome({
@@ -461,9 +417,7 @@ export class VisitQueueProcessor {
       });
       if (completed) {
         this.orphan_manager.remove_orphan(orphan);
-        if (this.inbox_dir) {
-          remove_visit(this.inbox_dir, orphan.visit.id);
-        }
+        await remove_visit(this.duck_db, orphan.visit.id);
       } else {
         this.orphan_manager.increment_retry_count(orphan);
       }

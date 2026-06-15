@@ -60,6 +60,10 @@ export const WEBPAGE_ACTIVITY_SESSIONS_TABLE = "webpage_activity_sessions";
 export const WEBPAGE_TREES_TABLE = "webpage_trees";
 export const WEBPAGE_CAPTURE_TABLE = "webpage_capture";
 export const WEBPAGE_FETCH_TABLE = "webpage_fetch";
+// Durable visit buffer: rows land here before the 200 response, deleted once
+// the capture pipeline commits to webpage_activity_sessions. Lives inside the
+// encrypted metadata store so visits-in-flight are never plaintext on disk.
+export const VISIT_INBOX_TABLE = "visit_inbox";
 
 /**
  * Capture metadata columns selected (aliased `cap_*`) when a tree query joins
@@ -1252,6 +1256,17 @@ export async function create_metadata_schema(db: DuckDB): Promise<void> {
     "fetched_at TEXT NOT NULL", // ISO timestamp of the fetch attempt
   ].join(", ");
   await db.create_table(WEBPAGE_FETCH_TABLE, webpage_fetch_schema);
+
+  // Durable visit inbox — transient rows written before the 200 response,
+  // deleted once the capture pipeline commits. Keyed by visit id; url and
+  // page_loaded_at are exposed for the right-to-forget selector sweep.
+  const visit_inbox_schema = [
+    "id TEXT PRIMARY KEY",       // visit.id (hash of url + timestamp)
+    "url TEXT NOT NULL",         // for forget cascade selector matching
+    "page_loaded_at TEXT",       // for time-range selector matching
+    "visit_json TEXT NOT NULL",  // full JSON of ExtendedPageVisit for reload
+  ].join(", ");
+  await db.create_table(VISIT_INBOX_TABLE, visit_inbox_schema);
 
   // Indexes for the common query patterns over the metadata tables.
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_activity_sessions_url

@@ -67,7 +67,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     console.log('Starting webpage categorizer service...');
     server_manager = new ServerManager({
       duck_db: databases.duck_db,
-      inbox_dir: path.join(storage_base, 'visit_inbox'),
       storage_base,
       // Claim the candidate port range from any stale Bergamot server (e.g. a
       // debug host that outlived its window) so this instance is the single

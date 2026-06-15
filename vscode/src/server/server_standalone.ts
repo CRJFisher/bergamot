@@ -43,7 +43,6 @@ async function main(): Promise<void> {
 
   const server = new ServerManager({
     duck_db: databases.duck_db,
-    inbox_dir: path.join(storage_path, 'visit_inbox'),
     storage_base: storage_path,
   });
 

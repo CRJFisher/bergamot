@@ -10,9 +10,8 @@ Run this after any change that alters a persisted schema — a DuckDB `CREATE TA
 
 All persistent stores live under the resolved storage base (`get_storage_base`, `config/storage_path.ts`):
 
-- **DuckDB metadata file** — `<storage_base>/webpage_categorizations.db`, encrypted at rest with DuckDB native encryption
+- **DuckDB metadata file** — `<storage_base>/webpage_categorizations.db`, encrypted at rest with DuckDB native encryption. Includes the `visit_inbox` table holding visits-in-flight between HTTP accept and DuckDB write.
 - **Content cache** — `<storage_base>/content_cache.db`, a separate encrypted DuckDB store holding cached re-download content (extracted main-content markdown, brotli-compressed)
-- **Visit inbox** — `<storage_base>/visit_inbox/`
 
 During F5 debugging `BERGAMOT_STORAGE_PATH` points the storage base at the repo-local `.dev-storage/` (see `.vscode/launch.json`). An installed extension uses the per-extension `globalStorageUri` instead.
 
@@ -31,7 +30,7 @@ Stop the Extension Development Host (and any running MCP server), then delete th
 rm -rf .dev-storage/webpage_categorizations.db .dev-storage/content_cache.db
 ```
 
-Deleting the whole `.dev-storage/` directory is equivalent and also clears the visit inbox and dev log:
+Deleting the whole `.dev-storage/` directory is equivalent and also clears the dev log:
 
 ```bash
 rm -rf .dev-storage
