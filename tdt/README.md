@@ -6,6 +6,14 @@ threads") by embedding similarity, using windowed HDBSCAN clustering. It reads
 captured metadata, re-downloads and embeds public page content itself, clusters
 per time window, and hands results back for the extension to persist.
 
+**Design reference:** `backlog/drafts/tdt-hdbscan-micro-tier-plan.md` is the
+canonical architecture doc. In-code `plan §N` citations refer to its numbered
+sections.
+
+**Start reading at `src/index.ts`** — it is the public surface, re-exporting
+`run_tdt`, `TdtDeps`, `TdtArgs`, the four port contracts (`src/ports.ts`), the
+stage data types (`src/types.ts`), and config defaults (`src/config.ts`).
+
 ## Module boundary
 
 `@bergamot/tdt` is a standalone npm workspace package (sibling of `vscode/`
@@ -18,7 +26,7 @@ four injected port contracts. The package owns the clustering logic and the
 
 - its own modules (`ports`, `types`, `config`, and the clustering stages)
 - `clustering-tfjs` (HDBSCAN, pairwise cosine distance) — at the single
-  isolated clustering stage only (`src/cluster_window.ts`)
+  isolated clustering stage only (`src/cluster_window.ts`, planned)
 - `@xenova/transformers` — behind the `EmbedFn` port implementation only
 
 **This package never imports:**
@@ -35,7 +43,9 @@ The dependency direction is one-way: `vscode/` depends on `@bergamot/tdt`;
 ## Port contracts
 
 All four are defined in `src/ports.ts`. The library calls them; the caller
-supplies the concrete implementations.
+supplies the concrete implementations. The data shapes they pass (`VisitRow`,
+`RunRecord`, `ClusterRecord`, `MemberRecord`, etc.) are defined in `src/types.ts`,
+a dependency-free leaf module that `ports.ts` imports.
 
 - **`RelationalReader`** — reads captured visit rows from DuckDB for a time
   window (`list_visits_in_window(start, end)`), ordered deterministically by
@@ -62,7 +72,7 @@ supplies the concrete implementations.
 ## Wiring it up
 
 The caller constructs `TdtDeps` from concrete implementations and passes it to
-`run_tdt`. For tests, in-memory fakes for every port live in `src/fakes/`:
+`run_tdt`. In-memory fakes for every port live in `src/fakes/` for use in tests:
 
 ```ts
 import { run_tdt, type TdtDeps, type TdtArgs } from "@bergamot/tdt";
@@ -71,7 +81,7 @@ import {
   create_fake_embed,
   FakeVectorStore,
   FakeClusterSink,
-} from "@bergamot/tdt/src/fakes";
+} from "./fakes"; // within the tdt package; external consumers import from the built path
 
 const { embed } = create_fake_embed();
 const sink = new FakeClusterSink();
@@ -79,7 +89,7 @@ const sink = new FakeClusterSink();
 const deps: TdtDeps = {
   reader: new FakeRelationalReader([/* seeded VisitRow[] */]),
   embed,
-  vectorStore: new FakeVectorStore(),
+  vector_store: new FakeVectorStore(),
   sink,
 };
 
@@ -97,8 +107,8 @@ cluster sink.
 ## Build and test
 
 ```sh
-npm run build --workspace tdt
-npm run test --workspace tdt
+npm run build -w @bergamot/tdt
+npm run test -w @bergamot/tdt
 ```
 
 `tsc` extends `../tsconfig.base.json` (strict, ES2022). Tests run under Jest

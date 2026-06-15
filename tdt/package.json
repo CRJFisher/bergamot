@@ -9,7 +9,7 @@
     "build": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "lint": "tsc -p ./ --noEmit",
+    "lint": "tsc -p ./tsconfig.test.json",
     "test": "jest",
     "clean": "rm -rf out"
   },

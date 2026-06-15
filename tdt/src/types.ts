@@ -45,8 +45,8 @@ export interface RunRecord {
   algo_version: string; // 'hdbscan-1#<tf-backend>'
   input_count: number;
   input_fingerprint: string; // hash of sorted (page_session_id, embedding_vector_version)
-  cluster_count: number;
-  noise_count: number;
+  cluster_count: number | null; // null while status='running'
+  noise_count: number | null;  // null while status='running'
   status: "running" | "complete" | "failed" | "superseded";
   created_at: string;
   completed_at: string | null;

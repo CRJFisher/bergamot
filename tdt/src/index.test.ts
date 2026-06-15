@@ -1,10 +1,10 @@
-import { run_tdt, type TdtDeps, type TdtArgs } from "../index";
+import { run_tdt, type TdtDeps, type TdtArgs } from "./index";
 import {
   FakeRelationalReader,
   FakeVectorStore,
   FakeClusterSink,
   create_fake_embed,
-} from "../fakes";
+} from "./fakes";
 
 function make_deps(): { deps: TdtDeps; sink: FakeClusterSink; embedded_texts: string[] } {
   const { embed, embedded_texts } = create_fake_embed();
@@ -12,7 +12,7 @@ function make_deps(): { deps: TdtDeps; sink: FakeClusterSink; embedded_texts: st
   const deps: TdtDeps = {
     reader: new FakeRelationalReader(),
     embed,
-    vectorStore: new FakeVectorStore(),
+    vector_store: new FakeVectorStore(),
     sink,
   };
   return { deps, sink, embedded_texts };

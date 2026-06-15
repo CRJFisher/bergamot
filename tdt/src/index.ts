@@ -19,7 +19,7 @@ import type { RelationalReader, EmbedFn, VectorStore, ClusterSink } from "./port
 export interface TdtDeps {
   reader: RelationalReader;
   embed: EmbedFn;
-  vectorStore: VectorStore;
+  vector_store: VectorStore;
   sink: ClusterSink;
 }
 
