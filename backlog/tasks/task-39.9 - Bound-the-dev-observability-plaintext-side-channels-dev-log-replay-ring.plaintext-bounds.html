@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Bound the dev-observability plaintext side-channels · task-39.9</title>
+<title>TASK-39.9: Bounding the dev-observability plaintext side-channels</title>
 <style>
   :root{
     --ivory:#f7f4ec; --slate:#33352f; --clay:#b56a44; --olive:#6f7a3f;
@@ -57,13 +57,14 @@
   .chip.key{background:var(--slate);color:var(--ivory);border-color:var(--slate)}
   .chip.rust{background:var(--rust);color:var(--ivory);border-color:var(--rust)}
   .chip.olive{background:var(--olive);color:var(--ivory);border-color:var(--olive)}
-  .prompt-box{border:var(--hair);border-left:4px solid var(--clay);border-radius:var(--r);
-    background:var(--g1);padding:14px 18px;margin:18px 0;max-width:84ch}
+  .prompt-box{border:var(--hair);border-left:4px solid var(--olive);border-radius:var(--r);
+    background:var(--g1);padding:14px 18px;margin:18px 0;max-width:90ch}
   .prompt-box .label{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;
-    letter-spacing:.1em;color:var(--clay);margin-bottom:6px}
-  .prompt-box ul{margin:.3em 0;padding-left:18px;font-size:.9rem}
-  .prompt-box li{margin:.2em 0}
-  .prompt-box code{font-size:.85rem}
+    letter-spacing:.1em;color:var(--olive);margin-bottom:6px}
+  .prompt-box .files{margin:.3em 0;padding-left:0;list-style:none;font-size:.9rem}
+  .prompt-box .files li{margin:.25em 0;display:flex;gap:8px;align-items:baseline}
+  .prompt-box .files code{font-size:.84rem}
+  .prompt-box .files .what{color:var(--g5);font-size:.82rem}
   aside.callout{border:var(--hair);border-left:4px solid var(--clay);border-radius:var(--r);
     background:var(--g1);padding:14px 18px;margin:18px 0;max-width:90ch}
   aside.callout.invert{background:var(--slate);color:var(--ivory);border-color:var(--slate)}
@@ -76,7 +77,7 @@
   aside.callout p{margin:.3em 0}
   .figure{margin:14px 0 6px}
   .figure svg{width:100%;height:auto;display:block}
-  figcaption{font-size:.84rem;color:var(--g5);margin-top:8px;max-width:84ch}
+  figcaption{font-size:.84rem;color:var(--g5);margin-top:8px;max-width:90ch}
   .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-family:var(--mono);font-size:.7rem;color:var(--g5)}
   .legend span{display:inline-flex;align-items:center;gap:6px}
   .legend .sw{width:13px;height:13px;border-radius:3px;display:inline-block;border:1px solid var(--g3)}
@@ -87,29 +88,41 @@
   .code pre{margin:0;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:.8rem;
     line-height:1.65;color:#e2ddca;white-space:pre}
   .code .kw{color:#c98a5a} .code .str{color:#9aac5e} .code .cm{color:#6f6c5c;font-style:italic}
-  .code .fn{color:#d7b56a} .code .dim{color:#6f6c5c}
+  .code .fn{color:#d7b56a} .code .dim{color:#6f6c5c} .code .ty{color:#7fb0a6}
   .code .del{display:inline-block;width:100%;background:rgba(156,74,47,.28);text-decoration:line-through;
     text-decoration-color:rgba(226,221,202,.4)}
   .code .add{display:inline-block;width:100%;background:rgba(111,122,63,.32)}
   .code .hl{background:rgba(181,106,68,.28);display:inline-block;width:100%}
+  /* truth table */
+  table.truth{border-collapse:collapse;width:100%;margin:14px 0;font-size:.9rem;background:var(--g1);
+    border:var(--hair);border-radius:var(--r);overflow:hidden}
+  table.truth th,table.truth td{padding:10px 14px;text-align:left;border-bottom:var(--hair)}
+  table.truth thead th{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;
+    color:var(--g5);background:var(--g2);font-weight:600}
+  table.truth td.mono,table.truth th.mono{font-family:var(--mono);font-size:.8rem}
+  table.truth tr:last-child td{border-bottom:none}
+  table.truth .on{color:var(--olive);font-weight:600}
+  table.truth .off{color:var(--rust);font-weight:600}
+  table.truth tr.guard{background:#f1f3e6}
+  table.truth tr.guard td{border-top:2px solid var(--olive)}
+  .pill{font-family:var(--mono);font-size:.66rem;padding:2px 8px;border-radius:999px;
+    display:inline-block;border:var(--hair)}
+  .pill.on{background:var(--olive);color:var(--ivory);border-color:var(--olive)}
+  .pill.off{background:var(--rust);color:var(--ivory);border-color:var(--rust)}
   /* AC mapping grid */
   .ac-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:16px 0}
   .ac{border:var(--hair);border-radius:var(--r);background:var(--g1);padding:16px 18px;
-    display:flex;flex-direction:column;gap:8px;border-top:3px solid var(--clay)}
+    display:flex;flex-direction:column;gap:8px;border-top:3px solid var(--olive)}
   .ac .num{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;
-    border-radius:999px;background:var(--clay);color:var(--ivory);font-family:var(--mono);
+    border-radius:999px;background:var(--olive);color:var(--ivory);font-family:var(--mono);
     font-weight:600;font-size:.85rem;flex:0 0 auto}
-  .ac.enforced{border-top-color:var(--olive)}
-  .ac.enforced .num{background:var(--olive)}
   .ac .head{display:flex;align-items:center;gap:10px}
   .ac h3{margin:0;font-size:1rem}
   .ac p{margin:0;font-size:.9rem}
   .ac .where{font-family:var(--mono);font-size:.72rem;color:var(--g5);margin-top:auto;padding-top:6px}
   .ac .where code{color:var(--clay)}
   .ac .tag{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;
-    border-radius:999px;padding:2px 9px;align-self:flex-start;border:var(--hair);color:var(--g5)}
-  .ac .tag.new{background:var(--clay);color:var(--ivory);border-color:var(--clay)}
-  .ac .tag.exists{background:var(--olive);color:var(--ivory);border-color:var(--olive)}
+    border-radius:999px;padding:2px 9px;align-self:flex-start;background:var(--olive);color:var(--ivory)}
   /* metric chips */
   .metrics{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
   .metric{font-family:var(--mono);font-size:.78rem;background:var(--g1);border:var(--hair);
@@ -128,62 +141,64 @@
   <a class="doc-link" href="task-39 - Privacy-preserving-capture-model-metadata-first-on-demand-encrypted-content.overview.html"><span class="dot" style="background:var(--slate)"></span>overview</a>
   <a class="doc-link" href="task-39.1 - Stop-ambient-content-capture-and-metadata-only-schema-reset.metadata-only-reset.html"><span class="dot" style="background:var(--olive)"></span>39.1 schema reset</a>
   <a class="doc-link" href="task-39.2 - Re-download-post-processing-content-fetcher-and-content-read-path.content-flow.html"><span class="dot" style="background:var(--olive)"></span>39.2 fetcher</a>
-  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.7 keyring · not yet generated</span>
+  <a class="doc-link" href="task-39.7 - Surface-Linux-keyring-degradation-of-SecretStorage-backed-store-keys.detection-plan.html"><span class="dot" style="background:var(--olive)"></span>39.7 keyring</a>
   <a class="doc-link" href="task-39.8 - Close-the-plaintext-visit-inbox-gap-encrypted-durable-visit-buffer.companion.html"><span class="dot" style="background:var(--olive)"></span>39.8 visit inbox</a>
   <span class="curr">39.9 plaintext bounds</span>
   <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.10 default cache · not yet generated</span>
 </nav>
 
 <nav class="toc" aria-label="On this page">
-  <a href="#gaps">The two side-channels</a>
-  <a href="#cascade">Forget cascade</a>
+  <a href="#surface">The two side-channels</a>
+  <a href="#cascade">Cascade: before / after</a>
+  <a href="#flow">sweep_dev_log in forget()</a>
+  <a href="#report">ForgetReport field</a>
   <a href="#gate">The install gate</a>
   <a href="#bound">Rotation bound</a>
-  <a href="#map">4 ACs · 4 changes</a>
+  <a href="#map">4 ACs · what shipped</a>
 </nav>
 
 <main>
   <header class="id">
-    <div class="eyebrow">task-39.9 · privacy-core · dev-observability hardening</div>
-    <h1>Bound the dev-observability plaintext side-channels</h1>
+    <div class="eyebrow">task-39.9 · privacy-core · dev-observability hardening · DONE</div>
+    <h1>Bounding the dev-observability plaintext side-channels</h1>
     <p class="prose">Two dev-only artifacts write visit URLs to disk <strong>in plaintext</strong>, outside
-      the encrypted metadata store: the tail-able <code>dev-log.jsonl</code> (and its <code>.1</code> rotation)
-      and the replay ring of recent full visit JSONs under <code>captures/</code>. This work brings both inside
-      the privacy boundary — the forget cascade deletes the dev log, a packaged install can never write either
+      the encrypted metadata store: the tail-able <code>dev-log.jsonl</code> (with its <code>.1</code> rotation)
+      and the replay ring of recent visit JSONs under <code>captures/</code>. Both now sit inside the privacy
+      boundary — the right-to-forget cascade deletes the dev log, a packaged install can no longer write either
       artifact silently, and the writes are named honestly in the threat model with a documented size bound.</p>
     <div class="meta-row">
-      <span class="chip key">4 ACs · 4 files</span>
-      <span class="chip rust">2 plaintext side-channels</span>
-      <span class="chip">priority <strong>medium</strong></span>
+      <span class="chip olive">4 ACs satisfied</span>
+      <span class="chip key">6 files changed</span>
+      <span class="chip">+11 test cases</span>
       <span class="chip">dev-only · default-off gate</span>
-      <span class="chip">no selective JSONL rewriting</span>
+      <span class="chip">wholesale delete · no JSONL rewriting</span>
     </div>
     <div class="prompt-box">
-      <div class="label">Scope — bound, don't gold-plate (these are dev-only artifacts behind a default-off gate)</div>
-      <ul>
-        <li>Forget deletes <code>dev-log.jsonl{,.1}</code> wholesale — coarse but real; no per-line rewriting.</li>
-        <li>A packaged install with devMode off writes neither artifact — the implicit F5 path must not fire installed.</li>
-        <li>The <code>bergamot.devMode</code> description and <code>docs/threat-model.md</code> say dev observability writes visit URLs to plaintext.</li>
-        <li>The dev log has a documented, enforced size/rotation bound (already coded — verify + document).</li>
+      <div class="label">What shipped — source of truth read for this companion</div>
+      <ul class="files">
+        <li><code>vscode/src/dev_log.ts</code><span class="what">DEV_LOG_FILENAME + should_enable_dev_log; rotation/cascade documented in header</span></li>
+        <li><code>vscode/src/right_to_forget.ts</code><span class="what">sweep_dev_log() + dev_log_files_removed field; forget() calls it</span></li>
+        <li><code>vscode/src/extension.ts</code><span class="what">F5 gate moved from env var to extensionMode</span></li>
+        <li><code>vscode/src/commands/command_manager.ts</code><span class="what">"dev-log file(s) removed" in swept summary + nothing-matched guard</span></li>
+        <li><code>vscode/package.json</code> · <code>docs/threat-model.md</code><span class="what">honest plaintext disclosure; open-gap framing retired</span></li>
+        <li><code>dev_log.test.ts</code> (4 cases) · <code>right_to_forget.test.ts</code> (7 cases)<span class="what">machine-checked gate + sweep behaviour</span></li>
       </ul>
     </div>
   </header>
 
-  <section id="gaps">
+  <section id="surface">
     <div class="eyebrow">the surface</div>
     <h2>Two plaintext artifacts under the storage base</h2>
     <div class="figure">
-      <svg viewBox="0 0 1180 300" role="img" aria-label="Under the storage base: an encrypted metadata store covered by the forget cascade, alongside two plaintext dev-observability artifacts — the replay ring (already swept) and dev-log.jsonl (the open gap this task closes).">
+      <svg viewBox="0 0 1180 300" role="img" aria-label="Under the storage base: an encrypted metadata store covered by the forget cascade, alongside two plaintext dev-observability artifacts — the replay ring and dev-log.jsonl — both now swept by the cascade.">
         <defs>
           <marker id="g-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0 0 L10 5 L0 10 z" fill="#6c6859"/>
           </marker>
         </defs>
-        <!-- storage base container -->
         <rect x="20" y="20" width="1140" height="260" rx="14" fill="#fbf9f3" stroke="#d8d1bf" stroke-width="1.5"/>
         <text x="44" y="48" font-family="ui-monospace,monospace" font-size="11" fill="#6c6859">&lt;storage_base&gt;/</text>
 
-        <!-- encrypted store -->
         <rect x="60" y="80" width="300" height="160" rx="10" fill="#33352f"/>
         <text x="210" y="118" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="15" font-weight="600" fill="#f7f4ec">metadata store</text>
         <text x="210" y="140" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10.5" fill="#e7e0cf">encrypted at rest (DuckDB)</text>
@@ -191,47 +206,42 @@
         <rect x="92" y="186" width="236" height="34" rx="999" fill="#6f7a3f"/>
         <text x="210" y="208" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10.5" font-weight="600" fill="#f7f4ec">✓ forget cascade covers this</text>
 
-        <!-- divider label -->
         <text x="600" y="64" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" letter-spacing="2" fill="#9c4a2f">PLAINTEXT SIDE-CHANNELS (dev observability)</text>
 
-        <!-- replay ring -->
         <rect x="440" y="90" width="320" height="150" rx="10" fill="#eef0e2" stroke="#6f7a3f" stroke-width="1.6"/>
         <text x="600" y="124" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="14" font-weight="600">replay ring</text>
-        <text x="600" y="145" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10.5" fill="#6c6859">captures/*.json · ~20 visit JSONs</text>
+        <text x="600" y="145" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10.5" fill="#6c6859">captures/*.json · recent visit JSONs</text>
         <text x="600" y="163" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#6c6859">full visit url + page_loaded_at</text>
         <rect x="476" y="190" width="248" height="32" rx="999" fill="#6f7a3f"/>
-        <text x="600" y="211" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" font-weight="600" fill="#f7f4ec">✓ already swept by selector match</text>
+        <text x="600" y="211" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" font-weight="600" fill="#f7f4ec">✓ swept by selector match</text>
 
-        <!-- dev-log -->
-        <rect x="800" y="90" width="320" height="150" rx="10" fill="#f2e6e0" stroke="#9c4a2f" stroke-width="1.8" stroke-dasharray="6 4"/>
+        <rect x="800" y="90" width="320" height="150" rx="10" fill="#eef0e2" stroke="#6f7a3f" stroke-width="1.6"/>
         <text x="960" y="124" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="14" font-weight="600">dev-log.jsonl</text>
         <text x="960" y="145" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10.5" fill="#6c6859">+ dev-log.jsonl.1 rotation</text>
         <text x="960" y="163" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#6c6859">per-visit stage lines · url field</text>
-        <rect x="836" y="190" width="248" height="32" rx="999" fill="#9c4a2f"/>
-        <text x="960" y="211" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" font-weight="600" fill="#f7f4ec">✗ never rewritten — the open gap</text>
+        <rect x="836" y="190" width="248" height="32" rx="999" fill="#6f7a3f"/>
+        <text x="960" y="211" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" font-weight="600" fill="#f7f4ec">✓ now swept wholesale</text>
 
         <g fill="none" stroke="#6c6859" stroke-width="1.4">
           <path d="M360 160 L440 160" marker-end="url(#g-ar)" stroke-dasharray="3 3"/>
         </g>
       </svg>
-      <figcaption>The encrypted store is fully covered by the forget cascade; both dev-observability artifacts
-        write visit URLs in plaintext. The replay ring is already swept on a forget — <code>dev-log.jsonl</code>
-        and its rotation are the survivor this task deletes.</figcaption>
+      <figcaption>The encrypted store and both dev-observability artifacts are now covered by the forget cascade.
+        The replay ring is matched by selector; <code>dev-log.jsonl</code> and its rotation are deleted wholesale.</figcaption>
     </div>
   </section>
 
   <section id="cascade">
     <div class="eyebrow">AC#1 — the core fix</div>
-    <h2>Forget cascade: before vs. after</h2>
+    <h2>The forget cascade: before vs. after</h2>
     <div class="figure">
-      <svg viewBox="0 0 1180 360" role="img" aria-label="Before and after of the forget cascade. Current: sweeps visit_inbox, captures replay files, content cache, metadata rows, and the in-memory outcome ring — but leaves dev-log.jsonl. Planned: adds sweep_dev_log deleting dev-log.jsonl and its rotation wholesale.">
+      <svg viewBox="0 0 1180 360" role="img" aria-label="Before and after of the forget cascade. Before, it swept visit_inbox, replay captures, the content cache, metadata rows, and the in-memory outcome ring, but left dev-log.jsonl. After, sweep_dev_log deletes dev-log.jsonl and its rotation wholesale.">
         <defs>
           <marker id="c-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
             <path d="M0 0 L10 5 L0 10 z" fill="#6c6859"/>
           </marker>
         </defs>
-        <!-- CURRENT panel -->
-        <text x="40" y="30" font-family="ui-monospace,monospace" font-size="11" letter-spacing="2" fill="#6c6859">CURRENT</text>
+        <text x="40" y="30" font-family="ui-monospace,monospace" font-size="11" letter-spacing="2" fill="#6c6859">BEFORE</text>
         <rect x="40" y="44" width="160" height="44" rx="10" fill="#33352f"/>
         <text x="120" y="66" text-anchor="middle" font-family="ui-monospace,monospace" font-size="12" font-weight="600" fill="#f7f4ec">forget()</text>
         <text x="120" y="80" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#e7e0cf">selector</text>
@@ -247,17 +257,14 @@
           <text x="54" y="252" fill="#33352f">forget_metadata &nbsp;·&nbsp; <tspan font-family="ui-monospace,monospace" font-size="9.5" fill="#6c6859">rows + referrer scrub + trees</tspan></text>
           <rect x="40" y="270" width="450" height="30" rx="7" fill="#eef0e2" stroke="#6f7a3f" stroke-width="1.3"/>
           <text x="54" y="290" fill="#33352f">purge_outcomes &nbsp;·&nbsp; <tspan font-family="ui-monospace,monospace" font-size="9.5" fill="#6c6859">in-memory ring</tspan></text>
-          <!-- the gap -->
           <rect x="40" y="312" width="450" height="32" rx="7" fill="#f2e6e0" stroke="#9c4a2f" stroke-width="1.6" stroke-dasharray="6 4"/>
-          <text x="54" y="332" fill="#9c4a2f" font-weight="600">dev-log.jsonl{,.1} &nbsp;·&nbsp; <tspan font-family="ui-monospace,monospace" font-size="9.5">NOT swept — survives the forget</tspan></text>
+          <text x="54" y="332" fill="#9c4a2f" font-weight="600">dev-log.jsonl{,.1} &nbsp;·&nbsp; <tspan font-family="ui-monospace,monospace" font-size="9.5">NOT swept — survived the forget</tspan></text>
         </g>
 
-        <!-- arrow divider -->
         <text x="600" y="190" text-anchor="middle" font-family="ui-serif,Georgia" font-size="34" fill="#b56a44">→</text>
         <text x="600" y="214" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#b56a44">add one sweep</text>
 
-        <!-- PLANNED panel -->
-        <text x="690" y="30" font-family="ui-monospace,monospace" font-size="11" letter-spacing="2" fill="#9c4a2f">PLANNED</text>
+        <text x="690" y="30" font-family="ui-monospace,monospace" font-size="11" letter-spacing="2" fill="#5b6731">AFTER</text>
         <rect x="690" y="44" width="160" height="44" rx="10" fill="#33352f"/>
         <text x="770" y="66" text-anchor="middle" font-family="ui-monospace,monospace" font-size="12" font-weight="600" fill="#f7f4ec">forget()</text>
         <text x="770" y="80" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#e7e0cf">selector</text>
@@ -267,7 +274,6 @@
           <text x="704" y="138" fill="#33352f">sweep_visit_inbox</text>
           <rect x="690" y="156" width="450" height="30" rx="7" fill="#eef0e2" stroke="#6f7a3f" stroke-width="1.3"/>
           <text x="704" y="176" fill="#33352f">sweep_replay_captures</text>
-          <!-- new sweep -->
           <rect x="690" y="194" width="450" height="30" rx="7" fill="#dfe6c8" stroke="#6f7a3f" stroke-width="2"/>
           <text x="704" y="214" fill="#3c4422" font-weight="700">sweep_dev_log &nbsp;·&nbsp; <tspan font-family="ui-monospace,monospace" font-size="9.5" fill="#5b6731">deletes dev-log.jsonl{,.1} wholesale</tspan></text>
           <rect x="690" y="232" width="450" height="30" rx="7" fill="#eef0e2" stroke="#6f7a3f" stroke-width="1.3"/>
@@ -280,127 +286,254 @@
       </svg>
       <figcaption>One new step closes the gap: <code>sweep_dev_log(storage_base)</code> deletes
         <code>dev-log.jsonl</code> and <code>dev-log.jsonl.1</code> wholesale, called from <code>forget()</code>
-        beside <code>sweep_replay_captures</code>, its count folded into <code>files_removed</code>.</figcaption>
+        beside <code>sweep_replay_captures</code> — its count reported in a dedicated field, not folded into the replay count.</figcaption>
     </div>
     <div class="legend">
       <span><span class="sw" style="background:#eef0e2;border-color:#6f7a3f"></span>already in the cascade</span>
       <span><span class="sw" style="background:#dfe6c8;border-color:#6f7a3f"></span>added (olive)</span>
-      <span><span class="sw" style="background:#f2e6e0;border-color:#9c4a2f"></span>the open gap (rust)</span>
+      <span><span class="sw" style="background:#f2e6e0;border-color:#9c4a2f"></span>the gap that was open (rust)</span>
     </div>
+  </section>
 
+  <section id="flow">
+    <div class="eyebrow">how it fits</div>
+    <h2><code>sweep_dev_log</code> in the forget() flow</h2>
     <div class="code">
-      <div class="file-label"><span>vscode/src/right_to_forget.ts</span><span>AC#1 — wholesale delete, idempotent</span></div>
-<pre><span class="cm">/** Deletes the plaintext dev-log.jsonl and its rotation wholesale.</span>
-<span class="cm"> *  Coarse but real: no per-line rewriting. Returns the count removed. */</span>
-<span class="kw">function</span> <span class="fn">sweep_dev_log</span>(storage_base: <span class="kw">string</span>): <span class="kw">number</span> {
+      <div class="file-label"><span>vscode/src/right_to_forget.ts</span><span>wholesale delete, idempotent, returns count</span></div>
+<pre><span class="cm">/** Deletes the plaintext dev-log files (dev-log.jsonl and its rotation</span>
+<span class="cm"> *  dev-log.jsonl.1) under the storage base, wholesale. The JSONL log</span>
+<span class="cm"> *  interleaves stage lines from every visit, so a forget cannot</span>
+<span class="cm"> *  selectively remove one URL's lines without rewriting the file —</span>
+<span class="cm"> *  wholesale deletion is the right trade-off for a dev-only artifact.</span>
+<span class="cm"> *  Returns the count of files removed (0, 1, or 2). */</span>
+<span class="kw">function</span> <span class="fn">sweep_dev_log</span>(storage_base: <span class="ty">string</span>): <span class="ty">number</span> {
   <span class="kw">let</span> removed = <span class="dim">0</span>;
-  <span class="kw">for</span> (<span class="kw">const</span> name <span class="kw">of</span> [<span class="str">"dev-log.jsonl"</span>, <span class="str">"dev-log.jsonl.1"</span>]) {
+  <span class="kw">for</span> (<span class="kw">const</span> name <span class="kw">of</span> [DEV_LOG_FILENAME, <span class="str">`${DEV_LOG_FILENAME}.1`</span>]) {
     <span class="kw">try</span> {
       fs.<span class="fn">unlinkSync</span>(path.<span class="fn">join</span>(storage_base, name));
       removed++;
-    } <span class="kw">catch</span> { <span class="cm">/* absent — nothing to delete */</span> }
+    } <span class="kw">catch</span> { <span class="cm">// Missing or already removed — nothing to do.</span> }
   }
   <span class="kw">return</span> removed;
-}
+}</pre>
+    </div>
+    <div class="code">
+      <div class="file-label"><span>vscode/src/right_to_forget.ts — inside forget()</span><span>two independent counts, gated on storage_base</span></div>
+<pre>  <span class="hl">const files_removed = options.storage_base</span>
+    ? <span class="fn">sweep_replay_captures</span>(options.storage_base, selector)
+    : <span class="dim">0</span>;
+  <span class="hl">const dev_log_files_removed = options.storage_base</span>
+    ? <span class="fn">sweep_dev_log</span>(options.storage_base)  <span class="cm">// unconditional, not selector-filtered</span>
+    : <span class="dim">0</span>;
 
-<span class="cm">// inside forget(), beside the replay sweep:</span>
-<span class="add">  const files_removed = options.storage_base</span>
-<span class="add">    ? sweep_replay_captures(options.storage_base, selector) +</span>
-<span class="add">      sweep_dev_log(options.storage_base)   // dev log is unconditional</span>
-<span class="add">    : 0;</span></pre>
+  <span class="cm">// ... cache, metadata transaction, empty-tree sweep, CHECKPOINT ...</span>
+
+  <span class="kw">return</span> {
+    page_session_ids: targets.page_session_ids.length,
+    urls: targets.urls.length,
+    content_cache_swept: content_cache !== <span class="kw">null</span>,
+    files_removed,
+    <span class="add">    dev_log_files_removed,   // separate field</span>
+  };
+}</pre>
+    </div>
+    <aside class="callout olive">
+      <span class="k">replay = selector-matched · dev log = wholesale</span>
+      <p>The two sweeps differ deliberately. <code>sweep_replay_captures</code> reads each
+        <code>captures/*.json</code> and deletes only those matching the selector. <code>sweep_dev_log</code>
+        takes no selector: the append-only JSONL interleaves lines from every visit, so it is deleted whole and
+        re-created on the next <code>dev_log()</code> append. Both no-op cleanly when their files are absent.</p>
+    </aside>
+  </section>
+
+  <section id="report">
+    <div class="eyebrow">the interface</div>
+    <h2>Why <code>dev_log_files_removed</code> is a separate field</h2>
+    <div class="code">
+      <div class="file-label"><span>vscode/src/right_to_forget.ts — interface ForgetReport</span><span>one field added, not a merged count</span></div>
+<pre><span class="kw">export interface</span> <span class="ty">ForgetReport</span> {
+  <span class="cm">/** Page sessions resolved by the selector. */</span>
+  page_session_ids: <span class="ty">number</span>;
+  <span class="cm">/** Distinct URLs the forget swept. */</span>
+  urls: <span class="ty">number</span>;
+  <span class="cm">/** Whether the content-cache cascade ran. */</span>
+  content_cache_swept: <span class="ty">boolean</span>;
+  <span class="cm">/** Selector-matched plaintext dev-replay files (captures/) removed. */</span>
+  files_removed: <span class="ty">number</span>;
+<span class="add">  /** Dev-log plaintext files (dev-log.jsonl and .1) deleted wholesale. 0, 1, or 2. */</span>
+<span class="add">  dev_log_files_removed: number;</span>
+}</pre>
     </div>
     <aside class="callout">
-      <span class="k">why wholesale, not per-line</span>
-      <p>The dev log is append-only JSONL with no index; selectively rewriting only the forgotten URLs' lines
-        would be fragile and is explicitly out of scope. Wholesale deletion is coarse — a forget by one URL
-        removes the whole log — but it is real deletion, and the log is a dev-only artifact that re-creates
-        itself on the next stage write. The replay sweep still matches by selector; only the dev log is deleted unconditionally.</p>
+      <span class="k">why not fold it into files_removed</span>
+      <p>The two counts have different semantics — <code>files_removed</code> is
+        <em>selector-matched</em> replay captures; <code>dev_log_files_removed</code> is a
+        <em>wholesale</em> 0/1/2. Merging them would hide that distinction and break the command layer's
+        "nothing matched" guard, which must check <code>dev_log_files_removed === 0</code> independently:
+        a forget that deletes only the dev log still did something, so it must not report "nothing forgotten."</p>
     </aside>
+    <div class="code">
+      <div class="file-label"><span>vscode/src/commands/command_manager.ts</span><span>distinct count surfaced in the summary and the guard</span></div>
+<pre>const swept = [
+  report.content_cache_swept ? <span class="str">'content cache swept'</span> : <span class="kw">null</span>,
+  report.files_removed &gt; <span class="dim">0</span>
+    ? <span class="str">`${report.files_removed} buffered file(s) removed`</span> : <span class="kw">null</span>,
+<span class="add">  report.dev_log_files_removed &gt; 0</span>
+<span class="add">    ? `${report.dev_log_files_removed} dev-log file(s) removed` : null,</span>
+].filter(Boolean);
+
+vscode.window.<span class="fn">showInformationMessage</span>(
+  report.page_session_ids === <span class="dim">0</span> &&
+  report.files_removed === <span class="dim">0</span> &&
+<span class="add">  report.dev_log_files_removed === 0          // guard counts the dev log too</span>
+    ? <span class="str">'Bergamot: nothing matched — nothing forgotten.'</span>
+    : <span class="str">`Bergamot: forgot ...`</span> + (swept.length &gt; <span class="dim">0</span> ? <span class="str">` (${swept.join(', ')}).`</span> : <span class="str">'.'</span>)
+);</pre>
+    </div>
   </section>
 
   <section id="gate">
     <div class="eyebrow">AC#2 — the install gate</div>
     <h2>A packaged install can never write either artifact silently</h2>
     <div class="figure">
-      <svg viewBox="0 0 1180 320" role="img" aria-label="The dev-logging gate, before and after. Before, the gate is devMode OR BERGAMOT_STORAGE_PATH set, which leaks if an installed extension ever sees that env var. After, the gate is devMode OR ExtensionMode.Development, so a packaged install in Production mode is logging-off unless the user explicitly enables devMode.">
+      <svg viewBox="0 0 1180 220" role="img" aria-label="The dev-logging gate, before and after. Before, the second clause was double-bang process.env.BERGAMOT_STORAGE_PATH, which fires on a packaged install if that env var is present. After, it is context.extensionMode not-equal Production, a VS Code controlled signal an install cannot carry.">
         <defs>
           <marker id="ga-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0 0 L10 5 L0 10 z" fill="#6c6859"/>
           </marker>
         </defs>
-        <!-- BEFORE -->
-        <text x="40" y="28" font-family="ui-monospace,monospace" font-size="11" letter-spacing="2" fill="#6c6859">CURRENT GATE</text>
-        <rect x="40" y="44" width="500" height="48" rx="10" fill="#26271f"/>
-        <text x="60" y="66" font-family="ui-monospace,monospace" font-size="11.5" fill="#9aac5e">get_dev_mode()</text>
-        <text x="184" y="66" font-family="ui-monospace,monospace" font-size="11.5" fill="#c98a5a"> || </text>
-        <text x="216" y="66" font-family="ui-monospace,monospace" font-size="11.5" fill="#d77a55">!!process.env.BERGAMOT_STORAGE_PATH</text>
-        <text x="60" y="83" font-family="ui-monospace,monospace" font-size="9" fill="#6f6c5c">explicit setting &nbsp; OR &nbsp; an env var that may be present on an install</text>
+        <text x="40" y="28" font-family="ui-monospace,monospace" font-size="11" letter-spacing="2" fill="#6c6859">BEFORE GATE</text>
+        <rect x="40" y="44" width="500" height="62" rx="10" fill="#26271f"/>
+        <text x="60" y="68" font-family="ui-monospace,monospace" font-size="11.5" fill="#9aac5e">get_dev_mode()</text>
+        <text x="184" y="68" font-family="ui-monospace,monospace" font-size="11.5" fill="#c98a5a"> || </text>
+        <text x="216" y="68" font-family="ui-monospace,monospace" font-size="11.5" fill="#d77a55">!!process.env.BERGAMOT_STORAGE_PATH</text>
+        <text x="60" y="90" font-family="ui-monospace,monospace" font-size="9" fill="#9c4a2f">an env var that may be present on an install → logs on silently ✗</text>
 
-        <rect x="40" y="120" width="240" height="56" rx="9" fill="#eef0e2" stroke="#6f7a3f" stroke-width="1.4"/>
-        <text x="160" y="144" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="12" font-weight="600">F5 debug run</text>
-        <text x="160" y="162" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#6c6859">env set → logs ON ✓</text>
+        <text x="600" y="80" text-anchor="middle" font-family="ui-serif,Georgia" font-size="30" fill="#b56a44">→</text>
 
-        <rect x="300" y="120" width="240" height="56" rx="9" fill="#f2e6e0" stroke="#9c4a2f" stroke-width="1.6"/>
-        <text x="420" y="140" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="12" font-weight="600">packaged install</text>
-        <text x="420" y="158" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#9c4a2f">if env ever leaks → logs ON</text>
-        <text x="420" y="171" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#9c4a2f">silently, devMode off ✗</text>
+        <text x="660" y="28" font-family="ui-monospace,monospace" font-size="11" letter-spacing="2" fill="#5b6731">AFTER GATE</text>
+        <rect x="660" y="44" width="490" height="62" rx="10" fill="#26271f"/>
+        <text x="680" y="64" font-family="ui-monospace,monospace" font-size="11" fill="#d7b56a">should_enable_dev_log(</text>
+        <text x="696" y="80" font-family="ui-monospace,monospace" font-size="10.5" fill="#9aac5e">get_dev_mode(),</text>
+        <text x="696" y="96" font-family="ui-monospace,monospace" font-size="10.5" fill="#9aac5e">ctx.extensionMode !== ExtensionMode.Production)</text>
 
-        <!-- arrow -->
-        <text x="600" y="150" text-anchor="middle" font-family="ui-serif,Georgia" font-size="30" fill="#b56a44">→</text>
-
-        <!-- AFTER -->
-        <text x="660" y="28" font-family="ui-monospace,monospace" font-size="11" letter-spacing="2" fill="#9c4a2f">PLANNED GATE</text>
-        <rect x="660" y="44" width="480" height="48" rx="10" fill="#26271f"/>
-        <text x="680" y="66" font-family="ui-monospace,monospace" font-size="11.5" fill="#9aac5e">get_dev_mode()</text>
-        <text x="804" y="66" font-family="ui-monospace,monospace" font-size="11.5" fill="#c98a5a"> || </text>
-        <text x="836" y="66" font-family="ui-monospace,monospace" font-size="11.5" fill="#9aac5e">ctx.extensionMode === Development</text>
-        <text x="680" y="83" font-family="ui-monospace,monospace" font-size="9" fill="#6f6c5c">explicit setting &nbsp; OR &nbsp; VS Code's own dev/prod signal — not an env var</text>
-
-        <rect x="660" y="120" width="230" height="56" rx="9" fill="#eef0e2" stroke="#6f7a3f" stroke-width="1.4"/>
-        <text x="775" y="144" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="12" font-weight="600">F5 debug run</text>
-        <text x="775" y="162" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#6c6859">Development → logs ON ✓</text>
-
-        <rect x="910" y="120" width="230" height="56" rx="9" fill="#eef0e2" stroke="#6f7a3f" stroke-width="1.4"/>
-        <text x="1025" y="140" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="12" font-weight="600">packaged install</text>
-        <text x="1025" y="158" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#5b6731">Production → logs OFF</text>
-        <text x="1025" y="171" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#5b6731">unless devMode set by user ✓</text>
-
-        <!-- key insight band -->
-        <rect x="40" y="222" width="1100" height="68" rx="10" fill="#fbf9f3" stroke="#d8d1bf"/>
-        <text x="60" y="250" font-family="ui-monospace,monospace" font-size="10" letter-spacing="1.5" fill="#b56a44">WHY IT EXCLUDES INSTALLS</text>
-        <text x="60" y="272" font-family="ui-sans-serif,system-ui" font-size="12.5" fill="#33352f">VS Code sets <tspan font-family="ui-monospace,monospace" font-size="11" fill="#9c4a2f">ExtensionMode.Development</tspan> only for F5 / debug hosts; every Marketplace / VSIX install runs in <tspan font-family="ui-monospace,monospace" font-size="11" fill="#5b6731">ExtensionMode.Production</tspan>.</text>
-        <text x="60" y="288" font-family="ui-sans-serif,system-ui" font-size="12.5" fill="#33352f">The implicit "on by default for dev" path can no longer fire on an installed extension — the only remaining on-switch is the explicit user setting.</text>
+        <rect x="40" y="138" width="1110" height="64" rx="10" fill="#fbf9f3" stroke="#d8d1bf"/>
+        <text x="60" y="164" font-family="ui-monospace,monospace" font-size="10" letter-spacing="1.5" fill="#b56a44">WHY IT EXCLUDES INSTALLS</text>
+        <text x="60" y="184" font-family="ui-sans-serif,system-ui" font-size="12.5" fill="#33352f">VS Code sets <tspan font-family="ui-monospace,monospace" font-size="11" fill="#5b6731">ExtensionMode.Production</tspan> for every Marketplace / VSIX install; only F5 debug and test hosts run <tspan font-family="ui-monospace,monospace" font-size="11" fill="#9c4a2f">Development</tspan> / <tspan font-family="ui-monospace,monospace" font-size="11" fill="#9c4a2f">Test</tspan>.</text>
+        <text x="60" y="200" font-family="ui-sans-serif,system-ui" font-size="12.5" fill="#33352f">The signal is VS Code-controlled, not an env var — an installed extension cannot carry it, so the only remaining on-switch on an install is the explicit user setting.</text>
       </svg>
-      <figcaption>The gate's second clause moves from an env var (which could be present on an install and turn
-        logging on silently) to VS Code's own <code>ExtensionMode</code>, which is <code>Development</code> only
-        under F5/debug. A packaged install runs in <code>Production</code> and stays logging-off unless the user opts in.</figcaption>
+      <figcaption>The gate's second clause moves from an env var to VS Code's own
+        <code>extensionMode</code>. The check is extracted into <code>should_enable_dev_log</code> so the
+        packaged-install guarantee is unit-testable without an extension-host harness.</figcaption>
     </div>
 
     <div class="code">
-      <div class="file-label"><span>vscode/src/extension.ts</span><span>AC#2 — the implicit F5 gate</span></div>
-<pre>    init_dev_log(
-      storage_base,
-<span class="del">      ConfigManager.get_dev_mode() || !!process.env.BERGAMOT_STORAGE_PATH</span>
-<span class="add">      ConfigManager.get_dev_mode() ||</span>
-<span class="add">        context.extensionMode === vscode.ExtensionMode.Development</span>
-    );</pre>
+      <div class="file-label"><span>vscode/src/extension.ts — activate()</span><span>AC#2 — the gate change</span></div>
+<pre>init_dev_log(
+  storage_base,
+<span class="del">  ConfigManager.get_dev_mode() || !!process.env.BERGAMOT_STORAGE_PATH</span>
+<span class="add">  should_enable_dev_log(</span>
+<span class="add">    ConfigManager.get_dev_mode(),</span>
+<span class="add">    context.extensionMode !== vscode.ExtensionMode.Production</span>
+<span class="add">  )</span>
+);</pre>
     </div>
-    <aside class="callout olive">
-      <span class="k">AC#2 — verified, not assumed</span>
-      <p>A test asserts that with <code>ExtensionMode.Production</code> and devMode off,
-        <code>is_dev_log_enabled()</code> is false and neither <code>dev-log.jsonl</code> nor
-        <code>captures/</code> is written. The replay ring is gated on the same
-        <code>is_dev_log_enabled()</code>, so one gate change closes both artifacts on an install.</p>
-    </aside>
+
+    <h3 style="margin-top:24px">When does dev logging activate?</h3>
+    <table class="truth">
+      <thead>
+        <tr>
+          <th>Run context</th>
+          <th class="mono">extensionMode</th>
+          <th class="mono">!== Production</th>
+          <th class="mono">devMode setting</th>
+          <th>Dev logging</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>F5 / debug host</td>
+          <td class="mono">Development</td>
+          <td class="mono on">true</td>
+          <td class="mono">off</td>
+          <td><span class="pill on">ON</span></td>
+        </tr>
+        <tr>
+          <td>Test host</td>
+          <td class="mono">Test</td>
+          <td class="mono on">true</td>
+          <td class="mono">off</td>
+          <td><span class="pill on">ON</span></td>
+        </tr>
+        <tr>
+          <td>Packaged install, user opted in</td>
+          <td class="mono">Production</td>
+          <td class="mono off">false</td>
+          <td class="mono">on</td>
+          <td><span class="pill on">ON</span></td>
+        </tr>
+        <tr class="guard">
+          <td><strong>Packaged install, devMode off</strong></td>
+          <td class="mono">Production</td>
+          <td class="mono off">false</td>
+          <td class="mono">off</td>
+          <td><span class="pill off">OFF</span> — the guarantee</td>
+        </tr>
+      </tbody>
+    </table>
+    <figcaption>The bottom row is the privacy guarantee: a packaged install with the default setting writes
+      neither <code>dev-log.jsonl</code> nor the replay ring. The replay ring shares the same
+      <code>is_dev_log_enabled()</code> gate, so one change closes both artifacts on an install.</figcaption>
+
+    <h3 style="margin-top:24px">The machine-checked guarantee — <code>should_enable_dev_log</code> (4 cases)</h3>
+    <table class="truth">
+      <thead>
+        <tr>
+          <th class="mono">dev_mode</th>
+          <th class="mono">in_development</th>
+          <th class="mono">returns</th>
+          <th>Test asserts</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="guard">
+          <td class="mono">false</td>
+          <td class="mono">false</td>
+          <td class="mono off">false</td>
+          <td>packaged install, devMode off — the AC#2 regression guard</td>
+        </tr>
+        <tr>
+          <td class="mono">true</td>
+          <td class="mono">false</td>
+          <td class="mono on">true</td>
+          <td>devMode on, regardless of context</td>
+        </tr>
+        <tr>
+          <td class="mono">false</td>
+          <td class="mono">true</td>
+          <td class="mono on">true</td>
+          <td>development context, devMode off</td>
+        </tr>
+        <tr>
+          <td class="mono">true</td>
+          <td class="mono">true</td>
+          <td class="mono on">true</td>
+          <td>both on</td>
+        </tr>
+      </tbody>
+    </table>
+    <figcaption>The function is <code>dev_mode || in_development</code>. Extracting it makes the
+      false-false case — the packaged-install guarantee — a unit test (<code>dev_log.test.ts</code>) rather
+      than an assumption that holds only in an extension host.</figcaption>
   </section>
 
   <section id="bound">
-    <div class="eyebrow">AC#4 — already enforced</div>
-    <h2>The rotation bound exists in code — this documents it</h2>
+    <div class="eyebrow">AC#4 — bound, documented</div>
+    <h2>The rotation bound is enforced in code and now documented</h2>
     <div class="metrics">
       <div class="metric"><span class="v">5 MB</span><span class="l">MAX_LOG_BYTES</span></div>
       <div class="metric"><span class="v">×2</span><span class="l">live + .1 rotation</span></div>
-      <div class="metric"><span class="v">10 MB</span><span class="l">worst-case on disk</span></div>
+      <div class="metric"><span class="v">~10 MB</span><span class="l">worst-case on disk</span></div>
       <div class="metric"><span class="v">200</span><span class="l">writes per size check</span></div>
     </div>
     <div class="figure">
@@ -436,66 +569,69 @@
           <path d="M790 75 L850 75" marker-end="url(#b-ar)"/>
         </g>
       </svg>
-      <figcaption>Rotation is already implemented in <code>dev_log.ts</code>: every 200 writes the size is
-        re-checked, and once <code>dev-log.jsonl</code> passes 5 MB it is renamed to <code>.1</code>, capping
-        disk use at two 5 MB files. AC#4 verifies and documents this bound in the setting description and threat model.</figcaption>
+      <figcaption>Rotation lives in <code>dev_log.ts</code>: every <code>ROTATION_CHECK_INTERVAL</code> (200)
+        writes the size is re-checked, and once <code>dev-log.jsonl</code> passes <code>MAX_LOG_BYTES</code>
+        (5 MB) it is renamed to <code>.1</code>, capping disk use at two 5 MB files. The module header and
+        the <code>devMode</code> setting description now state this bound.</figcaption>
     </div>
   </section>
 
   <section id="map">
     <div class="eyebrow">the work</div>
-    <h2>Four acceptance criteria, four changes</h2>
+    <h2>Four acceptance criteria, all satisfied</h2>
     <div class="ac-grid">
       <div class="ac">
         <div class="head"><span class="num">1</span><h3>Forget deletes the dev log</h3></div>
-        <span class="tag new">new code + tests</span>
-        <p>Add <code>sweep_dev_log(storage_base)</code> deleting <code>dev-log.jsonl{,.1}</code> wholesale; call
-          from <code>forget()</code>; fold its count into <code>files_removed</code> (update the JSDoc). The
-          replay-ring sweep stays covered by tests.</p>
+        <span class="tag">code + 7 tests</span>
+        <p><code>sweep_dev_log(storage_base)</code> deletes <code>dev-log.jsonl{,.1}</code> wholesale, called
+          from <code>forget()</code>, count reported in <code>dev_log_files_removed</code>. The dev-log sweep
+          suite covers both files, each alone, none present, wholesale-regardless-of-URL, no storage_base, and
+          alongside replay captures.</p>
         <div class="where"><code>right_to_forget.ts</code> · <code>right_to_forget.test.ts</code></div>
       </div>
 
       <div class="ac">
         <div class="head"><span class="num">2</span><h3>Installs never write silently</h3></div>
-        <span class="tag new">one-line gate fix + test</span>
-        <p>Replace <code>!!process.env.BERGAMOT_STORAGE_PATH</code> with
-          <code>context.extensionMode === vscode.ExtensionMode.Development</code>. A packaged install
-          (Production) writes neither artifact unless the user enables devMode — verified by test.</p>
-        <div class="where"><code>extension.ts</code></div>
+        <span class="tag">gate fix + 4 tests</span>
+        <p><code>!!process.env.BERGAMOT_STORAGE_PATH</code> is replaced by
+          <code>context.extensionMode !== vscode.ExtensionMode.Production</code> through the extracted
+          <code>should_enable_dev_log</code>. The false-false regression guard asserts a packaged install with
+          devMode off writes neither artifact.</p>
+        <div class="where"><code>extension.ts</code> · <code>dev_log.ts</code> · <code>dev_log.test.ts</code></div>
       </div>
 
       <div class="ac">
         <div class="head"><span class="num">3</span><h3>Named honestly in docs</h3></div>
-        <span class="tag new">docs</span>
-        <p>The <code>bergamot.devMode</code> description and <code>docs/threat-model.md</code> state that
-          dev observability writes visit URLs to plaintext files. Remove the open-gap framing for the dev log —
-          the cascade now deletes it.</p>
+        <span class="tag">docs</span>
+        <p>The <code>bergamot.devMode</code> description states dev observability writes visit URLs to plaintext
+          and that the dev log is deleted by Bergamot: Forget. <code>docs/threat-model.md</code> describes the
+          dev log as swept by the cascade; the open-gap framing is retired.</p>
         <div class="where"><code>package.json</code> · <code>docs/threat-model.md</code></div>
       </div>
 
-      <div class="ac enforced">
+      <div class="ac">
         <div class="head"><span class="num">4</span><h3>Documented, enforced bound</h3></div>
-        <span class="tag exists">already coded · document</span>
-        <p>The 5 MB / 200-write rotation already lives in <code>dev_log.ts</code>. Document the cap (≤ 2 × 5 MB
-          on disk) in the setting description and/or threat model so the bound is stated, not just enforced.</p>
-        <div class="where"><code>dev_log.ts</code> (exists) · docs</div>
+        <span class="tag">docs of existing code</span>
+        <p>The 5 MB / one-<code>.1</code> / every-200-writes rotation (~10 MB worst case) is documented in the
+          <code>dev_log.ts</code> module header and the setting description, so the bound is stated, not only
+          enforced.</p>
+        <div class="where"><code>dev_log.ts</code> (header) · docs</div>
       </div>
     </div>
     <aside class="callout invert">
       <span class="k">net effect</span>
-      <h3 style="margin-top:4px">Both dev-only plaintext paths brought inside the privacy boundary</h3>
-      <p style="margin:.4em 0">After this work, enabling dev observability is an explicit, documented choice that
-        still writes plaintext — but a forget now deletes the dev log alongside the replay ring, an installed
-        extension can never enable it silently, and the threat model names the write honestly with a stated size
-        bound. Three changes are code (one is one line), one is documentation of an already-enforced bound.</p>
+      <h3 style="margin-top:4px">Both dev-only plaintext paths are inside the privacy boundary</h3>
+      <p style="margin:.4em 0">Enabling dev observability is now an explicit, documented choice that still
+        writes plaintext — but a forget deletes the dev log alongside the replay ring, an installed extension
+        can never enable it silently, and the threat model names the write honestly with a stated size bound.</p>
     </aside>
   </section>
 
   <footer>
     Comprehension companion for task-39.9 — bounding the dev-observability plaintext side-channels
-    (dev-log.jsonl + replay ring). Source read: vscode/src/{right_to_forget,dev_log,extension}.ts,
-    vscode/package.json, docs/threat-model.md. Code excerpts are the planned diffs against current source.
-    Self-contained · no external assets · generated 2026-06-15.
+    (dev-log.jsonl + replay ring), reflecting the completed implementation. Source read:
+    vscode/src/{right_to_forget,dev_log,extension}.ts, vscode/src/commands/command_manager.ts,
+    and the colocated *.test.ts files. Self-contained · no external assets · generated 2026-06-17.
   </footer>
 </main>
 

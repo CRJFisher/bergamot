@@ -141,9 +141,14 @@ export class CommandManager {
         report.files_removed > 0
           ? `${report.files_removed} buffered file(s) removed`
           : null,
+        report.dev_log_files_removed > 0
+          ? `${report.dev_log_files_removed} dev-log file(s) removed`
+          : null,
       ].filter(Boolean);
       vscode.window.showInformationMessage(
-        report.page_session_ids === 0 && report.files_removed === 0
+        report.page_session_ids === 0 &&
+        report.files_removed === 0 &&
+        report.dev_log_files_removed === 0
           ? 'Bergamot: nothing matched — nothing forgotten.'
           : `Bergamot: forgot ${report.page_session_ids} visit(s) across ${report.urls} URL(s)` +
             (swept.length > 0 ? ` (${swept.join(', ')}).` : '.')

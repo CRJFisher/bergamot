@@ -4,8 +4,9 @@
  * rows AND every artifact that encodes the forgotten pages: the fetch log
  * (matched by stored URL and by post-redirect final URL), the encrypted
  * content cache, the visit_inbox table rows buffered under the metadata store,
- * the plaintext dev-replay files buffered under the storage base, and the
- * in-memory visit-outcome ring. Forgetting is deletion, not hiding: surviving
+ * the plaintext dev-replay files buffered under the storage base, the
+ * plaintext dev-log files (`dev-log.jsonl` and its rotation, deleted
+ * wholesale), and the in-memory visit-outcome ring. Forgetting is deletion, not hiding: surviving
  * visits' referrer fields are scrubbed and navigation trees left empty are
  * removed.
  *
