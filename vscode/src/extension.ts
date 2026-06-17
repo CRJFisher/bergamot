@@ -6,6 +6,7 @@ import { get_storage_base } from './config/storage_path';
 import { init_dev_log, should_enable_dev_log } from './dev_log';
 import { DatabaseManager, METADATA_DB_FILENAME } from './database/database_manager';
 import { METADATA_DB_KEY_SECRET, get_or_create_store_key } from './database/encryption_key';
+import { maybe_warn_linux_keyring } from './database/linux_keyring';
 import { ServerManager } from './server/server_manager';
 import { MCPServerManager } from './server/mcp_server_manager';
 import { CommandManager } from './commands/command_manager';
@@ -63,6 +64,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       METADATA_DB_KEY_SECRET,
       store_file_exists
     );
+    void maybe_warn_linux_keyring(context);
     const databases = await database_manager.initialize_all(
       storage_base,
       encryption_key

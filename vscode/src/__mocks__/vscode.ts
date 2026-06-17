@@ -22,12 +22,17 @@ export const workspace = {
 
 export const window = {
     showInformationMessage: jest.fn(),
+    showWarningMessage: jest.fn(),
     showErrorMessage: jest.fn(),
     createOutputChannel: jest.fn(() => ({
         appendLine: jest.fn(),
         show: jest.fn(),
         clear: jest.fn(),
     })),
+};
+
+export const commands = {
+    executeCommand: jest.fn(),
 };
 
 export class Position {
@@ -45,6 +50,11 @@ export class WorkspaceEdit {
 export class Uri {
     static file(path: string): Uri {
         return new Uri(path);
+    }
+
+    static joinPath(base: Uri, ...paths: string[]): Uri {
+        const node_path = require("path") as typeof import("path");
+        return new Uri(node_path.join(base.fsPath, ...paths));
     }
 
     constructor(public readonly fsPath: string) { }
