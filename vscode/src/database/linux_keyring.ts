@@ -53,6 +53,9 @@ export function linux_keyring_status(): Promise<KeyringStatus> {
         { stdio: "ignore" }
       );
     } catch {
+      // Synchronous throw from spawn — e.g. malformed options or resource
+      // exhaustion. ENOENT for a missing binary is asynchronous via 'error'
+      // below; this path handles the rarer synchronous failure modes.
       resolve("degraded");
       return;
     }
@@ -102,14 +105,15 @@ export async function maybe_warn_linux_keyring(
       dismiss
     );
 
-    if (choice === learn_more || choice === dismiss) {
-      await context.globalState.update(
-        LINUX_KEYRING_WARNING_DISMISSED_KEY,
-        true
-      );
-    }
-
-    if (choice === learn_more) {
+    if (choice === dismiss) {
+      await context.globalState.update(LINUX_KEYRING_WARNING_DISMISSED_KEY, true);
+    } else if (choice === learn_more) {
+      // docs/threat-model.md lives one level above the extension dir in the
+      // monorepo (extensionUri = bergamot/vscode, docs at bergamot/docs), so
+      // this resolves correctly in dev. In a packaged install the file is not
+      // bundled, so executeCommand will throw — don't persist dismissal then:
+      // the warning re-appears next activation so the user can still reach the
+      // threat model from a dev workspace, or silence it via "Dismiss".
       const doc_uri = vscode.Uri.joinPath(
         context.extensionUri,
         "..",
@@ -118,11 +122,13 @@ export async function maybe_warn_linux_keyring(
       );
       try {
         await vscode.commands.executeCommand("markdown.showPreview", doc_uri);
+        await context.globalState.update(LINUX_KEYRING_WARNING_DISMISSED_KEY, true);
       } catch {
-        // docs/threat-model.md is not bundled in packaged installs; the
-        // warning itself has already conveyed the degraded-protection state.
+        // Preview failed; leave dismissed flag unset so the warning recurs.
       }
     }
+    // Closing via X (choice === undefined) intentionally does not persist the
+    // flag — the warning re-appears next activation on a still-degraded machine.
   } catch (err) {
     console.error("Bergamot: keyring degradation check failed:", err);
   }

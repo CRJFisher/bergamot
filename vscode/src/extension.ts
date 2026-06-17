@@ -64,6 +64,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       METADATA_DB_KEY_SECRET,
       store_file_exists
     );
+    // On Linux, warn once if the session has no OS keyring (at-rest protection
+    // for the store keys degrades to obfuscation). Fire-and-forget — never
+    // blocks activation. See docs/threat-model.md §A and linux_keyring.ts.
     void maybe_warn_linux_keyring(context);
     const databases = await database_manager.initialize_all(
       storage_base,

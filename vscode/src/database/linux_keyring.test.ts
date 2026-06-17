@@ -178,6 +178,22 @@ describe("maybe_warn_linux_keyring", () => {
     );
   });
 
+  it("does not persist dismissal when 'Learn more' cannot open the threat model", async () => {
+    set_platform("linux");
+    const child = fake_dbus_child();
+    (child_process.spawn as jest.Mock).mockReturnValue(child);
+    (vscode.window.showWarningMessage as jest.Mock).mockResolvedValue("Learn more");
+    (vscode.commands.executeCommand as jest.Mock).mockRejectedValue(new Error("not found"));
+    const context = fake_context();
+
+    const warn_promise = maybe_warn_linux_keyring(context);
+    child.emit("close", 1);
+    await warn_promise;
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalled();
+    expect(context.globalState.update).not.toHaveBeenCalled();
+  });
+
   it("persists dismissal and opens the threat model on 'Learn more'", async () => {
     set_platform("linux");
     const child = fake_dbus_child();
