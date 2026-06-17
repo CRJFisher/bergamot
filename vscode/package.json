@@ -46,7 +46,7 @@
         "bergamot.devMode": {
           "type": "boolean",
           "default": false,
-          "description": "Enable dev-phase observability: the Bergamot Dev output channel and a tail-able dev-log.jsonl. Always on during F5 debugging."
+          "description": "Enable dev-phase observability: writes visit URLs in plaintext to dev-log.jsonl (size-bounded at 5 MB, deleted by Bergamot: Forget). Also on automatically during F5 debugging; never on in a packaged install unless explicitly enabled."
         }
       }
     }

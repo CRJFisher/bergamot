@@ -1,4 +1,22 @@
-import { format_error_detail } from "./dev_log";
+import { format_error_detail, should_enable_dev_log } from "./dev_log";
+
+describe("should_enable_dev_log", () => {
+  it("returns false in a packaged install with devMode off (AC#2 regression guard)", () => {
+    expect(should_enable_dev_log(false, false)).toBe(false);
+  });
+
+  it("returns true when devMode is on regardless of extension context", () => {
+    expect(should_enable_dev_log(true, false)).toBe(true);
+  });
+
+  it("returns true in a development extension context with devMode off", () => {
+    expect(should_enable_dev_log(false, true)).toBe(true);
+  });
+
+  it("returns true when both devMode and development context are on", () => {
+    expect(should_enable_dev_log(true, true)).toBe(true);
+  });
+});
 
 describe("format_error_detail", () => {
   it("includes the stack trace for an Error", () => {

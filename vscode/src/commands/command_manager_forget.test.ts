@@ -17,6 +17,7 @@ jest.mock("../right_to_forget", () => ({
     page_session_ids: 0,
     urls: 0,
     files_removed: 0,
+    dev_log_files_removed: 0,
     content_cache_swept: false,
   }),
   selector_matches: jest.fn(),

@@ -11,10 +11,11 @@
  *
  * THIS MODULE IS THE CASCADE'S SINGLE HOME: every derived store joins it as
  * it lands. Today that is the metadata tables (including the visit_inbox
- * buffer, task-39.8), the encrypted content cache (task-39.3), and the
- * plaintext dev-replay ring; TDT cluster tables (task-36) and RAG vectors
- * (task-31) are added here when those stores exist (both tasks carry an
- * acceptance criterion pointing back at this module).
+ * buffer, task-39.8), the encrypted content cache (task-39.3), the plaintext
+ * dev-replay ring, and the plaintext dev-log files (dev-log.jsonl{,.1},
+ * deleted wholesale); TDT cluster tables (task-36) and RAG vectors (task-31)
+ * are added here when those stores exist (both tasks carry an acceptance
+ * criterion pointing back at this module).
  *
  * Ordering and atomicity, honestly: the metadata-side deletes run in one
  * transaction on a dedicated connection (the empty-tree sweep necessarily
@@ -50,7 +51,7 @@ import {
   VISIT_INBOX_TABLE,
 } from "./duck_db";
 import { ContentCache } from "./redownload/content_cache";
-import { purge_outcomes } from "./dev_log";
+import { purge_outcomes, DEV_LOG_FILENAME } from "./dev_log";
 
 /** What to forget. Time bounds are ISO-8601 strings, inclusive. */
 export type ForgetSelector =
@@ -66,8 +67,10 @@ export interface ForgetReport {
   urls: number;
   /** Whether the content-cache cascade ran (false when no cache exists). */
   content_cache_swept: boolean;
-  /** Plaintext dev-replay files (captures/) removed from the storage base. */
+  /** Selector-matched plaintext dev-replay files (captures/) removed. */
   files_removed: number;
+  /** Dev-log plaintext files (dev-log.jsonl and .1) deleted wholesale. 0, 1, or 2. */
+  dev_log_files_removed: number;
 }
 
 /** The resolved blast radius of a selector: session ids and their URLs. */
@@ -263,6 +266,28 @@ function sweep_replay_captures(
 }
 
 /**
+ * Deletes the plaintext dev-log files (`dev-log.jsonl` and its rotation
+ * `dev-log.jsonl.1`) under the storage base, wholesale. The JSONL log
+ * interleaves stage lines from every visit, so a forget cannot selectively
+ * remove one URL's lines without rewriting the file — wholesale deletion is
+ * the right trade-off for a dev-only artifact. A new file is created on the
+ * next `dev_log()` append. Missing files are not an error. Returns the count
+ * of files removed (0, 1, or 2).
+ */
+function sweep_dev_log(storage_base: string): number {
+  let removed = 0;
+  for (const name of [DEV_LOG_FILENAME, `${DEV_LOG_FILENAME}.1`]) {
+    try {
+      fs.unlinkSync(path.join(storage_base, name));
+      removed++;
+    } catch {
+      // Missing or already removed — nothing to do.
+    }
+  }
+  return removed;
+}
+
+/**
  * Forgets everything the selector matches, across every store that exists.
  *
  * @param metadata_db - The metadata store
@@ -290,6 +315,9 @@ export async function forget(
 
   const files_removed = options.storage_base
     ? sweep_replay_captures(options.storage_base, selector)
+    : 0;
+  const dev_log_files_removed = options.storage_base
+    ? sweep_dev_log(options.storage_base)
     : 0;
 
   // Derived content before metadata (see module header).
@@ -323,6 +351,7 @@ export async function forget(
     urls: targets.urls.length,
     content_cache_swept: content_cache !== null,
     files_removed,
+    dev_log_files_removed,
   };
 }
 

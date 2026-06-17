@@ -8,8 +8,11 @@
  *    running inside the extension host)
  *  - a per-visit outcome ring buffer surfaced by `bergamot.showVisitOutcomes`
  *
- * Logging is gated (see {@link init_dev_log}) and the JSONL file is rotated at a
- * size cap so it never grows unbounded.
+ * Logging is gated (see {@link init_dev_log}) and writes visit URLs in plaintext
+ * to `dev-log.jsonl` under the storage base. The file is rotation-capped at
+ * {@link MAX_LOG_BYTES} (5 MB); one rotated `.1` copy is kept, so worst-case
+ * on-disk footprint is ~10 MB. Both files are deleted wholesale by the
+ * right-to-forget cascade when a forget runs.
  *
  * The `vscode` module is loaded lazily so this file is safe to import from a
  * headless Node process (the standalone server/E2E harness), where only the
@@ -25,6 +28,21 @@ interface OutputChannelLike {
   appendLine(value: string): void;
   show(preserveFocus?: boolean): void;
   clear(): void;
+}
+
+/** Basename of the dev-log JSONL file under the storage base. */
+export const DEV_LOG_FILENAME = 'dev-log.jsonl';
+
+/**
+ * Returns true when dev logging should be enabled. Extracted so the gate is
+ * unit-testable without an extension-host harness.
+ *
+ * @param dev_mode - Whether `bergamot.devMode` is on in VS Code settings.
+ * @param in_development - True when the extension is running in a development
+ *   (F5) or test context, as opposed to a packaged install.
+ */
+export function should_enable_dev_log(dev_mode: boolean, in_development: boolean): boolean {
+  return dev_mode || in_development;
 }
 
 export type DevLogStage =
@@ -124,7 +142,7 @@ export function init_dev_log(storage_base: string, is_enabled: boolean): void {
   if (!channel) {
     channel = try_create_channel();
   }
-  log_file_path = path.join(storage_base, 'dev-log.jsonl');
+  log_file_path = path.join(storage_base, DEV_LOG_FILENAME);
   if (enabled) {
     rotate_if_needed();
   }
@@ -200,8 +218,8 @@ export function get_recent_outcomes(): VisitOutcome[] {
 /**
  * Drops in-memory outcomes whose URL matches — called by the right-to-forget
  * cascade so a forgotten URL stops appearing in `Show Visit Outcomes`. The
- * ring is in-memory only; the on-disk dev-log.jsonl is a named plaintext
- * side-channel the cascade does not rewrite (see docs/threat-model.md).
+ * ring is in-memory only; the on-disk dev-log.jsonl is deleted wholesale by
+ * the cascade (see `sweep_dev_log` in right_to_forget.ts).
  */
 export function purge_outcomes(matches: (url: string) => boolean): void {
   for (let i = recent_outcomes.length - 1; i >= 0; i--) {

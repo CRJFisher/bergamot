@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ConfigManager } from './config/config_manager';
 import { get_storage_base } from './config/storage_path';
-import { init_dev_log } from './dev_log';
+import { init_dev_log, should_enable_dev_log } from './dev_log';
 import { DatabaseManager, METADATA_DB_FILENAME } from './database/database_manager';
 import { METADATA_DB_KEY_SECRET, get_or_create_store_key } from './database/encryption_key';
 import { ServerManager } from './server/server_manager';
@@ -36,11 +36,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // at a repo-local .dev-storage; installed extensions use globalStorageUri.
     const storage_base = get_storage_base(context);
 
-    // Dev logging is on whenever explicitly enabled, or implicitly during F5
-    // debugging (BERGAMOT_STORAGE_PATH set), so the loop is observable by default.
+    // Dev logging is on when explicitly enabled via the devMode setting, or
+    // implicitly when running in a Development/Test extension context (F5). A
+    // packaged install always has extensionMode === Production, so it never
+    // enables dev logging without an explicit opt-in.
     init_dev_log(
       storage_base,
-      ConfigManager.get_dev_mode() || !!process.env.BERGAMOT_STORAGE_PATH
+      should_enable_dev_log(
+        ConfigManager.get_dev_mode(),
+        context.extensionMode !== vscode.ExtensionMode.Production
+      )
     );
 
     // Step 2: Initialize databases. The metadata store is encrypted at rest;

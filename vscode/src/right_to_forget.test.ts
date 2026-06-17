@@ -576,6 +576,102 @@ describe("right-to-forget cascade", () => {
   });
 });
 
+describe("right-to-forget: dev-log sweep (AC#1)", () => {
+  let metadata_db: DuckDB;
+  let storage_base: string;
+
+  beforeEach(async () => {
+    metadata_db = new DuckDB({ database_path: ":memory:" });
+    await metadata_db.init();
+    await create_metadata_schema(metadata_db);
+    storage_base = fs.mkdtempSync(path.join(os.tmpdir(), "bergamot-devlog-"));
+  });
+
+  afterEach(async () => {
+    await metadata_db.close();
+    fs.rmSync(storage_base, { recursive: true, force: true });
+  });
+
+  function write_dev_log(name: string): void {
+    fs.writeFileSync(path.join(storage_base, name), "ts=... stage=stored url=https://example.com\n");
+  }
+
+  it("deletes both dev-log.jsonl and dev-log.jsonl.1 when both exist; reports 2", async () => {
+    write_dev_log("dev-log.jsonl");
+    write_dev_log("dev-log.jsonl.1");
+
+    const report = await forget(metadata_db, null, { kind: "url", url: "https://example.com/a" }, { storage_base });
+
+    expect(report.dev_log_files_removed).toBe(2);
+    expect(fs.existsSync(path.join(storage_base, "dev-log.jsonl"))).toBe(false);
+    expect(fs.existsSync(path.join(storage_base, "dev-log.jsonl.1"))).toBe(false);
+  });
+
+  it("deletes only dev-log.jsonl when the rotated file is absent; reports 1", async () => {
+    write_dev_log("dev-log.jsonl");
+
+    const report = await forget(metadata_db, null, { kind: "url", url: "https://example.com/a" }, { storage_base });
+
+    expect(report.dev_log_files_removed).toBe(1);
+    expect(fs.existsSync(path.join(storage_base, "dev-log.jsonl"))).toBe(false);
+  });
+
+  it("deletes only dev-log.jsonl.1 when only the rotated file exists; reports 1", async () => {
+    write_dev_log("dev-log.jsonl.1");
+
+    const report = await forget(metadata_db, null, { kind: "url", url: "https://example.com/a" }, { storage_base });
+
+    expect(report.dev_log_files_removed).toBe(1);
+    expect(fs.existsSync(path.join(storage_base, "dev-log.jsonl.1"))).toBe(false);
+  });
+
+  it("is a no-op when no dev-log files exist; reports 0 and does not throw", async () => {
+    const report = await forget(metadata_db, null, { kind: "url", url: "https://example.com/a" }, { storage_base });
+
+    expect(report.dev_log_files_removed).toBe(0);
+  });
+
+  it("deletes the dev log wholesale regardless of the selector URL (not filtered by URL)", async () => {
+    // Log contains entries for a URL that is NOT the forgotten one.
+    fs.writeFileSync(
+      path.join(storage_base, "dev-log.jsonl"),
+      '{"url":"https://other.com/page"}\n{"url":"https://other.com/page2"}\n'
+    );
+
+    const report = await forget(metadata_db, null, { kind: "url", url: "https://example.com/a" }, { storage_base });
+
+    expect(report.dev_log_files_removed).toBe(1);
+    expect(fs.existsSync(path.join(storage_base, "dev-log.jsonl"))).toBe(false);
+  });
+
+  it("reports 0 when no storage_base is given", async () => {
+    const report = await forget(metadata_db, null, { kind: "url", url: "https://example.com/a" });
+
+    expect(report.dev_log_files_removed).toBe(0);
+  });
+
+  it("sweeps dev-log files alongside replay captures in one forget; counts are independent", async () => {
+    write_dev_log("dev-log.jsonl");
+    fs.mkdirSync(path.join(storage_base, "captures"));
+    fs.writeFileSync(
+      path.join(storage_base, "captures", "replay-match.json"),
+      JSON.stringify({ url: "https://example.com/a", page_loaded_at: "2026-06-01T10:00:00Z" })
+    );
+
+    const report = await forget(
+      metadata_db,
+      null,
+      { kind: "url", url: "https://example.com/a" },
+      { storage_base }
+    );
+
+    expect(report.files_removed).toBe(1);
+    expect(report.dev_log_files_removed).toBe(1);
+    expect(fs.existsSync(path.join(storage_base, "captures", "replay-match.json"))).toBe(false);
+    expect(fs.existsSync(path.join(storage_base, "dev-log.jsonl"))).toBe(false);
+  });
+});
+
 describe("right-to-forget cascade (real encrypted files)", () => {
   it("forgotten content is durably gone from both stores after reopen", async () => {
     const temp_dir = fs.mkdtempSync(path.join(os.tmpdir(), "bergamot-forget-"));

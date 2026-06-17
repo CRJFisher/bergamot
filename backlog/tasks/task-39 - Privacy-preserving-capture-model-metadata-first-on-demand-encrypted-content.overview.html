@@ -34,7 +34,7 @@
   nav.cross .home{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;
     letter-spacing:.1em;color:var(--g5);margin-right:4px}
   nav.cross a.doc-link,nav.cross span.pending,nav.cross span.curr{
-    font-family:var(--mono);font-size:.72rem;padding:4px 10px;border-radius:999px;
+    font-family:var(--mono);font-size:.71rem;padding:4px 10px;border-radius:999px;
     border:var(--hair);text-decoration:none;color:var(--slate);white-space:nowrap}
   nav.cross a.doc-link:hover{background:var(--oat)}
   nav.cross span.curr{background:var(--slate);color:var(--ivory);border-color:var(--slate)}
@@ -60,7 +60,7 @@
     letter-spacing:.1em;color:var(--clay);margin-bottom:6px}
   .prompt-box p{margin:.3em 0;font-size:.95rem}
   aside.callout{border:var(--hair);border-left:4px solid var(--clay);border-radius:var(--r);
-    background:var(--g1);padding:14px 18px;margin:18px 0;max-width:84ch}
+    background:var(--g1);padding:14px 18px;margin:18px 0;max-width:90ch}
   aside.callout.invert{background:var(--slate);color:var(--ivory);border-color:var(--slate)}
   aside.callout.invert h3{color:var(--ivory)}
   aside.callout .k{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;
@@ -68,12 +68,15 @@
   aside.callout.invert .k{color:var(--oat)}
   .figure{margin:14px 0 6px}
   .figure svg{width:100%;height:auto;display:block}
-  figcaption{font-size:.84rem;color:var(--g5);margin-top:8px;max-width:78ch}
+  figcaption{font-size:.84rem;color:var(--g5);margin-top:8px;max-width:84ch}
   /* subtask cards */
-  .subtasks{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin:16px 0}
+  .group-label{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;
+    color:var(--g5);margin:22px 0 8px}
+  .subtasks{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin:8px 0}
   .sub{border:var(--hair);border-radius:var(--r);background:var(--g1);padding:16px 18px;
     display:flex;flex-direction:column;gap:8px;position:relative;border-top:3px solid var(--g4)}
   .sub.keystone{border-top-color:var(--olive);background:#f6f8ee}
+  .sub.done{border-top-color:var(--olive)}
   .sub.ready{border-top-color:var(--clay)}
   .sub .sid{font-family:var(--mono);font-size:.72rem;color:var(--g5);display:flex;
     justify-content:space-between;align-items:center;gap:6px}
@@ -82,11 +85,12 @@
     font-weight:600;font-size:.66rem;text-transform:uppercase;letter-spacing:.06em}
   .sub.keystone .sid .badge{background:var(--olive);color:var(--ivory)}
   .sub.ready .sid .badge{background:var(--clay);color:var(--ivory)}
+  .sub.done .sid .badge{background:var(--olive);color:var(--ivory)}
   .sub .status{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;
     border-radius:999px;padding:2px 8px;border:var(--hair);color:var(--g4)}
   .sub .status.done{background:var(--olive);color:var(--ivory);border-color:var(--olive)}
   .sub .status.todo{color:var(--g4);border-style:dashed}
-  .sub h3{margin:0;font-size:1.08rem}
+  .sub h3{margin:0;font-size:1.05rem}
   .sub p{margin:0;font-size:.9rem;color:var(--slate)}
   .sub .links{margin-top:auto;display:flex;flex-wrap:wrap;gap:7px;padding-top:8px}
   .sub .links a{font-family:var(--mono);font-size:.72rem;text-decoration:none;color:var(--ivory);
@@ -99,7 +103,7 @@
   .sub.keystone .order{color:var(--olive)}
   .sub.ready .order{color:var(--clay)}
   footer{margin-top:60px;padding-top:18px;border-top:var(--hair);font-family:var(--mono);
-    font-size:.72rem;color:var(--g4);max-width:82ch}
+    font-size:.72rem;color:var(--g4);max-width:90ch}
   @media(max-width:760px){ h1{font-size:1.7rem} }
 </style>
 </head>
@@ -107,18 +111,19 @@
 
 <nav class="cross" aria-label="Task-39 family navigation">
   <span class="curr">task-39 ▸ overview</span>
-  <a class="doc-link" href="task-39.1 - Stop-ambient-content-capture-and-metadata-only-schema-reset.metadata-only-reset.html"><span class="dot" style="background:var(--clay)"></span>39.1 schema reset · ready</a>
-  <a class="doc-link" href="task-39.2 - Re-download-post-processing-content-fetcher-and-content-read-path.content-flow.html"><span class="dot" style="background:var(--olive)"></span>39.2 fetcher · done</a>
-  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.3 encrypted cache · not yet generated</span>
-  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.4 store encryption · not yet generated</span>
-  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.5 right-to-forget · not yet generated</span>
+  <a class="doc-link" href="task-39.1 - Stop-ambient-content-capture-and-metadata-only-schema-reset.metadata-only-reset.html"><span class="dot" style="background:var(--olive)"></span>39.1 schema reset</a>
+  <a class="doc-link" href="task-39.2 - Re-download-post-processing-content-fetcher-and-content-read-path.content-flow.html"><span class="dot" style="background:var(--olive)"></span>39.2 fetcher</a>
+  <a class="doc-link" href="task-39.7 - Surface-Linux-keyring-degradation-of-SecretStorage-backed-store-keys.detection-plan.html"><span class="dot" style="background:var(--clay)"></span>39.7 keyring</a>
+  <a class="doc-link" href="task-39.8 - Close-the-plaintext-visit-inbox-gap-encrypted-durable-visit-buffer.companion.html"><span class="dot" style="background:var(--olive)"></span>39.8 visit inbox</a>
+  <a class="doc-link" href="task-39.9 - Bound-the-dev-observability-plaintext-side-channels-dev-log-replay-ring.plaintext-bounds.html"><span class="dot" style="background:var(--clay)"></span>39.9 plaintext bounds</a>
+  <span class="pending"><span class="dot" style="background:var(--g4)"></span>39.10 default cache · not yet generated</span>
 </nav>
 
 <nav class="toc" aria-label="On this page">
   <a href="#why">Why</a>
   <a href="#model">The model</a>
-  <a href="#subtasks">Five subtasks</a>
-  <a href="#order">Build order</a>
+  <a href="#subtasks">The subtasks</a>
+  <a href="#hardening">Privacy hardening</a>
   <a href="#contract">Downstream contract</a>
 </nav>
 
@@ -133,11 +138,14 @@
       running as an anonymous, cookie-free visitor — the login wall is the privacy filter, so authenticated
       and paywalled pages fail to render content and are excluded. Any cached content is encrypted,
       on-demand, scoped, and deletable. This task is the code and schema work that makes the product behave
-      that way.</p>
+      that way — the original capture/store/forget pillars, then the hardening that seals every remaining
+      plaintext path on disk.</p>
     <div class="meta-row">
-      <span class="chip key">UMBRELLA · 5 subtasks</span>
+      <span class="chip key">UMBRELLA</span>
       <span class="chip done">39.2 keystone · DONE</span>
-      <span class="chip">39.1 · ready to build</span>
+      <span class="chip done">39.8 · DONE</span>
+      <span class="chip done">39.10 · DONE</span>
+      <span class="chip">39.7 / 39.9 · open</span>
       <span class="chip">priority <strong>high</strong></span>
       <span class="chip">no backwards-compat shims</span>
     </div>
@@ -145,7 +153,8 @@
       <div class="label">Canonical model</div>
       <p>backlog/drafts/privacy-preserving-capture-model.md · docs/decisions/privacy-core-reorientation.md.
         The docs are already reoriented; task-39 brings the code and schema into line. The keystone fetcher
-        (39.2) is built and the metadata-only reset (39.1) has its understanding contract — see the companions below.</p>
+        (39.2) is built; the metadata-only reset (39.1) has its understanding contract; and the hardening
+        subtasks below close the durable-buffer, dev-observability, and content-cache gaps — see the companions.</p>
     </div>
   </header>
 
@@ -157,7 +166,8 @@
       is impossible to get right. The privacy-core model removes that liability at the root: the trail is kept,
       the contents are not. To understand a page, bergamot re-downloads it from its public URL as an anonymous
       stranger. A page that requires a login simply will not come back — so the private ones exclude
-      themselves, with no heuristic to trust.</p>
+      themselves, with no heuristic to trust. The same principle then drives the hardening: every byte of
+      metadata that lands on disk must be encrypted, bounded, and deletable by the forget cascade.</p>
     <aside class="callout">
       <span class="k">admissibility — the spine, not a feature</span>
       <p style="margin:.2em 0">Per the intention tree, this advances the CAPTURE and STORE nodes directly:
@@ -186,7 +196,7 @@
         <rect x="280" y="85" width="210" height="80" rx="10" fill="#33352f"/>
         <text x="385" y="113" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="13.5" font-weight="600" fill="#f7f4ec">metadata store</text>
         <text x="385" y="132" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#e7e0cf">source of truth · encrypted</text>
-        <text x="385" y="148" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#b56a44">39.1 reset · 39.4 encrypt</text>
+        <text x="385" y="148" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#b56a44">+ encrypted visit_inbox (39.8)</text>
 
         <!-- stealth re-download + login wall -->
         <path d="M560 125 l30 -22 l30 22 l-30 22 z" fill="#f7f4ec" stroke="#6f7a3f" stroke-width="1.8"/>
@@ -203,11 +213,11 @@
 
         <rect x="940" y="40" width="210" height="56" rx="10" fill="#efe9da" stroke="#b56a44" stroke-width="1.5"/>
         <text x="1045" y="64" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="13" font-weight="600">encrypted cache</text>
-        <text x="1045" y="81" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#6c6859">on-demand · scoped · 39.3</text>
+        <text x="1045" y="81" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#6c6859">scoped · deletable · 39.10 ✓</text>
 
         <rect x="940" y="155" width="210" height="56" rx="10" fill="#efe9da" stroke="#9c4a2f" stroke-width="1.5"/>
         <text x="1045" y="179" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="13" font-weight="600">right-to-forget</text>
-        <text x="1045" y="196" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#6c6859">cascades · 39.5</text>
+        <text x="1045" y="196" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#6c6859">cascades across all stores</text>
 
         <g fill="none" stroke-width="1.6">
           <path d="M220 125 L280 125" stroke="#6c6859" marker-end="url(#o-ar)"/>
@@ -217,16 +227,16 @@
           <path d="M880 68 L940 68" stroke="#b56a44" marker-end="url(#o-ar)"/>
         </g>
       </svg>
-      <figcaption>The five subtasks placed on the model they implement: 39.1 resets the schema to metadata-only,
-        39.2 (the keystone, built) re-downloads through a stealth anonymous browser and the login-wall filter,
-        39.3 encrypts any cached content, 39.4 encrypts the metadata store, 39.5 makes deletion cascade across
-        all of it.</figcaption>
+      <figcaption>The model the subtasks implement: 39.1 resets the schema to metadata-only, 39.2 (the keystone,
+        built) re-downloads through a stealth anonymous browser and the login-wall filter, the encrypted cache
+        (39.10, built) holds any re-downloaded body, store encryption protects the source of truth, and
+        right-to-forget makes deletion cascade across all of it.</figcaption>
     </div>
   </section>
 
   <section id="subtasks">
     <div class="eyebrow">the work</div>
-    <h2>Five subtasks</h2>
+    <h2>The capture / store / forget pillars</h2>
     <div class="subtasks">
       <div class="sub ready">
         <div class="sid"><span class="ids"><span>task-39.1</span><span class="badge">schema reset</span></span><span class="status todo">to do</span></div>
@@ -240,83 +250,121 @@
       <div class="sub keystone">
         <div class="sid"><span class="ids"><span>task-39.2</span><span class="badge">keystone</span></span><span class="status done">done</span></div>
         <h3>Re-download content fetcher + content read path</h3>
-        <p>A stealth headless browser (patchright) re-downloads the stored URL as an anonymous, cookie-free
-          visitor; a pure classifier returns one of six outcomes (<code>ok</code> / <code>auth_redirect</code>
-          / <code>forbidden</code> / <code>paywall</code> / <code>dead_link</code> / <code>non_html</code>);
-          only <code>ok</code> enters the corpus. The read path serves re-downloaded content or reports
-          unavailable. The login wall is the privacy filter. Everything content-related depends on this.</p>
-        <span class="order">built — landed the new redownload/ package</span>
+        <p>A stealth headless browser re-downloads the stored URL as an anonymous, cookie-free visitor; a pure
+          classifier returns one of six outcomes and only <code>ok</code> enters the corpus. The login wall is
+          the privacy filter. Everything content-related depends on this.</p>
+        <span class="order">built — landed the redownload/ package</span>
         <div class="links"><a href="task-39.2 - Re-download-post-processing-content-fetcher-and-content-read-path.content-flow.html">content-flow ▸</a></div>
       </div>
 
-      <div class="sub">
-        <div class="sid"><span class="ids"><span>task-39.3</span><span class="badge">cache</span></span><span class="status todo">to do</span></div>
-        <h3>Encrypted on-demand re-download content cache</h3>
-        <p>The fetcher returns content live with no cache in its tier. This adds a separate encrypted,
-          on-demand, scoped, deletable cache — never plaintext on disk, never the source of truth.</p>
-        <span class="order">depends on 39.2 (built)</span>
+      <div class="sub done">
+        <div class="sid"><span class="ids"><span>task-39.10</span><span class="badge">cache</span></span><span class="status done">done</span></div>
+        <h3>Default-path encrypted content cache</h3>
+        <p>A separate encrypted, scoped, deletable cache holding the brotli-compressed re-downloaded body,
+          populated by default as public pages are re-downloaded — never plaintext, never the source of truth.</p>
+        <span class="order">built — the STORE content tier</span>
         <div class="links"><span class="nogen">companion not yet generated</span></div>
       </div>
+    </div>
 
+    <div class="group-label">— store encryption + cascading deletion (the durable-source guarantees)</div>
+    <div class="subtasks">
       <div class="sub">
-        <div class="sid"><span class="ids"><span>task-39.4</span><span class="badge">store crypto</span></span><span class="status todo">to do</span></div>
+        <div class="sid"><span class="ids"><span>task-39.x</span><span class="badge">store crypto</span></span><span class="status done">done</span></div>
         <h3>At-rest encryption of the metadata store</h3>
         <p>DuckDB native encryption with an OS-keystore-backed key via VS Code <code>SecretStorage</code>.
-          Create the store encrypted rather than migrating. Coordinates with 39.1's reset.</p>
-        <span class="order">coordinates with 39.1</span>
+          The store is created encrypted; key loss means the store is unrecoverable (no plaintext fallback).</p>
+        <span class="order">shipped — see docs/threat-model.md</span>
         <div class="links"><span class="nogen">companion not yet generated</span></div>
       </div>
 
       <div class="sub">
-        <div class="sid"><span class="ids"><span>task-39.5</span><span class="badge">forget</span></span><span class="status todo">to do</span></div>
+        <div class="sid"><span class="ids"><span>task-39.x</span><span class="badge">forget</span></span><span class="status done">done</span></div>
         <h3>Cascading right-to-forget</h3>
-        <p>Deleting by URL / origin / time-range atomically removes the metadata row and every derived
-          artifact: content cache, vectors, cluster memberships. Forgetting is deletion, not hiding.</p>
-        <span class="order">depends on 39.3</span>
+        <p>Deleting by URL / origin / time-range removes the metadata rows and every derived artifact: the fetch
+          log, encrypted content cache, the <code>visit_inbox</code> buffer, replay files, the outcome ring, and
+          empty navigation trees. Forgetting is deletion, not hiding.</p>
+        <span class="order">shipped — right_to_forget.ts is the cascade's single home</span>
         <div class="links"><span class="nogen">companion not yet generated</span></div>
       </div>
     </div>
   </section>
 
-  <section id="order">
-    <div class="eyebrow">sequencing</div>
-    <h2>Build order — 39.2 first, by design (now done)</h2>
+  <section id="hardening">
+    <div class="eyebrow">sealing the gaps</div>
+    <h2>Privacy hardening — every remaining plaintext path on disk</h2>
+    <p class="prose">With the pillars in place, the remaining work names and closes each spot where metadata
+      can still touch disk in the clear or fail silently: visits in flight, dev-observability artifacts, and the
+      OS keyring the store key depends on. Each subtask brings one such path inside the privacy boundary.</p>
     <div class="figure">
-      <svg viewBox="0 0 1180 130" role="img" aria-label="Build order: 39.2 (done) lands with or before 39.1; 39.3 depends on 39.2; 39.5 depends on 39.3; 39.4 coordinates with 39.1.">
+      <svg viewBox="0 0 1180 230" role="img" aria-label="Three hardening subtasks around the encrypted store: 39.8 (done) moves visits-in-flight into the encrypted visit_inbox; 39.9 (open) bounds the dev-observability plaintext side-channels; 39.7 (open) surfaces Linux keyring degradation of the store key.">
         <defs>
-          <marker id="s-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <marker id="h-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0 0 L10 5 L0 10 z" fill="#6c6859"/>
           </marker>
         </defs>
-        <g font-family="ui-sans-serif,system-ui" font-size="13" font-weight="600">
-          <rect x="30" y="45" width="150" height="46" rx="10" fill="#6f7a3f"/>
-          <text x="105" y="66" text-anchor="middle" fill="#f7f4ec">39.2 fetcher</text>
-          <text x="105" y="81" text-anchor="middle" fill="#eef0e2" font-family="ui-monospace,monospace" font-size="10" font-weight="400">keystone · done ✓</text>
+        <rect x="470" y="86" width="240" height="70" rx="10" fill="#33352f"/>
+        <text x="590" y="116" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="13.5" font-weight="600" fill="#f7f4ec">encrypted store</text>
+        <text x="590" y="135" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="#e7e0cf">the privacy boundary</text>
 
-          <rect x="270" y="10" width="150" height="46" rx="10" fill="#efe9da" stroke="#b56a44" stroke-width="1.6"/>
-          <text x="345" y="32" text-anchor="middle" fill="#33352f">39.1 reset</text>
-          <text x="345" y="47" text-anchor="middle" fill="#b56a44" font-family="ui-monospace,monospace" font-size="9.5" font-weight="400">contract ready</text>
-          <rect x="270" y="80" width="150" height="46" rx="10" fill="#efe9da" stroke="#a9a392" stroke-width="1.5"/>
-          <text x="345" y="108" text-anchor="middle" fill="#33352f">39.3 cache</text>
+        <!-- 39.8 -->
+        <rect x="60" y="86" width="300" height="70" rx="10" fill="#eef0e2" stroke="#6f7a3f" stroke-width="1.7"/>
+        <text x="210" y="112" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="12.5" font-weight="600">39.8 · visits in flight</text>
+        <text x="210" y="130" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#5b6731">plaintext inbox → encrypted visit_inbox</text>
+        <text x="210" y="146" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#6f7a3f">DONE ✓</text>
 
-          <rect x="510" y="80" width="150" height="46" rx="10" fill="#efe9da" stroke="#a9a392" stroke-width="1.5"/>
-          <text x="585" y="108" text-anchor="middle" fill="#33352f">39.5 forget</text>
+        <!-- 39.9 -->
+        <rect x="820" y="30" width="300" height="70" rx="10" fill="#f2e6e0" stroke="#9c4a2f" stroke-width="1.7"/>
+        <text x="970" y="56" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="12.5" font-weight="600">39.9 · dev observability</text>
+        <text x="970" y="74" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#9c4a2f">dev-log.jsonl + replay ring · bound + forget</text>
+        <text x="970" y="90" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#9c4a2f">OPEN</text>
 
-          <rect x="510" y="10" width="150" height="46" rx="10" fill="#efe9da" stroke="#a9a392" stroke-width="1.5"/>
-          <text x="585" y="38" text-anchor="middle" fill="#33352f">39.4 store crypto</text>
+        <!-- 39.7 -->
+        <rect x="820" y="142" width="300" height="70" rx="10" fill="#f2e6e0" stroke="#9c4a2f" stroke-width="1.7"/>
+        <text x="970" y="168" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="12.5" font-weight="600">39.7 · store key keyring</text>
+        <text x="970" y="186" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#9c4a2f">surface Linux keyring degradation</text>
+        <text x="970" y="202" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#9c4a2f">OPEN</text>
+
+        <g fill="none" stroke="#6c6859" stroke-width="1.5">
+          <path d="M360 121 L470 121" marker-end="url(#h-ar)"/>
+          <path d="M710 110 C760 90, 780 75, 820 65" stroke="#9c4a2f" stroke-dasharray="4 4" marker-end="url(#h-ar)"/>
+          <path d="M710 132 C760 152, 780 167, 820 177" stroke="#9c4a2f" stroke-dasharray="4 4" marker-end="url(#h-ar)"/>
         </g>
-        <g fill="none" stroke="#6c6859" stroke-width="1.6">
-          <path d="M180 60 C220 48, 230 38, 270 33" marker-end="url(#s-ar)"/>
-          <path d="M180 72 C220 88, 230 98, 270 103" marker-end="url(#s-ar)"/>
-          <path d="M420 103 L510 103" marker-end="url(#s-ar)"/>
-          <path d="M420 33 L510 33" stroke-dasharray="5 4" marker-end="url(#s-ar)"/>
-        </g>
-        <text x="700" y="37" font-family="ui-monospace,monospace" font-size="11" fill="#a9a392">— coordinates (schema reset once, encrypted)</text>
       </svg>
-      <figcaption>39.2 repointed the content read path at re-download <em>before</em> 39.1 drops the stored
-        content — otherwise <code>get_webpage_content</code> would return nothing. That ordering is why the
-        fetcher was the keystone and landed first by design; with it in place, 39.1 can safely drop the stored
-        content blob, and the remaining subtasks sit on a working corpus.</figcaption>
+      <figcaption>Three hardening subtasks ring the encrypted store: 39.8 (done) pulled visits-in-flight inside
+        it; 39.9 (open) bounds the two dev-observability plaintext artifacts; 39.7 (open) surfaces when the OS
+        keyring that protects the store key degrades.</figcaption>
+    </div>
+    <div class="subtasks">
+      <div class="sub done">
+        <div class="sid"><span class="ids"><span>task-39.8</span><span class="badge">visit inbox</span></span><span class="status done">done</span></div>
+        <h3>Close the plaintext visit-inbox gap</h3>
+        <p>Visits accepted over HTTP but not yet captured were buffered as plaintext files. They now live in an
+          encrypted, durable <code>visit_inbox</code> table inside the metadata store, covered by the cascade.</p>
+        <span class="order">shipped — closed the in-flight plaintext gap</span>
+        <div class="links"><a href="task-39.8 - Close-the-plaintext-visit-inbox-gap-encrypted-durable-visit-buffer.companion.html">visit-inbox companion ▸</a></div>
+      </div>
+
+      <div class="sub ready">
+        <div class="sid"><span class="ids"><span>task-39.9</span><span class="badge">plaintext bounds</span></span><span class="status todo">to do</span></div>
+        <h3>Bound the dev-observability plaintext side-channels</h3>
+        <p>Two dev-only artifacts write visit URLs in plaintext: <code>dev-log.jsonl{,.1}</code> and the replay
+          ring. Make the forget cascade delete the dev log, ensure a packaged install never writes either
+          silently, document the writes honestly, and document the rotation bound.</p>
+        <span class="order">medium · 4 ACs across 4 files · dev-only, default-off gate</span>
+        <div class="links"><a href="task-39.9 - Bound-the-dev-observability-plaintext-side-channels-dev-log-replay-ring.plaintext-bounds.html">plaintext-bounds ▸</a></div>
+      </div>
+
+      <div class="sub">
+        <div class="sid"><span class="ids"><span>task-39.7</span><span class="badge">keyring</span></span><span class="status todo">to do</span></div>
+        <h3>Surface Linux keyring degradation of store keys</h3>
+        <p>The store-encryption key is held in the OS keyring via <code>SecretStorage</code>. On Linux with no
+          working keyring, Electron <code>safeStorage</code> silently swaps in a hardcoded wrapping key —
+          SecretStorage still works, but the at-rest defense drops to obfuscation. A one-time D-Bus probe
+          detects this and shows a dismissible warning.</p>
+        <span class="order">protects the dependency the whole store rests on</span>
+        <div class="links"><a href="task-39.7 - Surface-Linux-keyring-degradation-of-SecretStorage-backed-store-keys.detection-plan.html">detection-plan ▸</a></div>
+      </div>
     </div>
   </section>
 
@@ -334,11 +382,12 @@
   </section>
 
   <footer>
-    Overview of task-39 (privacy-core capture model) and its five subtasks. 39.2 (the keystone fetcher) is
-    done; 39.1 (metadata-only reset) has its understanding contract and is ready to build; 39.3 / 39.4 / 39.5
-    remain to do. Re-scanned the tasks directory for sibling companions — 39.1 and 39.2 have companions so far.
-    Re-generate to refresh as the remaining companions land.
-    Self-contained · no external assets · refreshed 2026-06-09.
+    Overview of task-39 (privacy-core capture model) and its subtasks. The capture/store pillars (39.2 fetcher,
+    39.10 encrypted cache), store encryption, and the right-to-forget cascade are built; 39.1 (metadata-only
+    reset) has its understanding contract; the hardening pass closes the remaining plaintext paths — 39.8
+    (visit inbox, done), 39.9 (dev observability, open), 39.7 (keyring, open). Re-scanned the tasks directory
+    for sibling companions — 39.1, 39.2, 39.8, and 39.9 have companions; 39.7 and 39.10 do not yet.
+    Self-contained · no external assets · refreshed 2026-06-15.
   </footer>
 </main>
 
