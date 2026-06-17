@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bergamot — Phase 0 Comprehension</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d212b; --ink:#e6e9ef; --muted:#9aa3b2;
+    --line:#2a2f3a; --green:#3fb568; --greenbg:#16271d; --amber:#d9a441; --amberbg:#2a2317;
+    --red:#e2574c; --redbg:#2a1714; --blue:#5b9bd5; --bluebg:#15212e; --accent:#7c7cf0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 24px 80px;}
+  h1{font-size:26px;margin:0 0 4px;letter-spacing:-.2px}
+  h2{font-size:18px;margin:40px 0 14px;padding-bottom:7px;border-bottom:1px solid var(--line);letter-spacing:.2px}
+  h3{font-size:14px;margin:0 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+  p{margin:0 0 12px}
+  .sub{color:var(--muted);margin-bottom:24px;font-size:13.5px}
+  code{background:#0b0d11;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:12.5px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#cdd6e4}
+  .thesis{background:linear-gradient(135deg,#15233a,#1a1430);border:1px solid #34406b;border-radius:12px;
+    padding:20px 22px;margin:8px 0 8px}
+  .thesis b{color:#fff}
+  .thesis .big{font-size:17px;line-height:1.5;margin-bottom:10px}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;
+    letter-spacing:.4px;vertical-align:middle}
+  .p-done{background:var(--greenbg);color:var(--green);border:1px solid #2c5a3c}
+  .p-todo{background:var(--amberbg);color:var(--amber);border:1px solid #5a4a23}
+  .p-high{background:var(--redbg);color:var(--red);border:1px solid #6b2c26}
+  .p-med{background:var(--amberbg);color:var(--amber);border:1px solid #5a4a23}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .card.done{border-left:3px solid var(--green)}
+  .card.todo{border-left:3px solid var(--amber)}
+  .card h4{margin:0 0 10px;font-size:14px}
+  ul.tight{margin:0;padding-left:18px}
+  ul.tight li{margin:4px 0}
+  .tid{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--blue);font-weight:600}
+
+  /* spine diagram */
+  .spine{display:flex;flex-direction:column;gap:0;margin:6px 0}
+  .node{display:flex;align-items:center;gap:12px;padding:11px 16px;border-radius:9px;border:1px solid var(--line);
+    background:var(--panel2);position:relative}
+  .node .lbl{flex:1}
+  .node .lbl .t{font-weight:600}
+  .node .lbl .d{color:var(--muted);font-size:12.5px;margin-top:2px}
+  .node.done{background:var(--greenbg);border-color:#2c5a3c}
+  .node.todo{background:var(--amberbg);border-color:#5a4a23}
+  .node.crit{background:#241a2e;border:2px solid var(--accent);box-shadow:0 0 0 3px #7c7cf022}
+  .node.future{background:var(--panel);border-style:dashed;opacity:.85}
+  .arrow{align-self:center;color:var(--muted);font-size:18px;line-height:1;margin:3px 0}
+  .stage-no{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:11px;font-weight:700;background:#0b0d11;border:1px solid var(--line);color:var(--muted);flex:none}
+
+  /* two-track */
+  .tracks{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:6px}
+  @media(max-width:760px){.tracks{grid-template-columns:1fr}}
+  .lane{border:1px solid var(--line);border-radius:11px;padding:16px;background:var(--panel)}
+  .lane.value{border-top:3px solid var(--accent)}
+  .lane.hard{border-top:3px solid var(--red)}
+  .lane .lane-h{font-weight:700;font-size:14px;margin-bottom:4px}
+  .lane .lane-s{color:var(--muted);font-size:12.5px;margin-bottom:12px}
+  .chip{display:block;padding:9px 12px;border-radius:8px;margin:7px 0;font-size:13px;border:1px solid var(--line);
+    background:var(--panel2)}
+  .chip.done{background:var(--greenbg);border-color:#2c5a3c}
+  .chip.todo{background:var(--amberbg);border-color:#5a4a23}
+  .chip .meta{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}
+  .gate{text-align:center;font-size:12px;color:var(--muted);margin-top:10px;font-style:italic}
+
+  /* threat map */
+  .threat{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.threat{grid-template-columns:1fr}}
+  .adv{border:1px solid var(--line);border-radius:11px;padding:16px;background:var(--panel)}
+  .adv .ah{font-weight:700;margin-bottom:2px}
+  .adv .as{color:var(--muted);font-size:12.5px;margin-bottom:12px}
+  .adv .maps{display:flex;flex-direction:column;gap:8px}
+  .maprow{display:flex;align-items:center;gap:10px;font-size:13px}
+  .maprow .k{flex:none}
+
+  /* table */
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td .why{color:var(--muted);font-size:12px;margin-top:3px}
+  td code{font-size:11.5px}
+
+  .next{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:18px 20px}
+  .next .row{display:flex;gap:14px;align-items:flex-start;margin:12px 0}
+  .next .num{width:26px;height:26px;border-radius:7px;background:#241a2e;border:1px solid var(--accent);
+    color:#c9c9ff;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;font-size:13px}
+  .next .num.red{background:var(--redbg);border-color:#6b2c26;color:var(--red)}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin:14px 0 0;font-size:12px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+  .foot{color:var(--muted);font-size:12px;margin-top:40px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Bergamot — Phase 0 Comprehension</h1>
+  <div class="sub">Privacy-core migration (task-39): status, linkage, and what's actually on the critical path · 2026-06-15</div>
+
+  <div class="thesis">
+    <div class="big">The privacy migration's <b>substance is done and shipped.</b> What remains in Phase 0 is a <b>parallel privacy-hardening track</b> — release-blocking for the privacy promise, but <b>not on the technical critical path to value.</b></div>
+    <div>Both Phase-0 tasks the hero loop depended on — <span class="tid">39.2</span> (re-download keystone) and <span class="tid">39.1</span> (metadata-only reset) — are already done. So the critical path to value now runs <b>straight through TDT (task-36)</b>. The four remaining hardening tasks block <em>nothing</em> technically; they gate only a privacy-credible <em>release</em>.</div>
+  </div>
+
+  <div class="legend">
+    <span><i class="sw" style="background:var(--green)"></i> Done / shipped</span>
+    <span><i class="sw" style="background:var(--amber)"></i> To do</span>
+    <span><i class="sw" style="background:var(--accent)"></i> Critical path to value</span>
+    <span><i class="sw" style="background:var(--red)"></i> High priority / inviolable</span>
+  </div>
+
+  <!-- ============ STATUS BOARD ============ -->
+  <h2>1 · Phase 0 status board</h2>
+  <div class="grid2">
+    <div class="card done">
+      <h4><span class="pill p-done">DONE — SHIPPED</span> &nbsp;The migration itself</h4>
+      <ul class="tight">
+        <li><span class="tid">39.1</span> Stop ambient capture + metadata-only schema reset <span class="muted">·27a346f</span></li>
+        <li><span class="tid">39.2</span> <b>Keystone</b> — re-download fetcher + content read path</li>
+        <li><span class="tid">39.3</span> Encrypted on-demand content cache</li>
+        <li><span class="tid">39.4</span> At-rest encryption of metadata store</li>
+        <li><span class="tid">39.5</span> Cascading right-to-forget</li>
+        <li><span class="tid">39.6</span> Provision headless browser (packaged install)</li>
+        <li><span class="tid">39.10</span> Default encrypted cache, brotli body <span class="muted">·f1d175d</span></li>
+        <li><span class="tid">31.5</span> Heuristic main-content extraction <span class="muted">·75cf45b</span></li>
+      </ul>
+      <p style="margin:12px 0 0;font-size:12.5px;color:var(--muted)">All four task-39 umbrella acceptance criteria delivered: metadata-only capture · login-wall filter via re-download · encrypted/scoped/deletable cache · atomic cascading forget. Code in <code>vscode/src/redownload/</code>, <code>encryption_key.ts</code>, <code>right_to_forget.ts</code>.</p>
+    </div>
+    <div class="card todo">
+      <h4><span class="pill p-todo">TO DO</span> &nbsp;Remaining hardening track</h4>
+      <ul class="tight">
+        <li><span class="tid">40</span> Per-extension capability token <span class="pill p-high">HIGH · INVIOLABLE</span></li>
+        <li><span class="tid">39.8</span> Encrypted visit-inbox <span class="pill p-high">HIGH</span></li>
+        <li><span class="tid">39.9</span> Bound dev side-channels <span class="pill p-med">MED</span></li>
+        <li><span class="tid">39.7</span> Linux keyring signal <span class="pill p-med">MED</span></li>
+        <li><span class="tid">34</span> Degraded-content handling <span class="muted">— verify &amp; close</span></li>
+      </ul>
+      <p style="margin:12px 0 0;font-size:12.5px;color:var(--muted)">All four hardening tasks declare <code>dependencies: []</code> — mutually independent, fully parallelizable. Priority ordering is by <b>risk/exposure</b>, not by dependency. <span class="tid">34</span> is a loose end (mostly absorbed by task-35/31), not a workstream.</p>
+    </div>
+  </div>
+
+  <!-- ============ CRITICAL PATH SPINE ============ -->
+  <h2>2 · The critical path to value (the hero loop)</h2>
+  <p class="sub" style="margin-bottom:14px">Read top to bottom. Green is already built. The purple node is where the critical path lives <em>now</em> — unblocked by <span class="tid">39.2</span>, blocked by nothing else.</p>
+  <div class="spine">
+    <div class="node done"><span class="stage-no">✓</span><div class="lbl"><div class="t">CAPTURE — metadata-only</div><div class="d">visit id · URL · timestamp · title · navigation/session graph. Zero content stored.</div></div><span class="pill p-done">DONE</span></div>
+    <div class="arrow">↓</div>
+    <div class="node done"><span class="stage-no">✓</span><div class="lbl"><div class="t">STORE — encrypted metadata + content-cache tier</div><div class="d">DuckDB metadata store (encrypted at rest) + separate encrypted, deletable content cache.</div></div><span class="pill p-done">DONE</span></div>
+    <div class="arrow">↓</div>
+    <div class="node done"><span class="stage-no">✓</span><div class="lbl"><div class="t">39.2 — Re-download fetcher <span style="color:var(--accent)">(keystone)</span></div><div class="d">Re-download public URLs in post-processing. Login wall = the privacy filter. Unblocks ALL content work.</div></div><span class="pill p-done">DONE</span></div>
+    <div class="arrow">↓</div>
+    <div class="node crit"><span class="stage-no" style="border-color:var(--accent);color:#c9c9ff">36</span><div class="lbl"><div class="t">task-36 — Temporal Topic Detection &nbsp;<span class="pill p-todo">CRITICAL PATH · TO DO</span></div><div class="d">36.1 scaffold → 36.2 windowing → 36.3 vectorise → 36.4 cosine+HDBSCAN → 36.5 labels → 36.6 persist → 36.7 validate → 36.8 MCP → 36.9 trigger. <b>Surfaces the projects the user is actually working on.</b></div></div></div>
+    <div class="arrow">↓</div>
+    <div class="node future"><span class="stage-no">★</span><div class="lbl"><div class="t">PKM write-back + habit-anchor push surface</div><div class="d">Surfaced project → editable note stub; weekly panel/notification. Completes the hero loop. <em>Not yet ticketed.</em></div></div><span class="pill p-todo">FUTURE</span></div>
+  </div>
+  <p style="font-size:12.5px;color:var(--muted);margin-top:12px">Feeding <span class="tid">36.3</span>: content-quality enhancers <span class="tid">31.5</span> (main-content extraction, <b>done</b>) and <span class="tid">32</span> (LLM-gated image extraction, to do). These improve embedding quality but are <b>not hard blockers</b> — TDT can start on raw re-downloaded text. RAG (task-31.x) is <b>deferred</b> behind TDT proving value (constitution branch b).</p>
+
+  <!-- ============ TWO TRACK ============ -->
+  <h2>3 · Two tracks, running in parallel</h2>
+  <div class="tracks">
+    <div class="lane value">
+      <div class="lane-h">TRACK 1 · Critical path to value</div>
+      <div class="lane-s">Advances the intention-tree root. This is what makes the product <em>do something</em>.</div>
+      <div class="chip done">39.1 / 39.2 capture &amp; re-download <span class="meta">done — the on-ramp</span></div>
+      <div class="chip todo">task-36 TDT (36.1 → 36.9) <span class="meta">the hero loop — start here for value</span></div>
+      <div class="chip todo">PKM write-back + push surface <span class="meta">completes the loop · not ticketed</span></div>
+      <div class="gate">Does NOT require any hardening task to be finished first.</div>
+    </div>
+    <div class="lane hard">
+      <div class="lane-h">TRACK 2 · Privacy hardening</div>
+      <div class="lane-s">Closes threat-model gaps. Release-blocking for the privacy promise; blocks nothing technically.</div>
+      <div class="chip todo">40 · capability token <span class="meta">HIGH · inviolable (principle 7) · adversary B</span></div>
+      <div class="chip todo">39.8 · encrypted visit-inbox <span class="meta">HIGH · adversary A</span></div>
+      <div class="chip todo">39.9 · dev side-channels <span class="meta">MED · default-off gate</span></div>
+      <div class="chip todo">39.7 · Linux keyring signal <span class="meta">MED · Linux-only warning</span></div>
+      <div class="gate">Independent of each other and of TDT. Gates a privacy-credible <em>release</em>.</div>
+    </div>
+  </div>
+
+  <!-- ============ THREAT MAP ============ -->
+  <h2>4 · Threat-model mapping — which gap each task closes</h2>
+  <div class="threat">
+    <div class="adv">
+      <div class="ah" style="color:var(--red)">Adversary B — hostile local process</div>
+      <div class="as">Another process on the same machine talks to the local server.</div>
+      <div class="maps">
+        <div class="maprow"><span class="k"><span class="pill p-high">40</span></span><span>Capability token on <code>/visit</code>, <code>/query/*</code>, <code>/dev_signal</code>. Today only CORS — any local process can read re-downloaded content &amp; inject visits. <b>"Largest open gap."</b></span></div>
+      </div>
+    </div>
+    <div class="adv">
+      <div class="ah" style="color:var(--amber)">Adversary A — offline / file-level access</div>
+      <div class="as">Someone reads files on disk while the extension isn't guarding them.</div>
+      <div class="maps">
+        <div class="maprow"><span class="k"><span class="pill p-high">39.8</span></span><span>Plaintext visit-inbox JSON — the encrypted store's <b>plaintext front door.</b> "Largest remaining plaintext side-channel."</span></div>
+        <div class="maprow"><span class="k"><span class="pill p-med">39.9</span></span><span>Dev-log + replay ring write URLs in plaintext — but behind a <b>default-off</b> gate.</span></div>
+        <div class="maprow"><span class="k"><span class="pill p-med">39.7</span></span><span>Linux without a keyring silently degrades key wrapping to obfuscation — <b>no user signal</b> today.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ PRIORITY TABLE ============ -->
+  <h2>5 · Remaining tasks, ranked by priority</h2>
+  <table>
+    <thead><tr><th style="width:90px">Task</th><th style="width:80px">Priority</th><th>Why it matters</th><th style="width:230px">Key files</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="tid">TASK-40</span><br><span style="font-size:12px">capability token</span></td>
+        <td><span class="pill p-high">HIGH</span><br><span style="font-size:11px;color:var(--red)">inviolable</span></td>
+        <td>Constitution principle 7. Random token at first run → SecretStorage → paired to browser; required on every server endpoint; MCP standalone authenticates too. Loopback stays as 2nd layer.<div class="why">Closes adversary B — the single largest open gap in the posture.</div></td>
+        <td><code>server/server_manager.ts</code> · <code>mcp_server_standalone.ts</code> · <code>browser/src/background.ts</code></td>
+      </tr>
+      <tr>
+        <td><span class="tid">TASK-39.8</span><br><span style="font-size:12px">encrypted visit-inbox</span></td>
+        <td><span class="pill p-high">HIGH</span></td>
+        <td>Move the durable visit buffer <em>into</em> the encrypted metadata store as a queue table (preferred, destructive — no shim), written before the 200, deleted after commit; restart recovery reads the table. Update forget sweep, queue reload, threat model.<div class="why">Closes adversary A's largest plaintext side-channel.</div></td>
+        <td><code>visit_inbox.ts</code> · <code>visit_queue_processor.ts</code> · <code>right_to_forget.ts</code></td>
+      </tr>
+      <tr>
+        <td><span class="tid">TASK-39.9</span><br><span style="font-size:12px">dev side-channels</span></td>
+        <td><span class="pill p-med">MED</span></td>
+        <td>Make forget delete <code>dev-log.jsonl{,.1}</code> wholesale; verify/document a retention bound; confirm a packaged install writes neither artifact unless devMode is explicitly on. Bounded — don't gold-plate.<div class="why">Lower real exposure: default-off dev gate.</div></td>
+        <td><code>dev_log.ts</code> · <code>visit_replay.ts</code> · <code>right_to_forget.ts</code></td>
+      </tr>
+      <tr>
+        <td><span class="tid">TASK-39.7</span><br><span style="font-size:12px">Linux keyring signal</span></td>
+        <td><span class="pill p-med">MED</span></td>
+        <td>One-time, dismissible warning on Linux when no keyring backend is detectable (probe <code>org.freedesktop.secrets</code> on session D-Bus), linking the threat model. No false positives on macOS/Windows/working-keyring Linux. No behavior change.<div class="why">Linux-only honesty signal, not a fix.</div></td>
+        <td><code>database/encryption_key.ts</code></td>
+      </tr>
+      <tr>
+        <td><span class="tid">TASK-34</span><br><span style="font-size:12px">degraded content</span></td>
+        <td><span style="font-size:12px;color:var(--muted)">verify &amp; close</span></td>
+        <td>Not a security task. Its own notes say it's partially absorbed: the fetcher's <code>fetch_outcome</code> classifier already handles ok/auth-redirect/403/paywall/dead; non-JSON LLM handling belongs to RAG (task-31). Check whether the residual is already covered, then close.<div class="why">A loose end, not a workstream.</div></td>
+        <td><code>redownload/fetch_outcome.ts</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ============ WHAT NEXT ============ -->
+  <h2>6 · What to do next — the honest recommendation</h2>
+  <div class="next">
+    <div class="row"><div class="num">1</div><div><b>Highest VALUE next move: start TDT — <span class="tid">task-36.1</span> (scaffold <code>@bergamot/tdt</code>).</b> This is the critical path to the hero loop and is fully unblocked. Nothing in the hardening track needs to finish first.</div></div>
+    <div class="row"><div class="num red">2</div><div><b>Highest-PRIORITY privacy obligations: <span class="tid">40</span> and <span class="tid">39.8</span>.</b> Both HIGH, both independent, both close the two "largest gap" items in the threat model. They can run <em>in parallel</em> with TDT — they touch the server and storage layers, not the TDT package.</div></div>
+    <div class="row"><div class="num">3</div><div><b>Then the medium hardening: <span class="tid">39.9</span> and <span class="tid">39.7</span></b>, and <b>verify-and-close <span class="tid">34</span></b>. None are urgent; sequence them around the higher-value work.</div></div>
+    <p style="margin:14px 0 0;font-size:13px;color:var(--muted)">Bottom line: doing the hardening track does <b>not</b> advance the hero loop, and starting TDT does <b>not</b> require finishing hardening — but hardening <b>is</b> required before a privacy-credible release (constitution: privacy is the core organizing principle; principle 7 is inviolable). Pick by goal: ship value → TDT; close the privacy promise → 40 then 39.8.</p>
+  </div>
+
+  <div class="foot">
+    Sources: <code>backlog/WORK_PRIORITY.md</code>, <code>backlog/tasks/</code> &amp; <code>backlog/completed/</code> (status + frontmatter), <code>git log</code>, <code>vscode/src/redownload/</code>. One doc-accuracy note: WORK_PRIORITY.md line 19 ("39.1–39.6 shipped; 39.7 remains") predates 39.10 and 31.5 landing and doesn't list 39.10 — the real state is healthier than that line reads.
+  </div>
+
+</div>
+</body>
+</html>
