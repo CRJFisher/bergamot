@@ -1,4 +1,6 @@
 export type { RelationalReader, EmbedFn, VectorStore, ClusterSink } from "./ports";
+export type { WindowSignal } from "./windowing";
+export { compute_windows } from "./windowing";
 
 export type {
   VisitRow,

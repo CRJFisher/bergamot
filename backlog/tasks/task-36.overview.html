@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -25,6 +26,29 @@
     margin: 0; background: var(--bg); color: var(--fg);
     font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
+
+  /* sticky cross-doc nav */
+  nav.crossdoc {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg-alt); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    padding: .5rem 1.5rem;
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace; font-size: .74rem;
+  }
+  nav.crossdoc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.crossdoc a, nav.crossdoc span.pending, nav.crossdoc span.cur {
+    padding: .22em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap;
+    border: 1px solid var(--border);
+  }
+  nav.crossdoc a { color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.crossdoc a:hover { background: rgba(108,182,255,.16); }
+  nav.crossdoc span.cur { color: #1a1208; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  nav.crossdoc span.pending { color: var(--com); }
+  nav.crossdoc .dot { display:inline-block; width:.5em; height:.5em; border-radius:50%; margin-right:.35em; vertical-align: middle; }
+  nav.crossdoc .dot.done { background: var(--green); }
+  nav.crossdoc .dot.now { background: var(--accent); }
+  nav.crossdoc .dot.todo { background: var(--com); }
+
   .wrap { max-width: 980px; margin: 0 auto; padding: 2rem 1.5rem 6rem; }
   header.page { border-bottom: 1px solid var(--border); padding-bottom: 1.2rem; margin-bottom: 2rem; }
   .crumb { color: var(--fg-dim); font-size: .82rem; letter-spacing: .04em; text-transform: uppercase; }
@@ -65,19 +89,37 @@
     background: rgba(240,163,94,.08);
   }
   .steps > li.current::before { background: var(--accent); color: #1a1208; border-color: var(--accent); }
+  .steps > li.complete::before { background: rgba(126,231,135,.18); color: var(--green); border-color: rgba(126,231,135,.4); }
   .steps .task-ref { font-size: .78rem; color: var(--fg-dim); }
+  .steps .task-ref a { color: var(--accent-2); }
   .badge { display:inline-block; font-size:.68rem; font-weight:700; letter-spacing:.04em; padding:.1em .5em; border-radius:999px; margin-left:.4rem; }
   .badge.now { background: var(--accent); color:#1a1208; }
   .badge.done { background: rgba(126,231,135,.16); color: var(--green); border:1px solid rgba(126,231,135,.3); }
   .badge.dep { background: rgba(255,123,114,.14); color: var(--red); border:1px solid rgba(255,123,114,.3); }
   .cta {
-    display:inline-block; margin:.4rem 0; padding:.6rem 1.1rem; background: var(--accent-2); color:#0a0f14;
+    display:inline-block; margin:.4rem .4rem .4rem 0; padding:.6rem 1.1rem; background: var(--accent-2); color:#0a0f14;
     border-radius:6px; text-decoration:none; font-weight:600;
   }
+  .cta.now { background: var(--accent); color:#1a1208; }
   footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .85rem; }
 </style>
 </head>
 <body>
+
+<nav class="crossdoc" aria-label="Task family">
+  <span class="home">task-36 family</span>
+  <span class="cur">Overview</span>
+  <a href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html"><span class="dot done"></span>36.1 Scaffold</a>
+  <a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html"><span class="dot now"></span>36.2 Windowing</a>
+  <span class="pending"><span class="dot todo"></span>36.3 Vectorise · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.4 HDBSCAN core · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.5 Representations · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.6 Persistence · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.7 Validation · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.8 MCP · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.9 Trigger · not yet generated</span>
+</nav>
+
 <div class="wrap">
 
 <header class="page">
@@ -143,8 +185,8 @@
     </tr>
     <tr>
       <td><strong>Determinism is a contract</strong></td>
-      <td>Stable fetch order, fixed-order float64 segment accumulation, and a pinned tf backend with a bitwise reproducibility regression test.</td>
-      <td>Same captures + pinned model must produce identical clusters (parent AC #3). HDBSCAN is fit-only with no RNG on this path.</td>
+      <td>Window bounds are a pure function of <code>(timestamps, config)</code>; stable fetch order, fixed-order float64 segment accumulation, and a pinned tf backend with a bitwise reproducibility regression test.</td>
+      <td>Same captures + pinned model must produce identical clusters (parent AC #3). Windowing (36.2) is the first place this contract is enforced; HDBSCAN is fit-only with no RNG on this path.</td>
     </tr>
   </tbody>
 </table>
@@ -152,18 +194,18 @@
 <!-- ============================================================ -->
 <h2>The 9-step build order (design §11)</h2>
 
-<p>A phased, independently-verifiable delivery sequence for the module. Each step maps to a sub-task. <span style="color:var(--accent);font-weight:600">task-36.1 is the current step</span>.</p>
+<p>A phased, independently-verifiable delivery sequence for the module. Each step maps to a sub-task. <span style="color:var(--accent);font-weight:600">task-36.2 is the current step</span>; task-36.1 is complete.</p>
 
 <ol class="steps">
-  <li class="current">
-    <strong>Scaffold the package + ports</strong> <span class="badge now">YOU ARE HERE</span>
+  <li class="complete">
+    <strong>Scaffold the package + ports</strong> <span class="badge done">DONE</span>
     <div>Create <code>tdt/</code> workspace, add <code>"tdt"</code> to root <code>workspaces</code>, define <code>ports.ts</code> contracts (with the clustering-tfjs camelCase↔snake_case translation quarantined here), config + types, and fakes for every port. <em>Verify:</em> <code>tsc</code> + a no-op <code>run_tdt</code> round-trips fakes.</div>
-    <div class="task-ref">task-36.1 — Scaffold @bergamot/tdt package: ports, config, types, fakes</div>
+    <div class="task-ref">task-36.1 — Scaffold @bergamot/tdt package · <a href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html">companion →</a></div>
   </li>
-  <li>
-    <strong>Scale + window resolution</strong>
+  <li class="current">
+    <strong>Scale + window resolution</strong> <span class="badge now">YOU ARE HERE</span>
     <div>Run the §5 SQL against the live DuckDB to fix the window default and confirm the ~5k ceiling reality. Implement <code>windowing.ts</code> (calendar + count-guard + gap/calendar subdivision). <em>Verify:</em> window boundaries are a pure function of timestamps; oversized windows subdivide deterministically.</div>
-    <div class="task-ref">task-36.2 — Windowing and data-scale resolution</div>
+    <div class="task-ref">task-36.2 — Windowing and data-scale resolution · <a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html">companion →</a></div>
   </li>
   <li>
     <strong>Page vectorisation (TDT-owned)</strong>
@@ -203,13 +245,44 @@
 </ol>
 
 <!-- ============================================================ -->
+<h2>How the sub-tasks compose into the parent goal</h2>
+
+<p>The pipeline is a straight line from the visit stream to browsable clusters. Each sub-task owns one stage; the stages hand typed values forward and never reach backward.</p>
+
+<pre>
+  visit stream
+      │  36.2  windowing.ts ── bounded frames, each ≤ max_samples, deterministic
+      ▼
+  WindowSignal[]  ─ skip (sparse) ─▶ "not enough data yet"
+      │  36.3  build_page_vector ── re-download → embed → L2-normalize → cache
+      ▼
+  PageVector[]    ─ auth-walled / failed re-download ─▶ excluded
+      │  36.4  cosine distance matrix → HDBSCAN.fit  (the ONLY clustering-tfjs call)
+      ▼
+  HdbscanRaw      ─ label -1 ─▶ noise (not forced into a cluster)
+      │  36.5  representations + deterministic labeler (no LLM)
+      ▼
+  RepresentedCluster[]
+      │  36.6  persist: topic_run / topic_cluster / topic_cluster_member  (idempotent)
+      ▼
+  DuckDB tables ──▶ 36.8 MCP read tools ──▶ browsable clusters
+      ▲
+      └ 36.7 validation sweep picks + persists the operating parameters
+      └ 36.9 trigger runs the whole thing OFF the event loop
+</pre>
+
+<div class="note">
+<p style="margin:0"><strong>Windowing (36.2) is where the determinism contract is first enforced.</strong> Because window bounds are a pure function of <code>(timestamps, config)</code>, every downstream stage inherits a stable, reproducible set of frames — the precondition for parent AC #3 (identical captures → identical clusters) and for the future stateless cross-window tracker.</p>
+</div>
+
+<!-- ============================================================ -->
 <h2>Sub-task map</h2>
 
 <table>
   <thead><tr><th>Sub-task</th><th>Title</th><th>Status</th></tr></thead>
   <tbody>
-    <tr><td><strong>36.1</strong></td><td>Scaffold @bergamot/tdt package: ports, config, types, fakes</td><td><span class="badge now">CURRENT</span></td></tr>
-    <tr><td>36.2</td><td>Windowing and data-scale resolution</td><td>To Do</td></tr>
+    <tr><td><strong>36.1</strong></td><td>Scaffold @bergamot/tdt package: ports, config, types, fakes</td><td><span class="badge done">DONE</span></td></tr>
+    <tr><td><strong>36.2</strong></td><td>Windowing and data-scale resolution</td><td><span class="badge now">CURRENT</span></td></tr>
     <tr><td>36.3</td><td>Page vectorisation: TDT-owned embedding of captured pages</td><td>To Do</td></tr>
     <tr><td>36.4</td><td>Cosine distance matrix and HDBSCAN clustering core <span class="badge dep">needs clustering-tfjs Phase 2</span></td><td>To Do</td></tr>
     <tr><td>36.5</td><td>Cluster representations and deterministic labeler</td><td>To Do</td></tr>
@@ -238,8 +311,11 @@
 
 <!-- ============================================================ -->
 <h2>Start here</h2>
-<p>The current sub-task is the foundation everything else slots into. Read its comprehension companion:</p>
-<p><a class="cta" href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html">Open the task-36.1 scaffold companion →</a></p>
+<p>Task-36.1 (scaffold) is complete. The current sub-task is windowing — the first stage of the pipeline and where the determinism contract begins. Read its comprehension companion:</p>
+<p>
+  <a class="cta now" href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html">Open the task-36.2 windowing companion →</a>
+  <a class="cta" href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html">task-36.1 scaffold companion</a>
+</p>
 
 <footer>
   Overview for <code>task-36</code> (Temporal Topic Detection, micro tier). Canonical reference: <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code>. Broader two-tier vision (macro SOM tier, cross-window tracking, LLM linkage — later slices): <code>backlog/drafts/tdt-temporal-topic-architecture.md</code>.

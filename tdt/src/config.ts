@@ -11,6 +11,20 @@ export interface WindowConfig {
   min_window_visits: number; // windows below this threshold are skipped as too sparse
 }
 
+/**
+ * Window-default scale check (plan §5, "Empirical prerequisite").
+ * Run against the live DuckDB to confirm a typical month stays well under
+ * max_samples; if it routinely exceeds it, tighten `unit` to "days" with
+ * `days: 14`. The DB is encrypted at rest and held read-write by the extension —
+ * run through the HTTP broker, not a direct CLI connection:
+ *
+ *   SELECT date_trunc('month', CAST(page_loaded_at AS TIMESTAMP)) AS wk,
+ *          count(*) AS visits
+ *   FROM webpage_activity_sessions
+ *   GROUP BY 1 ORDER BY 2 DESC LIMIT 24;
+ *
+ * Decision recorded in TASK-36.2 Implementation Notes (AC #1).
+ */
 export const DEFAULT_WINDOW_CONFIG = {
   unit: "month",
   tz: "UTC",

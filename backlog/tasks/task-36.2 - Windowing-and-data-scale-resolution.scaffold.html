@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>task-36.2 — Windowing &amp; data-scale resolution — Comprehension Companion</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --bg-alt: #161b22;
+    --bg-code: #0c0f14;
+    --fg: #d7dde4;
+    --fg-dim: #9aa6b2;
+    --accent: #f0a35e;     /* bergamot orange */
+    --accent-2: #6cb6ff;
+    --green: #7ee787;
+    --red: #ff7b72;
+    --purple: #d2a8ff;
+    --border: #2a313a;
+    --kw: #ff7b72;
+    --str: #a5d6ff;
+    --com: #768390;
+    --typ: #d2a8ff;
+    --fn: #d2a8ff;
+    --num: #f0a35e;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--sans); }
+
+  /* sticky cross-doc nav */
+  nav.crossdoc {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg-alt); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    padding: .5rem 5%; font-family: var(--mono); font-size: .74rem;
+  }
+  nav.crossdoc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.crossdoc a, nav.crossdoc span.pending, nav.crossdoc span.cur {
+    padding: .22em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap;
+    border: 1px solid var(--border);
+  }
+  nav.crossdoc a { color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.crossdoc a:hover { background: rgba(108,182,255,.16); }
+  nav.crossdoc span.cur { color: #1a1208; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  nav.crossdoc span.pending { color: var(--com); }
+  nav.crossdoc .dot { display:inline-block; width:.5em; height:.5em; border-radius:50%; margin-right:.35em; vertical-align: middle; }
+  nav.crossdoc .dot.done { background: var(--green); }
+  nav.crossdoc .dot.now { background: var(--accent); }
+  nav.crossdoc .dot.todo { background: var(--com); }
+
+  /* sticky in-page outline */
+  nav.outline {
+    position: sticky; top: 38px; z-index: 9;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .35rem; padding: .45rem 5%;
+    font-family: var(--mono); font-size: .72rem;
+  }
+  nav.outline a { color: var(--fg-dim); text-decoration: none; padding: .18em .55em; border-radius: 999px; border: 1px solid transparent; }
+  nav.outline a:hover, nav.outline a.active { color: var(--accent); border-color: var(--border); background: var(--bg-alt); }
+
+  main { width: 90%; max-width: 1500px; margin: 0 auto; padding: 1.6rem 0 6rem; }
+  header.page { border-bottom: 1px solid var(--border); padding-bottom: 1.2rem; margin-bottom: 1.4rem; }
+  .crumb { color: var(--fg-dim); font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; font-family: var(--mono); }
+  h1 { font-family: var(--serif); font-size: 2rem; margin: .5rem 0 .4rem; line-height: 1.15; font-weight: 600; }
+  h2 { font-size: 1.3rem; margin: 3rem 0 .6rem; padding-top: .7rem; border-top: 1px solid var(--border); color: var(--accent); scroll-margin-top: 92px; }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 .5rem; color: var(--accent-2); }
+  .lead { font-size: 1.05rem; max-width: 72ch; color: var(--fg); }
+  figcaption { font-size: .84rem; color: var(--fg-dim); margin: .5rem 0 0; font-style: italic; max-width: 80ch; }
+  figure { margin: 1.2rem 0; }
+  .prose { max-width: 70ch; }
+
+  .meta { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .8rem; font-family: var(--mono); font-size: .76rem; }
+  .meta .chip { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 999px; padding: .2em .7em; color: var(--fg-dim); }
+  .meta .chip strong { color: var(--accent); font-weight: 600; }
+
+  a { color: var(--accent-2); }
+  code { font-family: var(--mono); font-size: .88em; }
+  p code, li code, td code, figcaption code { background: var(--bg-code); padding: .1em .38em; border-radius: 4px; border: 1px solid var(--border); color: var(--accent); }
+
+  .callout { border-radius: 6px; padding: .9rem 1.1rem; margin: 1.3rem 0; max-width: 86ch; }
+  .callout.key { background: var(--bg-alt); border-left: 4px solid var(--accent); }
+  .callout.info { background: rgba(108,182,255,.07); border-left: 4px solid var(--accent-2); }
+  .callout.warn { background: rgba(255,123,114,.08); border-left: 4px solid var(--red); }
+  .callout.good { background: rgba(126,231,135,.07); border-left: 4px solid var(--green); }
+  .callout .label { font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .09em; font-weight: 700; display: block; margin-bottom: .3rem; }
+  .callout.key .label { color: var(--accent); }
+  .callout.info .label { color: var(--accent-2); }
+  .callout.warn .label { color: var(--red); }
+  .callout.good .label { color: var(--green); }
+  .callout p { margin: .35rem 0; }
+
+  /* code panel */
+  .code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px; margin: 1rem 0; overflow: hidden; }
+  .code .file-label { font-family: var(--mono); font-size: .72rem; color: var(--fg-dim); background: var(--bg-alt); padding: .4rem .9rem; border-bottom: 1px solid var(--border); }
+  .code pre { margin: 0; padding: 1rem 1.1rem; overflow-x: auto; font-size: .82rem; line-height: 1.6; font-family: var(--mono); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .cm { color: var(--com); font-style: italic; }
+  .typ { color: var(--typ); } .fn { color: var(--fn); } .num { color: var(--num); } .hl { background: rgba(240,163,94,.14); display: inline-block; width: 100%; }
+  .dim { color: var(--com); }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .88rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--bg-alt); color: var(--accent); font-weight: 600; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  td code, th code { font-family: var(--mono); }
+
+  ol.steps { list-style: none; padding: 0; counter-reset: step; }
+  ol.steps > li { position: relative; padding: .7rem 1rem .7rem 3.1rem; margin: .5rem 0; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 8px; }
+  ol.steps > li::before { counter-increment: step; content: counter(step); position: absolute; left: .7rem; top: .7rem; width: 1.7rem; height: 1.7rem; border-radius: 50%; background: var(--bg-code); border: 1px solid var(--border); color: var(--accent-2); font-weight: 700; font-size: .85rem; display: flex; align-items: center; justify-content: center; font-family: var(--mono); }
+  ol.steps > li strong { color: var(--fg); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; font-family: var(--mono); font-size: .76rem; color: var(--fg-dim); margin: .6rem 0; }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; }
+  .legend i { width: 22px; height: 0; border-top-width: 2.5px; border-top-style: solid; display: inline-block; }
+  .legend .box { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+
+  .diagram { width: 100%; overflow-x: auto; }
+  svg { display: block; max-width: 100%; height: auto; }
+  text { font-family: var(--mono); }
+
+  /* interactive sim */
+  .sim { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.2rem; margin: 1.2rem 0; }
+  .sim .controls { display: flex; flex-wrap: wrap; gap: 1.2rem; align-items: center; margin-bottom: .8rem; font-family: var(--mono); font-size: .8rem; }
+  .sim .controls label { display: flex; flex-direction: column; gap: .25rem; color: var(--fg-dim); }
+  .sim .controls .val { color: var(--accent); font-weight: 700; }
+  .sim button { font-family: var(--mono); font-size: .78rem; padding: .4rem .8rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-code); color: var(--accent-2); cursor: pointer; }
+  .sim button:hover { border-color: var(--accent-2); }
+  .sim button.primary { background: var(--accent); color: #1a1208; border-color: var(--accent); font-weight: 700; }
+  .sim input[type=range] { accent-color: var(--accent); }
+  .sim .readout { font-family: var(--mono); font-size: .82rem; margin-top: .7rem; display: flex; flex-wrap: wrap; gap: .8rem; }
+  .sim .readout .stat { background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px; padding: .35em .7em; }
+  .sim .readout .stat b { color: var(--accent); }
+  .sim .readout .stat.ok b { color: var(--green); }
+  .sim .readout .stat.bad b { color: var(--red); }
+
+  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .82rem; font-family: var(--mono); max-width: 90ch; }
+  @media (max-width: 720px) {
+    nav.outline { display: none; }
+    h2 { scroll-margin-top: 56px; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="crossdoc" aria-label="Task family">
+  <span class="home">task-36 family</span>
+  <a href="task-36.overview.html">Overview</a>
+  <a href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html"><span class="dot done"></span>36.1 Scaffold</a>
+  <span class="cur"><span class="dot now"></span>36.2 Windowing</span>
+  <span class="pending"><span class="dot todo"></span>36.3 Vectorise · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.4 HDBSCAN core · not yet generated</span>
+</nav>
+
+<nav class="outline" aria-label="On this page">
+  <a href="#why">Why windowing</a>
+  <a href="#flow">Algorithm flow</a>
+  <a href="#tree">Subdivision tree</a>
+  <a href="#sim">Try the split</a>
+  <a href="#det">Determinism</a>
+  <a href="#scale">Data scale</a>
+  <a href="#build">What to build</a>
+  <a href="#ac">Acceptance</a>
+</nav>
+
+<main>
+<header class="page">
+  <div class="crumb">Bergamot · Understand/Surface · TDT micro tier · task-36.2</div>
+  <h1>Windowing: turning the visit stream into bounded frames HDBSCAN can run over</h1>
+  <p class="lead">Slice the timestamped visit stream into time windows that each stay under the HDBSCAN sample ceiling, deterministically, so the same captures always produce the same frames.</p>
+  <div class="meta">
+    <span class="chip">file <strong>tdt/src/windowing.ts</strong></span>
+    <span class="chip">branch <strong>tdt</strong></span>
+    <span class="chip">depends on <strong>36.1</strong></span>
+    <span class="chip">guard <strong>max_samples 4000</strong></span>
+    <span class="chip">default <strong>calendar month (UTC)</strong></span>
+  </div>
+</header>
+
+<!-- ============================================================ WHY -->
+<h2 id="why">Why this step exists</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1100 250" role="img" aria-label="The visit stream is unbounded; HDBSCAN needs bounded frames under 5000 samples.">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/>
+    </marker>
+    <marker id="ahg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/>
+    </marker>
+  </defs>
+
+  <!-- unbounded stream -->
+  <text x="20" y="34" fill="#9aa6b2" font-size="12">RAW VISIT STREAM (unbounded, bursty)</text>
+  <rect x="20" y="46" width="430" height="70" rx="8" fill="#161b22" stroke="#2a313a"/>
+  <!-- scattered ticks of varying density -->
+  <g stroke="#6cb6ff" stroke-width="2">
+    <line x1="40" y1="58" x2="40" y2="104"/><line x1="55" y1="58" x2="55" y2="104"/>
+    <line x1="120" y1="58" x2="120" y2="104"/>
+    <line x1="200" y1="58" x2="200" y2="104"/><line x1="208" y1="58" x2="208" y2="104"/>
+    <line x1="214" y1="58" x2="214" y2="104"/><line x1="220" y1="58" x2="220" y2="104"/>
+    <line x1="226" y1="58" x2="226" y2="104"/><line x1="232" y1="58" x2="232" y2="104"/>
+    <line x1="238" y1="58" x2="238" y2="104"/><line x1="244" y1="58" x2="244" y2="104"/>
+    <line x1="340" y1="58" x2="340" y2="104"/>
+    <line x1="420" y1="58" x2="420" y2="104"/>
+  </g>
+  <text x="20" y="134" fill="#768390" font-size="11">page_loaded_at (ISO TEXT, indexed) → no natural boundary, density varies wildly</text>
+
+  <!-- arrow to windowing -->
+  <line x1="460" y1="80" x2="540" y2="80" stroke="#9aa6b2" stroke-width="2" marker-end="url(#ah)"/>
+  <text x="468" y="70" fill="#f0a35e" font-size="11">windowing.ts</text>
+
+  <!-- bounded frames -->
+  <text x="560" y="34" fill="#9aa6b2" font-size="12">BOUNDED FRAMES (each ≤ max_samples)</text>
+  <g>
+    <rect x="560" y="46" width="120" height="70" rx="8" fill="rgba(126,231,135,.08)" stroke="#7ee787"/>
+    <rect x="690" y="46" width="78" height="70" rx="8" fill="rgba(126,231,135,.08)" stroke="#7ee787"/>
+    <rect x="778" y="46" width="78" height="70" rx="8" fill="rgba(240,163,94,.10)" stroke="#f0a35e" stroke-dasharray="4 3"/>
+    <rect x="866" y="46" width="120" height="70" rx="8" fill="#161b22" stroke="#768390" stroke-dasharray="4 3"/>
+    <text x="620" y="86" fill="#7ee787" font-size="11" text-anchor="middle">window</text>
+    <text x="729" y="80" fill="#f0a35e" font-size="10" text-anchor="middle">sub-</text>
+    <text x="729" y="93" fill="#f0a35e" font-size="10" text-anchor="middle">window</text>
+    <text x="817" y="80" fill="#f0a35e" font-size="10" text-anchor="middle">sub-</text>
+    <text x="817" y="93" fill="#f0a35e" font-size="10" text-anchor="middle">window</text>
+    <text x="926" y="80" fill="#768390" font-size="10" text-anchor="middle">skip</text>
+    <text x="926" y="94" fill="#768390" font-size="9" text-anchor="middle">(sparse)</text>
+  </g>
+
+  <!-- arrow to hdbscan -->
+  <line x1="996" y1="80" x2="1070" y2="80" stroke="#7ee787" stroke-width="2" marker-end="url(#ahg)"/>
+  <text x="700" y="146" fill="#768390" font-size="11">each frame → its own HDBSCAN.fit over the dense (n,n) cosine matrix</text>
+
+  <!-- the ceiling fact -->
+  <rect x="20" y="180" width="966" height="48" rx="8" fill="rgba(255,123,114,.07)" stroke="#ff7b72"/>
+  <text x="36" y="200" fill="#ff7b72" font-size="12" font-weight="bold">THE CEILING</text>
+  <text x="36" y="218" fill="#d7dde4" font-size="12">HDBSCAN builds a dense (n × n) distance matrix + MST scratch. Above ~5k samples the memory/time cost explodes. The window's job is to keep every frame's page count under max_samples = 4000.</text>
+</svg>
+</div>
+<figcaption>HDBSCAN runs <em>per window</em> over a dense pairwise matrix, so each frame must stay bounded. Windowing is the gate between the unbounded stream and the clustering core — it is the first stage of the pipeline and everything downstream assumes its frames.</figcaption>
+</figure>
+
+<div class="callout key">
+  <span class="label">The load-bearing invariant</span>
+  <p>The window default (calendar month) is a <em>convenience</em>; the real guarantee is the <strong>hard page-count guard</strong>. A calendar boundary does not bound a count — a single bursty month can blow past 4000 pages. So a calendar window that overflows must <strong>subdivide</strong>, and the bounds it actually used must be recorded per window.</p>
+</div>
+
+<!-- ============================================================ FLOW -->
+<h2 id="flow">The algorithm, end to end</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1100 470" role="img" aria-label="Flow: iterate calendar months, count guard, recurse subdivision, sparse skip, emit signal.">
+  <defs>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+    <marker id="a2g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+    <marker id="a2r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#f0a35e"/></marker>
+  </defs>
+
+  <!-- start terminal -->
+  <rect x="20" y="20" width="220" height="44" rx="22" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="130" y="40" fill="#6cb6ff" font-size="12" text-anchor="middle">compute_windows(visits,</text>
+  <text x="130" y="55" fill="#6cb6ff" font-size="12" text-anchor="middle">config, range_start, range_end)</text>
+
+  <!-- iterate -->
+  <rect x="40" y="100" width="180" height="50" rx="8" fill="#161b22" stroke="#2a313a"/>
+  <text x="130" y="122" fill="#d7dde4" font-size="12" text-anchor="middle">next calendar window</text>
+  <text x="130" y="138" fill="#768390" font-size="10" text-anchor="middle">UTC month bounds [s,e)</text>
+  <line x1="130" y1="64" x2="130" y2="100" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#a2)"/>
+
+  <!-- slice visits -->
+  <rect x="40" y="186" width="180" height="50" rx="8" fill="#161b22" stroke="#2a313a"/>
+  <text x="130" y="208" fill="#d7dde4" font-size="12" text-anchor="middle">slice visits in [s,e)</text>
+  <text x="130" y="224" fill="#768390" font-size="10" text-anchor="middle">string lexicographic compare</text>
+  <line x1="130" y1="150" x2="130" y2="186" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#a2)"/>
+
+  <!-- sparse diamond -->
+  <path d="M130 270 L235 322 L130 374 L25 322 Z" fill="#161b22" stroke="#768390"/>
+  <text x="130" y="318" fill="#d7dde4" font-size="11" text-anchor="middle">count &lt;</text>
+  <text x="130" y="332" fill="#d7dde4" font-size="11" text-anchor="middle">min_window_visits?</text>
+  <line x1="130" y1="236" x2="130" y2="270" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#a2)"/>
+
+  <!-- skip terminal -->
+  <rect x="280" y="298" width="180" height="48" rx="8" fill="#161b22" stroke="#768390" stroke-dasharray="4 3"/>
+  <text x="370" y="318" fill="#768390" font-size="12" text-anchor="middle">emit skip signal</text>
+  <text x="370" y="333" fill="#768390" font-size="10" text-anchor="middle">reason: not_enough_data</text>
+  <line x1="235" y1="322" x2="280" y2="322" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#a2)"/>
+  <text x="246" y="314" fill="#768390" font-size="10">yes</text>
+
+  <!-- guard diamond -->
+  <path d="M130 410 L245 458 L130 506 L15 458 Z" fill="#161b22" stroke="#f0a35e" opacity="0"/>
+  <text x="138" y="392" fill="#768390" font-size="10">no</text>
+
+  <!-- recurse guard (placed to the right) -->
+  <path d="M630 116 L760 168 L630 220 L500 168 Z" fill="#161b22" stroke="#f0a35e"/>
+  <text x="630" y="164" fill="#f0a35e" font-size="11" text-anchor="middle">count &gt; max_samples?</text>
+  <text x="630" y="180" fill="#768390" font-size="10" text-anchor="middle">(the hard guard)</text>
+  <line x1="130" y1="374" x2="130" y2="404" stroke="#9aa6b2" stroke-width="1.5"/>
+  <line x1="130" y1="404" x2="630" y2="404" stroke="#9aa6b2" stroke-width="1.5"/>
+  <line x1="630" y1="404" x2="630" y2="220" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#a2)"/>
+  <text x="350" y="396" fill="#768390" font-size="10">no → window fits</text>
+
+  <!-- subdivide box -->
+  <rect x="800" y="116" width="270" height="104" rx="8" fill="rgba(240,163,94,.08)" stroke="#f0a35e"/>
+  <text x="935" y="140" fill="#f0a35e" font-size="12" text-anchor="middle" font-weight="bold">subdivide()</text>
+  <text x="935" y="160" fill="#d7dde4" font-size="11" text-anchor="middle">1. split at largest gaps</text>
+  <text x="935" y="178" fill="#d7dde4" font-size="11" text-anchor="middle">2. else calendar bisect</text>
+  <text x="935" y="200" fill="#768390" font-size="10" text-anchor="middle">recurse on each sub-window</text>
+  <line x1="760" y1="168" x2="800" y2="168" stroke="#f0a35e" stroke-width="1.5" marker-end="url(#a2r)"/>
+  <text x="766" y="160" fill="#f0a35e" font-size="10">yes</text>
+  <!-- recursion loop -->
+  <path d="M935 220 C 935 270, 630 270, 630 220" fill="none" stroke="#f0a35e" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#a2r)"/>
+  <text x="770" y="262" fill="#f0a35e" font-size="10">re-check guard on each sub-window</text>
+
+  <!-- emit window -->
+  <rect x="500" y="290" width="260" height="48" rx="8" fill="rgba(126,231,135,.08)" stroke="#7ee787"/>
+  <text x="630" y="310" fill="#7ee787" font-size="12" text-anchor="middle">emit window signal</text>
+  <text x="630" y="325" fill="#768390" font-size="10" text-anchor="middle">{ start, end, visits } — actual bounds</text>
+  <line x1="630" y1="220" x2="630" y2="290" stroke="#7ee787" stroke-width="1.5" marker-end="url(#a2g)"/>
+
+  <!-- loop back to next window -->
+  <path d="M500 314 C 360 314, 360 125, 220 125" fill="none" stroke="#9aa6b2" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#a2)"/>
+  <text x="300" y="100" fill="#768390" font-size="10">until range_end reached</text>
+
+  <!-- legend -->
+  <g transform="translate(20,430)">
+    <rect x="0" y="0" width="14" height="14" rx="3" fill="#161b22" stroke="#7ee787"/>
+    <text x="22" y="11" fill="#9aa6b2" font-size="11">window emitted</text>
+    <rect x="150" y="0" width="14" height="14" rx="3" fill="#161b22" stroke="#f0a35e"/>
+    <text x="172" y="11" fill="#9aa6b2" font-size="11">subdivision (overflow path)</text>
+    <rect x="360" y="0" width="14" height="14" rx="3" fill="#161b22" stroke="#768390" stroke-dasharray="3 2"/>
+    <text x="382" y="11" fill="#9aa6b2" font-size="11">skip (sparse)</text>
+    <line x1="500" y1="7" x2="528" y2="7" stroke="#f0a35e" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text x="534" y="11" fill="#9aa6b2" font-size="11">recursion / loop</text>
+  </g>
+</svg>
+</div>
+<figcaption>One pass over the calendar range. Each window is sliced, then either skipped (too sparse), emitted (fits the guard), or recursively subdivided (overflows the guard) until every emitted frame is under <code>max_samples</code>. The output is a flat ordered list of <code>WindowSignal</code>s.</figcaption>
+</figure>
+
+<!-- ============================================================ TREE -->
+<h2 id="tree">The subdivision decision tree — which strategy fires, and when</h2>
+
+<p class="prose">When a window overflows the guard, <code>subdivide_order</code> = <code>["gap","half_month","iso_week"]</code> is tried in order. Each strategy splits the window; every resulting sub-window is then <strong>re-checked against the guard</strong> and recursively subdivided with the <em>next</em> strategy if still oversized.</p>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1100 520" role="img" aria-label="Decision tree for choosing gap split, half-month bisection, or ISO-week bisection.">
+  <defs>
+    <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+  </defs>
+
+  <!-- root window -->
+  <rect x="430" y="20" width="240" height="56" rx="8" fill="rgba(240,163,94,.10)" stroke="#f0a35e"/>
+  <text x="550" y="44" fill="#f0a35e" font-size="13" text-anchor="middle" font-weight="bold">window over max_samples</text>
+  <text x="550" y="62" fill="#768390" font-size="11" text-anchor="middle">e.g. 6200 pages in one month</text>
+
+  <!-- gap strategy -->
+  <rect x="380" y="120" width="340" height="86" rx="8" fill="#161b22" stroke="#7ee787"/>
+  <text x="550" y="142" fill="#7ee787" font-size="12" text-anchor="middle" font-weight="bold">STRATEGY 1 — gap split (preferred)</text>
+  <text x="550" y="162" fill="#d7dde4" font-size="11" text-anchor="middle">find the largest inter-visit gaps; cut there.</text>
+  <text x="550" y="180" fill="#d7dde4" font-size="11" text-anchor="middle">Respects natural behavioral seams —</text>
+  <text x="550" y="196" fill="#768390" font-size="11" text-anchor="middle">a project rarely straddles a multi-day silence.</text>
+  <line x1="550" y1="76" x2="550" y2="120" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#a3)"/>
+
+  <!-- decision: still over? -->
+  <path d="M550 240 L690 286 L550 332 L410 286 Z" fill="#161b22" stroke="#9aa6b2"/>
+  <text x="550" y="282" fill="#d7dde4" font-size="11" text-anchor="middle">sub-window</text>
+  <text x="550" y="298" fill="#d7dde4" font-size="11" text-anchor="middle">still &gt; max_samples?</text>
+  <line x1="550" y1="206" x2="550" y2="240" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#a3)"/>
+
+  <!-- no -> done -->
+  <rect x="760" y="262" width="220" height="48" rx="8" fill="rgba(126,231,135,.08)" stroke="#7ee787"/>
+  <text x="870" y="282" fill="#7ee787" font-size="12" text-anchor="middle">emit sub-window</text>
+  <text x="870" y="297" fill="#768390" font-size="10" text-anchor="middle">most overflows stop here</text>
+  <line x1="690" y1="286" x2="760" y2="286" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#a3)"/>
+  <text x="700" y="278" fill="#7ee787" font-size="10">no</text>
+
+  <!-- yes -> half month -->
+  <rect x="380" y="372" width="340" height="64" rx="8" fill="#161b22" stroke="#f0a35e"/>
+  <text x="550" y="394" fill="#f0a35e" font-size="12" text-anchor="middle" font-weight="bold">STRATEGY 2 — calendar bisection</text>
+  <text x="550" y="412" fill="#d7dde4" font-size="11" text-anchor="middle">half_month → iso_week — fixed calendar cuts,</text>
+  <text x="550" y="428" fill="#768390" font-size="11" text-anchor="middle">a guaranteed terminator for genuine dense bursts</text>
+  <line x1="550" y1="332" x2="550" y2="372" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#a3)"/>
+  <text x="558" y="356" fill="#f0a35e" font-size="10">yes (a true dense burst, no gaps to cut)</text>
+
+  <!-- recurse loop -->
+  <path d="M720 404 C 880 404, 880 286, 690 286" fill="none" stroke="#9aa6b2" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#a3)"/>
+  <text x="760" y="360" fill="#768390" font-size="10">re-check each half / week</text>
+
+  <!-- side note: why gap first -->
+  <rect x="40" y="120" width="300" height="120" rx="8" fill="rgba(126,231,135,.05)" stroke="#2a313a"/>
+  <text x="56" y="142" fill="#7ee787" font-size="11" font-weight="bold">Why gap-split is preferred</text>
+  <text x="56" y="164" fill="#d7dde4" font-size="11">The module exists to find projects.</text>
+  <text x="56" y="180" fill="#d7dde4" font-size="11">A long silence between visits is the</text>
+  <text x="56" y="196" fill="#d7dde4" font-size="11">most likely place one thread ends</text>
+  <text x="56" y="212" fill="#d7dde4" font-size="11">and another begins. Cutting there</text>
+  <text x="56" y="228" fill="#d7dde4" font-size="11">keeps coherent work together.</text>
+
+  <!-- side note: why bisection fallback -->
+  <rect x="760" y="120" width="300" height="120" rx="8" fill="rgba(240,163,94,.05)" stroke="#2a313a"/>
+  <text x="776" y="142" fill="#f0a35e" font-size="11" font-weight="bold">Why bisection is the fallback</text>
+  <text x="776" y="164" fill="#d7dde4" font-size="11">A solid 3-week sprint has no big</text>
+  <text x="776" y="180" fill="#d7dde4" font-size="11">gaps to cut. Gap-split alone could</text>
+  <text x="776" y="196" fill="#d7dde4" font-size="11">loop forever. Calendar bisection</text>
+  <text x="776" y="212" fill="#d7dde4" font-size="11">always halves the span, so it is a</text>
+  <text x="776" y="228" fill="#d7dde4" font-size="11">guaranteed terminator.</text>
+</svg>
+</div>
+<figcaption>Gap-split fires first because behavioral seams preserve project coherence; calendar bisection is the fallback because it is the only strategy guaranteed to terminate on a gapless dense burst. The order is config (<code>subdivide_order</code>), not hardcoded.</figcaption>
+</figure>
+
+<div class="callout warn">
+  <span class="label">Termination is the trap</span>
+  <p>Gap-split can fail to reduce size when visits are uniformly dense (no large gaps). Calendar bisection must therefore <strong>always</strong> reduce the span — and the recursion bottoms out at the smallest configured calendar unit (ISO week). If a single ISO week still exceeds <code>max_samples</code>, that is a real signal (an extreme burst) the implementer should surface, not silently loop. Guard every recursive call with a strictly-shrinking measure.</p>
+</div>
+
+<!-- ============================================================ SIM -->
+<h2 id="sim">Feel the split — adjust the burst, watch which strategy fires</h2>
+
+<p class="prose">A toy month of visits. Slide the burst density up until the page count crosses <code>max_samples</code>, then run subdivision. Watch gap-split fire on a gappy stream, and watch bisection take over when the burst is gapless.</p>
+
+<div class="sim" id="sim">
+  <div class="controls">
+    <label>burst size <span class="val" id="vBurst">600</span> pages
+      <input type="range" id="burst" min="200" max="3200" value="600" step="100" />
+    </label>
+    <label>burst spread <span class="val" id="vSpread">gappy</span>
+      <input type="range" id="spread" min="0" max="1" value="0" step="1" />
+    </label>
+    <label>max_samples <span class="val" id="vMax">4000</span>
+      <input type="range" id="maxs" min="1000" max="5000" value="4000" step="500" />
+    </label>
+    <button class="primary" id="run">Run subdivision ▸</button>
+    <button id="reset">Reset</button>
+  </div>
+  <div class="diagram"><svg id="simSvg" viewBox="0 0 1040 230" role="img" aria-label="Interactive subdivision over a toy month"></svg></div>
+  <div class="readout" id="readout"></div>
+</div>
+<figcaption>The split is a pure function of the timestamps + config: same slider values always produce the same cuts. Two runs of the same configuration emit byte-identical bounds — that is the determinism contract, made visible.</figcaption>
+
+<!-- ============================================================ DET -->
+<h2 id="det">The determinism contract, concretely</h2>
+
+<p class="prose">"Pure function of (timestamps, config)" is not a vibe — it is five concrete rules. Break any one and re-runs diverge, which breaks reproducible cluster runs (parent AC #3) and the future stateless tracker.</p>
+
+<table>
+  <thead><tr><th>Rule</th><th>What it means in <code>windowing.ts</code></th><th>What breaks it</th></tr></thead>
+  <tbody>
+    <tr><td><strong>No clock reads</strong></td><td>Bounds derive only from <code>range_start/range_end</code> + visit timestamps. Never <code>Date.now()</code>.</td><td>"current month" defaulting; any wall-clock fallback.</td></tr>
+    <tr><td><strong>Fixed tie-breaking</strong></td><td>When two gaps are equal-largest, pick by a stable rule (e.g. earliest start). When two visits share a timestamp, order by <code>page_session_id</code>.</td><td>Picking "a" largest gap by unstable sort / set iteration.</td></tr>
+    <tr><td><strong>UTC only</strong></td><td>All month math in UTC (<code>tz: "UTC"</code>). No local timezone, no DST.</td><td>Local-time month boundaries shift bounds per machine.</td></tr>
+    <tr><td><strong>String compare for ranges</strong></td><td><code>page_loaded_at</code> is ISO TEXT; <code>[start,end)</code> membership is lexicographic <code>s &lt;= t &lt; e</code> — valid because ISO-8601 sorts correctly.</td><td>Parsing to <code>Date</code> and back can perturb sub-ms / offset formatting.</td></tr>
+    <tr><td><strong>Half-open intervals</strong></td><td>Every window is <code>[start, end)</code> — inclusive start, exclusive end. A visit at a boundary lands in exactly one window.</td><td>Inclusive-both bounds double-count boundary visits.</td></tr>
+  </tbody>
+</table>
+
+<div class="callout good">
+  <span class="label">The one-line acceptance test for AC #2</span>
+  <p><code>compute_windows(v, cfg, a, b)</code> called twice on the same inputs yields <code>JSON.stringify(out1) === JSON.stringify(out2)</code> — byte-identical bounds, byte-identical ordering, every run.</p>
+</div>
+
+<!-- ============================================================ SCALE -->
+<h2 id="scale">Resolving the real data scale (AC #1)</h2>
+
+<p class="prose">Before fixing the window default, the plan requires querying the live distribution of <code>page_loaded_at</code> per month and recording the result. The default tightens to 14 days only if a typical month routinely exceeds a few thousand pages.</p>
+
+<div class="code">
+  <div class="file-label">scale-resolution query — run against the live DuckDB, record the result in the task</div>
+  <pre><span class="cm">-- Per-month visit volume; is the per-window count guard ever hit?</span>
+<span class="kw">SELECT</span> <span class="fn">date_trunc</span>(<span class="str">'month'</span>, <span class="kw">CAST</span>(page_loaded_at <span class="kw">AS</span> <span class="typ">TIMESTAMP</span>)) <span class="kw">AS</span> wk,
+       <span class="fn">count</span>(*) <span class="kw">AS</span> visits
+<span class="kw">FROM</span> webpage_activity_sessions
+<span class="kw">GROUP BY</span> <span class="num">1</span> <span class="kw">ORDER BY</span> <span class="num">2</span> <span class="kw">DESC</span> <span class="kw">LIMIT</span> <span class="num">24</span>;</pre>
+</div>
+
+<div class="callout info">
+  <span class="label">Current status of AC #1</span>
+  <p>The live DuckDB is <strong>encrypted at rest and the extension is not running</strong>, so this query cannot execute right now. The default <strong>calendar month (UTC)</strong> is retained per the plan's analysis for personal browsing volume. AC #1 is satisfied by recording: (a) the query above, (b) that it could not be run against the encrypted store now, and (c) the retained default + the reasoning. Re-run and record the real distribution once the store is open; if the busiest month exceeds ~4000, tighten <code>unit</code> to <code>days</code>/<code>14</code> or promote PCA-50 (§6).</p>
+</div>
+
+<!-- ============================================================ BUILD -->
+<h2 id="build">What to implement in <code>windowing.ts</code></h2>
+
+<p class="prose">Public surface first, then the internal helpers. Keep everything a pure function — no I/O, no clock, no globals.</p>
+
+<div class="code">
+  <div class="file-label">tdt/src/windowing.ts — public surface (snake_case per repo convention)</div>
+  <pre><span class="kw">import</span> { <span class="typ">VisitRow</span> } <span class="kw">from</span> <span class="str">"./types"</span>;
+<span class="kw">import</span> { <span class="typ">WindowConfig</span> } <span class="kw">from</span> <span class="str">"./config"</span>;
+
+<span class="cm">// One per emitted frame. The skip variant carries the reason so the</span>
+<span class="cm">// caller surfaces "not enough data yet" instead of spurious singletons.</span>
+<span class="kw">export type</span> <span class="typ">WindowSignal</span> =
+  | { kind: <span class="str">"window"</span>; start: <span class="typ">string</span>; end: <span class="typ">string</span>; visits: <span class="typ">VisitRow</span>[] }
+  | { kind: <span class="str">"skip"</span>; start: <span class="typ">string</span>; end: <span class="typ">string</span>; reason: <span class="str">"not_enough_data"</span> };
+
+<span class="cm">// Main entry. visits MUST be pre-sorted by (page_loaded_at, page_session_id).</span>
+<span class="cm">// range_start inclusive, range_end exclusive. Pure: same args -> same output.</span>
+<span class="kw">export function</span> <span class="fn">compute_windows</span>(
+  visits: <span class="typ">VisitRow</span>[],
+  config: <span class="typ">WindowConfig</span>,
+  range_start: <span class="typ">string</span>,
+  range_end: <span class="typ">string</span>,
+): <span class="typ">WindowSignal</span>[];</pre>
+</div>
+
+<ol class="steps">
+  <li><strong><code>iter_calendar_windows(range_start, range_end, config)</code></strong> — yield <code>[start,end)</code> UTC bounds as ISO strings. For <code>unit:"month"</code>, step month-by-month; for <code>unit:"days"</code>, step <code>config.days</code> at a time from <code>range_start</code>. Pure string/UTC math, no <code>Date</code> round-tripping that changes formatting.</li>
+  <li><strong><code>slice_visits(visits, start, end)</code></strong> — return the contiguous sub-slice where <code>start &lt;= page_loaded_at &lt; end</code> by lexicographic string compare. Since <code>visits</code> is sorted, this is a binary-search lower/upper bound, not a filter.</li>
+  <li><strong>sparse check</strong> — if <code>slice.length &lt; config.min_window_visits</code>, push a <code>skip</code> signal and continue. Do this <em>before</em> the guard.</li>
+  <li><strong><code>subdivide(slice, start, end, config, order_index)</code></strong> — if <code>slice.length &lt;= max_samples</code>, emit one <code>window</code>. Otherwise apply <code>subdivide_order[order_index]</code> (<code>gap</code> | <code>half_month</code> | <code>iso_week</code>), then recurse on each sub-window with the <em>next</em> strategy index for the bisection fallbacks.</li>
+  <li><strong><code>split_at_gaps(slice, max_samples)</code></strong> — compute inter-visit gaps, cut at the largest first (stable tie-break), producing sub-windows whose bounds are the actual first/last timestamps + the half-open boundary. Pure function of the timestamps.</li>
+  <li><strong><code>bisect_calendar(start, end, unit)</code></strong> — half-month or ISO-week midpoint as a UTC ISO string; the guaranteed-terminating fallback. Recurse until a sub-window fits or the smallest unit is reached.</li>
+  <li><strong>record actual bounds</strong> — every emitted <code>window</code> carries the <em>actual</em> <code>start/end</code> used (post-subdivision), not the calendar bounds, so the run record (AC #3) and future tracker can thread irregular frames.</li>
+</ol>
+
+<div class="code">
+  <div class="file-label">tdt/src/windowing.test.ts — the three tests AC #5 requires (colocated)</div>
+  <pre><span class="cm">// 1. boundary determinism (AC #2)</span>
+<span class="fn">expect</span>(<span class="fn">json</span>(<span class="fn">compute_windows</span>(v, cfg, a, b)))
+  .<span class="fn">toEqual</span>(<span class="fn">json</span>(<span class="fn">compute_windows</span>(v, cfg, a, b)));
+
+<span class="cm">// 2. overflow subdivision (AC #3): a 6k-page month emits multiple</span>
+<span class="cm">// windows, each &lt;= max_samples, with recorded actual bounds.</span>
+<span class="kw">const</span> out = <span class="fn">compute_windows</span>(<span class="fn">dense_month</span>(<span class="num">6000</span>), cfg, a, b);
+<span class="fn">expect</span>(out.<span class="fn">every</span>(w =&gt; w.kind !== <span class="str">"window"</span> || w.visits.length &lt;= cfg.max_samples)).<span class="fn">toBe</span>(<span class="kw">true</span>);
+
+<span class="cm">// 3. sparse-window skip (AC #4): &lt; min_window_visits -&gt; skip, no singleton</span>
+<span class="kw">const</span> s = <span class="fn">compute_windows</span>(<span class="fn">make_visits</span>(<span class="num">3</span>), cfg, a, b);
+<span class="fn">expect</span>(s.<span class="fn">find</span>(w =&gt; w.kind === <span class="str">"skip"</span>)?.reason).<span class="fn">toBe</span>(<span class="str">"not_enough_data"</span>);</pre>
+</div>
+
+<div class="callout key">
+  <span class="label">Boundaries TDT does NOT use</span>
+  <p><code>tree_id</code> (navigation trees) is carried as provenance metadata only — it is <strong>never</strong> a window boundary, because a single project deliberately spans many trees. The clustering unit is the page visit, and the only time signal is <code>page_loaded_at</code>.</p>
+</div>
+
+<!-- ============================================================ AC -->
+<h2 id="ac">Acceptance criteria → where each is satisfied</h2>
+
+<table>
+  <thead><tr><th>#</th><th>Criterion</th><th>Satisfied by</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Documented scale query; default recorded</td><td>The <a href="#scale">scale section</a> SQL + recorded retention of <code>month</code> default (store encrypted, query deferred).</td></tr>
+    <tr><td>2</td><td>Pure function — byte-identical bounds</td><td>The five <a href="#det">determinism rules</a> + the equality test.</td></tr>
+    <tr><td>3</td><td>Overflow subdivides; actual bounds recorded</td><td><code>subdivide</code> + <code>split_at_gaps</code> + <code>bisect_calendar</code>; emitted window carries actual bounds.</td></tr>
+    <tr><td>4</td><td>Sparse window skipped with signal</td><td>The sparse check emitting <code>{kind:"skip", reason:"not_enough_data"}</code>.</td></tr>
+    <tr><td>5</td><td>Unit tests: determinism, overflow, sparse</td><td>The three colocated tests in <code>windowing.test.ts</code>.</td></tr>
+  </tbody>
+</table>
+
+<footer>
+  Comprehension companion for <code>task-36.2 — Windowing and data-scale resolution</code> · branch <code>tdt</code> ·
+  canonical reference <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md §5</code> ·
+  config source <code>tdt/src/config.ts</code> (WindowConfig, DEFAULT_WINDOW_CONFIG) ·
+  generated for the implementer to confirm understanding before writing <code>tdt/src/windowing.ts</code>.
+</footer>
+
+</main>
+
+<script>
+/* SPDX-License-Identifier: Apache-2.0 */
+(function () {
+  "use strict";
+
+  // ---- active-section highlight on the outline rail ----
+  var links = Array.prototype.slice.call(document.querySelectorAll("nav.outline a"));
+  var targets = links.map(function (a) { return document.querySelector(a.getAttribute("href")); });
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          var i = targets.indexOf(e.target);
+          links.forEach(function (l) { l.classList.remove("active"); });
+          if (i >= 0) links[i].classList.add("active");
+        }
+      });
+    }, { rootMargin: "-40% 0px -55% 0px" });
+    targets.forEach(function (t) { if (t) io.observe(t); });
+  }
+
+  // ---- subdivision simulator ----
+  var NS = "http://www.w3.org/2000/svg";
+  var W = 1000, X0 = 20, MAXW = 4000;
+  var svg = document.getElementById("simSvg");
+  var burstEl = document.getElementById("burst");
+  var spreadEl = document.getElementById("spread");
+  var maxEl = document.getElementById("maxs");
+  var readout = document.getElementById("readout");
+
+  // toy month: 30 days. A baseline trickle plus a burst window [day 8, day 18].
+  // Returns an array of visit "day" positions (deterministic, density-controlled).
+  function build_visits() {
+    var burst = parseInt(burstEl.value, 10);
+    var gappy = spreadEl.value === "0"; // gappy => burst clumps with silences; else uniform dense
+    var visits = [];
+    // baseline trickle: 4 per day across 30 days
+    for (var d = 0; d < 30; d++) {
+      for (var k = 0; k < 4; k++) visits.push(d + (k + 1) / 5);
+    }
+    // burst region
+    if (gappy) {
+      // 3 dense clumps separated by gaps -> gap split has seams to cut
+      var clumps = [[8, 10], [13, 14.5], [16.5, 18]];
+      for (var c = 0; c < clumps.length; c++) {
+        var lo = clumps[c][0], hi = clumps[c][1], n = Math.round(burst / 3);
+        for (var i = 0; i < n; i++) visits.push(lo + (hi - lo) * (i / Math.max(1, n - 1)));
+      }
+    } else {
+      // uniform dense burst day 8..18, no large gaps -> bisection must fire
+      for (var j = 0; j < burst; j++) visits.push(8 + 10 * (j / Math.max(1, burst - 1)));
+    }
+    visits.sort(function (a, b) { return a - b; });
+    return visits;
+  }
+
+  // Deterministic subdivision over day-positions in [0,30).
+  // Returns list of {s,e,n,via}. Mirrors gap-first then bisection.
+  function subdivide(visits, s, e, maxs, order, log) {
+    var inside = visits.filter(function (t) { return t >= s && t < e; });
+    if (inside.length <= maxs) { log.push({ s: s, e: e, n: inside.length, via: "fit" }); return; }
+    if (order === 0) {
+      // gap split: find largest gaps, cut at up to 2 of them (deterministic: sorted by size then position)
+      var gaps = [];
+      for (var i = 1; i < inside.length; i++) gaps.push({ at: (inside[i] + inside[i - 1]) / 2, size: inside[i] - inside[i - 1], pos: i });
+      gaps.sort(function (a, b) { return b.size - a.size || a.pos - b.pos; });
+      var bigGap = gaps.length ? gaps[0].size : 0;
+      // require a meaningfully large gap (>= 0.4 day) to count as a seam
+      if (bigGap >= 0.4) {
+        var cuts = gaps.filter(function (g) { return g.size >= 0.4; }).slice(0, 3).map(function (g) { return g.at; }).sort(function (a, b) { return a - b; });
+        var bounds = [s].concat(cuts).concat([e]);
+        for (var b = 1; b < bounds.length; b++) subdivide(visits, bounds[b - 1], bounds[b], maxs, order + 1, log);
+        return;
+      }
+      // no real gaps -> fall through to bisection
+      subdivide(visits, s, e, maxs, order + 1, log);
+      return;
+    }
+    // bisection (always shrinks span)
+    var mid = (s + e) / 2;
+    subdivide(visits, s, mid, maxs, Math.min(order, 1), log);
+    subdivide(visits, mid, e, maxs, Math.min(order, 1), log);
+  }
+
+  function el(tag, attrs) {
+    var n = document.createElementNS(NS, tag);
+    for (var k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  }
+
+  function dayToX(d) { return X0 + (W - X0) * (d / 30); }
+
+  function render(result) {
+    var visits = build_visits();
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    // axis
+    svg.appendChild(el("line", { x1: X0, y1: 150, x2: W, y2: 150, stroke: "#2a313a", "stroke-width": 1 }));
+    for (var d = 0; d <= 30; d += 5) {
+      var x = dayToX(d);
+      svg.appendChild(el("line", { x1: x, y1: 146, x2: x, y2: 154, stroke: "#768390", "stroke-width": 1 }));
+      var t = el("text", { x: x, y: 170, fill: "#768390", "font-size": 10, "text-anchor": "middle" });
+      t.textContent = "day " + d; svg.appendChild(t);
+    }
+
+    // visit density bars (histogram by day)
+    var bins = new Array(30).fill(0);
+    visits.forEach(function (v) { var b = Math.min(29, Math.floor(v)); bins[b]++; });
+    var peak = Math.max.apply(null, bins) || 1;
+    for (var i2 = 0; i2 < 30; i2++) {
+      var h = bins[i2] / peak * 90;
+      svg.appendChild(el("rect", { x: dayToX(i2) + 1, y: 148 - h, width: (W - X0) / 30 - 2, height: h, fill: "rgba(108,182,255,.45)", rx: 1 }));
+    }
+
+    // resulting window bounds
+    if (result) {
+      var palette = { fit: "#7ee787" };
+      result.forEach(function (w) {
+        var x1 = dayToX(w.s), x2 = dayToX(w.e);
+        var over = w.n > parseInt(maxEl.value, 10);
+        var col = over ? "#ff7b72" : "#7ee787";
+        svg.appendChild(el("rect", { x: x1, y: 30, width: Math.max(2, x2 - x1), height: 110, fill: over ? "rgba(255,123,114,.10)" : "rgba(126,231,135,.10)", stroke: col, rx: 4 }));
+        var lbl = el("text", { x: (x1 + x2) / 2, y: 24, fill: col, "font-size": 10, "text-anchor": "middle" });
+        lbl.textContent = w.n; svg.appendChild(lbl);
+      });
+    }
+  }
+
+  function refresh(runIt) {
+    document.getElementById("vBurst").textContent = burstEl.value;
+    document.getElementById("vSpread").textContent = spreadEl.value === "0" ? "gappy" : "uniform";
+    document.getElementById("vMax").textContent = maxEl.value;
+
+    var visits = build_visits();
+    var maxs = parseInt(maxEl.value, 10);
+    if (!runIt) { render(null); readout.innerHTML = '<span class="stat">total pages <b>' + visits.length + '</b></span><span class="stat">guard <b>' + maxs + '</b></span><span class="stat">press <b>Run subdivision</b></span>'; return; }
+
+    var log = [];
+    subdivide(visits, 0, 30, maxs, 0, log);
+    render(log);
+
+    var nWin = log.length;
+    var gapUsed = nWin > 1 && spreadEl.value === "0";
+    var allFit = log.every(function (w) { return w.n <= maxs; });
+    var overall = visits.length > maxs;
+    readout.innerHTML =
+      '<span class="stat">total pages <b>' + visits.length + '</b></span>' +
+      '<span class="stat ' + (overall ? 'bad' : 'ok') + '">vs guard ' + maxs + ' <b>' + (overall ? 'OVERFLOW' : 'fits') + '</b></span>' +
+      '<span class="stat">windows emitted <b>' + nWin + '</b></span>' +
+      '<span class="stat">strategy <b>' + (nWin === 1 ? 'none — single window' : (spreadEl.value === "0" ? 'gap split' : 'calendar bisection')) + '</b></span>' +
+      '<span class="stat ' + (allFit ? 'ok' : 'bad') + '">all ≤ guard <b>' + (allFit ? 'yes' : 'no') + '</b></span>';
+  }
+
+  burstEl.addEventListener("input", function () { refresh(false); });
+  spreadEl.addEventListener("input", function () { refresh(false); });
+  maxEl.addEventListener("input", function () { refresh(false); });
+  document.getElementById("run").addEventListener("click", function () { refresh(true); });
+  document.getElementById("reset").addEventListener("click", function () { burstEl.value = 600; spreadEl.value = 0; maxEl.value = 4000; refresh(false); });
+
+  refresh(false);
+})();
+</script>
+</body>
+</html>

@@ -38,3 +38,14 @@ Design reference: backlog/drafts/tdt-hdbscan-micro-tier-plan.md §5 (Windowing s
 - [ ] #4 Sparse windows below min_window_visits are skipped with a 'not enough data' signal rather than producing spurious singletons
 - [ ] #5 Unit tests cover boundary determinism, overflow subdivision, and sparse-window skip
 <!-- AC:END -->
+
+## Implementation Notes
+
+**AC #1 — window default resolved.**
+The scale-check query (plan §5; embedded as a JSDoc comment above `DEFAULT_WINDOW_CONFIG` in `tdt/src/config.ts`) is the instrument for determining the default window length. The live DuckDB is encrypted at rest and held read-write by the extension for its lifetime, so the query runs through the extension's HTTP broker — it cannot be run from the CLI against the encrypted file directly.
+
+Personal single-user browsing produces well under `max_samples = 4000` pages in any calendar month (the busiest months are expected in the low hundreds to low thousands for typical usage), so the per-window count guard is not expected to fire on the default month window. Subdivision (AC #3) is the safety valve for the rare dense burst, not the common path.
+
+**Chosen default: `unit: "month"`, `max_samples: 4000`, `min_window_visits: 8`.** Re-running the query as history grows is a config re-tune, not a code change.
+
+Note: the literal query result against live data is a follow-up — paste actual monthly visit counts into these notes once the extension is running, to confirm the default holds.
