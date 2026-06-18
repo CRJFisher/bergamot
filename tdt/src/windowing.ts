@@ -4,16 +4,7 @@
  * Window bounds are a pure function of (timestamps, config): identical inputs
  * yield byte-identical output. No I/O, no Date.now(), no randomness.
  *
- * Scale-check query (plan §5, "Empirical prerequisite"). Run through the
- * extension's HTTP broker (the DB is encrypted at rest and held read-write by
- * the extension — it cannot be opened directly from the CLI):
- *
- *   SELECT date_trunc('month', CAST(page_loaded_at AS TIMESTAMP)) AS wk,
- *          count(*) AS visits
- *   FROM webpage_activity_sessions
- *   GROUP BY 1 ORDER BY 2 DESC LIMIT 24;
- *
- * Decision recorded in TASK-36.2 Implementation Notes (AC #1).
+ * Scale-check query: see DEFAULT_WINDOW_CONFIG in config.ts (plan §5).
  */
 
 import type { WindowConfig } from "./config";
@@ -80,7 +71,7 @@ function enumerate_calendar_windows(
     // unit === "days"
     if (!config.days || config.days <= 0) {
       throw new Error(
-        `compute_windows: config.unit is "days" but config.days is ${config.days}`,
+        `enumerate_calendar_windows: config.unit is "days" but config.days is ${config.days}`,
       );
     }
     const stride_ms = config.days * 86_400_000;
@@ -162,12 +153,12 @@ function iso_week_split_ms(window_start_ms: number, window_end_ms: number): numb
 // Core recursion
 // ---------------------------------------------------------------------------
 
-function emit_window(
+function subdivide_window(
   start_ms: number,
   end_ms: number,
   visits: VisitRow[],
   config: WindowConfig,
-  remaining: ReadonlyArray<"gap" | "half_month" | "iso_week">,
+  remaining_strategies: ReadonlyArray<"gap" | "half_month" | "iso_week">,
 ): WindowSignal[] {
   const start = to_iso(start_ms);
   const end = to_iso(end_ms);
@@ -181,7 +172,7 @@ function emit_window(
   }
 
   // Overflow: try next strategy.
-  if (remaining.length === 0) {
+  if (remaining_strategies.length === 0) {
     // All strategies exhausted — emit as-is to guarantee termination.
     console.warn(
       `[tdt/windowing] ${start}/${end}: ${visits.length} visits exceed ` +
@@ -190,8 +181,13 @@ function emit_window(
     return [{ kind: "window", start, end, visits }];
   }
 
-  const strategy = remaining[0]!;
-  const tail = remaining.slice(1);
+  const strategy = remaining_strategies[0]!;
+  // strategies_tail is passed on no-progress paths (null or degenerate split):
+  // the list strictly shrinks, guaranteeing termination.
+  // On a successful split, both children receive remaining_strategies so a
+  // still-oversized half can retry the same strategy (e.g. gap-split a window
+  // containing multiple dense bursts, each pair separated by a large gap).
+  const strategies_tail = remaining_strategies.slice(1);
 
   let split_ms: number | null = null;
 
@@ -206,7 +202,7 @@ function emit_window(
   }
 
   if (split_ms === null) {
-    return emit_window(start_ms, end_ms, visits, config, tail);
+    return subdivide_window(start_ms, end_ms, visits, config, strategies_tail);
   }
 
   const left = visits.filter(v => parse_iso_ms(v.page_loaded_at) < split_ms!);
@@ -214,12 +210,12 @@ function emit_window(
 
   // Degenerate split (one side empty) — advance to next strategy.
   if (left.length === 0 || right.length === 0) {
-    return emit_window(start_ms, end_ms, visits, config, tail);
+    return subdivide_window(start_ms, end_ms, visits, config, strategies_tail);
   }
 
   return [
-    ...emit_window(start_ms, split_ms, left, config, tail),
-    ...emit_window(split_ms, end_ms, right, config, tail),
+    ...subdivide_window(start_ms, split_ms, left, config, remaining_strategies),
+    ...subdivide_window(split_ms, end_ms, right, config, remaining_strategies),
   ];
 }
 
@@ -271,7 +267,7 @@ export function compute_windows(
       const ms = parse_iso_ms(v.page_loaded_at);
       return ms >= start_ms && ms < end_ms;
     });
-    result.push(...emit_window(start_ms, end_ms, w_visits, config, config.subdivide_order));
+    result.push(...subdivide_window(start_ms, end_ms, w_visits, config, config.subdivide_order));
   }
 
   return result;

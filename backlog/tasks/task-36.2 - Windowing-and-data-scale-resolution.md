@@ -41,6 +41,18 @@ Design reference: backlog/drafts/tdt-hdbscan-micro-tier-plan.md §5 (Windowing s
 
 ## Implementation Notes
 
+## High-level summary
+
+`windowing.ts` is a pure function module (`compute_windows`) that slices a raw visit stream into `WindowSignal[]` — either `{ kind: "window", visits }` for HDBSCAN to cluster, or `{ kind: "skip", reason: "not_enough_data" }` for windows too sparse to be meaningful. All timestamp arithmetic uses epoch milliseconds; no `Date.now()`, no randomness; identical inputs yield byte-identical output (AC #2).
+
+Calendar windows are enumerated first (month or fixed-day stride, clamped to the range boundaries). Each window is then processed by `subdivide_window`, a recursive subdivision function that enforces two invariants: a sparse check (`visits.length < min_window_visits → skip`) and a count guard (`visits.length > max_samples → subdivide`). Subdivision follows a strategy ladder — gap-split at the largest inter-visit gap first, then half-month calendar seam, then ISO-week seam. On a successful split, both children receive the full remaining strategy list so a still-oversized sub-window can retry the same strategy (e.g. gap-split a window containing multiple discrete bursts). On no-progress paths the strategy list shrinks, guaranteeing termination. When all strategies are exhausted on a degenerate window (e.g. all visits at the same timestamp), the window is emitted as-is with a warning (AC #3).
+
+Sparse windows below `min_window_visits` emit a skip signal at every level of the subdivision tree — including gap-split fragments — so post-split tails below the threshold are also filtered (AC #4). The 36-test suite covers boundary determinism, overflow subdivision, sparse skip, tie-breaking, calendar clamping, error paths, and input-order invariance (AC #5).
+
+The scale-check query and the chosen default (`unit: "month"`, `max_samples: 4000`, `min_window_visits: 8`) are recorded below and in `config.ts`.
+
+---
+
 **AC #1 — window default resolved.**
 The scale-check query (plan §5; embedded as a JSDoc comment above `DEFAULT_WINDOW_CONFIG` in `tdt/src/config.ts`) is the instrument for determining the default window length. The live DuckDB is encrypted at rest and held read-write by the extension for its lifetime, so the query runs through the extension's HTTP broker — it cannot be run from the CLI against the encrypted file directly.
 

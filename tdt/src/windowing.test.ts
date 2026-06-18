@@ -146,6 +146,20 @@ describe("compute_windows — calendar window generation", () => {
     ).toEqual([]);
   });
 
+  it("returns empty array for inverted range (range_start > range_end)", () => {
+    const visits = [make_visit("a", t(2026, 1, 5))];
+    expect(
+      compute_windows(visits, DEFAULT_WINDOW_CONFIG, t(2026, 2, 1), t(2026, 1, 1)),
+    ).toEqual([]);
+  });
+
+  it("throws when unit=days but days is zero", () => {
+    const config: WindowConfig = { ...MIN_CONFIG, unit: "days", days: 0 };
+    expect(() =>
+      compute_windows([make_visit("a", t(2026, 1, 5))], config, t(2026, 1, 1), t(2026, 2, 1)),
+    ).toThrow(/config\.days/);
+  });
+
   it("returns empty array for empty visit list", () => {
     expect(
       compute_windows([], DEFAULT_WINDOW_CONFIG, t(2026, 1, 1), t(2026, 3, 1)),
@@ -334,12 +348,11 @@ describe("compute_windows — gap-split subdivision (AC #3)", () => {
     expect(returned_ids.sort()).toEqual(original_ids);
   });
 
-  it("recurses: still-oversized half is split again via iso_week", () => {
-    // gap splits the full window at Jan 20 (the 17-day gap).
+  it("recurses: still-oversized half is gap-split again (gap strategy retries on sub-windows)", () => {
+    // First gap split: largest gap is burst-a→burst-b (17d), splits at Jan 20.
     // Right half [Jan 20, Feb 1) = 9 visits > max_samples=5.
-    // half_month is Jan 16 (before start of right half → no progress).
-    // iso_week midpoint ≈ Jan 26 05:00 UTC → Monday Jan 26 fires → splits at Jan 26.
-    // Jan 26, 2026 is a Monday; visits in burst-c are at Jan 28 (after Jan 26).
+    // Because remaining_strategies is passed to successful split children (not tail),
+    // gap retries on the right half: largest gap is burst-b→burst-c (8d), splits at Jan 28.
     const cfg = overflow_config(5);
     const visits = [
       ...spaced_visits("a", t(2026, 1, 3, 10), 4, 600_000),  // Jan 3 10:00–10:30 (4)
@@ -372,27 +385,26 @@ describe("compute_windows — gap-split subdivision (AC #3)", () => {
     expect(kinds).toContain("skip");    // the 2-visit tail
   });
 
-  it("breaks gap ties by lowest right-visit page_loaded_at (determinism)", () => {
-    // Two equal-sized gaps of exactly 24h at positions 2→3 and 4→5.
+  it("when two gaps are equal-sized, picks the one with the lower right-visit timestamp", () => {
+    // Gap v2→v3 (3 days) and gap v4→v5 (3 days) are tied.
+    // Tie-break: lower right-visit timestamp wins → v3 (Jan 5+5d) beats v5 (Jan 5+9d).
     const base = t(2026, 1, 5);
     const DAY = 86_400_000;
     const visits = [
       make_visit("v0", new Date(new Date(base).getTime() + 0 * DAY).toISOString()),
       make_visit("v1", new Date(new Date(base).getTime() + 1 * DAY).toISOString()),
       make_visit("v2", new Date(new Date(base).getTime() + 2 * DAY).toISOString()),
-      // Gap of 3 days (largest by far, at index 2→3)
+      // 3-day gap; right visit = v3 (Jan 5+5d) — tied with v4→v5.
       make_visit("v3", new Date(new Date(base).getTime() + 5 * DAY).toISOString()),
       make_visit("v4", new Date(new Date(base).getTime() + 6 * DAY).toISOString()),
-      // Second equal-size big gap
+      // 3-day gap; right visit = v5 (Jan 5+9d) — higher right-visit ms, loses.
       make_visit("v5", new Date(new Date(base).getTime() + 9 * DAY).toISOString()),
     ];
-    // max_samples=3 so 6 > 3 triggers split; the largest gap is index 2→3 (3 days).
-    // If two gaps were equal, tie-break should pick the lower right-visit timestamp.
     const cfg = overflow_config(3);
     const result1 = compute_windows(visits, cfg, t(2026, 1, 1), t(2026, 2, 1));
     const result2 = compute_windows(visits, cfg, t(2026, 1, 1), t(2026, 2, 1));
     expect(JSON.stringify(result1)).toBe(JSON.stringify(result2));
-    // First split should be at v3 (the 3-day gap at position 2→3).
+    // First split should be at v3 (lower right-visit ms wins the tie).
     expect(result1[0]!.end).toBe(visits[3]!.page_loaded_at);
   });
 });
@@ -510,5 +522,13 @@ describe("compute_windows — determinism (AC #2, AC #5)", () => {
     expect(() =>
       compute_windows(visits, config, t(2026, 2, 1), t(2026, 3, 1)),
     ).toThrow(/non-UTC/);
+  });
+
+  it("throws for malformed timestamps in visit data", () => {
+    const config: WindowConfig = { ...MIN_CONFIG };
+    const visits = [make_visit("bad", "not-a-date")];
+    expect(() =>
+      compute_windows(visits, config, t(2026, 2, 1), t(2026, 3, 1)),
+    ).toThrow(/invalid or non-UTC/);
   });
 });
