@@ -82,3 +82,5 @@ yarn.lock
 # single source of truth; nested lockfiles are stray per-package installs.
 browser/package-lock.json
 vscode/package-lock.json
+
+.code-charter
