@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>task-36 — Architecture &amp; the single-writer constraint — TDT micro tier</title>
+<style>
+  :root {
+    --bg: #0f1419; --bg-alt: #161b22; --bg-code: #0c0f14;
+    --fg: #d7dde4; --fg-dim: #9aa6b2;
+    --accent: #f0a35e; --accent-2: #6cb6ff; --green: #7ee787; --red: #ff7b72; --purple: #d2a8ff;
+    --border: #2a313a; --com: #768390;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--sans); }
+
+  nav.crossdoc { position: sticky; top: 0; z-index: 10; background: var(--bg-alt); border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; padding: .5rem 5%; font-family: var(--mono); font-size: .74rem; }
+  nav.crossdoc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.crossdoc a, nav.crossdoc span.pending, nav.crossdoc span.cur { padding: .22em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap; border: 1px solid var(--border); }
+  nav.crossdoc a { color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.crossdoc a:hover { background: rgba(108,182,255,.16); }
+  nav.crossdoc span.cur { color: #1a1208; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  nav.crossdoc span.pending { color: var(--com); }
+  nav.crossdoc .dot { display:inline-block; width:.5em; height:.5em; border-radius:50%; margin-right:.35em; vertical-align: middle; }
+  nav.crossdoc .dot.done { background: var(--green); } nav.crossdoc .dot.todo { background: var(--com); }
+
+  nav.concepts { position: sticky; top: 38px; z-index: 9; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; padding: .45rem 5%; font-family: var(--mono); font-size: .72rem; }
+  nav.concepts .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.concepts a, nav.concepts span.cur { padding: .2em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap; border: 1px solid var(--border); }
+  nav.concepts a { color: var(--purple); background: rgba(210,168,255,.06); }
+  nav.concepts a:hover { background: rgba(210,168,255,.16); }
+  nav.concepts span.cur { color: #1a1208; background: var(--purple); border-color: var(--purple); font-weight: 700; }
+
+  nav.outline { position: sticky; top: 76px; z-index: 8; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: .35rem; padding: .45rem 5%; font-family: var(--mono); font-size: .72rem; }
+  nav.outline a { color: var(--fg-dim); text-decoration: none; padding: .18em .55em; border-radius: 999px; border: 1px solid transparent; }
+  nav.outline a:hover, nav.outline a.active { color: var(--accent); border-color: var(--border); background: var(--bg-alt); }
+
+  main { width: 90%; max-width: 1500px; margin: 0 auto; padding: 1.6rem 0 6rem; }
+  header.page { border-bottom: 1px solid var(--border); padding-bottom: 1.2rem; margin-bottom: 1.4rem; }
+  .crumb { color: var(--fg-dim); font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; font-family: var(--mono); }
+  h1 { font-family: var(--serif); font-size: 2rem; margin: .5rem 0 .4rem; line-height: 1.15; font-weight: 600; }
+  h2 { font-size: 1.3rem; margin: 2.8rem 0 .5rem; padding-top: .7rem; border-top: 1px solid var(--border); color: var(--accent); scroll-margin-top: 130px; }
+  .lead { font-size: 1.05rem; max-width: 78ch; }
+  figcaption { font-size: .84rem; color: var(--fg-dim); margin: .5rem 0 0; font-style: italic; max-width: 90ch; }
+  figure { margin: 1rem 0 1.4rem; }
+  .prose { max-width: 74ch; }
+  a { color: var(--accent-2); }
+  code { font-family: var(--mono); font-size: .88em; }
+  p code, li code, td code, figcaption code { background: var(--bg-code); padding: .1em .38em; border-radius: 4px; border: 1px solid var(--border); color: var(--accent); }
+
+  .callout { border-radius: 6px; padding: .8rem 1.1rem; margin: 1rem 0; max-width: 96ch; }
+  .callout.key { background: var(--bg-alt); border-left: 4px solid var(--accent); }
+  .callout.info { background: rgba(108,182,255,.07); border-left: 4px solid var(--accent-2); }
+  .callout.warn { background: rgba(255,123,114,.08); border-left: 4px solid var(--red); }
+  .callout.good { background: rgba(126,231,135,.07); border-left: 4px solid var(--green); }
+  .callout .label { font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .09em; font-weight: 700; display: block; margin-bottom: .3rem; }
+  .callout.key .label { color: var(--accent); } .callout.info .label { color: var(--accent-2); }
+  .callout.warn .label { color: var(--red); } .callout.good .label { color: var(--green); }
+  .callout p { margin: .3rem 0; }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .86rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--bg-alt); color: var(--accent); font-weight: 600; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  td code, th code { font-family: var(--mono); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; font-family: var(--mono); font-size: .76rem; color: var(--fg-dim); margin: .6rem 0; }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; }
+  .legend .box { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+
+  .diagram { width: 100%; overflow-x: auto; }
+  svg { display: block; max-width: 100%; height: auto; }
+  text { font-family: var(--mono); }
+
+  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .82rem; font-family: var(--mono); max-width: 96ch; }
+  @media (max-width: 720px) { nav.outline { display: none; } h2 { scroll-margin-top: 90px; } }
+</style>
+</head>
+<body>
+
+<nav class="crossdoc" aria-label="Task family build order">
+  <span class="home">task-36 family</span>
+  <a href="task-36.overview.html">Overview</a>
+  <a href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html"><span class="dot done"></span>36.1 Scaffold</a>
+  <a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html"><span class="dot done"></span>36.2 Windowing</a>
+  <span class="pending"><span class="dot todo"></span>36.6 Persistence</span>
+  <span class="pending"><span class="dot todo"></span>36.8 Surface decision · not yet generated</span>
+</nav>
+
+<nav class="concepts" aria-label="Concept pages">
+  <span class="home">concepts</span>
+  <a href="task-36.concept-mental-model.html">Mental model</a>
+  <span class="cur">Architecture</span>
+  <a href="task-36.concept-data-and-privacy.html">Data &amp; privacy</a>
+  <a href="task-36.concept-pipeline-and-guarantees.html">Pipeline &amp; guarantees</a>
+</nav>
+
+<nav class="outline" aria-label="On this page">
+  <a href="#pkg">The package</a>
+  <a href="#ports">Four ports</a>
+  <a href="#writer">Single-writer constraint</a>
+  <a href="#access">Read vs write paths</a>
+  <a href="#surface">Surface layers</a>
+  <a href="#dir">Dependency direction</a>
+</nav>
+
+<main>
+<header class="page">
+  <div class="crumb">Bergamot · TDT micro tier · concept 2 of 4 · branch tdt</div>
+  <h1>Architecture &amp; the load-bearing constraint</h1>
+  <p class="lead"><code>@bergamot/tdt</code> is a pure dependency-injected library. One database fact — <strong>DuckDB is single-writer per file</strong> — drives the whole asymmetric read/write design.</p>
+</header>
+
+<!-- ============================================================ PACKAGE -->
+<h2 id="pkg">The package — a pure DI library, never touching VS Code</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1100 260" role="img" aria-label="@bergamot/tdt is a sibling workspace package of vscode and browser; it is a pure library plus thin adapters and never imports vscode/src.">
+  <!-- workspace siblings -->
+  <text x="40" y="30" fill="#768390" font-size="11">root package.json · workspaces: ["vscode", "browser", "tdt"]</text>
+  <rect x="40" y="44" width="300" height="80" rx="10" fill="#161b22" stroke="#2a313a"/>
+  <text x="190" y="72" fill="#d7dde4" font-size="13" text-anchor="middle">vscode/</text>
+  <text x="190" y="92" fill="#768390" font-size="10" text-anchor="middle">the extension · the host</text>
+  <text x="190" y="108" fill="#768390" font-size="10" text-anchor="middle">owns the DuckDB file</text>
+
+  <rect x="360" y="44" width="200" height="80" rx="10" fill="#161b22" stroke="#2a313a"/>
+  <text x="460" y="72" fill="#d7dde4" font-size="13" text-anchor="middle">browser/</text>
+  <text x="460" y="92" fill="#768390" font-size="10" text-anchor="middle">capture extension</text>
+
+  <rect x="580" y="44" width="480" height="80" rx="10" fill="rgba(240,163,94,.06)" stroke="#f0a35e" stroke-width="1.5"/>
+  <text x="820" y="68" fill="#f0a35e" font-size="13" text-anchor="middle" font-weight="bold">tdt/  ·  @bergamot/tdt</text>
+  <text x="820" y="88" fill="#768390" font-size="10" text-anchor="middle">pure dependency-injected library + thin adapters</text>
+  <text x="820" y="106" fill="#ff7b72" font-size="10" text-anchor="middle">NEVER imports vscode/src internals</text>
+
+  <!-- inside tdt: modules -->
+  <text x="40" y="162" fill="#768390" font-size="11">tdt/src · individually testable modules</text>
+  <g font-size="9.5" text-anchor="middle" fill="#d7dde4">
+    <rect x="40"  y="176" width="118" height="40" rx="6" fill="#0c0f14" stroke="#2a313a"/><text x="99"  y="194">windowing.ts</text><text x="99" y="208" fill="#7ee787" font-size="8">36.2 done</text>
+    <rect x="172" y="176" width="118" height="40" rx="6" fill="#0c0f14" stroke="#2a313a"/><text x="231" y="194">page_vectors.ts</text><text x="231" y="208" fill="#768390" font-size="8">36.3</text>
+    <rect x="304" y="176" width="120" height="40" rx="6" fill="#0c0f14" stroke="#2a313a"/><text x="364" y="194">cluster_window.ts</text><text x="364" y="208" fill="#768390" font-size="8">36.4</text>
+    <rect x="438" y="176" width="120" height="40" rx="6" fill="#0c0f14" stroke="#2a313a"/><text x="498" y="194">representations.ts</text><text x="498" y="208" fill="#768390" font-size="8">36.5</text>
+    <rect x="572" y="176" width="120" height="40" rx="6" fill="#0c0f14" stroke="#2a313a"/><text x="632" y="194">labeling/…</text><text x="632" y="208" fill="#768390" font-size="8">36.5</text>
+    <rect x="706" y="176" width="118" height="40" rx="6" fill="#0c0f14" stroke="#2a313a"/><text x="765" y="194">persist.ts</text><text x="765" y="208" fill="#768390" font-size="8">36.6</text>
+    <rect x="838" y="176" width="118" height="40" rx="6" fill="#0c0f14" stroke="#2a313a"/><text x="897" y="194">validation.ts</text><text x="897" y="208" fill="#768390" font-size="8">36.7</text>
+    <rect x="970" y="176" width="90" height="40" rx="6" fill="#0c0f14" stroke="#2a313a"/><text x="1015" y="194">ports.ts</text><text x="1015" y="208" fill="#7ee787" font-size="8">36.1 done</text>
+  </g>
+</svg>
+</div>
+<figcaption>TDT is a sibling workspace package, not part of the extension. The extension is just one possible host — TDT depends only on injected contracts and <code>clustering-tfjs</code>, which is what makes the whole pipeline unit-testable without VS Code, DuckDB, or a network.</figcaption>
+</figure>
+
+<!-- ============================================================ PORTS -->
+<h2 id="ports">Four ports — every external need is a contract</h2>
+
+<table>
+  <thead><tr><th>Port</th><th>What it abstracts</th><th>Production impl</th><th>Test fake</th></tr></thead>
+  <tbody>
+    <tr><td><code>RelationalReader</code></td><td>Reading captured visits from DuckDB.</td><td>In-process reader fns (inside the extension) or HTTP <code>/query/*</code> (batch CLI).</td><td>In-memory fixture rows.</td></tr>
+    <tr><td><code>EmbedFn</code></td><td>Turning page text into a vector.</td><td>TDT's own local embedding model.</td><td>Deterministic stub embedding.</td></tr>
+    <tr><td><code>VectorStore</code></td><td>Caching page vectors.</td><td><code>topic_page_vector</code> in the same DuckDB file, via the extension's writer.</td><td>In-memory map.</td></tr>
+    <tr><td><code>ClusterSink</code></td><td>Writing cluster results.</td><td>The extension's single-writer transaction.</td><td>In-memory capture of written rows.</td></tr>
+  </tbody>
+</table>
+
+<div class="callout info">
+  <span class="label">Why ports, not direct calls</span>
+  <p>Each external dependency — the database, the embedder, the cache, the write path — is one injectable contract. Tests supply fakes for all four, so the entire pipeline runs in memory; production supplies the real implementations.</p>
+</div>
+
+<!-- ============================================================ WRITER -->
+<h2 id="writer">The DuckDB single-writer constraint</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1100 280" role="img" aria-label="While the extension holds the DuckDB file read-write, no other process can open it, even read-only.">
+  <defs>
+    <marker id="wr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+    <marker id="wx" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff7b72"/></marker>
+  </defs>
+
+  <!-- the file -->
+  <rect x="440" y="100" width="220" height="80" rx="12" fill="#0c0f14" stroke="#f0a35e" stroke-width="1.5"/>
+  <text x="550" y="128" fill="#f0a35e" font-size="13" text-anchor="middle" font-weight="bold">DuckDB file</text>
+  <text x="550" y="148" fill="#768390" font-size="10" text-anchor="middle">encrypted at rest</text>
+  <text x="550" y="166" fill="#768390" font-size="10" text-anchor="middle">single-writer per file</text>
+
+  <!-- extension holds RW -->
+  <rect x="60" y="110" width="260" height="62" rx="10" fill="#161b22" stroke="#7ee787" stroke-width="1.5"/>
+  <text x="190" y="135" fill="#7ee787" font-size="12" text-anchor="middle" font-weight="bold">vscode/ extension</text>
+  <text x="190" y="155" fill="#d7dde4" font-size="10" text-anchor="middle">holds read-write for its lifetime</text>
+  <line x1="320" y1="140" x2="440" y2="140" stroke="#7ee787" stroke-width="2.5" marker-end="url(#wr)"/>
+  <text x="380" y="130" fill="#7ee787" font-size="10" text-anchor="middle">RW lock</text>
+
+  <!-- other processes refused -->
+  <rect x="780" y="40" width="260" height="56" rx="10" fill="#161b22" stroke="#ff7b72" stroke-dasharray="4 3"/>
+  <text x="910" y="64" fill="#ff7b72" font-size="11" text-anchor="middle">standalone Bergamot daemon</text>
+  <text x="910" y="82" fill="#768390" font-size="9.5" text-anchor="middle">cannot open the file directly</text>
+  <rect x="780" y="184" width="260" height="56" rx="10" fill="#161b22" stroke="#ff7b72" stroke-dasharray="4 3"/>
+  <text x="910" y="208" fill="#ff7b72" font-size="11" text-anchor="middle">TDT batch CLI</text>
+  <text x="910" y="226" fill="#768390" font-size="9.5" text-anchor="middle">cannot open the file</text>
+
+  <line x1="780" y1="80" x2="660" y2="120" stroke="#ff7b72" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#wx)"/>
+  <line x1="780" y1="210" x2="660" y2="165" stroke="#ff7b72" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#wx)"/>
+  <text x="730" y="92" fill="#ff7b72" font-size="9" text-anchor="middle">✗ even read-only</text>
+  <text x="730" y="200" fill="#ff7b72" font-size="9" text-anchor="middle">✗ even read-only</text>
+</svg>
+</div>
+<figcaption>While the extension holds the file read-write — its whole lifetime — <strong>no other process can open it at all, not even read-only</strong>. The extension is the only writer; every other consumer must reach data through it. <span style="color:var(--red)">Getting this wrong is an availability failure (the file open is refused), not corruption.</span></figcaption>
+</figure>
+
+<div class="callout key">
+  <span class="label">The fact that drives everything else</span>
+  <p>Because TDT can never open the DuckDB file directly, its data access must be <strong>asymmetric</strong>: reads come <em>through</em> the extension, writes go <em>through</em> the extension's single writer. TDT computes; the extension persists.</p>
+</div>
+
+<!-- ============================================================ ACCESS -->
+<h2 id="access">The asymmetric read &amp; write paths</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1100 340" role="img" aria-label="Reads flow in through the RelationalReader port; compute happens in TDT; writes flow back out through the ClusterSink port to the extension's single writer.">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#6cb6ff"/></marker>
+    <marker id="aw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+  </defs>
+
+  <!-- DuckDB -->
+  <rect x="40" y="130" width="160" height="80" rx="12" fill="#0c0f14" stroke="#f0a35e"/>
+  <text x="120" y="160" fill="#f0a35e" font-size="12" text-anchor="middle" font-weight="bold">DuckDB file</text>
+  <text x="120" y="180" fill="#768390" font-size="9" text-anchor="middle">capture + cluster</text>
+  <text x="120" y="194" fill="#768390" font-size="9" text-anchor="middle">tables, one file</text>
+
+  <!-- extension as the gate -->
+  <rect x="250" y="60" width="180" height="220" rx="12" fill="rgba(126,231,135,.04)" stroke="#7ee787"/>
+  <text x="340" y="86" fill="#7ee787" font-size="11" text-anchor="middle" font-weight="bold">vscode/ extension</text>
+  <text x="340" y="102" fill="#768390" font-size="9" text-anchor="middle">the only file handle</text>
+  <rect x="266" y="120" width="148" height="44" rx="6" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="340" y="140" fill="#6cb6ff" font-size="9.5" text-anchor="middle">reader fns /</text>
+  <text x="340" y="154" fill="#6cb6ff" font-size="9.5" text-anchor="middle">HTTP /query/*</text>
+  <rect x="266" y="184" width="148" height="44" rx="6" fill="#161b22" stroke="#7ee787"/>
+  <text x="340" y="204" fill="#7ee787" font-size="9.5" text-anchor="middle">single-writer</text>
+  <text x="340" y="218" fill="#7ee787" font-size="9.5" text-anchor="middle">transaction</text>
+
+  <!-- TDT -->
+  <rect x="560" y="60" width="460" height="220" rx="12" fill="rgba(240,163,94,.05)" stroke="#f0a35e"/>
+  <text x="790" y="86" fill="#f0a35e" font-size="11" text-anchor="middle" font-weight="bold">@bergamot/tdt — read + compute only</text>
+  <rect x="585" y="108" width="170" height="48" rx="6" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="670" y="128" fill="#6cb6ff" font-size="10" text-anchor="middle">RelationalReader</text>
+  <text x="670" y="144" fill="#768390" font-size="9" text-anchor="middle">port (read)</text>
+  <rect x="775" y="108" width="220" height="48" rx="6" fill="#0c0f14" stroke="#2a313a"/>
+  <text x="885" y="128" fill="#d7dde4" font-size="10" text-anchor="middle">window → vectors → distance</text>
+  <text x="885" y="144" fill="#768390" font-size="9" text-anchor="middle">→ HDBSCAN.fit → represent</text>
+  <rect x="585" y="200" width="410" height="48" rx="6" fill="#161b22" stroke="#7ee787"/>
+  <text x="790" y="220" fill="#7ee787" font-size="10" text-anchor="middle">ClusterSink port (write) — hands results back to the extension</text>
+  <text x="790" y="236" fill="#768390" font-size="9" text-anchor="middle">TDT never opens the file; the writer persists in one short transaction</text>
+
+  <!-- read arrows: file -> reader -> TDT -->
+  <line x1="200" y1="142" x2="266" y2="142" stroke="#6cb6ff" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="414" y1="142" x2="585" y2="132" stroke="#6cb6ff" stroke-width="2" marker-end="url(#ar)"/>
+  <text x="500" y="118" fill="#6cb6ff" font-size="9" text-anchor="middle">READ in</text>
+  <!-- write arrows: TDT sink -> writer -> file -->
+  <line x1="585" y1="224" x2="414" y2="210" stroke="#7ee787" stroke-width="2" marker-end="url(#aw)"/>
+  <line x1="266" y1="210" x2="206" y2="200" stroke="#7ee787" stroke-width="2" marker-end="url(#aw)"/>
+  <text x="500" y="262" fill="#7ee787" font-size="9" text-anchor="middle">WRITE back out</text>
+</svg>
+</div>
+<figcaption>Reads enter through the <code>RelationalReader</code> port (in-process fns inside the extension, or HTTP <code>/query/*</code> for the batch CLI); TDT computes; results return through <code>ClusterSink</code> for the extension's single writer to persist. The batch CLI does read+compute only and never writes.</figcaption>
+</figure>
+
+<div class="callout good">
+  <span class="label">The payoff of one shared DuckDB file</span>
+  <p>Cluster tables (<code>topic_run</code>, <code>topic_cluster</code>, <code>topic_cluster_member</code>, <code>topic_page_vector</code>) live in the <em>same</em> file as the capture tables, written only by the extension's writer. So windowed selection and the read path over clusters are plain single-DuckDB JOINs — no second store, no LanceDB, no separate <code>topics.db</code> (deferred, YAGNI). See <a href="task-36.concept-pipeline-and-guarantees.html">pipeline &amp; guarantees</a> and the persistence sub-task.</p>
+</div>
+
+<!-- ============================================================ SURFACE -->
+<h2 id="surface">Reaching the clusters — primitive vs surface, split in two</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1100 360" role="img" aria-label="Persisted cluster and label-bundle tables are read by exactly one thin host-agnostic integration primitive; every user-facing surface — a Claude skill, note-stub write-back, a VS Code webview — is a consumer of that primitive, and which surfaces layer is an open decision the 36.8 spike resolves.">
+  <defs>
+    <marker id="sr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#6cb6ff"/></marker>
+    <marker id="sp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d2a8ff"/></marker>
+  </defs>
+
+  <!-- the tables -->
+  <rect x="40" y="140" width="210" height="90" rx="12" fill="#0c0f14" stroke="#f0a35e"/>
+  <text x="145" y="168" fill="#f0a35e" font-size="11" text-anchor="middle" font-weight="bold">cluster + label-bundle</text>
+  <text x="145" y="184" fill="#f0a35e" font-size="11" text-anchor="middle" font-weight="bold">tables (one DuckDB file)</text>
+  <text x="145" y="204" fill="#768390" font-size="9" text-anchor="middle">36.5 bundle: headline_title,</text>
+  <text x="145" y="217" fill="#768390" font-size="9" text-anchor="middle">scope, keyphrases, display_label, …</text>
+
+  <!-- the one integration primitive -->
+  <rect x="320" y="135" width="230" height="100" rx="12" fill="rgba(108,182,255,.06)" stroke="#6cb6ff" stroke-width="1.5"/>
+  <text x="435" y="162" fill="#6cb6ff" font-size="12" text-anchor="middle" font-weight="bold">integration primitive</text>
+  <text x="435" y="182" fill="#d7dde4" font-size="9.5" text-anchor="middle">one thin, host-agnostic read API</text>
+  <text x="435" y="197" fill="#d7dde4" font-size="9.5" text-anchor="middle">the ONLY layer that touches the DB</text>
+  <text x="435" y="216" fill="#768390" font-size="9" text-anchor="middle">natural home: the standalone</text>
+  <text x="435" y="229" fill="#768390" font-size="9" text-anchor="middle">Bergamot daemon</text>
+  <line x1="250" y1="185" x2="320" y2="185" stroke="#6cb6ff" stroke-width="2" marker-end="url(#sr)"/>
+  <text x="285" y="176" fill="#6cb6ff" font-size="8.5" text-anchor="middle">JOINs</text>
+
+  <!-- the surfaces it feeds: decision pending -->
+  <rect x="620" y="40" width="440" height="280" rx="12" fill="rgba(210,168,255,.05)" stroke="#d2a8ff" stroke-dasharray="5 4"/>
+  <text x="840" y="64" fill="#d2a8ff" font-size="12" text-anchor="middle" font-weight="bold">user-facing surface(s) — consumers of the primitive</text>
+  <text x="840" y="80" fill="#d2a8ff" font-size="9.5" text-anchor="middle">DECISION PENDING · 36.8 is a spike (ADR → sub-tasks), not a fixed server</text>
+
+  <rect x="640" y="98" width="400" height="58" rx="8" fill="#161b22" stroke="#7ee787"/>
+  <text x="650" y="120" fill="#7ee787" font-size="10.5" font-weight="bold">note-stub write-back</text>
+  <text x="650" y="136" fill="#768390" font-size="9">PKM-native backbone · only into quarantined bergamot.staging/</text>
+  <text x="650" y="149" fill="#768390" font-size="9">never canonical user notes (constitution principle 8)</text>
+
+  <rect x="640" y="166" width="400" height="58" rx="8" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="650" y="188" fill="#6cb6ff" font-size="10.5" font-weight="bold">Claude skill / sub-agent over scripts</text>
+  <text x="650" y="204" fill="#768390" font-size="9">in-workflow actionability · host-agnostic · also drives</text>
+  <text x="650" y="217" fill="#768390" font-size="9">stub generation · preferred Bergamot integration pattern</text>
+
+  <rect x="640" y="234" width="400" height="58" rx="8" fill="#161b22" stroke="#f0a35e"/>
+  <text x="650" y="256" fill="#f0a35e" font-size="10.5" font-weight="bold">VS Code webview (standalone package)</text>
+  <text x="650" y="272" fill="#768390" font-size="9">optional rich-visibility accessory · timeline + cluster cards</text>
+  <text x="650" y="285" fill="#768390" font-size="9">VS-Code-host-specific · higher cost</text>
+
+  <line x1="550" y1="185" x2="620" y2="160" stroke="#d2a8ff" stroke-width="2" marker-end="url(#sp)"/>
+  <line x1="550" y1="190" x2="620" y2="195" stroke="#d2a8ff" stroke-width="2" marker-end="url(#sp)"/>
+  <line x1="550" y1="200" x2="620" y2="255" stroke="#d2a8ff" stroke-width="2" marker-end="url(#sp)"/>
+  <text x="585" y="150" fill="#d2a8ff" font-size="8.5" text-anchor="middle">consume</text>
+</svg>
+</div>
+<figcaption>Reaching the clusters splits into two layers the surface must never conflate. Exactly one thin <strong>integration primitive</strong> — a host-agnostic read API over the cluster + 36.5 label-bundle tables, whose natural home is the standalone Bergamot daemon — touches the database. Every <strong>user-facing surface</strong> is a consumer of that one primitive, so surfaces ship independently and per-host. Which surfaces layer — note-stub write-back as the PKM-native backbone, a Claude skill as the actionability layer, an optional VS Code webview — is an open decision the 36.8 spike resolves into an ADR and follow-on implementation sub-tasks. <a href="task-36.concept-pipeline-and-guarantees.html">Pipeline &amp; guarantees →</a></figcaption>
+</figure>
+
+<div class="callout info">
+  <span class="label">One primitive, many surfaces</span>
+  <p>Exposing raw read tools over the cluster tables would let the database shape the UX — a low-level surface with no curation and poor visibility into what the user has actually been browsing. Instead, one thin read API is the only thing on the DB; the surfaces that layer on top — and whether any is read-write to feed cluster-boundary curation back as a signal — are decided by the 36.8 spike, not assumed.</p>
+</div>
+
+<!-- ============================================================ DIRECTION -->
+<h2 id="dir">Dependency direction — acyclic, one-way</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1100 180" role="img" aria-label="vscode supplies dependencies to tdt and calls into it; tdt depends on clustering-tfjs and its port contracts; tdt never imports vscode.">
+  <defs>
+    <marker id="dd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+  </defs>
+  <rect x="60" y="60" width="220" height="60" rx="10" fill="#161b22" stroke="#7ee787"/>
+  <text x="170" y="86" fill="#7ee787" font-size="12" text-anchor="middle" font-weight="bold">vscode/ (the host)</text>
+  <text x="170" y="104" fill="#768390" font-size="9.5" text-anchor="middle">supplies port impls + triggers run_tdt</text>
+
+  <rect x="440" y="60" width="220" height="60" rx="10" fill="rgba(240,163,94,.06)" stroke="#f0a35e"/>
+  <text x="550" y="86" fill="#f0a35e" font-size="12" text-anchor="middle" font-weight="bold">@bergamot/tdt</text>
+  <text x="550" y="104" fill="#768390" font-size="9.5" text-anchor="middle">pure library</text>
+
+  <rect x="820" y="30" width="220" height="50" rx="10" fill="#161b22" stroke="#d2a8ff"/>
+  <text x="930" y="60" fill="#d2a8ff" font-size="11" text-anchor="middle">clustering-tfjs</text>
+  <rect x="820" y="100" width="220" height="50" rx="10" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="930" y="124" fill="#6cb6ff" font-size="11" text-anchor="middle">ports.ts contracts</text>
+  <text x="930" y="140" fill="#768390" font-size="9" text-anchor="middle">Reader/Embed/Store/Sink</text>
+
+  <line x1="280" y1="90" x2="440" y2="90" stroke="#7ee787" stroke-width="2.5" marker-end="url(#dd)"/>
+  <text x="360" y="80" fill="#7ee787" font-size="10" text-anchor="middle">supplies + calls</text>
+  <line x1="660" y1="80" x2="820" y2="60" stroke="#9aa6b2" stroke-width="2" marker-end="url(#dd)"/>
+  <line x1="660" y1="100" x2="820" y2="120" stroke="#9aa6b2" stroke-width="2" marker-end="url(#dd)"/>
+  <text x="740" y="78" fill="#768390" font-size="9" text-anchor="middle">depends on</text>
+
+  <!-- never -->
+  <text x="360" y="150" fill="#ff7b72" font-size="10" text-anchor="middle">✗ tdt never imports vscode/src — enforced by AC + a grep</text>
+</svg>
+</div>
+<figcaption>The arrow runs one way: <code>vscode →</code> supplies and calls <code>→ tdt → depends on →</code> <code>clustering-tfjs</code> + its port contracts. TDT never depends back on the extension, keeping it portable and testable.</figcaption>
+</figure>
+
+<footer>
+  Concept 2 of 4 for <code>task-36</code> · Temporal Topic Detection, micro tier · branch <code>tdt</code> ·
+  canonical reference <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md §3, §8</code> ·
+  surface split &amp; host portability <code>backlog/drafts/deploy-to-pkm-platforms.md</code> ·
+  <a href="task-36.overview.html">← back to the overview</a>
+</footer>
+
+</main>
+
+<script>
+/* SPDX-License-Identifier: Apache-2.0 */
+(function () {
+  "use strict";
+  var links = Array.prototype.slice.call(document.querySelectorAll("nav.outline a"));
+  var targets = links.map(function (a) { return document.querySelector(a.getAttribute("href")); });
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          var i = targets.indexOf(e.target);
+          links.forEach(function (l) { l.classList.remove("active"); });
+          if (i >= 0) links[i].classList.add("active");
+        }
+      });
+    }, { rootMargin: "-45% 0px -50% 0px" });
+    targets.forEach(function (t) { if (t) io.observe(t); });
+  }
+})();
+</script>
+</body>
+</html>

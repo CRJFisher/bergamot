@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>task-36.8 — Privacy guarantees &amp; the decomposition into sub-tasks — TDT surface decision</title>
+<style>
+  :root {
+    --bg: #0f1419; --bg-alt: #161b22; --bg-code: #0c0f14;
+    --fg: #d7dde4; --fg-dim: #9aa6b2;
+    --accent: #f0a35e; --accent-2: #6cb6ff; --green: #7ee787; --red: #ff7b72; --purple: #d2a8ff;
+    --border: #2a313a; --com: #768390;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--sans); }
+
+  nav.crossdoc { position: sticky; top: 0; z-index: 10; background: var(--bg-alt); border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; padding: .5rem 5%; font-family: var(--mono); font-size: .74rem; }
+  nav.crossdoc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.crossdoc a, nav.crossdoc span.pending, nav.crossdoc span.cur { padding: .22em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap; border: 1px solid var(--border); }
+  nav.crossdoc a { color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.crossdoc a:hover { background: rgba(108,182,255,.16); }
+  nav.crossdoc span.cur { color: #1a1208; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  nav.crossdoc span.pending { color: var(--com); }
+  nav.crossdoc .dot { display:inline-block; width:.5em; height:.5em; border-radius:50%; margin-right:.35em; vertical-align: middle; }
+  nav.crossdoc .dot.done { background: var(--green); } nav.crossdoc .dot.todo { background: var(--com); }
+
+  nav.concepts { position: sticky; top: 38px; z-index: 9; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; padding: .45rem 5%; font-family: var(--mono); font-size: .72rem; }
+  nav.concepts .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.concepts a, nav.concepts span.cur { padding: .2em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap; border: 1px solid var(--border); }
+  nav.concepts a { color: var(--purple); background: rgba(210,168,255,.06); }
+  nav.concepts a:hover { background: rgba(210,168,255,.16); }
+  nav.concepts span.cur { color: #1a1208; background: var(--purple); border-color: var(--purple); font-weight: 700; }
+
+  nav.outline { position: sticky; top: 76px; z-index: 8; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: .35rem; padding: .45rem 5%; font-family: var(--mono); font-size: .72rem; }
+  nav.outline a { color: var(--fg-dim); text-decoration: none; padding: .18em .55em; border-radius: 999px; border: 1px solid transparent; }
+  nav.outline a:hover, nav.outline a.active { color: var(--accent); border-color: var(--border); background: var(--bg-alt); }
+
+  main { width: 90%; max-width: 1500px; margin: 0 auto; padding: 1.6rem 0 6rem; }
+  header.page { border-bottom: 1px solid var(--border); padding-bottom: 1.2rem; margin-bottom: 1.4rem; }
+  .crumb { color: var(--fg-dim); font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; font-family: var(--mono); }
+  h1 { font-family: var(--serif); font-size: 2rem; margin: .5rem 0 .4rem; line-height: 1.15; font-weight: 600; }
+  h2 { font-size: 1.3rem; margin: 2.8rem 0 .5rem; padding-top: .7rem; border-top: 1px solid var(--border); color: var(--accent); scroll-margin-top: 130px; }
+  h3 { font-size: 1.02rem; margin: 1.6rem 0 .4rem; color: var(--fg); font-weight: 600; }
+  .lead { font-size: 1.05rem; max-width: 78ch; }
+  figcaption { font-size: .84rem; color: var(--fg-dim); margin: .5rem 0 0; font-style: italic; max-width: 90ch; }
+  figure { margin: 1rem 0 1.4rem; }
+  .prose { max-width: 74ch; }
+  a { color: var(--accent-2); }
+  code { font-family: var(--mono); font-size: .88em; }
+  p code, li code, td code, figcaption code { background: var(--bg-code); padding: .1em .38em; border-radius: 4px; border: 1px solid var(--border); color: var(--accent); }
+
+  .callout { border-radius: 6px; padding: .8rem 1.1rem; margin: 1rem 0; max-width: 96ch; }
+  .callout.key { background: var(--bg-alt); border-left: 4px solid var(--accent); }
+  .callout.info { background: rgba(108,182,255,.07); border-left: 4px solid var(--accent-2); }
+  .callout.warn { background: rgba(255,123,114,.08); border-left: 4px solid var(--red); }
+  .callout.good { background: rgba(126,231,135,.07); border-left: 4px solid var(--green); }
+  .callout .label { font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .09em; font-weight: 700; display: block; margin-bottom: .3rem; }
+  .callout.key .label { color: var(--accent); } .callout.info .label { color: var(--accent-2); }
+  .callout.warn .label { color: var(--red); } .callout.good .label { color: var(--green); }
+  .callout p { margin: .3rem 0; }
+  blockquote { margin: .5rem 0; padding-left: 1rem; border-left: 3px solid var(--accent); font-family: var(--serif); font-size: 1.02rem; color: var(--fg); font-style: italic; }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .86rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--bg-alt); color: var(--accent); font-weight: 600; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  td code, th code { font-family: var(--mono); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; font-family: var(--mono); font-size: .76rem; color: var(--fg-dim); margin: .6rem 0; }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; }
+  .legend .box { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+
+  .diagram { width: 100%; overflow-x: auto; }
+  svg { display: block; max-width: 100%; height: auto; }
+  text { font-family: var(--mono); }
+
+  /* roadmap cards */
+  .seq-label { font-family: var(--mono); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); margin: 1.8rem 0 .6rem; padding: .3rem 0; border-bottom: 1px dashed var(--border); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: .9rem; margin: .8rem 0 1.2rem; }
+  .card { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 8px; padding: .85rem 1rem; border-top: 3px solid var(--border); }
+  .card.block { border-top-color: var(--accent); }
+  .card.surf { border-top-color: var(--green); }
+  .card.ctrl { border-top-color: var(--purple); }
+  .card.acc { border-top-color: var(--accent-2); }
+  .card .num { font-family: var(--mono); font-size: .72rem; color: var(--com); float: right; }
+  .card h4 { margin: 0 0 .3rem; font-size: .98rem; font-weight: 600; line-height: 1.3; }
+  .card .scope { font-size: .84rem; color: var(--fg-dim); margin: .35rem 0; }
+  .card .just { font-family: var(--mono); font-size: .73rem; margin: .55rem 0 0; padding: .45rem .55rem; border-radius: 5px; background: var(--bg-code); border-left: 3px solid var(--green); color: var(--fg-dim); }
+  .card .just b { color: var(--green); }
+  .tag { display: inline-block; font-family: var(--mono); font-size: .64rem; text-transform: uppercase; letter-spacing: .05em; padding: .12em .5em; border-radius: 999px; border: 1px solid var(--border); margin: 0 .25em .25em 0; }
+  .tag.lb { color: var(--red); border-color: var(--red); }
+  .tag.opt { color: var(--accent-2); border-color: var(--accent-2); }
+  .tag.rw { color: var(--purple); border-color: var(--purple); }
+  .tag.ro { color: var(--green); border-color: var(--green); }
+  .tag.dep { color: var(--accent); border-color: var(--accent); }
+
+  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .82rem; font-family: var(--mono); max-width: 96ch; }
+  @media (max-width: 720px) { nav.outline { display: none; } h2 { scroll-margin-top: 90px; } }
+</style>
+</head>
+<body>
+
+<nav class="crossdoc" aria-label="Task family build order">
+  <span class="home">task-36 family</span>
+  <a href="task-36.overview.html">Overview</a>
+  <span class="cur">36.8 surface-decision concept set</span>
+</nav>
+
+<nav class="concepts" aria-label="Concept pages — 36.8 surface decision">
+  <span class="home">36.8 concepts</span>
+  <a href="task-36.8.concept-decision.html">Decision</a>
+  <a href="task-36.8.concept-surfaces.html">Surfaces</a>
+  <a href="task-36.8.concept-primitive.html">Primitive</a>
+  <a href="task-36.8.concept-workflows.html">Workflows</a>
+  <span class="cur">Privacy &amp; roadmap</span>
+</nav>
+
+<nav class="outline" aria-label="On this page">
+  <a href="#asym">Read/write asymmetry</a>
+  <a href="#p8">Principle 8 — staging only</a>
+  <a href="#invariants">Store invariants</a>
+  <a href="#decision">Read-only vs read-write</a>
+  <a href="#decomp">Decomposition roadmap</a>
+  <a href="#seq">Sequencing &amp; dependencies</a>
+</nav>
+
+<main>
+<header class="page">
+  <div class="crumb">Bergamot · TDT micro tier · task 36.8 surface decision · branch tdt</div>
+  <h1>Privacy guarantees &amp; the decomposition into sub-tasks</h1>
+  <p class="lead">The constitution forces a <strong>read/write asymmetry</strong> on every cluster surface. That asymmetry resolves the read-only-vs-read-write question, and the resolution decomposes into nine follow-on implementation sub-tasks — each justified against the <span style="color:var(--green)">UNDERSTAND</span> / <span style="color:var(--green)">SURFACE</span> spine.</p>
+</header>
+
+<!-- ============================================================ ASYMMETRY -->
+<h2 id="asym">The read/write asymmetry every surface respects</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1100 320" role="img" aria-label="Reads flow freely over metadata-only tables; writes split into two non-interchangeable kinds — note-stub write-back into a quarantined staging directory only, and cluster-boundary curation into Bergamot's own control tables, never the PKM's canonical notes.">
+  <defs>
+    <marker id="ro" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+    <marker id="wa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d2a8ff"/></marker>
+    <marker id="xx" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff7b72"/></marker>
+  </defs>
+
+  <!-- the primitive / surfaces -->
+  <rect x="40" y="120" width="200" height="80" rx="12" fill="rgba(108,182,255,.06)" stroke="#6cb6ff" stroke-width="1.5"/>
+  <text x="140" y="150" fill="#6cb6ff" font-size="12" text-anchor="middle" font-weight="bold">surfaces</text>
+  <text x="140" y="170" fill="#768390" font-size="9.5" text-anchor="middle">skill · stub writer · webview</text>
+  <text x="140" y="186" fill="#768390" font-size="9.5" text-anchor="middle">consumers of one primitive</text>
+
+  <!-- READ -->
+  <rect x="380" y="30" width="290" height="70" rx="10" fill="#0c0f14" stroke="#7ee787"/>
+  <text x="525" y="56" fill="#7ee787" font-size="11" text-anchor="middle" font-weight="bold">READ · metadata-only tables</text>
+  <text x="525" y="74" fill="#768390" font-size="9" text-anchor="middle">loopback + capability token (principle 7)</text>
+  <text x="525" y="88" fill="#768390" font-size="9" text-anchor="middle">no page content · no re-download triggered</text>
+  <line x1="240" y1="150" x2="380" y2="80" stroke="#7ee787" stroke-width="2.5" marker-end="url(#ro)"/>
+  <text x="305" y="100" fill="#7ee787" font-size="9" text-anchor="middle">unconstrained</text>
+
+  <!-- WRITE (a): staging -->
+  <rect x="380" y="125" width="290" height="70" rx="10" fill="rgba(126,231,135,.05)" stroke="#7ee787"/>
+  <text x="525" y="148" fill="#7ee787" font-size="10.5" text-anchor="middle" font-weight="bold">WRITE (a) · note-stub → bergamot.staging/</text>
+  <text x="525" y="165" fill="#768390" font-size="9" text-anchor="middle">append-only at canonical boundary · agent-tagged</text>
+  <text x="525" y="179" fill="#768390" font-size="9" text-anchor="middle">promoted by hand · the ONE write inviolables bless</text>
+  <line x1="240" y1="160" x2="380" y2="160" stroke="#d2a8ff" stroke-width="2.5" marker-end="url(#wa)"/>
+
+  <!-- WRITE (b): control -->
+  <rect x="380" y="220" width="290" height="70" rx="10" fill="rgba(210,168,255,.05)" stroke="#d2a8ff"/>
+  <text x="525" y="243" fill="#d2a8ff" font-size="10.5" text-anchor="middle" font-weight="bold">WRITE (b) · curation → Bergamot control tables</text>
+  <text x="525" y="260" fill="#768390" font-size="9" text-anchor="middle">suppress / rename / never-cluster-origin</text>
+  <text x="525" y="274" fill="#768390" font-size="9" text-anchor="middle">launch-blocking · NOT a principle-8 PKM write</text>
+  <line x1="240" y1="170" x2="380" y2="250" stroke="#d2a8ff" stroke-width="2.5" marker-end="url(#wa)"/>
+
+  <!-- canonical notes — forbidden -->
+  <rect x="800" y="125" width="240" height="70" rx="10" fill="#161b22" stroke="#ff7b72" stroke-dasharray="4 3"/>
+  <text x="920" y="150" fill="#ff7b72" font-size="11" text-anchor="middle" font-weight="bold">canonical PKM notes</text>
+  <text x="920" y="168" fill="#768390" font-size="9" text-anchor="middle">deterministic source of truth</text>
+  <text x="920" y="182" fill="#768390" font-size="9" text-anchor="middle">never mutated by an agent</text>
+  <line x1="670" y1="160" x2="800" y2="160" stroke="#ff7b72" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#xx)"/>
+  <text x="735" y="151" fill="#ff7b72" font-size="9" text-anchor="middle">✗ never</text>
+
+  <!-- no feedback loop -->
+  <line x1="800" y1="185" x2="672" y2="185" stroke="#ff7b72" stroke-width="1.5" stroke-dasharray="3 3" marker-end="url(#xx)"/>
+  <text x="735" y="200" fill="#ff7b72" font-size="8.5" text-anchor="middle">✗ no PKM-edit feedback</text>
+</svg>
+</div>
+<figcaption>Reads are unconstrained beyond auth + local-only over metadata-only tables. Writes split into two non-interchangeable kinds: <span style="color:var(--green)">(a)</span> the note-stub, write-only into a quarantined staging directory; <span style="color:var(--purple)">(b)</span> cluster-boundary curation, into Bergamot's own control tables. <span style="color:var(--red)">Neither ever touches canonical PKM notes, and nothing flows back from PKM edits</span> — treating a user's rename/move as an approval is brittle and skirts the principle-8 boundary.</figcaption>
+</figure>
+
+<!-- ============================================================ PRINCIPLE 8 -->
+<h2 id="p8">Principle 8 — staging only, never canonical notes</h2>
+
+<div class="callout key">
+  <span class="label">Constitution principle 8 — inviolable (relaxable only by user amendment)</span>
+  <blockquote>"Autonomous agents never write to canonical PKM notes. Agents write append-only to a quarantined staging area the user promotes by hand. Agent-authored content is clearly tagged. The deterministic source of truth is never mutated by an agent."</blockquote>
+  <p style="font-family:var(--mono);font-size:.74rem;color:var(--com);margin-top:.4rem;">docs/constitution.md:90 · governs the canonical-note boundary</p>
+</div>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1100 240" role="img" aria-label="Append-only governs the canonical-note boundary, not per-stub-file immutability. The agent may overwrite an un-promoted draft in staging; once a stub is promoted out it is canonical and is never overwritten or resurrected.">
+  <defs>
+    <marker id="ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+    <marker id="no" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff7b72"/></marker>
+  </defs>
+
+  <!-- staging zone -->
+  <rect x="40" y="40" width="430" height="170" rx="12" fill="rgba(126,231,135,.04)" stroke="#7ee787" stroke-dasharray="5 4"/>
+  <text x="255" y="64" fill="#7ee787" font-size="11" text-anchor="middle" font-weight="bold">bergamot.staging/  ·  quarantined, agent territory</text>
+
+  <rect x="70" y="86" width="170" height="56" rx="8" fill="#161b22" stroke="#7ee787"/>
+  <text x="155" y="108" fill="#d7dde4" font-size="10" text-anchor="middle">un-promoted draft</text>
+  <text x="155" y="124" fill="#768390" font-size="8.5" text-anchor="middle">agent-tagged · run_id · generated-at</text>
+
+  <!-- self overwrite loop -->
+  <path d="M 110 142 C 80 175, 200 175, 175 144" fill="none" stroke="#7ee787" stroke-width="2" marker-end="url(#ok)"/>
+  <text x="145" y="190" fill="#7ee787" font-size="9" text-anchor="middle">re-run overwrites OWN draft ✓</text>
+
+  <rect x="280" y="86" width="160" height="56" rx="8" fill="#0c0f14" stroke="#768390"/>
+  <text x="360" y="108" fill="#768390" font-size="10" text-anchor="middle">fingerprint gate</text>
+  <text x="360" y="124" fill="#768390" font-size="8.5" text-anchor="middle">re-stub only if changed</text>
+
+  <!-- promote arrow -->
+  <line x1="470" y1="120" x2="620" y2="120" stroke="#d2a8ff" stroke-width="2.5" marker-end="url(#ok)"/>
+  <text x="545" y="108" fill="#d2a8ff" font-size="9.5" text-anchor="middle">user promotes</text>
+  <text x="545" y="138" fill="#d2a8ff" font-size="9.5" text-anchor="middle">BY HAND</text>
+
+  <!-- canonical zone -->
+  <rect x="630" y="60" width="420" height="120" rx="12" fill="#161b22" stroke="#ff7b72"/>
+  <text x="840" y="92" fill="#ff7b72" font-size="11" text-anchor="middle" font-weight="bold">canonical notes — deterministic source of truth</text>
+  <text x="840" y="118" fill="#d7dde4" font-size="10" text-anchor="middle">promoted stub is now canonical</text>
+  <text x="840" y="138" fill="#768390" font-size="9" text-anchor="middle">agent NEVER overwrites it</text>
+  <text x="840" y="156" fill="#768390" font-size="9" text-anchor="middle">agent NEVER resurrects a discarded one</text>
+
+  <path d="M 840 60 C 840 30, 690 30, 660 70" fill="none" stroke="#ff7b72" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#no)"/>
+  <text x="755" y="28" fill="#ff7b72" font-size="9" text-anchor="middle">✗ never re-touch / mutate</text>
+</svg>
+</div>
+<figcaption>"Append-only" governs the <strong>canonical-note boundary</strong>, not per-file immutability. The agent rewriting its own un-promoted draft in staging is permitted and is required by the idempotency design — it never touches a canonical note. Once the user promotes a stub out of staging it is canonical: the agent must never overwrite it nor resurrect a discarded one. This reading is pinned explicitly because principle 8 is an inviolable.</figcaption>
+</figure>
+
+<div class="callout info">
+  <span class="label">The external landscape validates the staging quarantine</span>
+  <p>Nooscope queues AI output in SQLite then <code>flush</code>es to a vault <em>inbox</em>, "maintaining a human review gate before permanent integration"; Note Companion lands suggestions in a dedicated Inbox folder. <code>bergamot.staging/</code> is the same quarantine pattern — its "human review gate" / "preserve intentionality" rationale is reusable language for the ADR (sub-task 9).</p>
+</div>
+
+<!-- ============================================================ INVARIANTS -->
+<h2 id="invariants">Metadata / encrypted-store invariants every surface must respect</h2>
+
+<table>
+  <thead><tr><th>#</th><th>Invariant</th><th>What it forces on a surface</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>1</code></td>
+      <td>The metadata store is the durable source of truth and the syncable artifact (principle 6).</td>
+      <td>Surfaces read derived metadata only; they never become a second source of truth or an un-forgettable copy.</td>
+    </tr>
+    <tr>
+      <td><code>2</code></td>
+      <td>Re-downloaded content lives in a separate quarantined, encrypted, scoped, deletable tier — never git-tracked, never the PKM repo.</td>
+      <td>Two stores, two OS-keystore-backed DEKs (<code>encryption_key.ts</code>: <code>METADATA_DB_KEY_SECRET</code> / <code>CONTENT_CACHE_KEY_SECRET</code>); a surface never co-mingles them.</td>
+    </tr>
+    <tr>
+      <td><code>3</code></td>
+      <td>Staging is the privacy <em>seam</em> in write-back: staged stubs are plaintext markdown where the file-watcher sees them.</td>
+      <td>Defense is <strong>quarantine-by-directory + never-canonical + auto-gitignore</strong>, not encryption — a staging dir inside a PKM/git repo risks commit or sync despite principle 6 and must be auto-gitignored.</td>
+    </tr>
+    <tr>
+      <td><code>4</code></td>
+      <td>Right-to-forget cascades (principle 4): forgetting by URL / origin / time-range deletes cluster memberships, vectors, AND derived staged stubs + curation state.</td>
+      <td>Staged stubs are plaintext outside the encrypted stores, so the cascade needs a <em>new filesystem sweep</em> matching on the per-link citation key (sub-task 3), ordered and idempotent like the existing cascade.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout good">
+  <span class="label">Reads are clean by the privacy core's own design</span>
+  <p>The clusterable corpus is the re-downloadable public subset by design: auth-walled / dead pages are excluded from clusters, so a surface never risks exposing login-walled content. Reads are loopback-bound, per-extension capability-token authed (principle 7), over metadata-only tables — no page content, no re-download triggered by a surface.</p>
+</div>
+
+<!-- ============================================================ DECISION -->
+<h2 id="decision">The explicit read-only vs read-write decision (AC#4)</h2>
+
+<table>
+  <thead><tr><th>Direction</th><th>Mode</th><th>What is written</th><th>Constraint</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Toward the PKM</strong></td>
+      <td><span class="tag ro">read-mostly</span></td>
+      <td>The note-stub only — <strong>write-only into <code>bergamot.staging/</code></strong>.</td>
+      <td>Append-only at the canonical boundary (per-file overwrite of un-promoted drafts permitted). <span style="color:var(--red)">No reading PKM edits back as signal</span> — a rename is not an approval; that feedback loop is explicitly out of scope.</td>
+    </tr>
+    <tr>
+      <td><strong>Toward Bergamot's own state</strong></td>
+      <td><span class="tag rw">read-write</span></td>
+      <td>Cluster-boundary curation — suppress / rename / never-cluster-origin.</td>
+      <td>Writes to a new DuckDB control table in the encrypted metadata store. <strong>In scope now, launch-blocking</strong> (constitution §3), keyed to survive <code>run_id</code> recomputes, and itself a right-to-forget cascade target.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <span class="label">The brittle trap to never conflate</span>
+  <p>Curation is a write-back <em>control</em> signal that ships now; PKM-edit-derived feedback is explicitly out of scope. The two must not be conflated — treating stub edits as curation would skirt the principle-8 boundary and is brittle (a rename is not an approve). Stubs flow <em>out</em> to staging; nothing flows <em>back</em> from PKM edits.</p>
+</div>
+
+<!-- ============================================================ DECOMPOSITION -->
+<h2 id="decomp">Decomposition — the follow-on implementation sub-tasks</h2>
+
+<p class="prose">Nine sub-tasks, each justified against the intention tree: <strong style="color:var(--green)">UNDERSTAND</strong> (turn browsing into a queryable knowledge base) and <strong style="color:var(--green)">SURFACE</strong> (push the projects the user is actually working on at a habit anchor). The integration primitive is the blocking dependency for everything.</p>
+
+<div class="legend">
+  <span><span class="box" style="border-color:var(--accent);background:rgba(240,163,94,.15)"></span> blocking dependency</span>
+  <span><span class="box" style="border-color:var(--green);background:rgba(126,231,135,.15)"></span> backbone / actionability surface</span>
+  <span><span class="box" style="border-color:var(--purple);background:rgba(210,168,255,.15)"></span> mandatory control state</span>
+  <span><span class="box" style="border-color:var(--accent-2);background:rgba(108,182,255,.15)"></span> optional accessory · ADR</span>
+</div>
+
+<div class="seq-label">Sequence 0 — blocking dependency (must ship first)</div>
+<div class="cards">
+  <div class="card block">
+    <span class="num">01</span>
+    <span class="tag dep">depends-on: nothing</span> <span class="tag ro">read-only</span>
+    <h4>Implement the cluster read primitive (<code>cluster_reads.ts</code>)</h4>
+    <p class="scope">Four pure <code>(db, params) → JSON</code> functions filtered to <code>status='complete'</code> live runs: <code>list_clusters_in_range</code>, <code>get_cluster</code>, <code>list_clusters_for_page</code>, <code>window_coverage</code>. Return the label-bundle fields exactly (<code>headline_title</code>, <code>scope</code> with pinned JSON shape, <code>keyphrases</code>, <code>display_label</code>, <code>representation_version</code>), <code>size</code>, <code>coherence</code>, <code>time_span</code>; for members join <code>url</code>/<code>title</code>/<code>page_loaded_at</code>/<code>probability</code>/<code>is_exemplar</code>. Exclude <code>representative_vector</code>. <code>list_clusters_for_page</code> returns <code>page_status ∈ {clustered, noise, unseen}</code> distinguishing processed-noise (<code>is_noise = true</code>) from never-clustered. Clamp via <code>MAX_QUERY_LIMIT</code>. Colocated <code>cluster_reads.test.ts</code> with <code>__fixtures__/</code>.</p>
+    <p class="just"><b>UNDERSTAND:</b> the one queryable contract over the knowledge base; every surface and the whole SURFACE spine depend on it.</p>
+  </div>
+  <div class="card block">
+    <span class="num">02</span>
+    <span class="tag dep">depends-on: 01</span> <span class="tag ro">read-only</span>
+    <h4>Bind to four <code>/query/cluster*</code> routes + retire old scope, preserving <code>visits_in_window</code></h4>
+    <p class="scope">Add <code>GET /query/clusters</code>, <code>/query/cluster</code>, <code>/query/clusters_for_page</code>, <code>/query/cluster_coverage</code> mirroring the existing <code>/query/*</code> pattern (param validation, 400, <code>MAX_QUERY_LIMIT</code> clamp, <code>res.json</code>). Explicitly NOT <code>/query/topic_*</code> and NO new MCP <code>ListTools</code>/<code>CallTool</code> cases. <strong>Rewrite plan §9</strong> to describe this primitive and delete its retired three-tool/route spec — while <strong>explicitly preserving the <code>GET /query/visits_in_window?from=&amp;to=</code> Stage-1 bulk read</strong> (does not exist in <code>server_manager.ts</code> today; belongs to the clustering pipeline's input path, not the retired surface). Add cluster tables to the right-to-forget cascade.</p>
+    <p class="just"><b>AC#2 + principle 12:</b> retires the DB-shaped raw-tool scope cleanly with no half-built routes or stale canonical doc, without orphaning Stage-1.</p>
+  </div>
+</div>
+
+<div class="seq-label">Sequence 1 — backbone + actionability (the hero loop)</div>
+<div class="cards">
+  <div class="card surf">
+    <span class="num">03</span>
+    <span class="tag dep">depends-on: 01</span> <span class="tag rw">read-write → staging</span>
+    <h4>Note-stub renderer + staging writer (the backbone)</h4>
+    <p class="scope">Render one markdown stub per cluster (<code>display_label</code>/<code>headline_title</code> → H1, <code>keyphrases</code> → tags, member URLs → MoC links, exemplar pinned, one-line summary) into <code>bergamot.staging/</code> via pure filesystem write with workspace discovery, agent-tagged frontmatter (<code>run_id</code>, generated-at), auto-gitignore. <strong>Pin the per-link citation format here</strong>: each member link embeds <code>page_session_id</code> + URL in a machine-matchable form so the right-to-forget filesystem sweep can reliably match and delete stubs citing a forgotten URL/origin.</p>
+    <p class="just"><b>SURFACE:</b> the literal hero-loop deliverable, the PKM-native push surface, satisfying principle 8 by construction; the citation key is the contract the forget sweep matches on.</p>
+  </div>
+  <div class="card surf">
+    <span class="num">04</span>
+    <span class="tag dep">depends-on: 03</span> <span class="tag rw">read-write → staging</span>
+    <h4>Staging idempotency + re-run/promotion behavior + forget sweep</h4>
+    <p class="scope">Deterministic filename per lineage (<code>lifeline_id</code> when present — currently NULL, a Phase-4 seam, <code>types.ts:70</code> — else <code>run_id</code> + local label). Re-run overwrites un-promoted stubs in place (permitted: rewrites the agent's own un-promoted draft, never a canonical note); never re-create a stub moved/promoted out, never resurrect a discarded one. Gate restaging to a changed fingerprint. Implement the right-to-forget filesystem sweep matching the sub-task-3 citation key, ordered and idempotent like the existing cascade.</p>
+    <p class="just"><b>SURFACE (trust + principle 4):</b> without idempotency, unstable run-local labels emit churning stubs and erode the hero loop's trust; without the keyed sweep, plaintext stubs escape the forget cascade.</p>
+  </div>
+  <div class="card surf">
+    <span class="num">05</span>
+    <span class="tag dep">depends-on: 02, 03, 07</span> <span class="tag ro">read</span> <span class="tag rw">drives writes</span>
+    <h4>Build the Bergamot cluster skill (SKILL.md + scripts)</h4>
+    <p class="scope">Author SKILL.md (frontmatter + scoped allowed-tools per the <code>weekly-interests</code> template) and <code>fetch_recent_clusters</code> + <code>summarise_cluster</code> + <code>draft_note_stub</code> scripts that call the primitive only, plus the curation actions (suppress / rename / never-cluster-origin) that POST to the control route (sub-task 7). The skill answers in-context recall, DRIVES stub generation (<code>summarise_cluster → draft_note_stub</code>), and is the host-agnostic driver for the launch-blocking control surface. Resolve clusters by current window each invocation (cluster ids dangle across recomputes).</p>
+    <p class="just"><b>SURFACE + UNDERSTAND:</b> the in-workflow actionability layer, the host-agnostic push vehicle, and the host-agnostic home for the launch-blocking control surface; cheapest surface, the task-31.12 pattern.</p>
+  </div>
+  <div class="card surf">
+    <span class="num">06</span>
+    <span class="tag dep">depends-on: 05</span> <span class="tag ro">read</span> <span class="tag rw">opt-in staging write</span>
+    <h4>Schedule the cluster digest (weekly cron/routine)</h4>
+    <p class="scope">Wire the skill to run on a documented weekly cadence, parameterised by window, emitting a digest artifact + optional desktop notification, and a staged weekly-review stub.</p>
+    <p class="just"><b>SURFACE (constitution.md:127):</b> the host-agnostic push anchor — the pull-only mitigation — for hosts without a webview. Pull-first with opt-in weekly write to staging, per the notification-fatigue lesson: triaged, not a firehose.</p>
+  </div>
+</div>
+
+<div class="seq-label">Sequence 2 — mandatory control state + optional accessory</div>
+<div class="cards">
+  <div class="card ctrl">
+    <span class="num">07</span>
+    <span class="tag dep">depends-on: 01</span> <span class="tag lb">launch-blocking</span> <span class="tag rw">read-write → control</span>
+    <h4>Cluster-control table + write route (host-agnostic)</h4>
+    <p class="scope">New DuckDB control table (in the encrypted metadata store) + write endpoint for suppress / rename / never-cluster-this-origin, consumed by the skill (sub-task 5) so the launch-blocking control surface is host-agnostic and never gated on the webview. Suppression persists across recomputes keyed on stable identity; never-cluster-origin feeds the capture/skip-re-download list; the control state is a right-to-forget cascade target.</p>
+    <p class="just"><b>SURFACE (constitution.md:128, launch-blocking):</b> converts "surveilled" into "seen"; mandatory, not optional. Ships with the skill on the launch path.</p>
+  </div>
+  <div class="card acc">
+    <span class="num">08</span>
+    <span class="tag dep">depends-on: 02, 07</span> <span class="tag opt">optional · VS-Code host only</span>
+    <h4>VS Code webview cluster dashboard (NOT launch-blocking)</h4>
+    <p class="scope">Net-new <code>WebviewView</code>/<code>Panel</code>: timeline + cluster cards + member drill-down + domain scope, consuming the primitive via <code>port.json</code> + token-authed fetch in the extension host, <code>postMessage</code> to a sandboxed CSP/nonce webview; <code>viewsContainers</code> + a <code>bergamot.openClusters</code> command + opens-on-launch activation. Optionally hosts the control affordances from (7) as one-click card buttons — a richer host for them, never their only route.</p>
+    <p class="just"><b>SURFACE (constitution.md:127 for VS Code users):</b> the richest ambient-visibility accessory and a discoverable control host, but explicitly host-locked and off the launch critical path — build after the backbone + skill + control route prove the loop; resist any PKM-write affordance.</p>
+  </div>
+  <div class="card acc">
+    <span class="num">09</span>
+    <span class="tag dep">depends-on: 03, 07</span> <span class="tag opt">ADR · record</span>
+    <h4>ADR for the read/write boundary (AC#4)</h4>
+    <p class="scope">Record: stub write-back is write-only toward <code>bergamot.staging/</code> (append-only at the canonical-note boundary, per-file overwrite of un-promoted drafts permitted) and feeds no signal back from PKM edits; cluster-boundary curation is a separate mandatory control surface over Bergamot's own tables (in scope now, launch-blocking, host-agnostic via the skill + control route), not inferred from promotion. Document the asymmetry, the "append-only governs the canonical boundary" reading of principle 8, and quote the Nooscope / Note Companion "human review gate" rationale.</p>
+    <p class="just"><b>principle 12:</b> the canonical record downstream surfaces are built against.</p>
+  </div>
+</div>
+
+<!-- ============================================================ SEQUENCING -->
+<h2 id="seq">Sequencing &amp; dependencies at a glance</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1100 360" role="img" aria-label="The primitive (sub-tasks 1 and 2) blocks everything; the backbone stub writer and skill form the hero loop; the control table is launch-blocking and feeds the skill; the webview and ADR are optional accessories built last.">
+  <defs>
+    <marker id="dep" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+  </defs>
+
+  <!-- Seq 0 -->
+  <text x="120" y="28" fill="#f0a35e" font-size="11" text-anchor="middle" font-weight="bold">Seq 0 · blocking</text>
+  <rect x="30" y="40" width="180" height="50" rx="8" fill="rgba(240,163,94,.08)" stroke="#f0a35e"/>
+  <text x="120" y="62" fill="#f0a35e" font-size="10" text-anchor="middle" font-weight="bold">01 · cluster_reads.ts</text>
+  <text x="120" y="78" fill="#768390" font-size="9" text-anchor="middle">the read primitive</text>
+  <rect x="30" y="105" width="180" height="50" rx="8" fill="rgba(240,163,94,.08)" stroke="#f0a35e"/>
+  <text x="120" y="127" fill="#f0a35e" font-size="10" text-anchor="middle" font-weight="bold">02 · /query/cluster*</text>
+  <text x="120" y="143" fill="#768390" font-size="9" text-anchor="middle">routes + retire §9</text>
+  <line x1="120" y1="90" x2="120" y2="105" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#dep)"/>
+
+  <!-- Seq 1 -->
+  <text x="475" y="28" fill="#7ee787" font-size="11" text-anchor="middle" font-weight="bold">Seq 1 · hero loop</text>
+  <rect x="320" y="40" width="170" height="50" rx="8" fill="rgba(126,231,135,.07)" stroke="#7ee787"/>
+  <text x="405" y="62" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">03 · stub writer</text>
+  <text x="405" y="78" fill="#768390" font-size="9" text-anchor="middle">backbone · staging</text>
+  <rect x="320" y="105" width="170" height="50" rx="8" fill="rgba(126,231,135,.07)" stroke="#7ee787"/>
+  <text x="405" y="127" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">04 · idempotency</text>
+  <text x="405" y="143" fill="#768390" font-size="9" text-anchor="middle">+ forget sweep</text>
+  <rect x="540" y="40" width="170" height="50" rx="8" fill="rgba(126,231,135,.07)" stroke="#7ee787"/>
+  <text x="625" y="62" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">05 · cluster skill</text>
+  <text x="625" y="78" fill="#768390" font-size="9" text-anchor="middle">drives stub + control</text>
+  <rect x="540" y="105" width="170" height="50" rx="8" fill="rgba(126,231,135,.07)" stroke="#7ee787"/>
+  <text x="625" y="127" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">06 · weekly digest</text>
+  <text x="625" y="143" fill="#768390" font-size="9" text-anchor="middle">push anchor</text>
+
+  <line x1="405" y1="90" x2="405" y2="105" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#dep)"/>
+  <line x1="625" y1="90" x2="625" y2="105" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#dep)"/>
+  <line x1="210" y1="65" x2="320" y2="65" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#dep)"/>
+
+  <!-- Seq 2 -->
+  <text x="900" y="28" fill="#d2a8ff" font-size="11" text-anchor="middle" font-weight="bold">Seq 2 · control + accessory</text>
+  <rect x="790" y="40" width="220" height="50" rx="8" fill="rgba(210,168,255,.07)" stroke="#d2a8ff"/>
+  <text x="900" y="58" fill="#d2a8ff" font-size="10" text-anchor="middle" font-weight="bold">07 · control table + route</text>
+  <text x="900" y="74" fill="#ff7b72" font-size="8.5" text-anchor="middle">LAUNCH-BLOCKING · host-agnostic</text>
+  <rect x="790" y="105" width="220" height="50" rx="8" fill="rgba(108,182,255,.06)" stroke="#6cb6ff"/>
+  <text x="900" y="123" fill="#6cb6ff" font-size="10" text-anchor="middle" font-weight="bold">08 · VS Code webview</text>
+  <text x="900" y="139" fill="#768390" font-size="8.5" text-anchor="middle">optional · VS-Code host only</text>
+
+  <!-- Seq 3 -->
+  <rect x="790" y="170" width="220" height="50" rx="8" fill="rgba(108,182,255,.06)" stroke="#6cb6ff"/>
+  <text x="900" y="188" fill="#6cb6ff" font-size="10" text-anchor="middle" font-weight="bold">09 · ADR · read/write boundary</text>
+  <text x="900" y="204" fill="#768390" font-size="8.5" text-anchor="middle">Seq 3 · record the asymmetry</text>
+
+  <!-- cross deps -->
+  <line x1="210" y1="130" x2="320" y2="130" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#dep)"/>
+  <line x1="210" y1="135" x2="790" y2="65" stroke="#9aa6b2" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#dep)"/>
+  <line x1="710" y1="65" x2="790" y2="65" stroke="#9aa6b2" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="710" y1="130" x2="790" y2="65" stroke="#9aa6b2" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#dep)"/>
+  <text x="745" y="100" fill="#768390" font-size="8" text-anchor="middle">07 feeds skill</text>
+  <line x1="900" y1="90" x2="900" y2="105" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#dep)"/>
+  <line x1="900" y1="155" x2="900" y2="170" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#dep)"/>
+
+  <!-- hero-loop arc -->
+  <path d="M 490 165 C 540 200, 280 200, 320 168" fill="none" stroke="#7ee787" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="405" y="215" fill="#7ee787" font-size="9.5" text-anchor="middle">summarise_cluster → draft_note_stub = the hero loop</text>
+
+  <!-- bottom note -->
+  <text x="550" y="280" fill="#768390" font-size="10" text-anchor="middle">Top-to-bottom is the rough build order. The primitive (01–02) blocks all surfaces.</text>
+  <text x="550" y="298" fill="#768390" font-size="10" text-anchor="middle">The control route (07) is launch-blocking and ships with the skill (05) on the launch path — never gated on the webview (08).</text>
+</svg>
+</div>
+<figcaption>The primitive (01–02) blocks everything. The backbone stub writer (03–04) and the skill (05–06) form the hero loop, where <code>summarise_cluster → draft_note_stub</code> seeds staged Maps-of-Content. The control table (07) is <span style="color:var(--red)">launch-blocking</span> and ships host-agnostic via the skill, never on the VS-Code-only critical path; the webview (08) and the ADR (09) are the optional accessories built last.</figcaption>
+</figure>
+
+<div class="callout key">
+  <span class="label">The decomposition in one line</span>
+  <p>One read primitive, then a PKM-native staging backbone driven by a host-agnostic skill, then a launch-blocking control surface that ships with the skill — with the VS Code webview as an optional accessory and an ADR recording the read/write asymmetry. Every sub-task traces to <strong>UNDERSTAND</strong> or <strong>SURFACE</strong>, and no surplus surface is built (YAGNI): <code>representative_vector</code> stays hidden, raw <code>/query/topic_*</code> tools are never re-created, and PKM-edit feedback is out of scope.</p>
+</div>
+
+<footer>
+  Concept 5 of 5 for <code>task-36.8</code> · Surface decision for topic clusters · branch <code>tdt</code> ·
+  canonical reference <code>backlog/tasks/task-36.8 — Decision Brief §6, §7</code> ·
+  privacy core <code>docs/constitution.md</code> principles 4 / 6 / 7 / 8 / 12, §3 ·
+  forget cascade <code>vscode/src/right_to_forget.ts:13</code> · keystore <code>encryption_key.ts</code> ·
+  <a href="task-36.overview.html">← back to the overview</a>
+</footer>
+
+</main>
+
+<script>
+/* SPDX-License-Identifier: Apache-2.0 */
+(function () {
+  "use strict";
+  var links = Array.prototype.slice.call(document.querySelectorAll("nav.outline a"));
+  var targets = links.map(function (a) { return document.querySelector(a.getAttribute("href")); });
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          var i = targets.indexOf(e.target);
+          links.forEach(function (l) { l.classList.remove("active"); });
+          if (i >= 0) links[i].classList.add("active");
+        }
+      });
+    }, { rootMargin: "-45% 0px -50% 0px" });
+    targets.forEach(function (t) { if (t) io.observe(t); });
+  }
+})();
+</script>
+</body>
+</html>

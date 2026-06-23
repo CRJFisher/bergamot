@@ -745,6 +745,21 @@ replace** (CASCADE-delete the run's clusters/members, repopulate, flip to `compl
 Changing model/algo/params yields a **new** key; the prior run for that window is marked
 `superseded` (one live run per window; history retained).
 
+### Per-run cost model
+
+A run's marginal cost is **`K` re-downloads** (`K` = new public pages in the window absent
+from `topic_page_vector`) **+ `K` embeddings + one `O(n²)` cosine-distance build + one full
+HDBSCAN fit over all `n`**. The fit is full-recompute regardless of `K` — there is no append
+path. A run whose `input_fingerprint` is unchanged is a **run-level no-op** (above), which is
+what makes the automatic trigger (§11 step 9) cheap on quiet days. The real incrementality
+mechanism is the **`topic_page_vector` + content caches**: `ok` pages are cache-served, so
+re-download happens only for pages absent from the cache. **Excluded pages (auth-walled /
+failed re-download) re-fetch live on every run by design** — capture never caches exclusions,
+so a page that becomes public later is not pinned to a stale exclusion; there is therefore no
+negative-outcome skip. Re-download is bounded only by the politeness gate (per-host interval,
+host- and global-concurrency caps), which is what makes any cadence faster than daily
+pointless.
+
 ### Centroids
 
 The authoritative representative is the **exemplar/medoid `page_session_id`**; its vector is
@@ -881,8 +896,15 @@ A phased, testable delivery sequence for THIS module. Each phase is independentl
    event loop** (worker thread / child process, mirroring the MCP server spawn pattern) so a
    multi-second dense `O(n²)` `fit` never freezes the UI or stalls the `/visit` capture
    endpoint; the worker returns raw results and the extension's single writer persists them
-   in one short transaction. No scheduler (YAGNI). _Verify:_ clustering a real month produces
-   browsable clusters via MCP without blocking capture.
+   in one short transaction. **An automatic in-host scheduler** (a VS Code extension timer /
+   activation-time check) fires the same `rebuild_clusters` entry on a configurable cadence
+   (default once/day, the value an evidence-based judgement from the step-7 sweep's
+   visits-per-month and per-run re-download volume), with a single-flight guard and §8
+   idempotency making quiet-day ticks ~free. An OS cron + headless writer is rejected (it
+   violates the single-writer model §3); count-based triggers are rejected (the count guard is
+   a windowing invariant, not a trigger). _Verify:_ clustering a real month produces browsable
+   clusters via MCP without blocking capture; a scheduled run over an unchanged window is a
+   no-op.
 
 ---
 
@@ -905,9 +927,18 @@ A phased, testable delivery sequence for THIS module. Each phase is independentl
 - **`~5k` ceiling on a heavy month.** _Mitigation:_ count guard + gap/calendar subdivision;
   a project spanning a sub-window split fragments until the later tracking slice stitches it.
 - **Window-boundary fragmentation.** A project straddling a month edge splits into two
-  short-lived clusters. _Mitigation:_ partly resolved by deferred tracking; flagged that v1
-  cluster counts near boundaries look split. (Optional cheap mitigation: overlapping windows
-  — deferred, YAGNI.)
+  short-lived clusters. _Mitigation:_ the fix is **hierarchical**, in two complementary layers
+  (neither in v1): (1) the cross-window **tracker** (Phase 4) threads the two per-window stubs
+  into one lifeline by Hungarian-matching their frozen representative vectors — micro-tier
+  continuity; (2) the **SOM macro tier** projects both stubs onto the same boundary-agnostic
+  enduring-interest cell, so fragmentation never reaches macro altitude. Both are seamed for
+  free via the frozen `representative_vector` + the one shared cosine space. v1 ships honest
+  split stubs. **Overlapping windows are rejected** (not merely deferred): they are
+  incompatible with the non-overlapping immutable-closed-window idempotency model (§6/§8 key
+  runs on `window_start`/`window_end` and memoize closed windows), they duplicate a straddling
+  project across frames — forcing dedup at every read surface and double-counting the §8
+  coverage/`is_noise` math — and they confer no stable identity (a project longer than the
+  overlap still splits).
 - **Determinism leaks beyond row order.** float32 non-associativity in pooling; tf-backend
   reduction non-determinism. _Mitigation:_ fixed-order float64 accumulation + pinned backend
   - bitwise regression test (§6).
@@ -946,3 +977,7 @@ A phased, testable delivery sequence for THIS module. Each phase is independentl
   better project primitive is the next granularity decision, not assumed settled.
 - **Should noise pages be retried** in an adjacent or coarser window before being declared
   unclustered, given boundary fragmentation? Deferred; depends on tracking.
+- **Trigger cadence default.** v1 ships an automatic in-host trigger (§11 step 9); the only
+  open value is its cadence. Default once/day, finalised as an evidence-based judgement from
+  the §11 step 7 sweep's visits-per-month distribution and measured per-run re-download volume.
+  _Mechanism in scope; cadence value pending that data._

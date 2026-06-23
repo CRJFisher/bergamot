@@ -16,7 +16,7 @@ High-level design for surfacing evolving and recurring topics from a browsing ti
 
 Topics exist at two altitudes, each served by the algorithm whose properties fit that altitude.
 
-**Macro tier — enduring interests (SOM, online).** A single self-organizing map maintained continuously over the whole stream produces a small, stable set of long-horizon interests. SOM fits because its profile is an advantage here: a fixed grid gives a bounded interest vocabulary, online updates with decay model slow drift without recompute, and incidental noise averages out over long spans.
+**Macro tier — enduring interests (SOM, online).** A single self-organizing map maintained continuously over the whole stream produces a small, stable set of long-horizon interests. SOM fits because its profile is an advantage here: a fixed grid gives a bounded interest vocabulary, online updates with decay model slow drift without recompute, and incidental noise averages out over long spans. The macro map is independent of micro window boundaries: a project straddling a calendar edge projects onto the same macro cell from both sides, so window-boundary fragmentation — a micro-tier artifact — never reaches macro altitude. This is why hierarchy, not overlapping windows, is the principled resolution.
 
 **Micro tier — bursty topics (HDBSCAN, windowed).** Within each time window (e.g. month), HDBSCAN finds finer, time-limited topics. It fits because the number of topics is unknown and data-driven, one-off pages are rejected as noise rather than forced into a topic, and topics have variable density. Topics are linked across consecutive windows into lifelines (emerge / persist / merge / split / die).
 
@@ -33,8 +33,8 @@ Both tiers and the linkage operate in one shared embedding space and one metric 
 
 ## Build order
 
-1. **Micro tier** — HDBSCAN per window + cross-window tracking + naming. Delivers visible value and proves the embeddings cluster well.
-2. **Macro tier** — SOM interest map, surfaced once enough history exists to make it stable.
+1. **Micro tier** — HDBSCAN per window + cross-window tracking + naming. Delivers visible value and proves the embeddings cluster well. (Cross-window tracking gives same-burst continuity across window edges — the micro half of boundary-fragmentation resolution.)
+2. **Macro tier** — SOM interest map, surfaced once enough history exists to make it stable. (The macro half: a boundary-agnostic enduring parent. The two halves are complementary, not alternatives, and overlapping windows are not used.)
 3. **Linkage** — geometric attachment first, then the LLM adjudicator/namer on top.
 
 Each layer is independently useful. The clustering primitives (HDBSCAN, SOM, cosine, representation accessors, tracking, projection) live in the clustering library; the LLM linkage and hierarchy persistence live in this consumer.

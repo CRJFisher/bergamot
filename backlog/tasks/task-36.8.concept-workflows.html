@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>task-36.8 — PKM workflows → surface mapping — TDT micro tier</title>
+<style>
+  :root {
+    --bg: #0f1419; --bg-alt: #161b22; --bg-code: #0c0f14;
+    --fg: #d7dde4; --fg-dim: #9aa6b2;
+    --accent: #f0a35e; --accent-2: #6cb6ff; --green: #7ee787; --red: #ff7b72; --purple: #d2a8ff;
+    --border: #2a313a; --com: #768390;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--sans); }
+
+  nav.crossdoc { position: sticky; top: 0; z-index: 10; background: var(--bg-alt); border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; padding: .5rem 5%; font-family: var(--mono); font-size: .74rem; }
+  nav.crossdoc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.crossdoc a, nav.crossdoc span.pending, nav.crossdoc span.cur { padding: .22em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap; border: 1px solid var(--border); }
+  nav.crossdoc a { color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.crossdoc a:hover { background: rgba(108,182,255,.16); }
+  nav.crossdoc span.cur { color: #1a1208; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  nav.crossdoc span.pending { color: var(--com); }
+  nav.crossdoc .dot { display:inline-block; width:.5em; height:.5em; border-radius:50%; margin-right:.35em; vertical-align: middle; }
+  nav.crossdoc .dot.done { background: var(--green); } nav.crossdoc .dot.todo { background: var(--com); }
+
+  nav.concepts { position: sticky; top: 38px; z-index: 9; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; padding: .45rem 5%; font-family: var(--mono); font-size: .72rem; }
+  nav.concepts .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.concepts a, nav.concepts span.cur { padding: .2em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap; border: 1px solid var(--border); }
+  nav.concepts a { color: var(--purple); background: rgba(210,168,255,.06); }
+  nav.concepts a:hover { background: rgba(210,168,255,.16); }
+  nav.concepts span.cur { color: #1a1208; background: var(--purple); border-color: var(--purple); font-weight: 700; }
+
+  nav.outline { position: sticky; top: 76px; z-index: 8; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: .35rem; padding: .45rem 5%; font-family: var(--mono); font-size: .72rem; }
+  nav.outline a { color: var(--fg-dim); text-decoration: none; padding: .18em .55em; border-radius: 999px; border: 1px solid transparent; }
+  nav.outline a:hover, nav.outline a.active { color: var(--accent); border-color: var(--border); background: var(--bg-alt); }
+
+  main { width: 90%; max-width: 1500px; margin: 0 auto; padding: 1.6rem 0 6rem; }
+  header.page { border-bottom: 1px solid var(--border); padding-bottom: 1.2rem; margin-bottom: 1.4rem; }
+  .crumb { color: var(--fg-dim); font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; font-family: var(--mono); }
+  h1 { font-family: var(--serif); font-size: 2rem; margin: .5rem 0 .4rem; line-height: 1.15; font-weight: 600; }
+  h2 { font-size: 1.3rem; margin: 2.8rem 0 .5rem; padding-top: .7rem; border-top: 1px solid var(--border); color: var(--accent); scroll-margin-top: 130px; }
+  .lead { font-size: 1.05rem; max-width: 78ch; }
+  figcaption { font-size: .84rem; color: var(--fg-dim); margin: .5rem 0 0; font-style: italic; max-width: 90ch; }
+  figure { margin: 1rem 0 1.4rem; }
+  .prose { max-width: 74ch; }
+  a { color: var(--accent-2); }
+  code { font-family: var(--mono); font-size: .88em; }
+  p code, li code, td code, figcaption code { background: var(--bg-code); padding: .1em .38em; border-radius: 4px; border: 1px solid var(--border); color: var(--accent); }
+
+  .callout { border-radius: 6px; padding: .8rem 1.1rem; margin: 1rem 0; max-width: 96ch; }
+  .callout.key { background: var(--bg-alt); border-left: 4px solid var(--accent); }
+  .callout.info { background: rgba(108,182,255,.07); border-left: 4px solid var(--accent-2); }
+  .callout.warn { background: rgba(255,123,114,.08); border-left: 4px solid var(--red); }
+  .callout.good { background: rgba(126,231,135,.07); border-left: 4px solid var(--green); }
+  .callout .label { font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .09em; font-weight: 700; display: block; margin-bottom: .3rem; }
+  .callout.key .label { color: var(--accent); } .callout.info .label { color: var(--accent-2); }
+  .callout.warn .label { color: var(--red); } .callout.good .label { color: var(--green); }
+  .callout p { margin: .3rem 0; }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .86rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--bg-alt); color: var(--accent); font-weight: 600; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  td code, th code { font-family: var(--mono); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; font-family: var(--mono); font-size: .76rem; color: var(--fg-dim); margin: .6rem 0; }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; }
+  .legend .box { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+
+  .diagram { width: 100%; overflow-x: auto; }
+  svg { display: block; max-width: 100%; height: auto; }
+  text { font-family: var(--mono); }
+
+  /* read/write pills, reusing palette tokens */
+  .rw { font-family: var(--mono); font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: .12em .5em; border-radius: 999px; white-space: nowrap; border: 1px solid; }
+  .rw.read { color: var(--accent-2); border-color: var(--accent-2); background: rgba(108,182,255,.08); }
+  .rw.write { color: var(--green); border-color: var(--green); background: rgba(126,231,135,.08); }
+
+  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .82rem; font-family: var(--mono); max-width: 96ch; }
+  @media (max-width: 720px) { nav.outline { display: none; } h2 { scroll-margin-top: 90px; } }
+</style>
+</head>
+<body>
+
+<nav class="crossdoc" aria-label="Task-36 family">
+  <span class="home">task-36 family</span>
+  <a href="task-36.overview.html">↑ Overview</a>
+  <span class="cur">36.8 surface decision — concept set</span>
+</nav>
+
+<nav class="concepts" aria-label="Surface-decision concept pages">
+  <span class="home">concepts</span>
+  <a href="task-36.8.concept-decision.html">Decision</a>
+  <a href="task-36.8.concept-surfaces.html">Surfaces</a>
+  <a href="task-36.8.concept-primitive.html">Primitive</a>
+  <span class="cur">Workflows</span>
+  <a href="task-36.8.concept-privacy-and-roadmap.html">Privacy &amp; roadmap</a>
+</nav>
+
+<nav class="outline" aria-label="On this page">
+  <a href="#shape">The six workflows</a>
+  <a href="#map">Workflow → surface map</a>
+  <a href="#rw">Read vs read-write</a>
+  <a href="#window">Windowing</a>
+  <a href="#calls">Primitive calls</a>
+</nav>
+
+<main>
+<header class="page">
+  <div class="crumb">Bergamot · TDT micro tier · task 36.8 surface decision · branch tdt</div>
+  <h1>PKM workflows → surface mapping</h1>
+  <p class="lead">Six concrete PKM workflows turn topic clusters into something a user sees and acts on. Every one consumes the <strong>single</strong> read primitive, the primary surface on the launch path is always host-agnostic, and exactly two workflows are read-write — one writes only to <code>bergamot.staging/</code>, the other only to Bergamot's own control tables.</p>
+</header>
+
+<!-- ============================================================ SHAPE -->
+<h2 id="shape">The six workflows, by primary surface and access</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1120 470" role="img" aria-label="One integration primitive feeds three host-agnostic surfaces — skill, note-stub write-back, control write route — plus an optional VS Code webview accessory; six workflows attach to those surfaces, four read-only and two read-write.">
+  <defs>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#6cb6ff"/></marker>
+    <marker id="w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+  </defs>
+
+  <!-- the one primitive -->
+  <rect x="40" y="190" width="180" height="90" rx="12" fill="rgba(108,182,255,.06)" stroke="#6cb6ff" stroke-width="1.5"/>
+  <text x="130" y="222" fill="#6cb6ff" font-size="12" text-anchor="middle" font-weight="bold">cluster_reads.ts</text>
+  <text x="130" y="240" fill="#d7dde4" font-size="9" text-anchor="middle">one read API · 4 fns</text>
+  <text x="130" y="256" fill="#768390" font-size="8.5" text-anchor="middle">the ONLY DB-touching</text>
+  <text x="130" y="268" fill="#768390" font-size="8.5" text-anchor="middle">layer · live runs only</text>
+
+  <!-- surfaces -->
+  <rect x="300" y="40" width="320" height="58" rx="9" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="312" y="62" fill="#6cb6ff" font-size="11" font-weight="bold">Skill / sub-agent over scripts</text>
+  <text x="312" y="80" fill="#768390" font-size="8.5">host-agnostic · in-workflow · drives stubs &amp; control · cheapest</text>
+
+  <rect x="300" y="118" width="320" height="58" rx="9" fill="#161b22" stroke="#7ee787"/>
+  <text x="312" y="140" fill="#7ee787" font-size="11" font-weight="bold">Note-stub write-back → bergamot.staging/</text>
+  <text x="312" y="158" fill="#768390" font-size="8.5">PKM-native backbone · the hero-loop deliverable</text>
+
+  <rect x="300" y="196" width="320" height="58" rx="9" fill="#161b22" stroke="#f0a35e"/>
+  <text x="312" y="218" fill="#f0a35e" font-size="11" font-weight="bold">Control write route</text>
+  <text x="312" y="236" fill="#768390" font-size="8.5">launch-blocking · suppress / rename / never-cluster-origin</text>
+
+  <rect x="300" y="274" width="320" height="58" rx="9" fill="#0c0f14" stroke="#d2a8ff" stroke-dasharray="5 4"/>
+  <text x="312" y="296" fill="#d2a8ff" font-size="11" font-weight="bold">VS Code webview (optional accessory)</text>
+  <text x="312" y="314" fill="#768390" font-size="8.5">Wave 1 only · richer host · NOT on the launch critical path</text>
+
+  <!-- primitive feeds surfaces -->
+  <line x1="220" y1="225" x2="300" y2="69" stroke="#6cb6ff" stroke-width="1.5" marker-end="url(#r)"/>
+  <line x1="220" y1="230" x2="300" y2="147" stroke="#6cb6ff" stroke-width="1.5" marker-end="url(#r)"/>
+  <line x1="220" y1="240" x2="300" y2="225" stroke="#6cb6ff" stroke-width="1.5" marker-end="url(#r)"/>
+  <line x1="220" y1="250" x2="300" y2="303" stroke="#6cb6ff" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#r)"/>
+  <text x="250" y="180" fill="#6cb6ff" font-size="8" text-anchor="middle">consume</text>
+
+  <!-- workflows column -->
+  <g font-size="9.5">
+    <rect x="700" y="34" width="380" height="34" rx="7" fill="#0c0f14" stroke="#2a313a"/>
+    <text x="712" y="55" fill="#d7dde4">1 · Weekly review <tspan fill="#6cb6ff">read</tspan></text>
+    <rect x="700" y="76" width="380" height="34" rx="7" fill="#0c0f14" stroke="#7ee787"/>
+    <text x="712" y="97" fill="#d7dde4">2 · Note seeding / MoC <tspan fill="#7ee787">read-write → staging</tspan></text>
+    <rect x="700" y="118" width="380" height="34" rx="7" fill="#0c0f14" stroke="#2a313a"/>
+    <text x="712" y="139" fill="#d7dde4">3 · In-context recall while writing <tspan fill="#6cb6ff">read</tspan></text>
+    <rect x="700" y="160" width="380" height="34" rx="7" fill="#0c0f14" stroke="#2a313a"/>
+    <text x="712" y="181" fill="#d7dde4">4 · Dormant-thread resurfacing <tspan fill="#6cb6ff">read</tspan></text>
+    <rect x="700" y="202" width="380" height="34" rx="7" fill="#0c0f14" stroke="#f0a35e"/>
+    <text x="712" y="223" fill="#d7dde4">5 · Cluster-boundary curation <tspan fill="#7ee787">read-write → control</tspan></text>
+    <rect x="700" y="244" width="380" height="34" rx="7" fill="#0c0f14" stroke="#2a313a"/>
+    <text x="712" y="265" fill="#d7dde4">6 · Drill-down / page provenance <tspan fill="#6cb6ff">read</tspan></text>
+  </g>
+
+  <!-- surface -> workflow attach (representative) -->
+  <line x1="620" y1="62" x2="700" y2="51" stroke="#9aa6b2" stroke-width="1" marker-end="url(#r)"/>
+  <line x1="620" y1="147" x2="700" y2="93" stroke="#7ee787" stroke-width="1" marker-end="url(#w)"/>
+  <line x1="620" y1="62" x2="700" y2="135" stroke="#9aa6b2" stroke-width="1" marker-end="url(#r)"/>
+  <line x1="620" y1="62" x2="700" y2="177" stroke="#9aa6b2" stroke-width="1" marker-end="url(#r)"/>
+  <line x1="620" y1="225" x2="700" y2="219" stroke="#f0a35e" stroke-width="1" marker-end="url(#w)"/>
+  <line x1="620" y1="62" x2="700" y2="261" stroke="#9aa6b2" stroke-width="1" marker-end="url(#r)"/>
+
+  <!-- legend -->
+  <g font-size="9" font-family="monospace">
+    <line x1="40" y1="370" x2="80" y2="370" stroke="#6cb6ff" stroke-width="1.5" marker-end="url(#r)"/>
+    <text x="88" y="374" fill="#9aa6b2">read path — over metadata-only tables, no content, no re-download</text>
+    <line x1="40" y1="392" x2="80" y2="392" stroke="#7ee787" stroke-width="1.5" marker-end="url(#w)"/>
+    <text x="88" y="396" fill="#9aa6b2">write → bergamot.staging/ (append-only at the canonical boundary, agent-tagged)</text>
+    <line x1="40" y1="414" x2="80" y2="414" stroke="#f0a35e" stroke-width="1.5" marker-end="url(#w)"/>
+    <text x="88" y="418" fill="#9aa6b2">write → Bergamot's own control tables (launch-blocking, NEVER the PKM)</text>
+    <rect x="40" y="430" width="40" height="14" rx="3" fill="#0c0f14" stroke="#d2a8ff" stroke-dasharray="4 3"/>
+    <text x="88" y="441" fill="#9aa6b2">webview is a Wave-1 accessory — never the sole route to a launch-blocking capability</text>
+  </g>
+</svg>
+</div>
+<figcaption>Four workflows are read-only; two are read-write — and the two writes go to <strong>different</strong> destinations that must never be conflated. Every primary surface on the launch path (skill, note-stub write-back, control write route) is host-agnostic; the webview attaches as a Wave-1 accessory only.</figcaption>
+</figure>
+
+<div class="callout key">
+  <span class="label">The one thing to read off this page</span>
+  <p>The read-only/read-write split <em>is</em> the AC#4 answer. Toward the PKM, surfaces are <strong>read-mostly</strong>: the only PKM write is the note-stub, and it flows <em>one way</em> into staging with no feedback read back from the user's edits. Toward Bergamot's own state, curation is <strong>read-write and in scope now</strong> — launch-blocking, not a deferred seam.</p>
+</div>
+
+<!-- ============================================================ MAP -->
+<h2 id="map">Workflow → primary surface → supporting → read/write → data pulled</h2>
+
+<table>
+  <thead>
+    <tr><th>Workflow</th><th>Scenario</th><th>Primary surface</th><th>Supporting</th><th>Access</th><th>Primitive call</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Weekly review</strong></td>
+      <td>Monday: see the topics actually browsed last week as headlines/cards at a habit anchor, without asking.</td>
+      <td>Skill digest + staged weekly stub <em>(host-agnostic push)</em></td>
+      <td>Webview cards/timeline (VS Code accessory)</td>
+      <td><span class="rw read">read-only</span></td>
+      <td><code>list_clusters_in_range(last 7d)</code></td>
+    </tr>
+    <tr>
+      <td><strong>Note seeding / Maps-of-Content</strong></td>
+      <td>Turn a cluster into a starting MoC note — theme + member-page links — then review and promote by hand.</td>
+      <td>Note-stub write-back → <code>bergamot.staging/</code></td>
+      <td>Skill (drafts / triggers the stub)</td>
+      <td><span class="rw write">read-write → staging</span></td>
+      <td><code>get_cluster(id)</code> → exemplar + ranked members + label bundle</td>
+    </tr>
+    <tr>
+      <td><strong>In-context recall while writing</strong></td>
+      <td>Mid-draft: “what have I been reading related to this?” — matching clusters + member pages inline to cite/link.</td>
+      <td>Skill (invoked in the PKM / Claude task)</td>
+      <td>Webview (click a cluster)</td>
+      <td><span class="rw read">read-only</span></td>
+      <td><code>list_clusters_for_page</code> / <code>list_clusters_in_range</code></td>
+    </tr>
+    <tr>
+      <td><strong>Dormant-thread resurfacing</strong></td>
+      <td>A topic explored weeks ago then dropped, pushed back: “you spent time on X three weeks ago.”</td>
+      <td>Skill (scheduled push: weekly digest / notification)</td>
+      <td>Webview (launch panel flags stale clusters); write-back (resurfacing entry in digest stub)</td>
+      <td><span class="rw read">read-only</span></td>
+      <td><code>list_clusters_in_range</code> over an OLDER / wider window <em>(multi-window read)</em></td>
+    </tr>
+    <tr>
+      <td><strong>Cluster-boundary curation</strong></td>
+      <td>A cluster is wrong/unwanted → suppress, rename, or “never cluster this origin”; effect persists across recomputes.</td>
+      <td>Skill + control write route <em>(host-agnostic)</em></td>
+      <td>Webview (per-cluster one-click controls, VS Code accessory)</td>
+      <td><span class="rw write">read-write → control</span></td>
+      <td>reads current clusters to act on; writes suppression / rename / never-cluster-origin</td>
+    </tr>
+    <tr>
+      <td><strong>Cluster drill-down / page provenance</strong></td>
+      <td>Click into a cluster to inspect exact member pages, domain scope, representative page — “what is in this topic and why.”</td>
+      <td>Skill (expand-cluster command)</td>
+      <td>Webview (card → member list, VS Code accessory)</td>
+      <td><span class="rw read">read-only</span></td>
+      <td><code>get_cluster(id)</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout info">
+  <span class="label">All six consume one primitive</span>
+  <p>No workflow touches DuckDB. Each calls <code>cluster_reads.ts</code> through the host-agnostic JSON contract — in-process for the stub generator and webview, over the <code>/query/cluster*</code> relay for the skill. Surfaces <strong>layer</strong>; they are not mutually exclusive. The same skill that answers in-context recall also drives stub generation (<code>summarise_cluster → draft_note_stub</code>) and POSTs curation actions to the control route.</p>
+</div>
+
+<!-- ============================================================ RW -->
+<h2 id="rw">The read-only vs read-write decision, made visible (AC#4)</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1120 320" role="img" aria-label="Toward the PKM surfaces are read-mostly with one one-way write to staging and no edit feedback; toward Bergamot's own control tables curation is read-write and launch-blocking now.">
+  <defs>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#6cb6ff"/></marker>
+    <marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#f0a35e"/></marker>
+    <marker id="x" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff7b72"/></marker>
+  </defs>
+
+  <!-- surfaces (center) -->
+  <rect x="430" y="120" width="260" height="80" rx="12" fill="rgba(108,182,255,.06)" stroke="#6cb6ff" stroke-width="1.5"/>
+  <text x="560" y="150" fill="#6cb6ff" font-size="12" text-anchor="middle" font-weight="bold">the surfaces</text>
+  <text x="560" y="170" fill="#768390" font-size="9" text-anchor="middle">skill · note-stub writer ·</text>
+  <text x="560" y="184" fill="#768390" font-size="9" text-anchor="middle">control route · (webview)</text>
+
+  <!-- PKM side (left) -->
+  <rect x="40" y="40" width="280" height="80" rx="12" fill="#161b22" stroke="#7ee787"/>
+  <text x="180" y="68" fill="#7ee787" font-size="12" text-anchor="middle" font-weight="bold">bergamot.staging/</text>
+  <text x="180" y="88" fill="#768390" font-size="9" text-anchor="middle">quarantined, agent-tagged, hand-promoted</text>
+  <text x="180" y="104" fill="#768390" font-size="9" text-anchor="middle">append-only at the canonical boundary</text>
+
+  <rect x="40" y="180" width="280" height="74" rx="12" fill="#0c0f14" stroke="#ff7b72" stroke-dasharray="4 3"/>
+  <text x="180" y="208" fill="#ff7b72" font-size="12" text-anchor="middle" font-weight="bold">canonical PKM notes</text>
+  <text x="180" y="228" fill="#768390" font-size="9" text-anchor="middle">deterministic source of truth</text>
+  <text x="180" y="244" fill="#768390" font-size="9" text-anchor="middle">an agent NEVER mutates these</text>
+
+  <!-- write-only into staging -->
+  <line x1="430" y1="150" x2="320" y2="90" stroke="#7ee787" stroke-width="2.5" marker-end="url(#g)"/>
+  <text x="372" y="106" fill="#7ee787" font-size="9" text-anchor="middle">write-only</text>
+  <!-- no feedback read back -->
+  <line x1="318" y1="118" x2="430" y2="138" stroke="#ff7b72" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#x)"/>
+  <text x="375" y="132" fill="#ff7b72" font-size="8.5" text-anchor="middle">✗ no edit-feedback read-back</text>
+  <!-- never canonical -->
+  <line x1="430" y1="175" x2="320" y2="215" stroke="#ff7b72" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#x)"/>
+  <text x="372" y="208" fill="#ff7b72" font-size="8.5" text-anchor="middle">✗ never</text>
+
+  <!-- Bergamot control side (right) -->
+  <rect x="800" y="100" width="280" height="120" rx="12" fill="rgba(240,163,94,.06)" stroke="#f0a35e" stroke-width="1.5"/>
+  <text x="940" y="130" fill="#f0a35e" font-size="12" text-anchor="middle" font-weight="bold">Bergamot control tables</text>
+  <text x="940" y="150" fill="#d7dde4" font-size="9" text-anchor="middle">new DuckDB table in the metadata store</text>
+  <text x="940" y="166" fill="#768390" font-size="9" text-anchor="middle">suppress · rename · never-cluster-origin</text>
+  <text x="940" y="184" fill="#768390" font-size="9" text-anchor="middle">survives run_id recomputes · encrypted</text>
+  <text x="940" y="202" fill="#7ee787" font-size="9" text-anchor="middle" font-weight="bold">launch-blocking · IN SCOPE NOW</text>
+
+  <line x1="690" y1="155" x2="800" y2="155" stroke="#f0a35e" stroke-width="2.5" marker-end="url(#o)"/>
+  <text x="745" y="145" fill="#f0a35e" font-size="9" text-anchor="middle">read-write</text>
+
+  <!-- captions -->
+  <text x="180" y="290" fill="#768390" font-size="9" text-anchor="middle" font-family="monospace">TOWARD THE PKM · read-mostly</text>
+  <text x="940" y="290" fill="#768390" font-size="9" text-anchor="middle" font-family="monospace">TOWARD BERGAMOT'S OWN STATE · read-write, now</text>
+</svg>
+</div>
+<figcaption>The two writes are not interchangeable. Note-stub write-back flows <strong>one way into staging</strong> with no signal read back from the user's edits (a rename is not an approval). Cluster-boundary curation writes to <strong>Bergamot's own control tables, never the PKM</strong> — so principle 8 does not gate it; the constitution mandates it as launch-blocking on day one.</figcaption>
+</figure>
+
+<div class="callout good">
+  <span class="label">In scope now — not a seam</span>
+  <p>Cluster-boundary curation (suppress / rename / never-cluster-this-origin) ships with the surface on day one. It persists in a control table keyed to survive <code>run_id</code> recomputes, is itself a right-to-forget cascade target, and ships host-agnostic via the skill + control route — never gated on the VS Code webview.</p>
+</div>
+
+<div class="callout warn">
+  <span class="label">The seam that is deliberately NOT built</span>
+  <p>PKM-edit-derived feedback is explicitly out of scope. Reading a user's stub edits back as curation (treating a rename/move as “approve”) would skirt the principle-8 boundary and is brittle. Stubs flow <em>out</em> to staging; nothing flows <em>back</em> from PKM edits. Conflating this with control-table curation is the brittle trap the decision avoids.</p>
+</div>
+
+<!-- ============================================================ WINDOW -->
+<h2 id="window">Windowing — a hard contract requirement, not a convenience</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1120 220" role="img" aria-label="Most workflows read the latest live run, but dormant-thread resurfacing reads across multiple historical per-window runs, which is why the read API exposes a time-range read, not latest-run-only.">
+  <defs>
+    <marker id="tr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d2a8ff"/></marker>
+  </defs>
+  <!-- run windows along a timeline -->
+  <line x1="60" y1="120" x2="1060" y2="120" stroke="#2a313a" stroke-width="2"/>
+  <g font-size="9" text-anchor="middle">
+    <rect x="80"  y="92" width="150" height="56" rx="8" fill="#0c0f14" stroke="#2a313a"/><text x="155" y="116" fill="#9aa6b2">run · 3 weeks ago</text><text x="155" y="132" fill="#768390">run_id A</text>
+    <rect x="270" y="92" width="150" height="56" rx="8" fill="#0c0f14" stroke="#2a313a"/><text x="345" y="116" fill="#9aa6b2">run · 2 weeks ago</text><text x="345" y="132" fill="#768390">run_id B</text>
+    <rect x="460" y="92" width="150" height="56" rx="8" fill="#0c0f14" stroke="#2a313a"/><text x="535" y="116" fill="#9aa6b2">run · last week</text><text x="535" y="132" fill="#768390">run_id C</text>
+    <rect x="650" y="84" width="170" height="72" rx="8" fill="#161b22" stroke="#7ee787" stroke-width="1.5"/><text x="735" y="112" fill="#7ee787" font-weight="bold">live run · this week</text><text x="735" y="130" fill="#768390">status='complete'</text><text x="735" y="146" fill="#768390">run_id D</text>
+  </g>
+
+  <!-- latest-run readers -->
+  <text x="735" y="56" fill="#7ee787" font-size="9" text-anchor="middle">weekly review · drill-down · curation → latest live run</text>
+  <line x1="735" y1="62" x2="735" y2="82" stroke="#7ee787" stroke-width="1.5"/>
+
+  <!-- dormant multi-window read -->
+  <path d="M155 92 C 155 30, 535 30, 535 90" fill="none" stroke="#d2a8ff" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#tr)"/>
+  <text x="345" y="28" fill="#d2a8ff" font-size="9.5" text-anchor="middle">dormant-thread resurfacing → reads ACROSS historical windows</text>
+
+  <text x="560" y="196" fill="#768390" font-size="9" text-anchor="middle" font-family="monospace">run_id is per-window · superseded / running runs filtered out · always status='complete'</text>
+</svg>
+</div>
+<figcaption>Weekly review, drill-down, and curation operate on the latest live run. Dormant-thread resurfacing must read <strong>across multiple historical windows</strong> because <code>run_id</code> is per-window — so <code>list_clusters_in_range(from, to)</code> and <code>window_coverage(from, to)</code> take a range, not “latest run” only. Every operation filters to <code>status='complete'</code> so superseded runs never double-surface a page.</figcaption>
+</figure>
+
+<!-- ============================================================ CALLS -->
+<h2 id="calls">What each workflow pulls from the primitive</h2>
+
+<table>
+  <thead>
+    <tr><th>Primitive function</th><th>Returns</th><th>Driven by</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>list_clusters_in_range(from, to, limit)</code></td>
+      <td>Cluster summaries overlapping <code>[from, to)</code>, live run, newest-first: <code>id</code>, <code>display_label</code>, <code>headline_title</code>, pinned <code>scope</code>, <code>keyphrases</code>, <code>size</code>, <code>coherence</code>, <code>time_span</code>. (No <code>representative_vector</code>.)</td>
+      <td>Weekly review · in-context recall · <strong>dormant-thread resurfacing</strong> (older/wider window)</td>
+    </tr>
+    <tr>
+      <td><code>get_cluster(id)</code></td>
+      <td><code>{ cluster, exemplar_page, members[] }</code> — members ordered <code>probability DESC, page_session_id</code>, joined to <code>webpage_*</code> for <code>url</code> / <code>title</code> / <code>page_loaded_at</code>, capped at <code>MAX_QUERY_LIMIT</code>.</td>
+      <td>Note seeding / MoC (the stub payload) · drill-down / page provenance</td>
+    </tr>
+    <tr>
+      <td><code>list_clusters_for_page(page_session_id)</code></td>
+      <td><code>{ clusters[], page_status }</code> where <code>page_status ∈ {clustered, noise, unseen}</code> — distinguishing processed-noise (<code>is_noise = true, cluster_id = null</code>) from never-clustered.</td>
+      <td>In-context recall while writing · page provenance</td>
+    </tr>
+    <tr>
+      <td><code>window_coverage(from, to)</code></td>
+      <td><code>{ window, input_count, cluster_count, noise_count, coverage }</code> per overlapping live run — <code>coverage = (input_count − noise_count) / input_count</code>.</td>
+      <td>Browsing-health context inside weekly review / drill-down</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout info">
+  <span class="label">Why the noise distinction matters here</span>
+  <p>The provenance and recall workflows depend on <code>page_status</code> separating “you read this but it was a one-off in its window” (<code>noise</code>) from “this page has not been clustered” (<code>unseen</code>). The data carries noise as an explicit row, so the contract never collapses processed-and-noise into never-seen — an honest answer the surfaces surface as-is.</p>
+</div>
+
+<footer>
+  Doc 4 of 5 · surface decision for <code>task-36.8</code> · Temporal Topic Detection, micro tier · branch <code>tdt</code> ·
+  canonical reference: task-36.8 decision brief §5 (workflow map), §6 (read/write asymmetry) ·
+  windowing &amp; the live-run filter <code>tdt/src/types.ts</code>, plan §9 ·
+  <a href="task-36.overview.html">← back to the task-36 overview</a>
+</footer>
+
+</main>
+
+<script>
+/* SPDX-License-Identifier: Apache-2.0 */
+(function () {
+  "use strict";
+  var links = Array.prototype.slice.call(document.querySelectorAll("nav.outline a"));
+  var targets = links.map(function (a) { return document.querySelector(a.getAttribute("href")); });
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          var i = targets.indexOf(e.target);
+          links.forEach(function (l) { l.classList.remove("active"); });
+          if (i >= 0) links[i].classList.add("active");
+        }
+      });
+    }, { rootMargin: "-45% 0px -50% 0px" });
+    targets.forEach(function (t) { if (t) io.observe(t); });
+  }
+})();
+</script>
+</body>
+</html>

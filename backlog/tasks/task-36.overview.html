@@ -12,28 +12,32 @@
     --bg-code: #0c0f14;
     --fg: #d7dde4;
     --fg-dim: #9aa6b2;
-    --accent: #f0a35e;
+    --accent: #f0a35e;     /* bergamot orange */
     --accent-2: #6cb6ff;
     --green: #7ee787;
     --red: #ff7b72;
     --purple: #d2a8ff;
     --border: #2a313a;
+    --kw: #ff7b72;
+    --str: #a5d6ff;
     --com: #768390;
+    --typ: #d2a8ff;
+    --fn: #d2a8ff;
+    --num: #f0a35e;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, ui-monospace, monospace;
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
-  body {
-    margin: 0; background: var(--bg); color: var(--fg);
-    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--sans); }
 
-  /* sticky cross-doc nav */
+  /* sticky cross-doc nav (build-order family) */
   nav.crossdoc {
     position: sticky; top: 0; z-index: 10;
     background: var(--bg-alt); border-bottom: 1px solid var(--border);
     display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
-    padding: .5rem 1.5rem;
-    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace; font-size: .74rem;
+    padding: .5rem 5%; font-family: var(--mono); font-size: .74rem;
   }
   nav.crossdoc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
   nav.crossdoc a, nav.crossdoc span.pending, nav.crossdoc span.cur {
@@ -49,278 +53,497 @@
   nav.crossdoc .dot.now { background: var(--accent); }
   nav.crossdoc .dot.todo { background: var(--com); }
 
-  .wrap { max-width: 980px; margin: 0 auto; padding: 2rem 1.5rem 6rem; }
-  header.page { border-bottom: 1px solid var(--border); padding-bottom: 1.2rem; margin-bottom: 2rem; }
-  .crumb { color: var(--fg-dim); font-size: .82rem; letter-spacing: .04em; text-transform: uppercase; }
-  h1 { font-size: 1.95rem; margin: .4rem 0 .3rem; line-height: 1.2; }
-  h2 { font-size: 1.35rem; margin: 2.6rem 0 .8rem; padding-top: .6rem; border-top: 1px solid var(--border); color: var(--accent); }
-  h3 { font-size: 1.08rem; margin: 1.4rem 0 .5rem; color: var(--accent-2); }
-  p { margin: .6rem 0; }
+  /* second nav row: concept pages */
+  nav.concepts {
+    position: sticky; top: 38px; z-index: 9;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    padding: .45rem 5%; font-family: var(--mono); font-size: .72rem;
+  }
+  nav.concepts .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.concepts a, nav.concepts span.cur {
+    padding: .2em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap; border: 1px solid var(--border);
+  }
+  nav.concepts a { color: var(--purple); background: rgba(210,168,255,.06); }
+  nav.concepts a:hover { background: rgba(210,168,255,.16); }
+  nav.concepts span.cur { color: #1a1208; background: var(--purple); border-color: var(--purple); font-weight: 700; }
+
+  main { width: 90%; max-width: 1500px; margin: 0 auto; padding: 1.6rem 0 6rem; }
+  header.page { border-bottom: 1px solid var(--border); padding-bottom: 1.2rem; margin-bottom: 1.4rem; }
+  .crumb { color: var(--fg-dim); font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; font-family: var(--mono); }
+  h1 { font-family: var(--serif); font-size: 2rem; margin: .5rem 0 .4rem; line-height: 1.15; font-weight: 600; }
+  h2 { font-size: 1.3rem; margin: 2.6rem 0 .5rem; padding-top: .7rem; border-top: 1px solid var(--border); color: var(--accent); scroll-margin-top: 100px; }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 .5rem; color: var(--accent-2); }
+  .lead { font-size: 1.05rem; max-width: 78ch; color: var(--fg); }
+  figcaption { font-size: .84rem; color: var(--fg-dim); margin: .5rem 0 0; font-style: italic; max-width: 90ch; }
+  figure { margin: 1rem 0 1.4rem; }
+  .prose { max-width: 74ch; }
+
   a { color: var(--accent-2); }
-  code { font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace; font-size: .88em; }
-  p code, li code, td code { background: var(--bg-code); padding: .1em .38em; border-radius: 4px; border: 1px solid var(--border); color: var(--accent); }
-  pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.1rem; overflow-x: auto; font-size: .85rem; line-height: 1.55; margin: 1rem 0; color: var(--fg-dim); }
-  .lead { font-size: 1.05rem; }
-  .summary-box { background: var(--bg-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 6px; padding: 1rem 1.2rem; margin: 1.4rem 0; }
-  .summary-box .label { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-weight: 600; }
-  .note { background: rgba(108,182,255,.08); border-left: 4px solid var(--accent-2); border-radius: 6px; padding: .8rem 1rem; margin: 1rem 0; }
-  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .9rem; }
-  th, td { border: 1px solid var(--border); padding: .55rem .7rem; text-align: left; vertical-align: top; }
+  code { font-family: var(--mono); font-size: .88em; }
+  p code, li code, td code, figcaption code { background: var(--bg-code); padding: .1em .38em; border-radius: 4px; border: 1px solid var(--border); color: var(--accent); }
+
+  .northstar { background: var(--bg-alt); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 6px; padding: 1rem 1.2rem; margin: 1.4rem 0; }
+  .northstar .label { font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .09em; color: var(--accent); font-weight: 700; }
+  .northstar p { margin: .4rem 0 0; font-size: 1.18rem; font-family: var(--serif); }
+
+  .callout { border-radius: 6px; padding: .8rem 1.1rem; margin: 1rem 0; max-width: 96ch; }
+  .callout.key { background: var(--bg-alt); border-left: 4px solid var(--accent); }
+  .callout.info { background: rgba(108,182,255,.07); border-left: 4px solid var(--accent-2); }
+  .callout.warn { background: rgba(255,123,114,.08); border-left: 4px solid var(--red); }
+  .callout.good { background: rgba(126,231,135,.07); border-left: 4px solid var(--green); }
+  .callout .label { font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .09em; font-weight: 700; display: block; margin-bottom: .3rem; }
+  .callout.key .label { color: var(--accent); }
+  .callout.info .label { color: var(--accent-2); }
+  .callout.warn .label { color: var(--red); }
+  .callout.good .label { color: var(--green); }
+  .callout p { margin: .3rem 0; }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .88rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
   th { background: var(--bg-alt); color: var(--accent); font-weight: 600; }
   tr:nth-child(even) td { background: rgba(255,255,255,.015); }
-  ul, ol { padding-left: 1.4rem; }
-  li { margin: .35rem 0; }
-  /* build-order steps */
-  .steps { list-style: none; padding-left: 0; counter-reset: step; }
-  .steps > li {
-    position: relative; padding: .75rem 1rem .75rem 3.2rem; margin: .5rem 0;
-    background: var(--bg-alt); border: 1px solid var(--border); border-radius: 8px;
-  }
-  .steps > li::before {
-    counter-increment: step; content: counter(step);
-    position: absolute; left: .8rem; top: .75rem;
-    width: 1.7rem; height: 1.7rem; border-radius: 50%;
-    background: var(--bg-code); border: 1px solid var(--border);
-    color: var(--accent-2); font-weight: 700; font-size: .9rem;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .steps > li.current {
-    border-color: var(--accent); border-left: 4px solid var(--accent);
-    background: rgba(240,163,94,.08);
-  }
-  .steps > li.current::before { background: var(--accent); color: #1a1208; border-color: var(--accent); }
-  .steps > li.complete::before { background: rgba(126,231,135,.18); color: var(--green); border-color: rgba(126,231,135,.4); }
-  .steps .task-ref { font-size: .78rem; color: var(--fg-dim); }
-  .steps .task-ref a { color: var(--accent-2); }
-  .badge { display:inline-block; font-size:.68rem; font-weight:700; letter-spacing:.04em; padding:.1em .5em; border-radius:999px; margin-left:.4rem; }
-  .badge.now { background: var(--accent); color:#1a1208; }
-  .badge.done { background: rgba(126,231,135,.16); color: var(--green); border:1px solid rgba(126,231,135,.3); }
-  .badge.dep { background: rgba(255,123,114,.14); color: var(--red); border:1px solid rgba(255,123,114,.3); }
-  .cta {
-    display:inline-block; margin:.4rem .4rem .4rem 0; padding:.6rem 1.1rem; background: var(--accent-2); color:#0a0f14;
-    border-radius:6px; text-decoration:none; font-weight:600;
-  }
-  .cta.now { background: var(--accent); color:#1a1208; }
-  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .85rem; }
+  td code, th code { font-family: var(--mono); }
+  td.ac { white-space: nowrap; font-family: var(--mono); text-align: center; }
+  .pill { display: inline-block; font-family: var(--mono); font-size: .68rem; padding: .12em .55em; border-radius: 999px; border: 1px solid; }
+  .pill.done { color: var(--green); border-color: var(--green); background: rgba(126,231,135,.08); }
+  .pill.now { color: var(--accent); border-color: var(--accent); background: rgba(240,163,94,.08); }
+  .pill.todo { color: var(--com); border-color: var(--com); background: rgba(118,131,144,.08); }
+  .pill.dep { color: var(--red); border-color: var(--red); background: rgba(255,123,114,.08); }
+  .pill.spike { color: var(--purple); border-color: var(--purple); background: rgba(210,168,255,.08); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; font-family: var(--mono); font-size: .76rem; color: var(--fg-dim); margin: .6rem 0; }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; }
+  .legend .box { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+
+  .diagram { width: 100%; overflow-x: auto; }
+  svg { display: block; max-width: 100%; height: auto; }
+  text { font-family: var(--mono); }
+
+  /* concept launcher cards */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin: 1.2rem 0; }
+  .card { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; text-decoration: none; display: block; transition: border-color .15s; }
+  .card:hover { border-color: var(--purple); }
+  .card .num { font-family: var(--mono); font-size: .7rem; color: var(--purple); letter-spacing: .08em; }
+  .card h3 { color: var(--fg); margin: .25rem 0 .35rem; font-size: 1.02rem; }
+  .card p { margin: 0; font-size: .85rem; color: var(--fg-dim); }
+  .card .go { font-family: var(--mono); font-size: .72rem; color: var(--purple); margin-top: .55rem; display: inline-block; }
+
+  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .82rem; font-family: var(--mono); max-width: 96ch; }
+  @media (max-width: 720px) { h2 { scroll-margin-top: 60px; } }
 </style>
 </head>
 <body>
 
-<nav class="crossdoc" aria-label="Task family">
+<nav class="crossdoc" aria-label="Task family build order">
   <span class="home">task-36 family</span>
   <span class="cur">Overview</span>
   <a href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html"><span class="dot done"></span>36.1 Scaffold</a>
-  <a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html"><span class="dot now"></span>36.2 Windowing</a>
+  <a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html"><span class="dot done"></span>36.2 Windowing</a>
   <span class="pending"><span class="dot todo"></span>36.3 Vectorise · not yet generated</span>
-  <span class="pending"><span class="dot todo"></span>36.4 HDBSCAN core · not yet generated</span>
-  <span class="pending"><span class="dot todo"></span>36.5 Representations · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.4 Distance + HDBSCAN · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.5 Representations + labeler · not yet generated</span>
   <span class="pending"><span class="dot todo"></span>36.6 Persistence · not yet generated</span>
   <span class="pending"><span class="dot todo"></span>36.7 Validation · not yet generated</span>
-  <span class="pending"><span class="dot todo"></span>36.8 MCP · not yet generated</span>
-  <span class="pending"><span class="dot todo"></span>36.9 Trigger · not yet generated</span>
+  <a href="task-36.8.concept-decision.html"><span class="dot todo"></span>36.8 Surface decision · concept set</a>
+  <span class="pending"><span class="dot todo"></span>36.9 Orchestration · not yet generated</span>
 </nav>
 
-<div class="wrap">
+<nav class="concepts" aria-label="Concept pages">
+  <span class="home">concepts</span>
+  <a href="task-36.concept-mental-model.html">Mental model</a>
+  <a href="task-36.concept-architecture.html">Architecture</a>
+  <a href="task-36.concept-data-and-privacy.html">Data &amp; privacy</a>
+  <a href="task-36.concept-pipeline-and-guarantees.html">Pipeline &amp; guarantees</a>
+  <span class="home" style="margin-left:.6rem">36.8 surface</span>
+  <a href="task-36.8.concept-decision.html">Decision</a>
+  <a href="task-36.8.concept-surfaces.html">Surfaces</a>
+  <a href="task-36.8.concept-primitive.html">Primitive</a>
+  <a href="task-36.8.concept-workflows.html">Workflows</a>
+  <a href="task-36.8.concept-privacy-and-roadmap.html">Privacy &amp; roadmap</a>
+</nav>
 
+<main>
 <header class="page">
-  <div class="crumb">Bergamot · Understand / Surface spine node · task-36</div>
+  <div class="crumb">Bergamot · Understand / Surface spine node · task-36 · branch tdt</div>
   <h1>Temporal Topic Detection — windowed HDBSCAN clustering (micro tier)</h1>
-  <p class="lead">Turn the user's timestamped, passively-captured browsing into coherent <strong>projects / research threads</strong> — groups of highly-related pages — and reject one-off pages as noise. This is the first content consumer in the pipeline and the first slice of the TDT subsystem.</p>
+  <p class="lead">Turn timestamped, passively-captured browsing into coherent <strong>projects</strong> — sets of highly-related pages — and surface one-off pages as noise rather than forcing them into a topic.</p>
 </header>
 
-<div class="summary-box">
-  <div class="label">The one question this answers for the user</div>
-  <p style="margin:.4rem 0 0; font-size:1.05rem">"What projects have I been working on, and which pages belong to each?"</p>
+<div class="northstar">
+  <span class="label">The one question this answers for the user</span>
+  <p>“What projects have I been working on, and which pages belong to each?”</p>
 </div>
 
-<!-- ============================================================ -->
-<h2>Parent intention: why the micro tier exists</h2>
+<!-- ============================================================ MENTAL MODEL HERO -->
+<h2>The mental model — two axes, never fused</h2>
 
-<p>Bergamot's spine is <em>capture → store → understand/surface</em>. Capture stores <strong>browsing metadata only, never page content</strong>. The understand/surface node re-downloads the stored public URLs and makes sense of them. TDT is the <strong>first consumer of that re-download corpus</strong> — it runs ahead of the RAG pipeline (task-31).</p>
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1100 340" role="img" aria-label="Embedding space holds clusters and noise; the time axis only slices windows and is never fused into the embedding.">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+  </defs>
 
-<p>The micro tier ships <strong>windowed HDBSCAN clustering</strong>. For each time window it groups page visits by <strong>embedding similarity</strong> (doc↔doc cosine over page vectors), producing clusters that read as candidate projects, and rejects one-off pages as noise rather than forcing them into a topic. <strong>A cluster = a set of pages = one candidate research thread.</strong></p>
+  <!-- LEFT: embedding space -->
+  <text x="40" y="30" fill="#f0a35e" font-size="13" font-weight="bold">EMBEDDING AXIS — what HDBSCAN clusters on</text>
+  <text x="40" y="48" fill="#768390" font-size="11">doc↔doc cosine over one L2-normalized vector per page</text>
+  <rect x="40" y="60" width="520" height="240" rx="10" fill="#161b22" stroke="#2a313a"/>
 
-<p>Two axes are kept strictly separate:</p>
-<ul>
-  <li><strong>Embedding axis</strong> — the only thing HDBSCAN clusters on (cosine over page vectors).</li>
-  <li><strong>Time axis</strong> — used only for <em>windowing</em> (and later <em>tracking</em>). Time is never fused into the embedding.</li>
-</ul>
+  <!-- cluster A -->
+  <g>
+    <circle cx="150" cy="135" r="58" fill="rgba(126,231,135,.07)" stroke="#7ee787" stroke-dasharray="4 3"/>
+    <circle cx="135" cy="120" r="6" fill="#7ee787"/><circle cx="165" cy="118" r="6" fill="#7ee787"/>
+    <circle cx="150" cy="150" r="7" fill="#7ee787" stroke="#fff" stroke-width="1.5"/>
+    <circle cx="175" cy="148" r="6" fill="#7ee787"/><circle cx="128" cy="150" r="6" fill="#7ee787"/>
+    <text x="150" y="205" fill="#7ee787" font-size="11" text-anchor="middle">cluster = a project</text>
+  </g>
+  <!-- cluster B -->
+  <g>
+    <circle cx="400" cy="200" r="62" fill="rgba(108,182,255,.07)" stroke="#6cb6ff" stroke-dasharray="4 3"/>
+    <circle cx="385" cy="185" r="6" fill="#6cb6ff"/><circle cx="415" cy="183" r="6" fill="#6cb6ff"/>
+    <circle cx="400" cy="210" r="7" fill="#6cb6ff" stroke="#fff" stroke-width="1.5"/>
+    <circle cx="425" cy="212" r="6" fill="#6cb6ff"/><circle cx="378" cy="215" r="6" fill="#6cb6ff"/><circle cx="405" cy="235" r="6" fill="#6cb6ff"/>
+    <text x="400" y="278" fill="#6cb6ff" font-size="11" text-anchor="middle">another project</text>
+  </g>
+  <!-- noise points -->
+  <g fill="#768390">
+    <circle cx="290" cy="95" r="5"/><circle cx="490" cy="110" r="5"/><circle cx="240" cy="255" r="5"/><circle cx="510" cy="265" r="5"/>
+  </g>
+  <text x="490" y="92" fill="#768390" font-size="10" text-anchor="end">noise (−1) = page in no project</text>
+  <text x="150" y="142" fill="#0f1419" font-size="9" text-anchor="middle" font-weight="bold">★</text>
+  <text x="400" y="217" fill="#0f1419" font-size="9" text-anchor="middle" font-weight="bold">★</text>
 
-<div class="note">
-<p style="margin:0"><strong>The privacy filter is the login wall.</strong> Visits whose pages fail to re-download (auth-walled, paywalled, dead links) have no embedding and are <strong>excluded</strong> from clustering — they remain trail/metadata only. The clusterable corpus is the re-downloadable public subset. No ingestion-time content heuristic decides this; the re-download outcome does.</p>
+  <!-- divider with NEVER FUSED -->
+  <line x1="600" y1="60" x2="600" y2="300" stroke="#2a313a" stroke-width="1"/>
+  <rect x="572" y="160" width="56" height="38" rx="6" fill="#0f1419" stroke="#ff7b72"/>
+  <text x="600" y="176" fill="#ff7b72" font-size="9" text-anchor="middle">NEVER</text>
+  <text x="600" y="190" fill="#ff7b72" font-size="9" text-anchor="middle">FUSED</text>
+
+  <!-- RIGHT: time axis -->
+  <text x="650" y="30" fill="#f0a35e" font-size="13" font-weight="bold">TIME AXIS — windowing only</text>
+  <text x="650" y="48" fill="#768390" font-size="11">slices the visit stream into bounded frames; never an embedding dimension</text>
+  <rect x="650" y="80" width="410" height="120" rx="10" fill="#161b22" stroke="#2a313a"/>
+  <line x1="670" y1="160" x2="1040" y2="160" stroke="#9aa6b2" stroke-width="2" marker-end="url(#ah)"/>
+  <g stroke="#2a313a" stroke-width="1">
+    <line x1="745" y1="120" x2="745" y2="180"/><line x1="840" y1="120" x2="840" y2="180"/><line x1="935" y1="120" x2="935" y2="180"/>
+  </g>
+  <text x="697" y="112" fill="#6cb6ff" font-size="10" text-anchor="middle">window 1</text>
+  <text x="792" y="112" fill="#6cb6ff" font-size="10" text-anchor="middle">window 2</text>
+  <text x="887" y="112" fill="#6cb6ff" font-size="10" text-anchor="middle">window 3</text>
+  <text x="1030" y="152" fill="#768390" font-size="10" text-anchor="end">time →</text>
+  <text x="855" y="225" fill="#768390" font-size="11" text-anchor="middle">HDBSCAN runs once per window — independently</text>
+</svg>
 </div>
+<figcaption>HDBSCAN clusters purely on embedding similarity; time only decides which visits enter each window. A cluster is a project; a <code>−1</code> page is surfaced as noise, not forced into a topic. <a href="task-36.concept-mental-model.html">Mental model in depth →</a></figcaption>
+</figure>
 
-<p>TDT is a <strong>new top-level npm workspace package <code>@bergamot/tdt</code></strong> (sibling of <code>vscode/</code> and <code>browser/</code>): a pure dependency-injected library plus thin adapters, depending only on injected port contracts and the <code>clustering-tfjs</code> library. It is <strong>independent of the RAG pipeline</strong> — it embeds pages with its own local model and never waits on task-31. The only nominal overlap with RAG is "both embed text," which is not a shared dependency.</p>
+<!-- ============================================================ ARCHITECTURE -->
+<h2>Architecture at a glance</h2>
 
-<!-- ============================================================ -->
-<h2>Key architectural decisions</h2>
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1100 380" role="img" aria-label="The tdt package depends on four injected ports and clustering-tfjs; the extension is the only DuckDB writer and the only host; the dependency arrow is one-way.">
+  <defs>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+    <marker id="aag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+  </defs>
+
+  <!-- tdt package box -->
+  <rect x="360" y="40" width="380" height="240" rx="12" fill="rgba(240,163,94,.05)" stroke="#f0a35e" stroke-width="1.5"/>
+  <text x="550" y="66" fill="#f0a35e" font-size="13" text-anchor="middle" font-weight="bold">@bergamot/tdt</text>
+  <text x="550" y="84" fill="#768390" font-size="10" text-anchor="middle">pure dependency-injected library · never imports vscode/src</text>
+
+  <!-- four ports -->
+  <g font-size="10.5">
+    <rect x="385" y="104" width="150" height="42" rx="6" fill="#161b22" stroke="#6cb6ff"/>
+    <text x="460" y="122" fill="#6cb6ff" text-anchor="middle">RelationalReader</text>
+    <text x="460" y="137" fill="#768390" text-anchor="middle" font-size="9">reads (visits)</text>
+    <rect x="565" y="104" width="150" height="42" rx="6" fill="#161b22" stroke="#6cb6ff"/>
+    <text x="640" y="122" fill="#6cb6ff" text-anchor="middle">EmbedFn</text>
+    <text x="640" y="137" fill="#768390" text-anchor="middle" font-size="9">local embed model</text>
+    <rect x="385" y="160" width="150" height="42" rx="6" fill="#161b22" stroke="#6cb6ff"/>
+    <text x="460" y="178" fill="#6cb6ff" text-anchor="middle">VectorStore</text>
+    <text x="460" y="193" fill="#768390" text-anchor="middle" font-size="9">page-vector cache</text>
+    <rect x="565" y="160" width="150" height="42" rx="6" fill="#161b22" stroke="#7ee787"/>
+    <text x="640" y="178" fill="#7ee787" text-anchor="middle">ClusterSink</text>
+    <text x="640" y="193" fill="#768390" text-anchor="middle" font-size="9">writes (clusters)</text>
+  </g>
+  <text x="550" y="232" fill="#768390" font-size="10" text-anchor="middle">4 injected port contracts = every external need</text>
+  <text x="550" y="262" fill="#d2a8ff" font-size="10.5" text-anchor="middle">depends on clustering-tfjs (the HDBSCAN engine)</text>
+
+  <!-- clustering-tfjs -->
+  <rect x="800" y="120" width="240" height="60" rx="10" fill="#161b22" stroke="#d2a8ff"/>
+  <text x="920" y="146" fill="#d2a8ff" font-size="12" text-anchor="middle" font-weight="bold">clustering-tfjs</text>
+  <text x="920" y="164" fill="#768390" font-size="10" text-anchor="middle">external HDBSCAN engine</text>
+  <line x1="740" y1="150" x2="800" y2="150" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#aa)"/>
+  <text x="770" y="142" fill="#768390" font-size="9" text-anchor="middle">depends</text>
+
+  <!-- extension host -->
+  <rect x="60" y="120" width="250" height="120" rx="12" fill="#161b22" stroke="#7ee787" stroke-width="1.5"/>
+  <text x="185" y="146" fill="#7ee787" font-size="12" text-anchor="middle" font-weight="bold">vscode/ extension</text>
+  <text x="185" y="166" fill="#d7dde4" font-size="10" text-anchor="middle">the single DuckDB writer</text>
+  <text x="185" y="182" fill="#d7dde4" font-size="10" text-anchor="middle">+ the host that runs TDT</text>
+  <text x="185" y="202" fill="#768390" font-size="9.5" text-anchor="middle">supplies the 4 port impls</text>
+  <text x="185" y="217" fill="#768390" font-size="9.5" text-anchor="middle">+ triggers run_tdt</text>
+
+  <!-- one-way arrow vscode -> tdt -->
+  <line x1="310" y1="160" x2="360" y2="160" stroke="#7ee787" stroke-width="2" marker-end="url(#aag)"/>
+  <text x="335" y="150" fill="#7ee787" font-size="9" text-anchor="middle">supplies</text>
+  <!-- never reverse -->
+  <line x1="360" y1="200" x2="312" y2="200" stroke="#ff7b72" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="336" y="214" fill="#ff7b72" font-size="9" text-anchor="middle">✗ never</text>
+
+  <!-- duckdb file -->
+  <rect x="60" y="290" width="250" height="56" rx="10" fill="#0c0f14" stroke="#2a313a"/>
+  <text x="185" y="313" fill="#d7dde4" font-size="11" text-anchor="middle">DuckDB file (encrypted)</text>
+  <text x="185" y="330" fill="#768390" font-size="9.5" text-anchor="middle">capture tables + cluster tables, one file</text>
+  <line x1="185" y1="240" x2="185" y2="290" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#aa)"/>
+  <text x="232" y="268" fill="#768390" font-size="9">holds read-write</text>
+</svg>
+</div>
+<figcaption>TDT is a pure library: four injected ports express every external need, the extension supplies the implementations and is the only process that opens the DuckDB file, and the dependency arrow runs one way — <code>vscode → tdt</code>, never the reverse. <a href="task-36.concept-architecture.html">Architecture &amp; the single-writer constraint →</a></figcaption>
+</figure>
+
+<!-- ============================================================ PIPELINE -->
+<h2>The pipeline</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1100 320" role="img" aria-label="Left to right: visit stream, windowing, page vectors, cosine distance, HDBSCAN fit, representations and labeler, persist, then a thin host-agnostic read API feeding a still-undecided set of user-facing surfaces — with three exclusion branches.">
+  <defs>
+    <marker id="pf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+    <marker id="pfr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff7b72"/></marker>
+    <marker id="pfc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#f0a35e"/></marker>
+    <marker id="pfp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d2a8ff"/></marker>
+  </defs>
+
+  <!-- main row of stages -->
+  <g font-size="10.5" text-anchor="middle">
+    <rect x="20"  y="100" width="118" height="50" rx="8" fill="#161b22" stroke="#6cb6ff"/><text x="79" y="122" fill="#6cb6ff">visit stream</text><text x="79" y="137" fill="#768390" font-size="9">metadata only</text>
+    <rect x="168" y="100" width="118" height="50" rx="8" fill="#161b22" stroke="#2a313a"/><text x="227" y="122" fill="#d7dde4">windowing</text><text x="227" y="137" fill="#768390" font-size="9">36.2 · bounded frames</text>
+    <rect x="316" y="100" width="118" height="50" rx="8" fill="#161b22" stroke="#2a313a"/><text x="375" y="118" fill="#d7dde4">page vectors</text><text x="375" y="132" fill="#768390" font-size="9">36.3 · re-download</text><text x="375" y="144" fill="#768390" font-size="9">+ embed</text>
+    <rect x="464" y="100" width="118" height="50" rx="8" fill="#161b22" stroke="#2a313a"/><text x="523" y="122" fill="#d7dde4">cosine distance</text><text x="523" y="137" fill="#768390" font-size="9">36.4 · (n×n) matrix</text>
+    <rect x="612" y="100" width="118" height="50" rx="8" fill="rgba(210,168,255,.08)" stroke="#d2a8ff"/><text x="671" y="118" fill="#d2a8ff">HDBSCAN.fit</text><text x="671" y="132" fill="#768390" font-size="9">36.4 · the only</text><text x="671" y="144" fill="#768390" font-size="9">tfjs call</text>
+    <rect x="760" y="100" width="118" height="50" rx="8" fill="#161b22" stroke="#2a313a"/><text x="819" y="118" fill="#d7dde4">representations</text><text x="819" y="132" fill="#768390" font-size="9">36.5 · + labeler</text><text x="819" y="144" fill="#768390" font-size="9">(no LLM)</text>
+    <rect x="908" y="100" width="92" height="50" rx="8" fill="rgba(126,231,135,.08)" stroke="#7ee787"/><text x="954" y="122" fill="#7ee787">persist</text><text x="954" y="137" fill="#768390" font-size="9">36.6 · DuckDB</text>
+  </g>
+  <!-- connectors -->
+  <g stroke="#9aa6b2" stroke-width="1.5">
+    <line x1="138" y1="125" x2="168" y2="125" marker-end="url(#pf)"/>
+    <line x1="286" y1="125" x2="316" y2="125" marker-end="url(#pf)"/>
+    <line x1="434" y1="125" x2="464" y2="125" marker-end="url(#pf)"/>
+    <line x1="582" y1="125" x2="612" y2="125" marker-end="url(#pf)"/>
+    <line x1="730" y1="125" x2="760" y2="125" marker-end="url(#pf)"/>
+    <line x1="878" y1="125" x2="908" y2="125" marker-end="url(#pf)"/>
+  </g>
+
+  <!-- the integration primitive: one thin read API -->
+  <rect x="868" y="200" width="172" height="46" rx="8" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="954" y="220" fill="#6cb6ff" font-size="10.5" text-anchor="middle">integration primitive</text>
+  <text x="954" y="234" fill="#768390" font-size="8.5" text-anchor="middle">36.8 · one thin read API · the only layer on the DB</text>
+  <line x1="954" y1="150" x2="954" y2="200" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#pf)"/>
+
+  <!-- the undecided surfaces it feeds -->
+  <rect x="612" y="270" width="428" height="42" rx="8" fill="rgba(210,168,255,.06)" stroke="#d2a8ff" stroke-dasharray="4 3"/>
+  <text x="826" y="288" fill="#d2a8ff" font-size="10" text-anchor="middle">user-facing surface(s) — DECISION PENDING (36.8 spike)</text>
+  <text x="826" y="302" fill="#768390" font-size="8.5" text-anchor="middle">skill · note-stub write-back · VS Code webview — layered, each a consumer of the primitive</text>
+  <line x1="900" y1="246" x2="854" y2="270" stroke="#d2a8ff" stroke-width="1.5" marker-end="url(#pfp)"/>
+
+  <!-- exclusion branch 1: sparse window -> skip -->
+  <line x1="227" y1="150" x2="227" y2="200" stroke="#f0a35e" stroke-width="1.5" marker-end="url(#pfc)"/>
+  <rect x="150" y="200" width="155" height="38" rx="6" fill="rgba(240,163,94,.08)" stroke="#f0a35e" stroke-dasharray="3 2"/>
+  <text x="227" y="217" fill="#f0a35e" font-size="9.5" text-anchor="middle">sparse window → SKIP</text>
+  <text x="227" y="230" fill="#768390" font-size="8.5" text-anchor="middle">“not enough data yet”</text>
+
+  <!-- exclusion branch 2: failed re-download -> excluded -->
+  <line x1="375" y1="150" x2="375" y2="252" stroke="#ff7b72" stroke-width="1.5" marker-end="url(#pfr)"/>
+  <rect x="320" y="252" width="200" height="38" rx="6" fill="rgba(255,123,114,.08)" stroke="#ff7b72" stroke-dasharray="3 2"/>
+  <text x="420" y="269" fill="#ff7b72" font-size="9.5" text-anchor="middle">auth-walled / failed re-download</text>
+  <text x="420" y="282" fill="#768390" font-size="8.5" text-anchor="middle">EXCLUDED — trail/metadata only</text>
+
+  <!-- exclusion branch 3: label -1 -> noise -->
+  <line x1="671" y1="150" x2="671" y2="200" stroke="#768390" stroke-width="1.5" marker-end="url(#pf)"/>
+  <rect x="600" y="200" width="142" height="38" rx="6" fill="#161b22" stroke="#768390" stroke-dasharray="3 2"/>
+  <text x="671" y="217" fill="#768390" font-size="9.5" text-anchor="middle">label −1 → NOISE</text>
+  <text x="671" y="230" fill="#768390" font-size="8.5" text-anchor="middle">surfaced, not forced</text>
+</svg>
+</div>
+<figcaption>A straight line from the visit stream to persisted clusters; each stage owns one sub-task. Past persistence the path splits in two: one thin host-agnostic read API is the <em>only</em> layer that touches the DB, and the user-facing surface that consumes it — a Claude skill, note-stub write-back, a VS Code webview, layered together — is an open decision 36.8 resolves. Three things leave the line: a sparse window is skipped, a page that fails to re-download is excluded, and a <code>−1</code> page is surfaced as noise. <a href="task-36.concept-pipeline-and-guarantees.html">Pipeline stages &amp; the guarantees →</a></figcaption>
+</figure>
+
+<!-- ============================================================ BUILD ORDER -->
+<h2>Build order — nine sub-tasks</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1100 250" role="img" aria-label="Nine sub-tasks as a progress strip: 36.1 and 36.2 done, 36.3 through 36.9 to do, with 36.4 gated on external clustering-tfjs work and 36.8 a surface-decision spike.">
+  <defs>
+    <marker id="bo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#768390"/></marker>
+  </defs>
+  <!-- spine -->
+  <line x1="55" y1="70" x2="1045" y2="70" stroke="#2a313a" stroke-width="2"/>
+
+  <!-- helper: 9 nodes -->
+  <!-- positions -->
+  <g font-size="10" text-anchor="middle">
+    <!-- 36.1 -->
+    <circle cx="60" cy="70" r="13" fill="rgba(126,231,135,.18)" stroke="#7ee787"/><text x="60" y="74" fill="#7ee787" font-size="11">1</text>
+    <text x="60" y="100" fill="#7ee787" font-size="9.5">DONE</text>
+    <text x="60" y="124" fill="#d7dde4">Scaffold</text><text x="60" y="138" fill="#768390" font-size="8.5">package + ports</text>
+    <!-- 36.2 -->
+    <circle cx="183" cy="70" r="13" fill="rgba(126,231,135,.18)" stroke="#7ee787"/><text x="183" y="74" fill="#7ee787" font-size="11">2</text>
+    <text x="183" y="100" fill="#7ee787" font-size="9.5">DONE</text>
+    <text x="183" y="124" fill="#d7dde4">Windowing</text><text x="183" y="138" fill="#768390" font-size="8.5">bounded frames</text>
+    <!-- 36.3 -->
+    <circle cx="306" cy="70" r="13" fill="#161b22" stroke="#768390"/><text x="306" y="74" fill="#768390" font-size="11">3</text>
+    <text x="306" y="100" fill="#768390" font-size="9.5">to do</text>
+    <text x="306" y="124" fill="#d7dde4">Vectorise</text><text x="306" y="138" fill="#768390" font-size="8.5">re-download+embed</text>
+    <!-- 36.4 gated -->
+    <circle cx="429" cy="70" r="13" fill="rgba(255,123,114,.12)" stroke="#ff7b72"/><text x="429" y="74" fill="#ff7b72" font-size="11">4</text>
+    <text x="429" y="100" fill="#ff7b72" font-size="9.5">GATED</text>
+    <text x="429" y="124" fill="#d7dde4">Distance + HDBSCAN</text><text x="429" y="138" fill="#768390" font-size="8.5">only tfjs call</text>
+    <!-- 36.5 -->
+    <circle cx="552" cy="70" r="13" fill="#161b22" stroke="#768390"/><text x="552" y="74" fill="#768390" font-size="11">5</text>
+    <text x="552" y="100" fill="#768390" font-size="9.5">to do</text>
+    <text x="552" y="124" fill="#d7dde4">Representations</text><text x="552" y="138" fill="#768390" font-size="8.5">+ labeler</text>
+    <!-- 36.6 -->
+    <circle cx="675" cy="70" r="13" fill="#161b22" stroke="#768390"/><text x="675" y="74" fill="#768390" font-size="11">6</text>
+    <text x="675" y="100" fill="#768390" font-size="9.5">to do</text>
+    <text x="675" y="124" fill="#d7dde4">Persistence</text><text x="675" y="138" fill="#768390" font-size="8.5">cluster tables</text>
+    <!-- 36.7 -->
+    <circle cx="798" cy="70" r="13" fill="#161b22" stroke="#768390"/><text x="798" y="74" fill="#768390" font-size="11">7</text>
+    <text x="798" y="100" fill="#768390" font-size="9.5">to do</text>
+    <text x="798" y="124" fill="#d7dde4">Validation</text><text x="798" y="138" fill="#768390" font-size="8.5">sweep → config</text>
+    <!-- 36.8 spike -->
+    <circle cx="921" cy="70" r="13" fill="rgba(210,168,255,.14)" stroke="#d2a8ff"/><text x="921" y="74" fill="#d2a8ff" font-size="11">8</text>
+    <text x="921" y="100" fill="#d2a8ff" font-size="9.5">SPIKE</text>
+    <text x="921" y="124" fill="#d7dde4">Surface decision</text><text x="921" y="138" fill="#768390" font-size="8.5">ADR → sub-tasks</text>
+    <!-- 36.9 -->
+    <circle cx="1044" cy="70" r="13" fill="#161b22" stroke="#768390"/><text x="1044" y="74" fill="#768390" font-size="11">9</text>
+    <text x="1044" y="100" fill="#768390" font-size="9.5">to do</text>
+    <text x="1044" y="124" fill="#d7dde4">Orchestration</text><text x="1044" y="138" fill="#768390" font-size="8.5">off-thread trigger</text>
+  </g>
+
+  <!-- external gate on 36.4 -->
+  <rect x="330" y="178" width="320" height="56" rx="8" fill="rgba(255,123,114,.06)" stroke="#ff7b72" stroke-dasharray="4 3"/>
+  <text x="490" y="198" fill="#ff7b72" font-size="10.5" text-anchor="middle" font-weight="bold">EXTERNAL GATE on 36.4</text>
+  <text x="490" y="214" fill="#d7dde4" font-size="9.5" text-anchor="middle">clustering-tfjs HDBSCAN upgrade (Phases 0/2/3)</text>
+  <text x="490" y="228" fill="#768390" font-size="9" text-anchor="middle">separate repo, tasks 49–55</text>
+  <line x1="429" y1="178" x2="429" y2="86" stroke="#ff7b72" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#bo)"/>
+</svg>
+</div>
+<figcaption>36.1 and 36.2 are complete on the <code>tdt</code> branch; 36.3–36.9 are to do. 36.4 is gated on the external clustering-tfjs HDBSCAN upgrade. 36.8 is a <span style="color:var(--purple)">surface-decision spike</span> — it outputs a decision record and spun-off implementation sub-tasks, not a shipped UI, and has its own five-page concept set. The two completed sub-tasks and 36.8 have companion pages today.</figcaption>
+</figure>
 
 <table>
-  <thead><tr><th>Decision</th><th>What it means</th><th>Why</th></tr></thead>
+  <thead><tr><th>#</th><th>Sub-task</th><th>What it does</th><th>Status</th><th>Page</th></tr></thead>
   <tbody>
-    <tr>
-      <td><strong>Dependency-injection pattern</strong></td>
-      <td>TDT is a pure library. Four injected port contracts — <code>RelationalReader</code>, <code>EmbedFn</code>, <code>VectorStore</code>, <code>ClusterSink</code> — express every external need. The extension supplies the concrete implementations; tests supply in-memory fakes.</td>
-      <td>Makes the whole pipeline unit-testable without VS Code, DuckDB, or a network, and keeps <code>clustering-tfjs</code> and the embedding model swappable.</td>
-    </tr>
-    <tr>
-      <td><strong>DuckDB single-writer constraint</strong></td>
-      <td>DuckDB is single-writer per file across processes. While the extension holds the file read-write (its whole lifetime), no other process can open it — even read-only. The extension is the only writer.</td>
-      <td>This is the load-bearing fact that drives the port design: TDT never opens the DB file. Reads go through the <code>RelationalReader</code> port (in-process fns or HTTP <code>/query/*</code>); writes go through the extension's single-writer transaction behind <code>ClusterSink</code>.</td>
-    </tr>
-    <tr>
-      <td><strong>No imports from <code>vscode/src</code></strong></td>
-      <td>The <code>@bergamot/tdt</code> package never imports VS Code internals. The dependency arrow is one-way: <code>vscode/</code> supplies deps to and calls into <code>tdt/</code>, never the reverse.</td>
-      <td>Keeps TDT a clean, portable, testable library; the extension is just one possible host. Enforced by AC and a grep.</td>
-    </tr>
-    <tr>
-      <td><strong><code>clustering-tfjs</code> dependency</strong></td>
-      <td>The HDBSCAN engine. v1 needs <code>pairwise_distance_matrix(X,'cosine')</code> (shipped), the <code>HDBSCAN</code> estimator with <code>metric='precomputed'</code> emitting <code>labels_</code>/<code>probabilities_</code>/<code>exemplarIndices_</code> (Phase 2), and <code>select_medoids</code> (Phase 3).</td>
-      <td>It is an <strong>external prerequisite</strong>: the HDBSCAN upgrade is planned in the separate clustering-tfjs repo (its tasks 49–55) and gates the clustering sub-task. All library calls are isolated in one stage; the camelCase↔snake_case translation is quarantined at that boundary.</td>
-    </tr>
-    <tr>
-      <td><strong>Cluster tables in the same DuckDB file</strong></td>
-      <td><code>topic_run</code> / <code>topic_cluster</code> / <code>topic_cluster_member</code> / <code>topic_page_vector</code> live in the capture DB, written only by the extension's writer.</td>
-      <td>Windowed selection and the MCP read path become plain single-DuckDB JOINs, consistent with the existing tools. A separate <code>topics.db</code> is deferred (YAGNI).</td>
-    </tr>
-    <tr>
-      <td><strong>Determinism is a contract</strong></td>
-      <td>Window bounds are a pure function of <code>(timestamps, config)</code>; stable fetch order, fixed-order float64 segment accumulation, and a pinned tf backend with a bitwise reproducibility regression test.</td>
-      <td>Same captures + pinned model must produce identical clusters (parent AC #3). Windowing (36.2) is the first place this contract is enforced; HDBSCAN is fit-only with no RNG on this path.</td>
-    </tr>
+    <tr><td class="ac">36.1</td><td>Scaffold the package + ports</td><td>Create the <code>tdt/</code> workspace, the four port contracts, config + types, fakes for every port.</td><td><span class="pill done">done</span></td><td><a href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html">companion →</a></td></tr>
+    <tr><td class="ac">36.2</td><td>Windowing &amp; data-scale</td><td>Slice the visit stream into bounded frames under the sample ceiling; deterministic subdivision; skip sparse frames.</td><td><span class="pill done">done</span></td><td><a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html">companion →</a></td></tr>
+    <tr><td class="ac">36.3</td><td>Page vectorisation</td><td>Re-download each public URL, build page text, embed with TDT's own model, L2-normalize, cache.</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
+    <tr><td class="ac">36.4</td><td>Distance + HDBSCAN core</td><td>Build the cosine distance matrix and run <code>HDBSCAN.fit</code> — the only <code>clustering-tfjs</code> call.</td><td><span class="pill dep">gated</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
+    <tr><td class="ac">36.5</td><td>Representations + labeler</td><td>Pick the representative page, freeze the representative vector, compose a deterministic label bundle — <code>headline_title</code>, <code>scope</code>, <code>keyphrases</code>, <code>display_label</code>, <code>representation_version</code> (no LLM).</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
+    <tr><td class="ac">36.6</td><td>Persistence</td><td>Write <code>topic_run</code> / <code>topic_cluster</code> / <code>topic_cluster_member</code>; run keying; idempotency.</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
+    <tr><td class="ac">36.7</td><td>Validation + sweep</td><td>Sweep parameters on real windows; score by native validity + noise rate; persist the chosen operating point.</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
+    <tr><td class="ac">36.8</td><td>Decide the user-facing surface</td><td>A UI investigation, not an implementation. Split the thin host-agnostic read API (the integration primitive over the cluster + label-bundle tables) from the user-facing surface(s) — a Claude skill over scripts, note-stub write-back into <code>bergamot.staging/</code>, a VS Code webview — and decide how they layer. Output is a decision record (ADR) plus spun-off implementation sub-tasks.</td><td><span class="pill spike">spike</span></td><td><a href="task-36.8.concept-decision.html">concept set →</a></td></tr>
+    <tr><td class="ac">36.9</td><td>Trigger + orchestration</td><td>A manual VS Code command and an automatic in-host trigger over one <code>rebuild_clusters</code> entry; compute runs off the event loop so a dense fit never freezes capture. Cadence is configurable (default once/day), its value an evidence-based judgement from the 36.7 sweep; an OS cron + headless writer and count-based triggers are rejected.</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
   </tbody>
 </table>
 
-<!-- ============================================================ -->
-<h2>The 9-step build order (design §11)</h2>
-
-<p>A phased, independently-verifiable delivery sequence for the module. Each step maps to a sub-task. <span style="color:var(--accent);font-weight:600">task-36.2 is the current step</span>; task-36.1 is complete.</p>
-
-<ol class="steps">
-  <li class="complete">
-    <strong>Scaffold the package + ports</strong> <span class="badge done">DONE</span>
-    <div>Create <code>tdt/</code> workspace, add <code>"tdt"</code> to root <code>workspaces</code>, define <code>ports.ts</code> contracts (with the clustering-tfjs camelCase↔snake_case translation quarantined here), config + types, and fakes for every port. <em>Verify:</em> <code>tsc</code> + a no-op <code>run_tdt</code> round-trips fakes.</div>
-    <div class="task-ref">task-36.1 — Scaffold @bergamot/tdt package · <a href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html">companion →</a></div>
-  </li>
-  <li class="current">
-    <strong>Scale + window resolution</strong> <span class="badge now">YOU ARE HERE</span>
-    <div>Run the §5 SQL against the live DuckDB to fix the window default and confirm the ~5k ceiling reality. Implement <code>windowing.ts</code> (calendar + count-guard + gap/calendar subdivision). <em>Verify:</em> window boundaries are a pure function of timestamps; oversized windows subdivide deterministically.</div>
-    <div class="task-ref">task-36.2 — Windowing and data-scale resolution · <a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html">companion →</a></div>
-  </li>
-  <li>
-    <strong>Page vectorisation (TDT-owned)</strong>
-    <div>Implement <code>build_page_vector</code> (re-download URL, build page text, embed via injected local <code>EmbedFn</code>, L2-normalize, cache in <code>topic_page_vector</code>), re-download outcome classification, dispersion/degenerate/no-text/failed guards, dedupe, fixed-order float64 segment accumulation. <em>Verify:</em> determinism, auth-walled exclusion, cache hit/invalidation on model change.</div>
-    <div class="task-ref">task-36.3 — Page vectorisation: TDT-owned embedding of captured pages</div>
-  </li>
-  <li>
-    <strong>Distance + HDBSCAN integration</strong>
-    <div><code>build_cosine_distance_matrix</code> (clamp/diag/symmetrize) + the isolated <code>cluster_window.ts</code> call (the ONLY <code>clustering-tfjs</code> call). <em>Verify:</em> bitwise reproducibility (same window twice → identical <code>labels_</code> and <code>probabilities_</code>); pinned tf backend.</div>
-    <div class="task-ref">task-36.4 — Cosine distance matrix and HDBSCAN clustering core</div>
-  </li>
-  <li>
-    <strong>Representations + deterministic labeler</strong>
-    <div>Exemplar/medoid representative, frozen representative vector, headline + domain scope + title keyphrases (no LLM). <em>Verify:</em> labels recompose; noise has no representative.</div>
-    <div class="task-ref">task-36.5 — Cluster representations and deterministic labeler</div>
-  </li>
-  <li>
-    <strong>Persistence</strong>
-    <div><code>topic_run</code> / <code>topic_cluster</code> / <code>topic_cluster_member</code>, run-id hashing, idempotency (no-op / atomic-replace / supersede), <code>is_noise</code> coverage. <em>Verify:</em> re-run same key+fingerprint is a no-op; re-embed bumps <code>input_fingerprint</code> and re-clusters.</div>
-    <div class="task-ref">task-36.6 — Persistence: cluster tables, run keying, idempotency</div>
-  </li>
-  <li>
-    <strong>Validation harness + parameter sweep</strong>
-    <div>Sweep window × <code>minClusterSize</code> × <code>minSamples</code> × <code>epsilon</code> on real windows; score by HDBSCAN-native validity + noise rate; A/B raw-dim vs PCA-50; confirm a known project recovers. <strong>Persist the chosen operating point as config.</strong> <em>Verify:</em> noise-rate guardrail trips → PCA promotion works.</div>
-    <div class="task-ref">task-36.7 — Validation harness and parameter sweep</div>
-  </li>
-  <li>
-    <strong>MCP surface</strong>
-    <div>Three <code>/query/topic_*</code> routes + the <code>visits_in_window</code> route + three read-only MCP tools (<code>list_topic_clusters</code>, <code>get_topic_cluster</code>, <code>list_clusters_for_page</code>). <em>Verify:</em> tools return JSON mirroring the existing five; read-only.</div>
-    <div class="task-ref">task-36.8 — MCP surface for topic clusters</div>
-  </li>
-  <li>
-    <strong>Trigger</strong>
-    <div>One VS Code command <code>bergamot.tdt.rebuildClusters</code> over a pure <code>rebuild_clusters(window_spec)</code> function. <strong>Compute runs OFF the extension-host event loop</strong> (worker/child process) so a dense <code>O(n²)</code> <code>fit</code> never freezes the UI or stalls capture; the writer persists results in one short transaction. No scheduler (YAGNI). <em>Verify:</em> clustering a real month produces browsable clusters via MCP without blocking capture.</div>
-    <div class="task-ref">task-36.9 — Trigger and off-thread orchestration</div>
-  </li>
-</ol>
-
-<!-- ============================================================ -->
-<h2>How the sub-tasks compose into the parent goal</h2>
-
-<p>The pipeline is a straight line from the visit stream to browsable clusters. Each sub-task owns one stage; the stages hand typed values forward and never reach backward.</p>
-
-<pre>
-  visit stream
-      │  36.2  windowing.ts ── bounded frames, each ≤ max_samples, deterministic
-      ▼
-  WindowSignal[]  ─ skip (sparse) ─▶ "not enough data yet"
-      │  36.3  build_page_vector ── re-download → embed → L2-normalize → cache
-      ▼
-  PageVector[]    ─ auth-walled / failed re-download ─▶ excluded
-      │  36.4  cosine distance matrix → HDBSCAN.fit  (the ONLY clustering-tfjs call)
-      ▼
-  HdbscanRaw      ─ label -1 ─▶ noise (not forced into a cluster)
-      │  36.5  representations + deterministic labeler (no LLM)
-      ▼
-  RepresentedCluster[]
-      │  36.6  persist: topic_run / topic_cluster / topic_cluster_member  (idempotent)
-      ▼
-  DuckDB tables ──▶ 36.8 MCP read tools ──▶ browsable clusters
-      ▲
-      └ 36.7 validation sweep picks + persists the operating parameters
-      └ 36.9 trigger runs the whole thing OFF the event loop
-</pre>
-
-<div class="note">
-<p style="margin:0"><strong>Windowing (36.2) is where the determinism contract is first enforced.</strong> Because window bounds are a pure function of <code>(timestamps, config)</code>, every downstream stage inherits a stable, reproducible set of frames — the precondition for parent AC #3 (identical captures → identical clusters) and for the future stateless cross-window tracker.</p>
+<div class="callout key">
+  <span class="label">The surface is split into two layers</span>
+  <p>Past persistence, exactly one thin <strong>integration primitive</strong> — a host-agnostic read API over the cluster + 36.5 label-bundle tables — touches the database; its natural home is the standalone Bergamot daemon. Every <strong>user-facing surface</strong> is a <em>consumer</em> of that one primitive, so surfaces ship independently and per-host. The likely shape, which 36.8 confirms: <strong>note-stub write-back</strong> (into a quarantined <code>bergamot.staging/</code> directory, never canonical notes) as the PKM-native backbone, a <strong>Claude skill</strong> as the in-workflow actionability layer that also drives stub generation, and a <strong>VS Code webview</strong> as an optional rich-visibility accessory. These surfaces layer; they do not compete.</p>
 </div>
 
-<!-- ============================================================ -->
-<h2>Sub-task map</h2>
+<!-- ============================================================ ACCEPTANCE -->
+<h2>Parent acceptance criteria</h2>
 
 <table>
-  <thead><tr><th>Sub-task</th><th>Title</th><th>Status</th></tr></thead>
+  <thead><tr><th class="ac">#</th><th>Criterion</th></tr></thead>
   <tbody>
-    <tr><td><strong>36.1</strong></td><td>Scaffold @bergamot/tdt package: ports, config, types, fakes</td><td><span class="badge done">DONE</span></td></tr>
-    <tr><td><strong>36.2</strong></td><td>Windowing and data-scale resolution</td><td><span class="badge now">CURRENT</span></td></tr>
-    <tr><td>36.3</td><td>Page vectorisation: TDT-owned embedding of captured pages</td><td>To Do</td></tr>
-    <tr><td>36.4</td><td>Cosine distance matrix and HDBSCAN clustering core <span class="badge dep">needs clustering-tfjs Phase 2</span></td><td>To Do</td></tr>
-    <tr><td>36.5</td><td>Cluster representations and deterministic labeler</td><td>To Do</td></tr>
-    <tr><td>36.6</td><td>Persistence: cluster tables, run keying, idempotency</td><td>To Do</td></tr>
-    <tr><td>36.7</td><td>Validation harness and parameter sweep</td><td>To Do</td></tr>
-    <tr><td>36.8</td><td>MCP surface for topic clusters</td><td>To Do</td></tr>
-    <tr><td>36.9</td><td>Trigger and off-thread orchestration</td><td>To Do</td></tr>
+    <tr><td class="ac">1</td><td>The <code>@bergamot/tdt</code> package clusters a real window of re-downloaded public pages into project groups end-to-end and exposes them through a thin host-agnostic read API, without blocking capture; auth-walled / failed-re-download visits are excluded.</td></tr>
+    <tr><td class="ac">2</td><td>TDT embeds pages with its own model and has no build-time or runtime dependency on the RAG pipeline (task-31).</td></tr>
+    <tr><td class="ac">3</td><td>Clustering is deterministic and reproducible — same captures + pinned model produce identical clusters, verified by a regression test.</td></tr>
+    <tr><td class="ac">4</td><td>One-off pages are surfaced as noise rather than forced into clusters; per-window coverage / noise rate is queryable.</td></tr>
+    <tr><td class="ac">5</td><td>Operating parameters are selected by a validation sweep on real data and persisted as config, not hardcoded.</td></tr>
+    <tr><td class="ac">6</td><td>The design draft remains the canonical reference and stays in sync with what ships.</td></tr>
+    <tr><td class="ac">7</td><td>Every cluster/persistence store joins the right-to-forget cascade in <code>vscode/src/right_to_forget.ts</code>, with cascade tests extended.</td></tr>
   </tbody>
 </table>
 
-<div class="note">
-<p style="margin:0"><strong>External dependency.</strong> The clustering core (36.4) requires the clustering-tfjs HDBSCAN upgrade — its Phases 0, 2, 3: an HDBSCAN estimator with <code>metric='precomputed'</code> emitting <code>labels_</code>/<code>probabilities_</code>/<code>exemplarIndices_</code>, plus <code>select_medoids</code>. That work is planned in the separate clustering-tfjs repo (tasks 49–55). Sub-tasks 36.1–36.3 do not depend on it and can proceed now.</p>
+<!-- ============================================================ CONCEPT LAUNCHER -->
+<h2>Concept pages — the why and how, in depth</h2>
+
+<div class="cards">
+  <a class="card" href="task-36.concept-mental-model.html">
+    <span class="num">CONCEPT 1</span>
+    <h3>Mental model</h3>
+    <p>Two axes kept strictly separate, a cluster as a project, noise as “pages in no project,” and probability as core-vs-fringe ranking.</p>
+    <span class="go">Read →</span>
+  </a>
+  <a class="card" href="task-36.concept-architecture.html">
+    <span class="num">CONCEPT 2</span>
+    <h3>Architecture &amp; the load-bearing constraint</h3>
+    <p>The pure DI package, the four ports as contracts, and how DuckDB's single-writer rule drives the asymmetric read/write design.</p>
+    <span class="go">Read →</span>
+  </a>
+  <a class="card" href="task-36.concept-data-and-privacy.html">
+    <span class="num">CONCEPT 3</span>
+    <h3>Data &amp; privacy</h3>
+    <p>Metadata-only capture, re-download as the content source, the login wall as the privacy filter, and TDT-owned vectorisation.</p>
+    <span class="go">Read →</span>
+  </a>
+  <a class="card" href="task-36.concept-pipeline-and-guarantees.html">
+    <span class="num">CONCEPT 4</span>
+    <h3>Pipeline &amp; guarantees</h3>
+    <p>Stage-by-stage flow, noise and probabilities as product signals, the three determinism anchors, and the ~5k ceiling.</p>
+    <span class="go">Read →</span>
+  </a>
 </div>
 
-<!-- ============================================================ -->
-<h2>Parent acceptance criteria (task-36)</h2>
-<ol>
-  <li>A <code>@bergamot/tdt</code> workspace clusters a real time window of re-downloaded public pages into project groups end-to-end, browsable via MCP, without blocking capture; auth-walled / failed-re-download visits are excluded.</li>
-  <li>TDT embeds pages with its own model and has no build-time or runtime dependency on the RAG pipeline (task-31).</li>
-  <li>Clustering is deterministic and reproducible — same captures + pinned model produce identical clusters, verified by a regression test.</li>
-  <li>One-off pages are surfaced as noise rather than forced into clusters; per-window cluster coverage / noise rate is queryable.</li>
-  <li>Operating parameters are selected by a validation sweep on real data and persisted as config rather than hardcoded.</li>
-  <li>The design draft remains the canonical reference and stays in sync with what ships.</li>
-  <li>Every cluster/persistence store joins the right-to-forget cascade in <code>vscode/src/right_to_forget.ts</code> (constitution principle 4), with cascade tests extended.</li>
-</ol>
+<h2>36.8 surface-decision concept set — the user-facing surface, investigated</h2>
+<p class="prose">The companion set for the 36.8 surface investigation: why raw MCP tools are rejected, the three candidate surfaces, the one host-agnostic integration primitive, the PKM-workflow mapping, and the privacy guarantees plus sub-task roadmap.</p>
 
-<!-- ============================================================ -->
-<h2>Start here</h2>
-<p>Task-36.1 (scaffold) is complete. The current sub-task is windowing — the first stage of the pipeline and where the determinism contract begins. Read its comprehension companion:</p>
-<p>
-  <a class="cta now" href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html">Open the task-36.2 windowing companion →</a>
-  <a class="cta" href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html">task-36.1 scaffold companion</a>
-</p>
+<div class="cards">
+  <a class="card" href="task-36.8.concept-decision.html">
+    <span class="num">36.8 · A</span>
+    <h3>The surface decision</h3>
+    <p>Why raw MCP is rejected, the two-layer split (one primitive, layered surfaces), the five-criteria scorecard, and the layering recommendation.</p>
+    <span class="go">Read →</span>
+  </a>
+  <a class="card" href="task-36.8.concept-surfaces.html">
+    <span class="num">36.8 · B</span>
+    <h3>Three candidate surfaces</h3>
+    <p>Note-stub write-back, a Claude skill, and a VS Code webview — anatomy, mockups, per-criterion scores, and the role each plays in the layering.</p>
+    <span class="go">Read →</span>
+  </a>
+  <a class="card" href="task-36.8.concept-primitive.html">
+    <span class="num">36.8 · C</span>
+    <h3>The integration primitive</h3>
+    <p>One thin host-agnostic read API over the cluster + label-bundle tables — the only layer on the DB — and the clean retirement of the raw <code>/query/topic_*</code> routes.</p>
+    <span class="go">Read →</span>
+  </a>
+  <a class="card" href="task-36.8.concept-workflows.html">
+    <span class="num">36.8 · D</span>
+    <h3>PKM workflows → surfaces</h3>
+    <p>Weekly review, MoC seeding, in-context recall, dormant-thread resurfacing, and cluster-boundary curation, each mapped to a surface and a read/write mode.</p>
+    <span class="go">Read →</span>
+  </a>
+  <a class="card" href="task-36.8.concept-privacy-and-roadmap.html">
+    <span class="num">36.8 · E</span>
+    <h3>Privacy &amp; roadmap</h3>
+    <p>Principle-8 staging-only write-back, the store invariants, the read-vs-write decision, and the decomposition into sequenced sub-tasks.</p>
+    <span class="go">Read →</span>
+  </a>
+</div>
 
 <footer>
-  Overview for <code>task-36</code> (Temporal Topic Detection, micro tier). Canonical reference: <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code>. Broader two-tier vision (macro SOM tier, cross-window tracking, LLM linkage — later slices): <code>backlog/drafts/tdt-temporal-topic-architecture.md</code>.
+  Overview for <code>task-36</code> — Temporal Topic Detection, micro tier · branch <code>tdt</code> ·
+  canonical reference <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> ·
+  broader two-tier vision <code>backlog/drafts/tdt-temporal-topic-architecture.md</code>.
 </footer>
 
-</div>
+</main>
 </body>
 </html>

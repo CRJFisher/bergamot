@@ -4,7 +4,7 @@ title: Windowing and data-scale resolution
 status: To Do
 assignee: []
 created_date: "2026-06-05 19:22"
-updated_date: "2026-06-05 19:23"
+updated_date: "2026-06-23 03:45"
 labels: []
 dependencies:
   - TASK-36.1
@@ -60,4 +60,16 @@ Personal single-user browsing produces well under `max_samples = 4000` pages in 
 
 **Chosen default: `unit: "month"`, `max_samples: 4000`, `min_window_visits: 8`.** Re-running the query as history grows is a config re-tune, not a code change.
 
-Note: the literal query result against live data is a follow-up — paste actual monthly visit counts into these notes once the extension is running, to confirm the default holds.
+Note: the literal query result against live data is a follow-up — paste actual monthly visit counts into these notes once the extension is running, to confirm the default holds. This live query is the **highest-priority open item** in the windowing design: the month-vs-14d default and every downstream re-download-volume / trigger-cadence claim (task-36.9) stay provisional until it runs.
+
+---
+
+## Window span vs trigger cadence (resolved)
+
+**Window SPAN and trigger CADENCE are independent concerns and live in different sub-tasks.** Span — what each HDBSCAN fit covers — is owned here and is calendar-primary (`unit: "month"`). Cadence — when a run fires — is owned by task-36.9. They must not be conflated.
+
+`max_samples` is a **ceiling that triggers deterministic subdivision on overflow** (`windowing.ts`: `visits.length <= config.max_samples` is the pass condition), **not a per-window target**. Count-targeted / target-N windowing — cutting a window after ~N visits — is explicitly **not built**: it shatters slow multi-week projects (v1 has no cross-window tracker to stitch the fragments — plan §5) and makes window boundaries a function of the full visit *set* rather than the timestamps alone, which breaks both backfill-robustness and the closed-window memoization that idempotency relies on (plan §6/§8).
+
+Target-N remains the swept seam already named in plan §5, gated on the task-36.7 sweep. If that sweep shows fixed-span N variance destabilises clusters across windows, **`minClusterSize`-as-a-fraction-of-N (plan §6) is the cheaper first lever**, tried before any re-windowing.
+
+"Fire after N new visits" belongs to the future trigger layer (task-36.9) as a possible heuristic, **never to the span layer here**.
