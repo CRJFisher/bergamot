@@ -36,6 +36,39 @@ export function create_fake_embed(dim = 8): {
   return { embed, embedded_texts };
 }
 
+/**
+ * Content-dependent EmbedFn: maps each distinct text to a stable, non-zero
+ * direction via a pure FNV-1a → LCG fill (no call counter, no clock — the vector
+ * is a function of `text` alone). Same text → byte-identical vector; different
+ * text → different direction. Exercises pooling / dispersion / determinism that
+ * the constant {@link create_fake_embed} cannot. Records every embedded text.
+ */
+export function create_deterministic_embed(dim = 8): {
+  embed: EmbedFn;
+  embedded_texts: string[];
+} {
+  const embedded_texts: string[] = [];
+  const embed: EmbedFn = async (text: string) => {
+    embedded_texts.push(text);
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) {
+      h ^= text.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    let state = (h ^ 0x9e3779b9) >>> 0;
+    const v = new Float32Array(dim);
+    let nonzero = false;
+    for (let d = 0; d < dim; d++) {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      v[d] = (state / 0xffffffff) * 2 - 1; // [-1, 1]
+      if (v[d] !== 0) nonzero = true;
+    }
+    if (!nonzero) v[0] = 1; // never an all-zero (un-normalizable) vector
+    return v;
+  };
+  return { embed, embedded_texts };
+}
+
 /** In-memory VectorStore keyed by `${page_session_id}:${embedding_model_id}`. */
 export class FakeVectorStore implements VectorStore {
   private readonly store = new Map<string, Float32Array>();

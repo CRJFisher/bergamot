@@ -4,6 +4,8 @@ export { compute_windows } from "./windowing";
 
 export type {
   VisitRow,
+  PageRepr,
+  PageContent,
   PageVector,
   DistanceMatrix,
   HdbscanRaw,
@@ -13,8 +15,18 @@ export type {
   MemberRecord,
 } from "./types";
 
-export type { WindowConfig, HdbscanConfig } from "./config";
-export { DEFAULT_WINDOW_CONFIG, DEFAULT_HDBSCAN_CONFIG } from "./config";
+export type { WindowConfig, HdbscanConfig, PageVectorConfig } from "./config";
+export {
+  DEFAULT_WINDOW_CONFIG,
+  DEFAULT_HDBSCAN_CONFIG,
+  DEFAULT_PAGE_VECTOR_CONFIG,
+} from "./config";
+
+export {
+  build_page_vector,
+  resolve_page_vector,
+  dedupe_visits,
+} from "./page_vectors";
 
 import type { RelationalReader, EmbedFn, VectorStore, ClusterSink } from "./ports";
 

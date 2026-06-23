@@ -9,6 +9,22 @@ export interface VisitRow {
   tree_id: string;
 }
 
+// The page-representation strategy used to build a page vector (plan §4).
+// Folded (as a version suffix) into embedding_model_id so a representation
+// change is a clean cache invalidation.
+export type PageRepr = "title_plus_lead" | "main_content_extract";
+
+// One re-downloaded public page's extracted content, projected from vscode's
+// CorpusContent (the task-39.2 read path). TDT consumes this; it never
+// re-downloads, never parses HTML, and never re-classifies fetch outcomes —
+// auth/paywall/dead/non-HTML pages are excluded upstream and never appear here.
+// title is "" (never null) when the page has none; the no-text guard handles it.
+export interface PageContent {
+  page_session_id: string;
+  title: string;
+  content: string; // already-extracted main-content markdown
+}
+
 export interface PageVector {
   page_session_id: string;
   vector: Float32Array; // L2-normalized page vector

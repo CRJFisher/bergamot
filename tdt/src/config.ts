@@ -46,3 +46,23 @@ export const DEFAULT_HDBSCAN_CONFIG = {
   method: "eom",
   epsilon: 0.0,
 } as const satisfies HdbscanConfig;
+
+// Page-vector construction knobs (plan §4). Character budgets are deterministic
+// proxies for the embedder's token budget: the pure library cannot tokenize, so
+// it splits on code-point offsets. Sizes are starting points — re-tuning as the
+// chosen embedder changes is a config change, not a code change.
+export interface PageVectorConfig {
+  lead_chars: number; // title_plus_lead: lead length, in code points
+  segment_chars: number; // split content into segments of this many code points
+  dispersion_min_mean_cosine: number; // below → multi-topic → represent by dominant segment
+  degenerate_norm_epsilon: number; // L2 norm below this → degenerate (fallback, else exclude)
+}
+
+// segment_chars ≈ 512 tokens × ~3.2 chars/token (English), rounded down for
+// tokenizer headroom; recompute if the embedder's budget/tokenizer changes.
+export const DEFAULT_PAGE_VECTOR_CONFIG = {
+  lead_chars: 1000,
+  segment_chars: 1600,
+  dispersion_min_mean_cosine: 0.35,
+  degenerate_norm_epsilon: 1e-6,
+} as const satisfies PageVectorConfig;
