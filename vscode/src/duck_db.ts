@@ -60,6 +60,9 @@ export const WEBPAGE_ACTIVITY_SESSIONS_TABLE = "webpage_activity_sessions";
 export const WEBPAGE_TREES_TABLE = "webpage_trees";
 export const WEBPAGE_CAPTURE_TABLE = "webpage_capture";
 export const WEBPAGE_FETCH_TABLE = "webpage_fetch";
+// TDT-owned page-vector cache (TASK-36.3.1). Lives in the metadata store so the
+// extension's single writer owns it; exported for the right-to-forget cascade.
+export const TOPIC_PAGE_VECTOR_TABLE = "topic_page_vector";
 
 /**
  * Capture metadata columns selected (aliased `cap_*`) when a tree query joins
@@ -1253,6 +1256,23 @@ export async function create_metadata_schema(db: DuckDB): Promise<void> {
   ].join(", ");
   await db.create_table(WEBPAGE_FETCH_TABLE, webpage_fetch_schema);
 
+  // TDT-owned page-vector cache (TASK-36.3.1): one L2-normalized embedding per
+  // (page, model). Produced by the batched embed pass that runs ahead of a TDT
+  // clustering run; clustering and RAG only read it. The cache key folds the
+  // representation-rule version into embedding_model_id, so a model or
+  // representation change is a clean miss. The vector is a DuckDB FLOAT[] (32-bit
+  // per component, dim fixed by the model id) — the shape RAG's eventual
+  // array_cosine_similarity search reuses, so no later migration.
+  const topic_page_vector_schema = [
+    "page_session_id TEXT NOT NULL", // soft ref -> webpage_activity_sessions.id
+    "embedding_model_id TEXT NOT NULL", // model + dim + page-representation-rule version
+    "vector FLOAT[] NOT NULL", // L2-normalized page vector; dim fixed by embedding_model_id
+    "repr TEXT NOT NULL", // page-representation strategy used to build it
+    "built_at TEXT NOT NULL", // ISO timestamp the vector was written
+    "PRIMARY KEY (page_session_id, embedding_model_id)",
+  ].join(", ");
+  await db.create_table(TOPIC_PAGE_VECTOR_TABLE, topic_page_vector_schema);
+
   // Indexes for the common query patterns over the metadata tables.
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_activity_sessions_url
                  ON ${WEBPAGE_ACTIVITY_SESSIONS_TABLE}(url)`);
@@ -1266,4 +1286,7 @@ export async function create_metadata_schema(db: DuckDB): Promise<void> {
                  ON ${WEBPAGE_TREES_TABLE}(latest_activity_time)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_capture_title
                  ON ${WEBPAGE_CAPTURE_TABLE}(title)`);
+  // The right-to-forget cascade deletes page vectors by page_session_id.
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_topic_page_vector_page
+                 ON ${TOPIC_PAGE_VECTOR_TABLE}(page_session_id)`);
 }
