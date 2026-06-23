@@ -19,6 +19,11 @@ export type PageRepr = "title_plus_lead" | "main_content_extract";
 // re-downloads, never parses HTML, and never re-classifies fetch outcomes —
 // auth/paywall/dead/non-HTML pages are excluded upstream and never appear here.
 // title is "" (never null) when the page has none; the no-text guard handles it.
+//
+// The extension's TDT adapter (a later orchestration subtask) maps each `ok`
+// CorpusContent → PageContent, keeping page_session_id/title/content and dropping
+// the fetch-fidelity metadata TDT does not embed. TDT defines this minimal shape
+// so the pure library need not import vscode types.
 export interface PageContent {
   page_session_id: string;
   title: string;

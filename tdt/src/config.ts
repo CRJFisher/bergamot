@@ -60,6 +60,10 @@ export interface PageVectorConfig {
 
 // segment_chars ≈ 512 tokens × ~3.2 chars/token (English), rounded down for
 // tokenizer headroom; recompute if the embedder's budget/tokenizer changes.
+// dispersion_min_mean_cosine = 0.35: passages of one article typically sit at
+// 0.5–0.8 mutual cosine for sentence/passage embedders, while unrelated topics
+// fall well below; 0.35 is a conservative "genuinely multi-topic" floor and the
+// primary knob for the task-36.7 validation sweep.
 export const DEFAULT_PAGE_VECTOR_CONFIG = {
   lead_chars: 1000,
   segment_chars: 1600,

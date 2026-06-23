@@ -140,7 +140,7 @@
   <span class="cur">Overview</span>
   <a href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html"><span class="dot done"></span>36.1 Scaffold</a>
   <a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html"><span class="dot done"></span>36.2 Windowing</a>
-  <span class="pending"><span class="dot todo"></span>36.3 Vectorise · not yet generated</span>
+  <a href="task-36.3 - Page-vectorisation-TDT-owned-embedding-of-captured-pages.page-vectors.html"><span class="dot todo"></span>36.3 Vectorise</a>
   <span class="pending"><span class="dot todo"></span>36.4 Distance + HDBSCAN · not yet generated</span>
   <span class="pending"><span class="dot todo"></span>36.5 Representations + labeler · not yet generated</span>
   <span class="pending"><span class="dot todo"></span>36.6 Persistence · not yet generated</span>
@@ -322,7 +322,7 @@
   <g font-size="10.5" text-anchor="middle">
     <rect x="20"  y="100" width="118" height="50" rx="8" fill="#161b22" stroke="#6cb6ff"/><text x="79" y="122" fill="#6cb6ff">visit stream</text><text x="79" y="137" fill="#768390" font-size="9">metadata only</text>
     <rect x="168" y="100" width="118" height="50" rx="8" fill="#161b22" stroke="#2a313a"/><text x="227" y="122" fill="#d7dde4">windowing</text><text x="227" y="137" fill="#768390" font-size="9">36.2 · bounded frames</text>
-    <rect x="316" y="100" width="118" height="50" rx="8" fill="#161b22" stroke="#2a313a"/><text x="375" y="118" fill="#d7dde4">page vectors</text><text x="375" y="132" fill="#768390" font-size="9">36.3 · re-download</text><text x="375" y="144" fill="#768390" font-size="9">+ embed</text>
+    <rect x="316" y="100" width="118" height="50" rx="8" fill="#161b22" stroke="#f0a35e"/><text x="375" y="118" fill="#f0a35e">page vectors</text><text x="375" y="132" fill="#768390" font-size="9">36.3 · read content</text><text x="375" y="144" fill="#768390" font-size="9">+ embed</text>
     <rect x="464" y="100" width="118" height="50" rx="8" fill="#161b22" stroke="#2a313a"/><text x="523" y="122" fill="#d7dde4">cosine distance</text><text x="523" y="137" fill="#768390" font-size="9">36.4 · (n×n) matrix</text>
     <rect x="612" y="100" width="118" height="50" rx="8" fill="rgba(210,168,255,.08)" stroke="#d2a8ff"/><text x="671" y="118" fill="#d2a8ff">HDBSCAN.fit</text><text x="671" y="132" fill="#768390" font-size="9">36.4 · the only</text><text x="671" y="144" fill="#768390" font-size="9">tfjs call</text>
     <rect x="760" y="100" width="118" height="50" rx="8" fill="#161b22" stroke="#2a313a"/><text x="819" y="118" fill="#d7dde4">representations</text><text x="819" y="132" fill="#768390" font-size="9">36.5 · + labeler</text><text x="819" y="144" fill="#768390" font-size="9">(no LLM)</text>
@@ -356,11 +356,11 @@
   <text x="227" y="217" fill="#f0a35e" font-size="9.5" text-anchor="middle">sparse window → SKIP</text>
   <text x="227" y="230" fill="#768390" font-size="8.5" text-anchor="middle">“not enough data yet”</text>
 
-  <!-- exclusion branch 2: failed re-download -> excluded -->
+  <!-- exclusion branch 2: excluded upstream (39.2) -->
   <line x1="375" y1="150" x2="375" y2="252" stroke="#ff7b72" stroke-width="1.5" marker-end="url(#pfr)"/>
   <rect x="320" y="252" width="200" height="38" rx="6" fill="rgba(255,123,114,.08)" stroke="#ff7b72" stroke-dasharray="3 2"/>
-  <text x="420" y="269" fill="#ff7b72" font-size="9.5" text-anchor="middle">auth-walled / failed re-download</text>
-  <text x="420" y="282" fill="#768390" font-size="8.5" text-anchor="middle">EXCLUDED — trail/metadata only</text>
+  <text x="420" y="269" fill="#ff7b72" font-size="9.5" text-anchor="middle">auth-walled / paywall / dead</text>
+  <text x="420" y="282" fill="#768390" font-size="8.5" text-anchor="middle">EXCLUDED upstream (39.2) — not emitted</text>
 
   <!-- exclusion branch 3: label -1 -> noise -->
   <line x1="671" y1="150" x2="671" y2="200" stroke="#768390" stroke-width="1.5" marker-end="url(#pf)"/>
@@ -369,7 +369,7 @@
   <text x="671" y="230" fill="#768390" font-size="8.5" text-anchor="middle">surfaced, not forced</text>
 </svg>
 </div>
-<figcaption>A straight line from the visit stream to persisted clusters; each stage owns one sub-task. Past persistence the path splits in two: one thin host-agnostic read API is the <em>only</em> layer that touches the DB, and the user-facing surface that consumes it — a Claude skill, note-stub write-back, a VS Code webview, layered together — is an open decision 36.8 resolves. Three things leave the line: a sparse window is skipped, a page that fails to re-download is excluded, and a <code>−1</code> page is surfaced as noise. <a href="task-36.concept-pipeline-and-guarantees.html">Pipeline stages &amp; the guarantees →</a></figcaption>
+<figcaption>A straight line from the visit stream to persisted clusters; each stage owns one sub-task. <strong>36.3 reads already-extracted content</strong> from the task-39.2 corpus and embeds it — the re-download and HTML parse happen upstream, eagerly, and are cached. Past persistence the path splits in two: one thin host-agnostic read API is the <em>only</em> layer that touches the DB, and the user-facing surface that consumes it — a Claude skill, note-stub write-back, a VS Code webview, layered together — is an open decision 36.8 resolves. Three things leave the line: a sparse window is skipped, an auth-walled / failed page is excluded upstream at the corpus, and a <code>−1</code> page is surfaced as noise. <a href="task-36.concept-pipeline-and-guarantees.html">Pipeline stages &amp; the guarantees →</a></figcaption>
 </figure>
 
 <!-- ============================================================ BUILD ORDER -->
@@ -385,7 +385,6 @@
   <line x1="55" y1="70" x2="1045" y2="70" stroke="#2a313a" stroke-width="2"/>
 
   <!-- helper: 9 nodes -->
-  <!-- positions -->
   <g font-size="10" text-anchor="middle">
     <!-- 36.1 -->
     <circle cx="60" cy="70" r="13" fill="rgba(126,231,135,.18)" stroke="#7ee787"/><text x="60" y="74" fill="#7ee787" font-size="11">1</text>
@@ -396,9 +395,9 @@
     <text x="183" y="100" fill="#7ee787" font-size="9.5">DONE</text>
     <text x="183" y="124" fill="#d7dde4">Windowing</text><text x="183" y="138" fill="#768390" font-size="8.5">bounded frames</text>
     <!-- 36.3 -->
-    <circle cx="306" cy="70" r="13" fill="#161b22" stroke="#768390"/><text x="306" y="74" fill="#768390" font-size="11">3</text>
-    <text x="306" y="100" fill="#768390" font-size="9.5">to do</text>
-    <text x="306" y="124" fill="#d7dde4">Vectorise</text><text x="306" y="138" fill="#768390" font-size="8.5">re-download+embed</text>
+    <circle cx="306" cy="70" r="13" fill="rgba(240,163,94,.14)" stroke="#f0a35e"/><text x="306" y="74" fill="#f0a35e" font-size="11">3</text>
+    <text x="306" y="100" fill="#f0a35e" font-size="9.5">to do · companion</text>
+    <text x="306" y="124" fill="#d7dde4">Vectorise</text><text x="306" y="138" fill="#768390" font-size="8.5">read content+embed</text>
     <!-- 36.4 gated -->
     <circle cx="429" cy="70" r="13" fill="rgba(255,123,114,.12)" stroke="#ff7b72"/><text x="429" y="74" fill="#ff7b72" font-size="11">4</text>
     <text x="429" y="100" fill="#ff7b72" font-size="9.5">GATED</text>
@@ -433,7 +432,7 @@
   <line x1="429" y1="178" x2="429" y2="86" stroke="#ff7b72" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#bo)"/>
 </svg>
 </div>
-<figcaption>36.1 and 36.2 are complete on the <code>tdt</code> branch; 36.3–36.9 are to do. 36.4 is gated on the external clustering-tfjs HDBSCAN upgrade. 36.8 is a <span style="color:var(--purple)">surface-decision spike</span> — it outputs a decision record and spun-off implementation sub-tasks, not a shipped UI, and has its own five-page concept set. The two completed sub-tasks and 36.8 have companion pages today.</figcaption>
+<figcaption>36.1 and 36.2 are complete on the <code>tdt</code> branch; 36.3–36.9 are to do, and 36.3 now has a companion. 36.4 is gated on the external clustering-tfjs HDBSCAN upgrade. 36.8 is a <span style="color:var(--purple)">surface-decision spike</span> — it outputs a decision record and spun-off implementation sub-tasks, not a shipped UI, and has its own five-page concept set.</figcaption>
 </figure>
 
 <table>
@@ -441,7 +440,7 @@
   <tbody>
     <tr><td class="ac">36.1</td><td>Scaffold the package + ports</td><td>Create the <code>tdt/</code> workspace, the four port contracts, config + types, fakes for every port.</td><td><span class="pill done">done</span></td><td><a href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html">companion →</a></td></tr>
     <tr><td class="ac">36.2</td><td>Windowing &amp; data-scale</td><td>Slice the visit stream into bounded frames under the sample ceiling; deterministic subdivision; skip sparse frames.</td><td><span class="pill done">done</span></td><td><a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html">companion →</a></td></tr>
-    <tr><td class="ac">36.3</td><td>Page vectorisation</td><td>Re-download each public URL, build page text, embed with TDT's own model, L2-normalize, cache.</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
+    <tr><td class="ac">36.3</td><td>Page vectorisation</td><td>Read each re-downloadable page's already-extracted content from the task-39.2 corpus, build deterministic page text, embed with TDT's own model, L2-normalize, and cache. The re-download and HTML parse happen upstream; TDT consumes <code>CorpusContent</code> and never fetches. Ships the dispersion / degenerate / no-text guards and the dedup-before-clustering step.</td><td><span class="pill todo">to do</span></td><td><a href="task-36.3 - Page-vectorisation-TDT-owned-embedding-of-captured-pages.page-vectors.html">companion →</a></td></tr>
     <tr><td class="ac">36.4</td><td>Distance + HDBSCAN core</td><td>Build the cosine distance matrix and run <code>HDBSCAN.fit</code> — the only <code>clustering-tfjs</code> call.</td><td><span class="pill dep">gated</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
     <tr><td class="ac">36.5</td><td>Representations + labeler</td><td>Pick the representative page, freeze the representative vector, compose a deterministic label bundle — <code>headline_title</code>, <code>scope</code>, <code>keyphrases</code>, <code>display_label</code>, <code>representation_version</code> (no LLM).</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
     <tr><td class="ac">36.6</td><td>Persistence</td><td>Write <code>topic_run</code> / <code>topic_cluster</code> / <code>topic_cluster_member</code>; run keying; idempotency.</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>

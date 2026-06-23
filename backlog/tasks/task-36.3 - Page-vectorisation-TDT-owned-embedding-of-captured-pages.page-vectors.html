@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>task-36.3 — Page vectorisation (TDT-owned embedding)</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --bg-alt: #161b22;
+    --bg-code: #0c0f14;
+    --fg: #d7dde4;
+    --fg-dim: #9aa6b2;
+    --accent: #f0a35e;     /* bergamot orange */
+    --accent-2: #6cb6ff;
+    --green: #7ee787;
+    --red: #ff7b72;
+    --purple: #d2a8ff;
+    --border: #2a313a;
+    --kw: #ff7b72;
+    --str: #a5d6ff;
+    --com: #768390;
+    --typ: #d2a8ff;
+    --fn: #d2a8ff;
+    --num: #f0a35e;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--sans); }
+
+  nav.crossdoc {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg-alt); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    padding: .5rem 5%; font-family: var(--mono); font-size: .74rem;
+  }
+  nav.crossdoc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.crossdoc a, nav.crossdoc span.pending, nav.crossdoc span.cur {
+    padding: .22em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap;
+    border: 1px solid var(--border);
+  }
+  nav.crossdoc a { color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.crossdoc a:hover { background: rgba(108,182,255,.16); }
+  nav.crossdoc span.cur { color: #1a1208; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  nav.crossdoc span.pending { color: var(--com); }
+  nav.crossdoc .dot { display:inline-block; width:.5em; height:.5em; border-radius:50%; margin-right:.35em; vertical-align: middle; }
+  nav.crossdoc .dot.done { background: var(--green); }
+  nav.crossdoc .dot.now { background: var(--accent); }
+  nav.crossdoc .dot.todo { background: var(--com); }
+
+  nav.toc {
+    position: sticky; top: 38px; z-index: 9;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    padding: .45rem 5%; font-family: var(--mono); font-size: .72rem;
+  }
+  nav.toc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.toc a { padding: .2em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap; border: 1px solid var(--border); color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.toc a:hover { background: rgba(108,182,255,.16); }
+
+  main { width: 90%; max-width: 1500px; margin: 0 auto; padding: 1.6rem 0 6rem; }
+  header.page { border-bottom: 1px solid var(--border); padding-bottom: 1.2rem; margin-bottom: 1.4rem; }
+  .crumb { color: var(--fg-dim); font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; font-family: var(--mono); }
+  h1 { font-family: var(--serif); font-size: 2rem; margin: .5rem 0 .4rem; line-height: 1.15; font-weight: 600; }
+  h2 { font-size: 1.3rem; margin: 2.6rem 0 .5rem; padding-top: .7rem; border-top: 1px solid var(--border); color: var(--accent); scroll-margin-top: 100px; }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 .5rem; color: var(--accent-2); }
+  .lead { font-size: 1.05rem; max-width: 80ch; color: var(--fg); }
+  figcaption { font-size: .84rem; color: var(--fg-dim); margin: .5rem 0 0; font-style: italic; max-width: 96ch; }
+  figure { margin: 1rem 0 1.4rem; }
+  .prose { max-width: 74ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .7rem; font-family: var(--mono); font-size: .72rem; }
+  .meta .chip { padding: .2em .6em; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-alt); color: var(--fg-dim); }
+  .meta .chip strong { color: var(--accent); font-weight: 600; }
+  .meta .chip.ship { border-color: var(--green); color: var(--green); }
+
+  a { color: var(--accent-2); }
+  code { font-family: var(--mono); font-size: .88em; }
+  p code, li code, td code, figcaption code { background: var(--bg-code); padding: .1em .38em; border-radius: 4px; border: 1px solid var(--border); color: var(--accent); }
+
+  .callout { border-radius: 6px; padding: .8rem 1.1rem; margin: 1.1rem 0; max-width: 100ch; }
+  .callout.key { background: var(--bg-alt); border-left: 4px solid var(--accent); }
+  .callout.info { background: rgba(108,182,255,.07); border-left: 4px solid var(--accent-2); }
+  .callout.warn { background: rgba(255,123,114,.08); border-left: 4px solid var(--red); }
+  .callout.good { background: rgba(126,231,135,.07); border-left: 4px solid var(--green); }
+  .callout .label { font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .09em; font-weight: 700; display: block; margin-bottom: .3rem; }
+  .callout.key .label { color: var(--accent); }
+  .callout.info .label { color: var(--accent-2); }
+  .callout.warn .label { color: var(--red); }
+  .callout.good .label { color: var(--green); }
+  .callout p { margin: .3rem 0; }
+
+  .prompt-box { border: 1px solid var(--border); border-left: 3px solid var(--fg-dim); border-radius: 6px; background: var(--bg-alt); padding: .8rem 1.1rem; margin: 1rem 0; }
+  .prompt-box .label { font-family: var(--mono); font-size: .66rem; text-transform: uppercase; letter-spacing: .09em; color: var(--fg-dim); display: block; margin-bottom: .35rem; }
+  .prompt-box ul { margin: .2rem 0; padding-left: 1.2rem; }
+  .prompt-box code { color: var(--accent-2); }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .88rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--bg-alt); color: var(--accent); font-weight: 600; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  td code, th code { font-family: var(--mono); }
+  td.c { text-align: center; font-family: var(--mono); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; font-family: var(--mono); font-size: .76rem; color: var(--fg-dim); margin: .6rem 0; }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; }
+  .legend .box { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+  .legend .box.add { border-color: var(--green); background: rgba(126,231,135,.18); }
+  .legend .box.rm { border-color: var(--red); background: rgba(255,123,114,.18); }
+  .legend .box.mod { border-color: var(--accent); background: rgba(240,163,94,.18); }
+  .legend .box.same { border-color: var(--border); background: var(--bg-alt); }
+
+  .diagram { width: 100%; }
+  svg { display: block; max-width: 100%; height: auto; }
+  text { font-family: var(--mono); }
+
+  /* code panel */
+  .code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px; margin: 1rem 0; overflow: hidden; }
+  .code .file-label { font-family: var(--mono); font-size: .72rem; color: var(--fg-dim); padding: .45rem .9rem; border-bottom: 1px solid var(--border); background: var(--bg-alt); }
+  .code .file-label .new { color: var(--green); }
+  .code pre { margin: 0; padding: .9rem 1rem; overflow-x: auto; font-family: var(--mono); font-size: .8rem; line-height: 1.55; color: var(--fg); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .cm { color: var(--com); font-style: italic; }
+  .fn { color: var(--fn); } .typ { color: var(--typ); } .num { color: var(--num); }
+  .hl { background: rgba(240,163,94,.13); display: inline-block; width: 100%; }
+
+  /* numbered step list */
+  .steps { margin: 1rem 0; }
+  .step { display: grid; grid-template-columns: 44px 1fr; gap: .9rem; margin-bottom: .9rem; align-items: start; }
+  .step .badge { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 700; font-size: .9rem; border: 1.5px solid; }
+  .step .badge.ok { border-color: var(--green); color: var(--green); background: rgba(126,231,135,.1); }
+  .step .badge.guard { border-color: var(--accent); color: var(--accent); background: rgba(240,163,94,.1); }
+  .step .badge.excl { border-color: var(--red); color: var(--red); background: rgba(255,123,114,.1); }
+  .step .body h3 { margin: .1rem 0 .25rem; color: var(--fg); }
+  .step .body p { margin: 0; font-size: .9rem; color: var(--fg-dim); max-width: 88ch; }
+  .step .body .loc { font-family: var(--mono); font-size: .72rem; color: var(--accent-2); }
+
+  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .82rem; font-family: var(--mono); max-width: 100ch; }
+  @media (max-width: 820px) {
+    h2 { scroll-margin-top: 60px; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="crossdoc" aria-label="Task family build order">
+  <span class="home">task-36 family</span>
+  <a href="task-36.overview.html"><span class="dot now"></span>Overview</a>
+  <a href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html"><span class="dot done"></span>36.1 Scaffold</a>
+  <a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html"><span class="dot done"></span>36.2 Windowing</a>
+  <span class="cur">36.3 Vectorise</span>
+  <span class="pending"><span class="dot todo"></span>36.4 Distance + HDBSCAN · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.5 Representations · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.6 Persistence · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.7 Validation · not yet generated</span>
+  <a href="task-36.8.concept-decision.html"><span class="dot todo"></span>36.8 Surface · concept set</a>
+  <span class="pending"><span class="dot todo"></span>36.9 Orchestration · not yet generated</span>
+</nav>
+
+<nav class="toc" aria-label="On this page">
+  <span class="home">on this page</span>
+  <a href="#flow">Data flow</a>
+  <a href="#tree">build_page_vector decision tree</a>
+  <a href="#cache">Cache, store &amp; invalidation</a>
+  <a href="#dedup">Dedup before clustering</a>
+  <a href="#api">The module surface</a>
+</nav>
+
+<main>
+<header class="page">
+  <div class="crumb">Bergamot · TDT micro tier · task-36.3 · branch tdt</div>
+  <h1>Page vectorisation — TDT embeds re-downloaded pages into one vector each</h1>
+  <p class="lead">One pure module turns each re-downloadable public page into a single L2-normalized vector — the unit HDBSCAN clusters on. TDT is the first content consumer: it reads already-extracted page content, embeds with its own local model, and depends on no RAG pipeline and no LanceDB.</p>
+  <div class="meta">
+    <span class="chip ship"><strong>status</strong> shipped &amp; reviewed</span>
+    <span class="chip"><strong>module</strong> tdt/src/page_vectors.ts</span>
+    <span class="chip"><strong>tests</strong> page_vectors.test.ts</span>
+    <span class="chip"><strong>depends</strong> 36.1 ports · 39.2 corpus</span>
+    <span class="chip"><strong>output</strong> PageVector | null</span>
+  </div>
+</header>
+
+<div class="prompt-box">
+  <span class="label">Source of truth read to build this page</span>
+  <ul>
+    <li><code>tdt/src/page_vectors.ts</code> — the shipped module (<code>build_page_vector</code>, <code>resolve_page_vector</code>, <code>dedupe_visits</code>)</li>
+    <li><code>tdt/src/types.ts</code> — <code>PageContent</code>, <code>PageRepr</code>, <code>PageVector</code>, <code>VisitRow</code></li>
+    <li><code>tdt/src/config.ts</code> — <code>PageVectorConfig</code> + <code>DEFAULT_PAGE_VECTOR_CONFIG</code></li>
+    <li><code>tdt/src/ports.ts</code> — <code>EmbedFn</code>, <code>VectorStore</code></li>
+    <li><code>vscode/src/redownload/corpus.ts</code> — the task-39.2 content read path (<code>CorpusContent</code>, <code>iter_public_pages</code>)</li>
+  </ul>
+</div>
+
+<div class="callout info">
+  <span class="label">The independence property this step realizes</span>
+  <p>TDT consumes already-extracted <code>CorpusContent</code> — it never re-downloads, never parses raw HTML, and never re-classifies fetch outcomes. Pages are re-downloaded eagerly per visit and cached upstream (task-39.2 / <code>CachedCorpus</code>); auth-walled / paywalled / dead / non-HTML pages are excluded at the corpus boundary and never appear here. This is where TDT's "no task-31 dependency" becomes real: it embeds whole pages for <em>clustering</em> with its own injected local model, over the same content RAG uses for <em>retrieval</em> — no chunking, no contextual prefixes, no LanceDB.</p>
+</div>
+
+<!-- ======================================================= DATA FLOW -->
+<h2 id="flow">The data flow — who re-downloads, and where TDT plugs in</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 360" role="img" aria-label="The task-39.2 corpus re-downloads every visit eagerly, parses it once to main-content markdown, and caches it encrypted. TDT reads only the ok subset through iter_public_pages as CorpusContent, projects it to PageContent, and embeds it into one L2-normalized PageVector. Auth-walled, paywall, dead and non-HTML pages are excluded upstream and never emitted.">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff7b72"/></marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+  </defs>
+
+  <!-- capture -->
+  <rect x="40" y="150" width="130" height="56" rx="8" fill="#161b22" stroke="#2a313a"/>
+  <text x="105" y="174" fill="#d7dde4" font-size="11" text-anchor="middle">capture (35)</text>
+  <text x="105" y="190" fill="#768390" font-size="9" text-anchor="middle">metadata only</text>
+  <line x1="170" y1="178" x2="220" y2="178" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- corpus (39.2) -->
+  <rect x="220" y="60" width="340" height="200" rx="10" fill="rgba(108,182,255,.05)" stroke="#6cb6ff" stroke-width="1.5"/>
+  <text x="390" y="82" fill="#6cb6ff" font-size="12" text-anchor="middle" font-weight="bold">task-39.2 corpus (CachedCorpus)</text>
+  <text x="390" y="98" fill="#768390" font-size="9" text-anchor="middle">re-downloads eagerly · parses once · caches encrypted</text>
+  <g font-size="9.5" text-anchor="middle">
+    <rect x="240" y="112" width="140" height="36" rx="6" fill="#161b22" stroke="#6cb6ff"/><text x="310" y="134" fill="#6cb6ff">re-download URL</text>
+    <rect x="400" y="112" width="140" height="36" rx="6" fill="#161b22" stroke="#6cb6ff"/><text x="470" y="134" fill="#6cb6ff">parse → markdown</text>
+    <rect x="310" y="160" width="160" height="30" rx="6" fill="#0c0f14" stroke="#2a313a"/><text x="390" y="179" fill="#768390" font-size="8.5">encrypted content cache</text>
+  </g>
+  <!-- exclusion at corpus -->
+  <line x1="390" y1="190" x2="390" y2="222" stroke="#ff7b72" stroke-width="1.5" marker-end="url(#ar)"/>
+  <rect x="262" y="222" width="256" height="30" rx="6" fill="rgba(255,123,114,.07)" stroke="#ff7b72" stroke-dasharray="3 2"/>
+  <text x="390" y="236" fill="#ff7b72" font-size="9" text-anchor="middle">auth / paywall / dead / non-HTML</text>
+  <text x="390" y="246" fill="#768390" font-size="8" text-anchor="middle">not emitted — excluded upstream (login wall = privacy filter)</text>
+
+  <!-- TDT consumes via iter_public_pages -->
+  <line x1="540" y1="130" x2="640" y2="130" stroke="#7ee787" stroke-width="1.8" marker-end="url(#ag)"/>
+  <text x="590" y="118" fill="#7ee787" font-size="9" text-anchor="middle">iter_public_pages()</text>
+  <text x="590" y="146" fill="#768390" font-size="8" text-anchor="middle">CorpusContent (ok only)</text>
+
+  <!-- TDT module -->
+  <rect x="640" y="70" width="330" height="180" rx="10" fill="rgba(126,231,135,.05)" stroke="#7ee787" stroke-width="1.5"/>
+  <text x="805" y="92" fill="#7ee787" font-size="12" text-anchor="middle" font-weight="bold">page_vectors.ts (pure)</text>
+  <text x="805" y="108" fill="#768390" font-size="9" text-anchor="middle">reads content · never the network</text>
+  <g font-size="9.5" text-anchor="middle">
+    <rect x="660" y="122" width="140" height="34" rx="6" fill="#161b22" stroke="#2a313a"/><text x="730" y="138" fill="#d7dde4">project →</text><text x="730" y="150" fill="#768390" font-size="8">PageContent</text>
+    <rect x="812" y="122" width="140" height="34" rx="6" fill="#161b22" stroke="#2a313a"/><text x="882" y="138" fill="#d7dde4">build text → segments</text><text x="882" y="150" fill="#768390" font-size="8">code-point split</text>
+    <rect x="660" y="166" width="140" height="34" rx="6" fill="#161b22" stroke="#2a313a"/><text x="730" y="182" fill="#d7dde4">embed each (in order)</text><text x="730" y="194" fill="#768390" font-size="8">injected EmbedFn</text>
+    <rect x="812" y="166" width="140" height="34" rx="6" fill="#161b22" stroke="#2a313a"/><text x="882" y="182" fill="#d7dde4">pool / medoid</text><text x="882" y="194" fill="#768390" font-size="8">then L2-normalize</text>
+  </g>
+  <text x="805" y="222" fill="#768390" font-size="8.5" text-anchor="middle">no RAG · no LanceDB · no chunking · no contextual prefixes</text>
+  <text x="805" y="238" fill="#768390" font-size="8.5" text-anchor="middle">cache via VectorStore → encrypted DuckDB</text>
+
+  <!-- output -->
+  <line x1="970" y1="160" x2="1020" y2="160" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#a)"/>
+  <rect x="1020" y="120" width="130" height="48" rx="8" fill="#161b22" stroke="#7ee787"/>
+  <text x="1085" y="140" fill="#7ee787" font-size="10" text-anchor="middle">PageVector</text>
+  <text x="1085" y="156" fill="#768390" font-size="8.5" text-anchor="middle">L2-normalized | null</text>
+  <line x1="1085" y1="168" x2="1085" y2="206" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#a)"/>
+  <rect x="1010" y="206" width="150" height="44" rx="8" fill="rgba(210,168,255,.08)" stroke="#d2a8ff"/>
+  <text x="1085" y="224" fill="#d2a8ff" font-size="9" text-anchor="middle">(36.4) distance matrix</text>
+  <text x="1085" y="238" fill="#768390" font-size="8" text-anchor="middle">+ HDBSCAN</text>
+</svg>
+</div>
+<figcaption>The re-download lives in the task-39.2 corpus, not in TDT. The corpus re-downloads every visit eagerly, parses it once to main-content markdown, and caches it encrypted; TDT reads only the <code>ok</code> subset through <code>iter_public_pages()</code> and embeds it. The login wall stays the privacy filter, but the exclusion happens at the corpus boundary — TDT never sees an auth-walled page to classify.</figcaption>
+</figure>
+
+<!-- ======================================================= DECISION TREE -->
+<h2 id="tree">build_page_vector — the decision tree as implemented</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 540" role="img" aria-label="Decision flow inside build_page_vector. Build deterministic page text with NFC and whitespace collapse; if the text is the empty string, return null. Otherwise split into segments by segment_chars code points and embed each segment in order. If there is exactly one segment, use it directly. If there are several, compute mean pairwise cosine over per-segment L2-normalized units: if it is below dispersion_min_mean_cosine, take the medoid segment and set low_confidence; otherwise mean-pool the raw vectors with fixed-order float64 accumulation, and if the pooled norm is below epsilon fall back to the medoid. Finally L2-normalize once: if the final norm is below epsilon return null, else return the PageVector.">
+  <defs>
+    <marker id="d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+    <marker id="dr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff7b72"/></marker>
+    <marker id="dc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#f0a35e"/></marker>
+    <marker id="dg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+  </defs>
+
+  <!-- entry -->
+  <rect x="40" y="24" width="200" height="48" rx="8" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="140" y="44" fill="#6cb6ff" font-size="11" text-anchor="middle">PageContent in</text>
+  <text x="140" y="60" fill="#768390" font-size="8.5" text-anchor="middle">{ page_session_id, title, content }</text>
+
+  <!-- build page text -->
+  <line x1="140" y1="72" x2="140" y2="100" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#d)"/>
+  <rect x="40" y="100" width="200" height="58" rx="8" fill="#161b22" stroke="#2a313a"/>
+  <text x="140" y="120" fill="#d7dde4" font-size="10.5" text-anchor="middle">build deterministic text</text>
+  <text x="140" y="134" fill="#768390" font-size="8.5" text-anchor="middle">NFC · collapse whitespace · trim</text>
+  <text x="140" y="147" fill="#768390" font-size="8.5" text-anchor="middle">title_plus_lead | main_content_extract</text>
+
+  <!-- no text decision -->
+  <line x1="140" y1="158" x2="140" y2="188" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#d)"/>
+  <path d="M140 188 L218 226 L140 264 L62 226 Z" fill="rgba(255,123,114,.06)" stroke="#ff7b72"/>
+  <text x="140" y="222" fill="#ff7b72" font-size="9.5" text-anchor="middle">text === "" ?</text>
+  <text x="140" y="235" fill="#768390" font-size="8" text-anchor="middle">no-text predicate</text>
+
+  <!-- EXCLUSION A: empty text -> null -->
+  <line x1="218" y1="226" x2="278" y2="226" stroke="#ff7b72" stroke-width="1.5" marker-end="url(#dr)"/>
+  <text x="248" y="218" fill="#ff7b72" font-size="9" text-anchor="middle">yes</text>
+  <rect x="278" y="202" width="200" height="48" rx="8" fill="rgba(255,123,114,.08)" stroke="#ff7b72"/>
+  <text x="378" y="221" fill="#ff7b72" font-size="11" text-anchor="middle" font-weight="bold">return null — EXCLUDE</text>
+  <text x="378" y="237" fill="#768390" font-size="8.5" text-anchor="middle">no extractable text; never embed ""</text>
+
+  <!-- segment -->
+  <line x1="140" y1="264" x2="140" y2="294" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#d)"/>
+  <text x="158" y="284" fill="#768390" font-size="9">no</text>
+  <rect x="40" y="294" width="200" height="56" rx="8" fill="#161b22" stroke="#2a313a"/>
+  <text x="140" y="314" fill="#d7dde4" font-size="10.5" text-anchor="middle">segment by segment_chars</text>
+  <text x="140" y="329" fill="#768390" font-size="8.5" text-anchor="middle">code-point (surrogate-safe) offsets</text>
+  <text x="140" y="341" fill="#768390" font-size="8.5" text-anchor="middle">embed each, in ascending order</text>
+
+  <!-- single-segment shortcut decision -->
+  <line x1="240" y1="322" x2="300" y2="322" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#d)"/>
+  <path d="M385 282 L463 322 L385 362 L307 322 Z" fill="#161b22" stroke="#2a313a"/>
+  <text x="385" y="318" fill="#d7dde4" font-size="9" text-anchor="middle">how many</text>
+  <text x="385" y="331" fill="#d7dde4" font-size="9" text-anchor="middle">segments?</text>
+
+  <!-- single -> use directly -->
+  <line x1="385" y1="282" x2="385" y2="238" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#d)"/>
+  <text x="405" y="264" fill="#768390" font-size="9">one</text>
+  <rect x="300" y="190" width="170" height="48" rx="8" fill="#161b22" stroke="#2a313a"/>
+  <text x="385" y="210" fill="#d7dde4" font-size="10" text-anchor="middle">use that segment</text>
+  <text x="385" y="226" fill="#768390" font-size="8.5" text-anchor="middle">no dispersion to measure</text>
+
+  <!-- several -> dispersion -->
+  <line x1="463" y1="322" x2="523" y2="322" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#d)"/>
+  <text x="493" y="314" fill="#768390" font-size="9">several</text>
+  <path d="M620 270 L720 322 L620 374 L520 322 Z" fill="rgba(240,163,94,.06)" stroke="#f0a35e"/>
+  <text x="620" y="312" fill="#f0a35e" font-size="9" text-anchor="middle">mean pairwise cosine</text>
+  <text x="620" y="325" fill="#f0a35e" font-size="9" text-anchor="middle">&lt; dispersion_min</text>
+  <text x="620" y="338" fill="#f0a35e" font-size="9" text-anchor="middle">_mean_cosine ?</text>
+  <text x="620" y="260" fill="#768390" font-size="8" text-anchor="middle">over per-segment L2-normalized units</text>
+
+  <!-- GUARD: dispersion -> medoid -->
+  <line x1="620" y1="270" x2="620" y2="226" stroke="#f0a35e" stroke-width="1.5" marker-end="url(#dc)"/>
+  <text x="640" y="252" fill="#f0a35e" font-size="9">high (yes)</text>
+  <rect x="510" y="176" width="220" height="50" rx="8" fill="rgba(240,163,94,.08)" stroke="#f0a35e"/>
+  <text x="620" y="196" fill="#f0a35e" font-size="10.5" text-anchor="middle" font-weight="bold">medoid (dominant) segment</text>
+  <text x="620" y="212" fill="#768390" font-size="8.5" text-anchor="middle">max summed cosine · low_confidence = true</text>
+
+  <!-- low -> mean-pool RAW -->
+  <line x1="720" y1="322" x2="780" y2="322" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#d)"/>
+  <text x="750" y="314" fill="#768390" font-size="9">low (no)</text>
+  <rect x="780" y="294" width="180" height="56" rx="8" fill="#161b22" stroke="#2a313a"/>
+  <text x="870" y="314" fill="#d7dde4" font-size="10.5" text-anchor="middle">mean-pool RAW vectors</text>
+  <text x="870" y="329" fill="#768390" font-size="8.5" text-anchor="middle">fixed-order float64 accum</text>
+  <text x="870" y="341" fill="#768390" font-size="8.5" text-anchor="middle">(not the units)</text>
+
+  <!-- pooled norm guard -->
+  <line x1="960" y1="322" x2="1010" y2="322" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#d)"/>
+  <path d="M1080 282 L1150 322 L1080 362 L1010 322 Z" fill="rgba(240,163,94,.06)" stroke="#f0a35e"/>
+  <text x="1080" y="318" fill="#f0a35e" font-size="8.5" text-anchor="middle">pooled norm</text>
+  <text x="1080" y="330" fill="#f0a35e" font-size="8.5" text-anchor="middle">&lt; ε ?</text>
+
+  <!-- pooled collapse -> medoid fallback -->
+  <line x1="1080" y1="282" x2="1080" y2="226" stroke="#f0a35e" stroke-width="1.5" marker-end="url(#dc)"/>
+  <text x="1100" y="256" fill="#f0a35e" font-size="9">yes</text>
+  <rect x="975" y="176" width="200" height="50" rx="8" fill="rgba(240,163,94,.08)" stroke="#f0a35e"/>
+  <text x="1075" y="196" fill="#f0a35e" font-size="10" text-anchor="middle" font-weight="bold">fall back to medoid</text>
+  <text x="1075" y="212" fill="#768390" font-size="8.5" text-anchor="middle">backstop · low_confidence = true</text>
+
+  <!-- candidates converge to single L2-normalize at bottom -->
+  <line x1="385" y1="238" x2="385" y2="430" stroke="#9aa6b2" stroke-width="1.4"/>
+  <line x1="620" y1="226" x2="620" y2="430" stroke="#9aa6b2" stroke-width="1.4"/>
+  <line x1="1080" y1="362" x2="1080" y2="430" stroke="#9aa6b2" stroke-width="1.4"/>
+  <text x="1100" y="396" fill="#768390" font-size="9">no</text>
+  <line x1="1075" y1="226" x2="1075" y2="408" stroke="#9aa6b2" stroke-width="1.4"/>
+  <line x1="385" y1="430" x2="1080" y2="430" stroke="#9aa6b2" stroke-width="1.4"/>
+  <text x="730" y="424" fill="#768390" font-size="8.5" text-anchor="middle">candidate vector (float64)</text>
+
+  <!-- single L2-normalize -->
+  <line x1="700" y1="430" x2="700" y2="452" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#d)"/>
+  <rect x="585" y="452" width="230" height="44" rx="8" fill="#161b22" stroke="#7ee787"/>
+  <text x="700" y="472" fill="#7ee787" font-size="10.5" text-anchor="middle" font-weight="bold">L2-normalize once → float32</text>
+  <text x="700" y="487" fill="#768390" font-size="8" text-anchor="middle">the only float32 truncation</text>
+
+  <!-- final norm guard -->
+  <line x1="585" y1="474" x2="500" y2="474" stroke="#9aa6b2" stroke-width="1.4"/>
+  <path d="M430 444 L500 474 L430 504 L360 474 Z" fill="rgba(240,163,94,.06)" stroke="#f0a35e"/>
+  <text x="430" y="470" fill="#f0a35e" font-size="8.5" text-anchor="middle">final norm</text>
+  <text x="430" y="482" fill="#f0a35e" font-size="8.5" text-anchor="middle">&lt; ε ?</text>
+  <!-- EXCLUSION B: truly degenerate -> null -->
+  <line x1="360" y1="474" x2="280" y2="474" stroke="#ff7b72" stroke-width="1.5" marker-end="url(#dr)"/>
+  <text x="320" y="466" fill="#ff7b72" font-size="9" text-anchor="middle">yes</text>
+  <rect x="80" y="450" width="200" height="48" rx="8" fill="rgba(255,123,114,.08)" stroke="#ff7b72"/>
+  <text x="180" y="469" fill="#ff7b72" font-size="11" text-anchor="middle" font-weight="bold">return null — EXCLUDE</text>
+  <text x="180" y="485" fill="#768390" font-size="8.5" text-anchor="middle">truly degenerate, even after fallback</text>
+
+  <!-- final PageVector -->
+  <line x1="700" y1="496" x2="700" y2="516" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#dg)"/>
+  <rect x="540" y="500" width="320" height="36" rx="8" fill="rgba(126,231,135,.06)" stroke="#7ee787"/>
+  <text x="700" y="523" fill="#7ee787" font-size="10.5" text-anchor="middle" font-weight="bold">PageVector { page_session_id, vector, low_confidence }</text>
+</svg>
+</div>
+<figcaption>Every path yields one L2-normalized <code>PageVector</code> or returns <code>null</code>. A single segment is used directly. With several segments, dispersion is measured on <span style="color:var(--accent)">per-segment L2-normalized units</span> (a directional question) while the pool is the mean of the <span style="color:var(--accent)">raw vectors</span> — deliberately different bases. There are <span style="color:var(--red)">two exclusion exits</span> (empty text, and a final norm still below ε) and <span style="color:var(--accent)">two medoid fallbacks</span> (multi-topic dispersion, and a numerically-collapsed pool), both setting <code>low_confidence</code>.</figcaption>
+</figure>
+
+<div class="legend">
+  <span><span class="box add"></span> happy path</span>
+  <span><span class="box mod"></span> medoid fallback (sets low_confidence)</span>
+  <span><span class="box rm"></span> exclusion → null</span>
+</div>
+
+<table>
+  <thead><tr><th>PageVectorConfig knob</th><th>role</th><th class="c">default</th></tr></thead>
+  <tbody>
+    <tr><td class="c"><code>lead_chars</code></td><td><code>title_plus_lead</code>: lead length in code points</td><td class="c">1000</td></tr>
+    <tr><td class="c"><code>segment_chars</code></td><td>split content into segments of this many code points (≈512 tokens × ~3.2 chars/token)</td><td class="c">1600</td></tr>
+    <tr><td class="c"><code>dispersion_min_mean_cosine</code></td><td>mean pairwise cosine below this → multi-topic → medoid segment; primary 36.7 sweep knob</td><td class="c">0.35</td></tr>
+    <tr><td class="c"><code>degenerate_norm_epsilon</code></td><td>the single "is this vector meaningless" floor — reused for per-segment unit, pooled collapse, and final norm</td><td class="c">1e-6</td></tr>
+  </tbody>
+</table>
+
+<div class="callout info">
+  <span class="label">Determinism anchors — AC #4 (verified by test)</span>
+  <p>The vector is a pure function of (content, repr, config, pinned model). Five anchors make it bitwise-stable regardless of fetch/processing order: <strong>NFC + whitespace collapse</strong>, <strong>code-point (surrogate-safe) slicing</strong>, <strong>sequential in-order embedding</strong> (an explicit <code>for…await</code>, never <code>Promise.all</code>), <strong>fixed-order float64 accumulation</strong> for every sum (IEEE-754 addition is non-associative, so iteration order is load-bearing), and exactly <strong>one float32 truncation</strong> at the final store.</p>
+</div>
+
+<!-- ======================================================= CACHE -->
+<h2 id="cache">Cache, store &amp; invalidation</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 250" role="img" aria-label="resolve_page_vector is cache-aware: vector_store.get keyed by page_session_id and embedding_model_id. On a hit it returns the stored bare vector. On a miss it calls build_page_vector then put; an excluded page returns null and caches nothing. The cache key folds the page-representation rule into embedding_model_id, so changing the model or the representation is a clean cache miss.">
+  <defs>
+    <marker id="c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+    <marker id="cg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+    <marker id="crr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff7b72"/></marker>
+  </defs>
+
+  <rect x="30" y="40" width="170" height="50" rx="8" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="115" y="60" fill="#6cb6ff" font-size="10.5" text-anchor="middle">resolve_page_vector</text>
+  <text x="115" y="76" fill="#768390" font-size="8.5" text-anchor="middle">cache-aware wrapper</text>
+
+  <line x1="200" y1="65" x2="250" y2="65" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#c)"/>
+  <rect x="250" y="38" width="230" height="54" rx="8" fill="#161b22" stroke="#2a313a"/>
+  <text x="365" y="58" fill="#d7dde4" font-size="10" text-anchor="middle">vector_store.get(id, model_id)</text>
+  <text x="365" y="74" fill="#768390" font-size="8.5" text-anchor="middle">→ topic_page_vector (PK id, model_id)</text>
+
+  <!-- hit -->
+  <line x1="365" y1="92" x2="365" y2="128" stroke="#7ee787" stroke-width="1.5" marker-end="url(#cg)"/>
+  <text x="384" y="113" fill="#7ee787" font-size="9">HIT</text>
+  <rect x="270" y="128" width="190" height="42" rx="7" fill="rgba(126,231,135,.07)" stroke="#7ee787"/>
+  <text x="365" y="148" fill="#7ee787" font-size="10" text-anchor="middle">return bare vector</text>
+  <text x="365" y="162" fill="#768390" font-size="8" text-anchor="middle">no embed; low_confidence not reconstructible</text>
+
+  <!-- miss -->
+  <line x1="480" y1="65" x2="530" y2="65" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#c)"/>
+  <text x="505" y="56" fill="#768390" font-size="9">MISS</text>
+  <rect x="530" y="38" width="170" height="54" rx="8" fill="#161b22" stroke="#2a313a"/>
+  <text x="615" y="58" fill="#d7dde4" font-size="10" text-anchor="middle">build_page_vector</text>
+  <text x="615" y="74" fill="#768390" font-size="8.5" text-anchor="middle">(the decision tree above)</text>
+
+  <!-- null -> cache nothing -->
+  <line x1="615" y1="92" x2="615" y2="128" stroke="#ff7b72" stroke-width="1.4" marker-end="url(#crr)"/>
+  <text x="634" y="113" fill="#ff7b72" font-size="9">null</text>
+  <rect x="525" y="128" width="180" height="42" rx="7" fill="rgba(255,123,114,.07)" stroke="#ff7b72"/>
+  <text x="615" y="148" fill="#ff7b72" font-size="9.5" text-anchor="middle">return null · cache nothing</text>
+  <text x="615" y="162" fill="#768390" font-size="8" text-anchor="middle">no exclusion tombstone in the schema</text>
+
+  <!-- put -->
+  <line x1="700" y1="65" x2="750" y2="65" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#c)"/>
+  <text x="725" y="56" fill="#768390" font-size="9">vector</text>
+  <rect x="750" y="38" width="210" height="54" rx="8" fill="#161b22" stroke="#2a313a"/>
+  <text x="855" y="58" fill="#d7dde4" font-size="10" text-anchor="middle">vector_store.put</text>
+  <text x="855" y="74" fill="#768390" font-size="8.5" text-anchor="middle">(id, model_id, repr, vector)</text>
+
+  <!-- the key fold -->
+  <rect x="250" y="195" width="710" height="44" rx="8" fill="rgba(240,163,94,.06)" stroke="#f0a35e"/>
+  <text x="270" y="214" fill="#f0a35e" font-size="10" font-weight="bold">cache key folds repr-version into the model id:</text>
+  <text x="270" y="230" fill="#a5d6ff" font-size="11">embedding_model_id = "bge-small-en@384#repr-v1"</text>
+  <text x="640" y="214" fill="#768390" font-size="8.5">model change → new id → clean miss</text>
+  <text x="640" y="230" fill="#768390" font-size="8.5">representation change → new #repr-vN → clean miss</text>
+</svg>
+</div>
+<figcaption>The cache key is a single string, <code>(page_session_id, embedding_model_id)</code>. Because the page-representation rule is folded into <code>embedding_model_id</code> as a <code>#repr-vN</code> suffix, changing <em>either</em> the model <em>or</em> the representation produces a different key — so a re-run with new settings is automatically a clean miss, never a stale read. <code>repr</code> is stored in its own column for forensics, not as part of the key. An excluded page returns <code>null</code> and caches nothing; the build-time <code>low_confidence</code> diagnostic is never stored, so a cache hit returns only the bare vector.</figcaption>
+</figure>
+
+<div class="callout key">
+  <span class="label">Storage decision — resolved: encrypted DuckDB, LanceDB rejected</span>
+  <p>Page vectors live in the <strong>encrypted DuckDB</strong> store through the <code>VectorStore</code> port — <strong>LanceDB was evaluated and rejected</strong> because it cannot be encrypted at rest while searchable, and content-derived vectors are sensitive. DuckDB serves similarity search natively via <code>array_cosine_similarity</code> over fixed-size <code>FLOAT[dim]</code> columns. That search path is <strong>deferred to RAG (task-31)</strong>, which shares the same encrypted store and embedding space; TDT itself only reads cached vectors and computes its own in-memory cosine distance matrix in 36.4.</p>
+</div>
+
+<table>
+  <thead><tr><th>topic_page_vector column</th><th>meaning</th></tr></thead>
+  <tbody>
+    <tr><td class="c"><code>page_session_id</code></td><td>soft ref → the captured visit</td></tr>
+    <tr><td class="c"><code>embedding_model_id</code></td><td>model + dim + repr-rule, e.g. <code>bge-small-en@384#repr-v1</code> — the invalidation lever (the key)</td></tr>
+    <tr><td class="c"><code>vector</code></td><td><code>FLOAT[dim]</code>, L2-normalized; dim fixed by the model id; searchable via <code>array_cosine_similarity</code></td></tr>
+    <tr><td class="c"><code>repr</code></td><td>the page-representation strategy used to build it — forensic column, not part of the key</td></tr>
+    <tr><td class="c"><code>built_at</code></td><td>timestamp</td></tr>
+    <tr><td class="c">PRIMARY KEY</td><td><code>(page_session_id, embedding_model_id)</code></td></tr>
+  </tbody>
+</table>
+
+<!-- ======================================================= DEDUP -->
+<h2 id="dedup">Dedup before clustering — first-wins on sorted input</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 230" role="img" aria-label="dedupe_visits collapses repeat same-URL visits within one navigation tree. Three visits to the same URL in tree T1 — original, back-button, refresh — collapse to one unit keyed by tree_id plus url, keeping the FIRST in input order. Because the input is already sorted by page_loaded_at, first equals earliest; the function does not sort or compare timestamps itself. The same URL in a different tree T2 is kept.">
+  <defs>
+    <marker id="e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+  </defs>
+
+  <text x="40" y="28" fill="#768390" font-size="12" font-weight="bold">visits in window (already sorted by page_loaded_at, page_session_id)</text>
+
+  <!-- tree T1 visits -->
+  <g font-size="9" text-anchor="middle">
+    <rect x="40" y="44" width="190" height="34" rx="6" fill="#161b22" stroke="#6cb6ff"/><text x="135" y="60" fill="#6cb6ff">T1 · /docs/api · 09:00</text><text x="135" y="72" fill="#768390" font-size="8">original · 1st in order</text>
+    <rect x="40" y="84" width="190" height="34" rx="6" fill="#161b22" stroke="#2a313a"/><text x="135" y="100" fill="#768390">T1 · /docs/api · 09:05</text><text x="135" y="112" fill="#768390" font-size="8">back button</text>
+    <rect x="40" y="124" width="190" height="34" rx="6" fill="#161b22" stroke="#2a313a"/><text x="135" y="140" fill="#768390">T1 · /docs/api · 09:11</text><text x="135" y="152" fill="#768390" font-size="8">refresh</text>
+    <rect x="40" y="172" width="190" height="34" rx="6" fill="#161b22" stroke="#d2a8ff"/><text x="135" y="188" fill="#d2a8ff">T2 · /docs/api · 14:30</text><text x="135" y="200" fill="#768390" font-size="8">different tree</text>
+  </g>
+
+  <!-- arrow -->
+  <line x1="240" y1="120" x2="360" y2="120" stroke="#9aa6b2" stroke-width="1.6" marker-end="url(#e)"/>
+  <rect x="258" y="86" width="84" height="68" rx="8" fill="rgba(240,163,94,.06)" stroke="#f0a35e"/>
+  <text x="300" y="104" fill="#f0a35e" font-size="9" text-anchor="middle">dedupe_visits</text>
+  <text x="300" y="118" fill="#768390" font-size="7.5" text-anchor="middle">key = tree_id</text>
+  <text x="300" y="129" fill="#768390" font-size="7.5" text-anchor="middle">\0 url</text>
+  <text x="300" y="143" fill="#768390" font-size="7.5" text-anchor="middle">keep FIRST seen</text>
+
+  <!-- output clustering units -->
+  <text x="470" y="28" fill="#768390" font-size="12" font-weight="bold">clustering units (subsequence, order preserved)</text>
+  <g font-size="9" text-anchor="middle">
+    <rect x="380" y="84" width="200" height="40" rx="6" fill="rgba(126,231,135,.06)" stroke="#7ee787"/><text x="480" y="103" fill="#7ee787">T1 · /docs/api · 09:00</text><text x="480" y="116" fill="#768390" font-size="8">3 visits → 1 unit (first kept = earliest)</text>
+    <rect x="380" y="156" width="200" height="40" rx="6" fill="rgba(210,168,255,.06)" stroke="#d2a8ff"/><text x="480" y="175" fill="#d2a8ff">T2 · /docs/api · 14:30</text><text x="480" y="188" fill="#768390" font-size="8">separate tree → stays its own unit</text>
+  </g>
+
+  <!-- why -->
+  <rect x="640" y="56" width="500" height="128" rx="10" fill="#161b22" stroke="#2a313a"/>
+  <text x="660" y="80" fill="#f0a35e" font-size="11" font-weight="bold">first-wins, order-driven (not timestamp-driven)</text>
+  <text x="660" y="102" fill="#d7dde4" font-size="9.5">· keeps the FIRST row per (tree_id, url) in input order</text>
+  <text x="660" y="120" fill="#d7dde4" font-size="9.5">· input contract is sorted ascending → "first" == earliest</text>
+  <text x="660" y="138" fill="#d7dde4" font-size="9.5">· does NOT sort or compare timestamps itself</text>
+  <text x="660" y="156" fill="#d7dde4" font-size="9.5">· NUL-separated key so tree_id/url can never alias</text>
+  <text x="660" y="174" fill="#d7dde4" font-size="9.5">· preserves the stable row order 36.4's distance matrix needs</text>
+</svg>
+</div>
+<figcaption>The same page revisited via back-button or refresh inside one navigation tree collapses to <em>one</em> clustering unit, keyed by <code>tree_id + url</code> and keeping the <strong>first</strong> row in input order. The function relies on the sorted-input contract from <code>compute_windows</code> / <code>RelationalReader</code> — so "first" is the earliest — and never sorts or compares timestamps itself. The same URL in a <em>different</em> navigation tree is a distinct browsing context and is kept.</figcaption>
+</figure>
+
+<!-- ======================================================= MODULE SURFACE -->
+<h2 id="api">The module surface — page_vectors.ts</h2>
+
+<div class="code">
+  <div class="file-label"><span class="new">shipped</span> tdt/src/page_vectors.ts</div>
+<pre><span class="cm">// Pure module: imports only types + ports. No network, no DuckDB, no RAG.</span>
+<span class="cm">// Consumes already-extracted content from the task-39.2 corpus read path;</span>
+<span class="cm">// never re-downloads, never parses raw HTML, never re-classifies fetch outcomes.</span>
+
+<span class="cm">// types.ts</span>
+<span class="kw">export type</span> <span class="typ">PageRepr</span> = <span class="str">"title_plus_lead"</span> | <span class="str">"main_content_extract"</span>;
+
+<span class="kw">export interface</span> <span class="typ">PageContent</span> {   <span class="cm">// projection of CorpusContent</span>
+  page_session_id: <span class="typ">string</span>;
+  title: <span class="typ">string</span>;          <span class="cm">// "" (never null) when absent; the no-text guard handles it</span>
+  content: <span class="typ">string</span>;        <span class="cm">// already-extracted main-content markdown</span>
+}
+
+<span class="cm">// config.ts — defaults are 36.7-sweep starting points, not hardcoded behaviour</span>
+<span class="kw">export interface</span> <span class="typ">PageVectorConfig</span> {
+  lead_chars: <span class="typ">number</span>;                 <span class="cm">// 1000 · title_plus_lead lead length (code points)</span>
+  segment_chars: <span class="typ">number</span>;              <span class="cm">// 1600 · code points per segment</span>
+  dispersion_min_mean_cosine: <span class="typ">number</span>; <span class="cm">// 0.35 · below → multi-topic → medoid</span>
+  degenerate_norm_epsilon: <span class="typ">number</span>;    <span class="cm">// 1e-6 · the single near-zero floor</span>
+}
+
+<span class="cm">/**</span>
+<span class="cm"> * Pure (content, repr, config) × embed → vector | null. Same text + pinned model</span>
+<span class="cm"> * → byte-identical vector, regardless of processing order. null = excluded</span>
+<span class="cm"> * (no extractable text, or truly degenerate even after the medoid fallback).</span>
+<span class="cm"> * @throws RangeError if the embedder returns inconsistent dims across segments.</span>
+<span class="cm"> */</span>
+<span class="hl"><span class="kw">export async function</span> <span class="fn">build_page_vector</span>(</span>
+  content: <span class="typ">PageContent</span>,
+  embed: <span class="typ">EmbedFn</span>,
+  repr: <span class="typ">PageRepr</span>,
+  config: <span class="typ">PageVectorConfig</span>,
+): <span class="typ">Promise</span>&lt;<span class="typ">PageVector</span> | <span class="kw">null</span>&gt;;
+
+<span class="cm">/**</span>
+<span class="cm"> * Cache-aware: vector_store.get → on miss build_page_vector → put. Returns the</span>
+<span class="cm"> * BARE vector (the cache unit), not a PageVector — a hit cannot reconstruct</span>
+<span class="cm"> * low_confidence. An excluded page returns null and caches nothing.</span>
+<span class="cm"> * CALLER INVARIANT: repr MUST match the version encoded in embedding_model_id;</span>
+<span class="cm"> * the key omits repr, so keep the two in lockstep at the call site.</span>
+<span class="cm"> */</span>
+<span class="hl"><span class="kw">export async function</span> <span class="fn">resolve_page_vector</span>(</span>
+  content: <span class="typ">PageContent</span>,
+  embed: <span class="typ">EmbedFn</span>,
+  vector_store: <span class="typ">VectorStore</span>,
+  embedding_model_id: <span class="typ">string</span>,
+  repr: <span class="typ">PageRepr</span>,
+  config: <span class="typ">PageVectorConfig</span>,
+): <span class="typ">Promise</span>&lt;<span class="typ">Float32Array</span> | <span class="kw">null</span>&gt;;
+
+<span class="cm">/**</span>
+<span class="cm"> * Collapse repeat same-URL visits within one nav tree to one clustering unit.</span>
+<span class="cm"> * Keeps the FIRST row per (tree_id, url) in input order; input is already sorted</span>
+<span class="cm"> * ascending (compute_windows contract), so "first" == earliest. Does not sort.</span>
+<span class="cm"> */</span>
+<span class="hl"><span class="kw">export function</span> <span class="fn">dedupe_visits</span>(visits: <span class="typ">VisitRow</span>[]): <span class="typ">VisitRow</span>[];</span>
+</pre>
+</div>
+
+<h3>The acceptance criteria, as shipped</h3>
+<div class="steps">
+  <div class="step">
+    <div class="badge ok">1</div>
+    <div class="body">
+      <h3>Reads content, not the network — one L2-normalized vector via the injected EmbedFn</h3>
+      <p>Consumes <code>PageContent</code> projected from the task-39.2 corpus (<code>CorpusContent</code>). No <code>FetchedPage</code>, no fetch, no HTML parse, no outcome classification, no dependency on RAG chunk vectors or LanceDB.</p>
+      <span class="loc">AC #1 · page_vectors.ts → build_page_vector · types.ts → PageContent</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge ok">2</div>
+    <div class="body">
+      <h3>Cached in topic_page_vector; a model or representation change invalidates</h3>
+      <p><code>resolve_page_vector</code> folds the repr version into <code>embedding_model_id</code>, so a model or representation change is a clean miss. Stores only the vector + <code>repr</code> via <code>VectorStore.put</code> in the encrypted DuckDB store.</p>
+      <span class="loc">AC #2 · page_vectors.ts → resolve_page_vector · ports.ts → VectorStore</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge guard">3</div>
+    <div class="body">
+      <h3>Guards: dispersion → medoid, degenerate → fallback, no-text → excluded</h3>
+      <p>Dispersion (mean pairwise cosine over units &lt; <code>dispersion_min_mean_cosine</code>) → medoid segment, <code>low_confidence</code>. Pooled-norm collapse → medoid fallback. Empty text or final norm &lt; ε → <code>null</code>.</p>
+      <span class="loc">AC #3 · page_vectors.ts → build_page_vector</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge ok">4</div>
+    <div class="body">
+      <h3>Determinism — same page + pinned model → bitwise-identical vector</h3>
+      <p>NFC + whitespace collapse, code-point slicing, sequential in-order embedding, fixed-order float64 accumulation, one float32 truncation. The test embeds the same page in different orders and asserts byte equality.</p>
+      <span class="loc">AC #4 · page_vectors.ts (normalize_text, mean_pool)</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge ok">5</div>
+    <div class="body">
+      <h3>Repeat same-URL visits within a tree are deduped before clustering</h3>
+      <p><code>dedupe_visits</code> keeps the first row per <code>(tree_id, url)</code> in input order; the same URL in a different tree is kept.</p>
+      <span class="loc">AC #5 · page_vectors.ts → dedupe_visits</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge ok">6</div>
+    <div class="body">
+      <h3>Unit tests cover the guards, caching/invalidation, and determinism</h3>
+      <p>Colocated <code>page_vectors.test.ts</code>: medoid fallback, ε fallback and exclusion, empty-text <code>null</code>, model-id-change cache miss, and the order-independence determinism assertion.</p>
+      <span class="loc">AC #6 · tdt/src/page_vectors.test.ts</span>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Companion for <code>task-36.3</code> — page vectorisation · branch <code>tdt</code> ·
+  shipped module <code>tdt/src/page_vectors.ts</code> + <code>types.ts</code> / <code>config.ts</code> / tests <code>page_vectors.test.ts</code> ·
+  canonical reference <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> §4 ·
+  content read path <code>vscode/src/redownload/corpus.ts</code> (task-39.2).
+</footer>
+
+</main>
+</body>
+</html>

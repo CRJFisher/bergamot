@@ -131,10 +131,15 @@ TDT honors this with an **asymmetric data-access** design:
   the extension command; HTTP `/query/*` when TDT runs as the batch CLI). TDT never opens
   the capture DuckDB file directly. Getting this wrong is an **availability** failure
   (the file open is refused), not corruption — but it still breaks the batch job.
-- **Page vectors are TDT's own** (it embeds re-downloaded content itself; §4), cached in a
-  TDT-owned `topic_page_vector` table in the **same DuckDB file**. There is no second vector
-  store and no LanceDB dependency; the cache is read and written on the same DuckDB path as
-  everything else (through the extension's writer), not via a separate handle.
+- **Page vectors are TDT's own** (it embeds extracted public content read from the task-39.2
+  corpus; §4), cached in a TDT-owned `topic_page_vector` table in the **same DuckDB file**.
+  There is no second vector store and no LanceDB dependency: LanceDB was evaluated and rejected
+  because it cannot be encrypted at rest while remaining searchable, and content-derived vectors
+  are sensitive. The encrypted DuckDB store serves both the K-V vector cache (get/put) and
+  downstream similarity search via built-in `array_cosine_similarity` over fixed-size
+  `FLOAT[dim]` columns, and is shared with RAG (task-31) as one store / one embedding space. The
+  cache is read and written on the same DuckDB path as everything else (through the extension's
+  writer), not via a separate handle.
 - **Cluster writes** go through a `ClusterSink` port. The write path is owned by the
   extension's single writer — TDT's compute hands results back, and the extension persists
   them in one short transaction. The batch CLI does read+compute only; it does not write.
@@ -159,9 +164,9 @@ DuckDB (capture)  │                                                           
    tables  ──────────►  fetch_visits  ──(stable ORDER BY page_loaded_at, page_session_id)─► │
         ▲          │        │                                                               │
         │ (writer  │        ▼                                                               │
-        │  owns    │  page_vectors: re-download URL, build page text, EmbedFn(local model) │
+        │  owns    │  page_vectors: read extracted content (task-39.2), build text, embed  │
         │  file)   │  cache in topic_page_vector ──────────► one L2-normalized vec / page    │
-        │          │        │  (TDT embeds re-downloaded content — no RAG / LanceDB dep)    │
+        │          │        │  (TDT embeds extracted public content — no fetch, no RAG dep) │
         │          │        ▼                                                               │
         │          │  build (n,n) cosine DISTANCE matrix  D = clamp(1 - dot, 0, 2)          │
         │          │        │  metric='precomputed';  n = PAGES, guarded <= ~4000           │
@@ -189,9 +194,11 @@ DuckDB (capture)  │                                                           
 
 bergamot's capture pipeline (task-35) stores browsing **metadata only** (URL, title,
 timestamp, session graph) — **no page content and no embeddings**. Content is obtained later
-by **re-downloading the public URL during post-processing**, and vectorisation is TDT's own
-responsibility. There is **no page vector to cluster until TDT builds one**, and TDT builds it
-by embedding the re-downloaded content itself.
+by **task-39.2 re-downloading the public URL during post-processing** (eagerly per visit, into
+the encrypted content cache), and vectorisation is TDT's own responsibility. There is **no page
+vector to cluster until TDT builds one**, and TDT builds it by reading that already-extracted
+content (a `PageContent` projection of `CorpusContent`) and embedding it — TDT never
+re-downloads, parses HTML, or classifies fetch outcomes itself.
 
 **TDT is independent of the RAG pipeline (task-31), and is the first consumer of the
 re-download corpus.** Both RAG and TDT operate over the same re-downloaded public content, but
@@ -217,10 +224,11 @@ export type PageRepr = "title_plus_lead" | "main_content_extract";
  * (a throwaway internal split; NOT RAG chunking — no contextual prefixes, no persistence).
  */
 export async function build_page_vector(
-  fetched_page: FetchedPage, // re-downloaded public HTML + parsed <meta> fields
+  page: PageContent, // already-extracted main-content + title (projection of CorpusContent, task-39.2)
   embed: EmbedFn, // TDT's own local embedding model (injected)
-  repr: PageRepr = "title_plus_lead",
-): Promise<Float32Array>;
+  repr: PageRepr,
+  config: PageVectorConfig,
+): Promise<PageVector | null>; // null = excluded (no extractable text / truly degenerate)
 ```
 
 - **Default representation = title + lead/main-content extract** of the re-downloaded page,
@@ -707,6 +715,13 @@ CREATE TABLE IF NOT EXISTS topic_page_vector (
   PRIMARY KEY (page_session_id, embedding_model_id)
 );
 ```
+
+TDT's micro tier needs only get/put on this cache — clustering runs over a precomputed dense
+cosine matrix, not nearest-neighbor search. Downstream similarity search arrives with RAG
+(task-31), the first such consumer, which shares this encrypted store and embedding space: at
+that point `vector` becomes a fixed-size `FLOAT[dim]` so DuckDB's built-in
+`array_cosine_similarity` (and an optional `vss`/HNSW index) can rank it, with `dim` pinned by
+`embedding_model_id`.
 
 ### Noise representation (resolved)
 

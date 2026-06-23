@@ -10,10 +10,15 @@
  * Everything here is a pure deterministic transform: given fixed content, a
  * fixed representation rule, a fixed config, and a pinned embedder (same text →
  * byte-identical vector), the output bytes are identical regardless of the order
- * pages are processed. Determinism anchors: NFC + fixed whitespace normalization,
+ * pages are processed. Determinism anchors: NFC + whitespace normalization,
  * code-point-offset slicing (never locale/grapheme boundary search), sequential
  * in-order embedding, fixed-order float64 accumulation for every sum, and exactly
  * one float32 truncation at the final store.
+ *
+ * Pipeline position (plan §6): the orchestration loop (a later subtask) runs
+ * dedupe_visits over the window's VisitRow[], then resolve_page_vector per
+ * surviving visit, then builds the cosine distance matrix and clusters.
+ * build_page_vector is the pure inner step resolve_page_vector caches around.
  */
 
 import type { EmbedFn, VectorStore } from "./ports";
@@ -24,17 +29,15 @@ import type { PageVectorConfig } from "./config";
 // Text construction — deterministic page-level text (repr-rule-v1)
 // ---------------------------------------------------------------------------
 
-// The whitespace-equivalent set folded to a normal space before collapsing:
-// non-breaking, ideographic, en/em, zero-width-ish separators that \s misses.
-const WHITESPACE_EQUIVALENTS =
-  /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000\uFEFF]/gu;
-
-// NFC, fold separators, collapse runs to one ASCII space, trim. A string that is
-// empty or all-whitespace/zero-width normalizes to "" — the no-text predicate.
+// NFC, collapse whitespace runs to one ASCII space, trim. `\s` in Unicode mode
+// already covers every Unicode space separator plus the BOM (U+00A0, U+1680,
+// U+2000-U+200A, U+202F, U+205F, U+3000, U+FEFF), so one collapse suffices. A
+// string that is empty or all-whitespace normalizes to "" - the no-text
+// predicate. (Zero-width FORMAT chars - ZWSP/ZWNJ/ZWJ, soft hyphen - are NOT
+// folded; extracted main-content markdown is never composed solely of those.)
 function normalize_text(s: string): string {
   return s
     .normalize("NFC")
-    .replace(WHITESPACE_EQUIVALENTS, " ")
     .replace(/\s+/gu, " ")
     .trim();
 }
@@ -199,6 +202,9 @@ export async function build_page_vector(
     }
   }
 
+  // One epsilon is the single "is this vector meaningless" floor, reused for all
+  // three near-zero checks below (per-segment unit, pooled collapse, final norm).
+  // The PATH taken differs (fallback vs exclude); the threshold does not.
   const eps = config.degenerate_norm_epsilon;
   let candidate: Float64Array;
   let low_confidence = false;
@@ -207,9 +213,14 @@ export async function build_page_vector(
     // No pairwise dispersion for a single segment.
     candidate = widen(seg_vecs[0]);
   } else {
+    // Dispersion is a DIRECTIONAL question, so it runs on L2-normalized units;
+    // the pool below is the mean of the RAW embeddings (standard mean-pooling).
+    // The two bases are deliberately different, not an inconsistency.
     const units = seg_vecs.map((v) => unit_or_zero(v, eps));
     if (mean_pairwise_cosine(units) < config.dispersion_min_mean_cosine) {
-      // Multi-topic: a mean would land in dead space between sub-topics.
+      // Multi-topic: a mean would land in dead space between sub-topics. The
+      // medoid INDEX comes from units (direction); the VALUE is the raw vector
+      // at that index (re-normalized below) — positions align 1:1 with seg_vecs.
       candidate = widen(seg_vecs[medoid_index(units)]);
       low_confidence = true;
     } else {
@@ -255,6 +266,12 @@ export async function build_page_vector(
  * `bge-small-en@384#repr-v1`). A model OR representation change therefore yields
  * a new key — a clean miss — so no stale vector survives. `repr` is recorded in
  * its own column for forensics, not as part of the key.
+ *
+ * CALLER INVARIANT: `repr` MUST be the representation whose version is encoded in
+ * `embedding_model_id`. The key intentionally omits `repr`, so passing a `repr`
+ * inconsistent with the id would return a vector built under a different
+ * representation. Keep the two in lockstep at the call site (the id is the
+ * identity; `repr` only selects the page text and labels the forensic column).
  */
 export async function resolve_page_vector(
   content: PageContent,
@@ -284,11 +301,12 @@ export async function resolve_page_vector(
  * don't inflate cluster density. The same URL in a DIFFERENT tree is a distinct
  * browsing context and is kept.
  *
- * Keeps the earliest visit per `(tree_id, url)`. The input MUST arrive sorted by
- * `(page_loaded_at, page_session_id)` ascending — the contract `compute_windows`
- * already guarantees — so a first-wins pass keeps the earliest while preserving
- * the surviving subsequence's order (the stable row order the distance matrix
- * downstream depends on). Pure and deterministic; never mutates the input.
+ * Keeps the FIRST visit per `(tree_id, url)` in input order. The input MUST
+ * arrive sorted by `(page_loaded_at, page_session_id)` ascending — the contract
+ * `compute_windows` / `RelationalReader` already guarantees — so "first" IS the
+ * earliest; this function does not sort or compare timestamps itself. Preserving
+ * the surviving subsequence's order keeps the stable row order the distance
+ * matrix downstream depends on. Pure and deterministic; never mutates the input.
  */
 export function dedupe_visits(visits: VisitRow[]): VisitRow[] {
   const seen = new Set<string>();

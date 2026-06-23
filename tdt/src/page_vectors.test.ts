@@ -192,6 +192,15 @@ describe("build_page_vector — segmentation & normalization", () => {
     expect(embedded_texts).toEqual(["aaaa", "bbbb", "cc"]);
   });
 
+  it("segments on code-point boundaries, never splitting a surrogate pair", async () => {
+    // "ab🌍cd" = 5 code points; segment_chars=4 → ["ab🌍c","d"] (emoji intact).
+    // A UTF-16-offset split would instead yield ["ab🌍","cd"] (different) or a
+    // lone surrogate; the scripted embed throws on any unmapped segment.
+    const { embed, embedded_texts } = scripted_embed({ "ab🌍c": [1, 0], d: [1, 0] });
+    await build_page_vector(make_content("p", "", "ab🌍cd"), embed, EXTRACT, TINY);
+    expect(embedded_texts).toEqual(["ab🌍c", "d"]);
+  });
+
   it("title_plus_lead truncates the lead to the code-point budget", async () => {
     // lead_chars=4 → body lead is "abcd"; title "" → text "abcd" (one segment).
     const { embed, embedded_texts } = scripted_embed({ abcd: [3, 4] });
@@ -390,5 +399,19 @@ describe("dedupe_visits", () => {
 
   it("handles empty input", async () => {
     expect(dedupe_visits([])).toEqual([]);
+  });
+
+  it("is order-driven: keeps the first row in array order, not the earliest timestamp", async () => {
+    // Pins the documented contract — dedupe does NOT sort/compare timestamps; it
+    // keeps whichever (tree_id,url) appears first. Fed deliberately out of time
+    // order, the array-first row survives (the sorted-input contract is what
+    // makes "first" == "earliest" in production).
+    const visits = [
+      make_visit("v_late", "https://x.com/a", "tree-1", t(2024, 1, 1, 10)),
+      make_visit("v_early", "https://x.com/a", "tree-1", t(2024, 1, 1, 9)),
+    ];
+    const out = dedupe_visits(visits);
+    expect(out).toHaveLength(1);
+    expect(out[0].page_session_id).toBe("v_late");
   });
 });
