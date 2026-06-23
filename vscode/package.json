@@ -62,6 +62,7 @@
     "clean": "rm -rf out",
     "package": "node scripts/build-production.js",
     "build:production": "node scripts/build-production.js",
+    "verify:embedder": "npm run compile && node scripts/verify-embedder.mjs",
     "version:patch": "node scripts/version-bump.js patch",
     "version:minor": "node scripts/version-bump.js minor",
     "version:major": "node scripts/version-bump.js major",
@@ -73,6 +74,7 @@
   "dependencies": {
     "@bergamot/tdt": "*",
     "@duckdb/node-api": "^1.5.3-r.3",
+    "@huggingface/transformers": "3.7.6",
     "@modelcontextprotocol/sdk": "^1.15.1",
     "cors": "^2.8.5",
     "defuddle": "^0.18.1",

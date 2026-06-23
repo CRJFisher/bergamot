@@ -16,8 +16,11 @@ export const ENTRYPOINTS = [
  * binding; `patchright` carries browser registry assets and dynamic requires;
  * `defuddle` is resolved and required by absolute path at runtime (its ESM-only
  * `./node` subpath, which esbuild must not inline) and pulls `linkedom` +
- * `turndown` for string-input DOM parsing and HTML→markdown. All but `vscode`
- * are staged into the VSIX with their transitive closure.
+ * `turndown` for string-input DOM parsing and HTML→markdown;
+ * `@huggingface/transformers` (the TDT page embedder) dynamically requires
+ * `onnxruntime-node`'s native binding and resolves on-disk model/wasm assets, so
+ * both stay external. All but `vscode` are staged into the VSIX with their
+ * transitive closure.
  */
 export const EXTERNALS = [
   'vscode',
@@ -26,6 +29,8 @@ export const EXTERNALS = [
   'defuddle',
   'linkedom',
   'turndown',
+  '@huggingface/transformers',
+  'onnxruntime-node',
 ];
 
 /** The external packages staged into the VSIX (vscode is host-provided). */
@@ -35,4 +40,6 @@ export const SHIPPED_EXTERNALS = [
   'defuddle',
   'linkedom',
   'turndown',
+  '@huggingface/transformers',
+  'onnxruntime-node',
 ];
