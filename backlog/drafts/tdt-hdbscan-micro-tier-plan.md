@@ -131,8 +131,9 @@ TDT honors this with an **asymmetric data-access** design:
   the extension command; HTTP `/query/*` when TDT runs as the batch CLI). TDT never opens
   the capture DuckDB file directly. Getting this wrong is an **availability** failure
   (the file open is refused), not corruption — but it still breaks the batch job.
-- **Page vectors are TDT's own** (it embeds extracted public content read from the task-39.2
-  corpus; §4), cached in a TDT-owned `topic_page_vector` table in the **same DuckDB file**.
+- **Page vectors use TDT's own representation + model** (built at ingestion from the extracted
+  public content the task-39.2 re-download caches; §4), stored in a TDT-owned `topic_page_vector`
+  table in the **same DuckDB file**.
   There is no second vector store and no LanceDB dependency: LanceDB was evaluated and rejected
   because it cannot be encrypted at rest while remaining searchable, and content-derived vectors
   are sensitive. The encrypted DuckDB store serves both the K-V vector cache (get/put) and
@@ -164,9 +165,9 @@ DuckDB (capture)  │                                                           
    tables  ──────────►  fetch_visits  ──(stable ORDER BY page_loaded_at, page_session_id)─► │
         ▲          │        │                                                               │
         │ (writer  │        ▼                                                               │
-        │  owns    │  page_vectors: read extracted content (task-39.2), build text, embed  │
-        │  file)   │  cache in topic_page_vector ──────────► one L2-normalized vec / page    │
-        │          │        │  (TDT embeds extracted public content — no fetch, no RAG dep) │
+        │  owns    │  resolve_page_vector: read topic_page_vector (built at ingestion)     │
+        │  file)   │  ──────────────────────────► one L2-normalized vec / page               │
+        │          │        │  (vectors built at ingestion; miss → backfill; no RAG dep)    │
         │          │        ▼                                                               │
         │          │  build (n,n) cosine DISTANCE matrix  D = clamp(1 - dot, 0, 2)          │
         │          │        │  metric='precomputed';  n = PAGES, guarded <= ~4000           │
@@ -195,10 +196,12 @@ DuckDB (capture)  │                                                           
 bergamot's capture pipeline (task-35) stores browsing **metadata only** (URL, title,
 timestamp, session graph) — **no page content and no embeddings**. Content is obtained later
 by **task-39.2 re-downloading the public URL during post-processing** (eagerly per visit, into
-the encrypted content cache), and vectorisation is TDT's own responsibility. There is **no page
-vector to cluster until TDT builds one**, and TDT builds it by reading that already-extracted
-content (a `PageContent` projection of `CorpusContent`) and embedding it — TDT never
-re-downloads, parses HTML, or classifies fetch outcomes itself.
+the encrypted content cache). TDT **owns the page representation + embedding model** (the
+`build_page_vector` definition), but the embedding itself **runs at ingestion**, in the same
+eager-re-download pass that warms the content cache (see "Where vectorisation runs" below) —
+TDT never re-downloads, parses HTML, or classifies fetch outcomes itself; it reads the
+already-extracted content (a `PageContent` projection of `CorpusContent`) and the page vector it
+produced at capture time.
 
 **TDT is independent of the RAG pipeline (task-31), and is the first consumer of the
 re-download corpus.** Both RAG and TDT operate over the same re-downloaded public content, but
@@ -274,10 +277,21 @@ only relative to a given re-download; the run records the fetch fidelity metadat
 (`fetched_at`, `http_status`, content hash) so drift and changes in corpus membership are
 visible across re-clusters.
 
-### Cold start & the one deferred cross-feature seam
+### Where vectorisation runs (ingestion-time) & cold start
 
-Cold start is a non-issue: TDT re-downloads and embeds whatever metadata rows it has not
-embedded yet, on its own schedule, via its `EmbedFn`. It never waits on the RAG pipeline.
+**The page vector is produced at ingestion, not on TDT's schedule.** The eager re-download
+(task-39.2) already fetches and extracts a page's public content the moment it is captured (the
+`on_captured` hook in the visit-queue processor); embedding is the next step in that same pass,
+so the canonical page vector is built once at capture time and written to `topic_page_vector`.
+TDT (and RAG) only **read** vectors — `build_page_vector` is owned by TDT as the definition of
+the page representation + model, but it **runs in the ingestion pipeline**, off the capture hot
+path. `resolve_page_vector`'s build-on-miss is then the backfill / alternate-model-or-repr path
+(a new `embedding_model_id` is a clean miss → rebuild), not the common case.
+
+Cold start is therefore a non-issue: vectors accumulate as the user browses, so when TDT runs a
+window the vectors it needs are already present. TDT never waits on the RAG pipeline. (The
+concrete `topic_page_vector` store, the `on_captured` embedding wiring, and the right-to-forget
+cascade entry are TASK-36.3.1.)
 
 **The one deferred seam (an option, not a dependency).** If cross-feature work is ever wanted
 — grouping RAG search hits by project cluster, or the later macro→micro LLM linkage reasoning
@@ -883,13 +897,17 @@ A phased, testable delivery sequence for THIS module. Each phase is independentl
    default and confirm the `~5k` ceiling reality. Implement `windowing.ts` (calendar +
    count-guard + gap/calendar subdivision) against fixtures. _Verify:_ window boundaries are
    a pure function of timestamps; oversized windows subdivide deterministically.
-3. **Page vectorisation (TDT-owned).** Implement `build_page_vector` (re-download the public
-   URL, build page text from the fetched content, embed via the injected local `EmbedFn`,
-   L2-normalize, cache in `topic_page_vector`), the re-download outcome classification, the
-   dispersion/degenerate/no-text/failed-re-download guards, dedupe, and fixed-order
-   float64 segment accumulation. _Verify:_ determinism test (same re-download + pinned model →
-   identical page vector), auth-walled pages excluded, and cache hit / invalidation on model
-   change.
+3. **Page vectorisation library (task-36.3, done).** Implement the pure `build_page_vector`
+   (read already-extracted `PageContent`, build page text, embed via the injected local
+   `EmbedFn`, L2-normalize), `resolve_page_vector` (cache get/put through the `VectorStore`
+   port), `dedupe_visits`, the dispersion/degenerate/no-text guards, and fixed-order float64
+   segment accumulation. _Verified:_ determinism test (same content + pinned model → identical
+   page vector), no-text exclusion, and cache hit / invalidation on model-or-repr change.
+   3a. **Page-vector store + ingestion-time embedding (task-36.3.1).** The concrete DuckDB
+   `topic_page_vector` `VectorStore`, the `on_captured` wiring that builds the page vector at
+   ingestion (off the capture hot path) in the same eager-re-download pass, and the
+   right-to-forget cascade entry for the store. _Verify:_ a captured page's vector is present in
+   `topic_page_vector` after ingestion without TDT running; forgetting a page removes its vector.
 4. **Distance + HDBSCAN integration.** `build_cosine_distance_matrix` (clamp/diag/symmetrize)
    - the isolated `cluster_window.ts` call. _Verify:_ bitwise reproducibility test (same
      window twice → identical `labels_` and `probabilities_`); pinned tf backend.
