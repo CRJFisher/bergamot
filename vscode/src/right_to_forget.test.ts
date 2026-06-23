@@ -17,10 +17,14 @@ import {
   create_content_cache_schema,
 } from "./redownload/content_cache";
 import { CorpusContent } from "./redownload/corpus";
+import { PageVectorStore } from "./tdt/page_vector_store";
 import { forget } from "./right_to_forget";
 
 /** A production-shaped key: 64 lowercase hex chars (32 bytes). */
 const TEST_KEY = "abcdef0123456789".repeat(4);
+
+/** The embedding model id every seeded page vector is stored under. */
+const VECTOR_MODEL_ID = "bge-small-en-v1.5/q8/384#repr-v1";
 
 /** DuckDB that throws on any statement matching `poison` (when set). */
 class PoisonableDuckDB extends DuckDB {
@@ -86,6 +90,7 @@ describe("right-to-forget cascade", () => {
   let metadata_db: PoisonableDuckDB;
   let cache_db: DuckDB;
   let cache: ContentCache;
+  let vector_store: PageVectorStore;
   let seeded_trees: Set<string>;
 
   /**
@@ -135,6 +140,14 @@ describe("right-to-forget cascade", () => {
       fetched_at: loaded_at,
     });
     await cache.put(cached(id, url), "test-scope");
+    // A TDT page vector derived from this page (a unit vector; contents are
+    // irrelevant to the cascade — only that the row keys on page_session_id).
+    await vector_store.put(
+      id,
+      VECTOR_MODEL_ID,
+      "main_content_extract",
+      new Float32Array([1, 0, 0])
+    );
   }
 
   async function session_count(): Promise<number> {
@@ -161,6 +174,9 @@ describe("right-to-forget cascade", () => {
     await cache_db.init();
     await create_content_cache_schema(cache_db);
     cache = new ContentCache(cache_db);
+
+    // The page-vector cache lives in the metadata store (single writer).
+    vector_store = new PageVectorStore(metadata_db);
   });
 
   afterEach(async () => {
@@ -179,13 +195,16 @@ describe("right-to-forget cascade", () => {
 
     expect(report.page_session_ids).toBe(1);
     expect(report.content_cache_swept).toBe(true);
+    expect(report.page_vectors_deleted).toBe(1);
     expect(await get_webpage_capture(metadata_db, "a")).toBeNull();
     expect(await get_latest_webpage_fetch(metadata_db, "a")).toBeNull();
     expect(await cache.get("a")).toBeNull();
+    expect(await vector_store.get("a", VECTOR_MODEL_ID)).toBeNull();
     // The unrelated visit survives in every store.
     expect(await get_webpage_capture(metadata_db, "b")).not.toBeNull();
     expect(await get_latest_webpage_fetch(metadata_db, "b")).not.toBeNull();
     expect(await cache.get("b")).not.toBeNull();
+    expect(await vector_store.get("b", VECTOR_MODEL_ID)).not.toBeNull();
     expect(await session_count()).toBe(1);
   });
 
@@ -200,12 +219,16 @@ describe("right-to-forget cascade", () => {
     });
 
     expect(report.page_session_ids).toBe(2);
+    expect(report.page_vectors_deleted).toBe(2);
     expect(await get_webpage_capture(metadata_db, "s1")).toBeNull();
     expect(await get_webpage_capture(metadata_db, "s2")).toBeNull();
     expect(await cache.get("s1")).toBeNull();
     expect(await cache.get("s2")).toBeNull();
+    expect(await vector_store.get("s1", VECTOR_MODEL_ID)).toBeNull();
+    expect(await vector_store.get("s2", VECTOR_MODEL_ID)).toBeNull();
     expect(await get_webpage_capture(metadata_db, "keep")).not.toBeNull();
     expect(await cache.get("keep")).not.toBeNull();
+    expect(await vector_store.get("keep", VECTOR_MODEL_ID)).not.toBeNull();
   });
 
   it("forgets by time range (inclusive), leaving visits outside the window", async () => {
@@ -221,10 +244,15 @@ describe("right-to-forget cascade", () => {
     });
 
     expect(report.page_session_ids).toBe(2);
+    expect(report.page_vectors_deleted).toBe(2);
     expect(await get_webpage_capture(metadata_db, "in1")).toBeNull();
     expect(await get_webpage_capture(metadata_db, "in2")).toBeNull();
+    expect(await vector_store.get("in1", VECTOR_MODEL_ID)).toBeNull();
+    expect(await vector_store.get("in2", VECTOR_MODEL_ID)).toBeNull();
     expect(await get_webpage_capture(metadata_db, "before")).not.toBeNull();
     expect(await get_webpage_capture(metadata_db, "after")).not.toBeNull();
+    expect(await vector_store.get("before", VECTOR_MODEL_ID)).not.toBeNull();
+    expect(await vector_store.get("after", VECTOR_MODEL_ID)).not.toBeNull();
   });
 
   it("removes trees left empty and keeps trees with surviving sessions", async () => {
@@ -323,9 +351,11 @@ describe("right-to-forget cascade", () => {
 
     // Cache swept first (the safe direction)...
     expect(await cache.get("a")).toBeNull();
-    // ...metadata fully intact after ROLLBACK — fetch log, capture, session.
+    // ...metadata fully intact after ROLLBACK — fetch log, capture, session,
+    // and the page vector (deleted in the same transaction) all survive together.
     expect(await get_webpage_capture(metadata_db, "a")).not.toBeNull();
     expect(await get_latest_webpage_fetch(metadata_db, "a")).not.toBeNull();
+    expect(await vector_store.get("a", VECTOR_MODEL_ID)).not.toBeNull();
     expect(await session_count()).toBe(1);
 
     // Re-running the same forget from the partial state completes it.

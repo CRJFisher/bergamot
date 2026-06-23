@@ -139,6 +139,9 @@ export class CommandManager {
       });
       const swept = [
         report.content_cache_swept ? 'content cache swept' : null,
+        report.page_vectors_deleted > 0
+          ? `${report.page_vectors_deleted} page vector(s) removed`
+          : null,
         report.files_removed > 0
           ? `${report.files_removed} buffered file(s) removed`
           : null,

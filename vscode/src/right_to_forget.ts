@@ -9,10 +9,14 @@
  * and navigation trees left empty are removed.
  *
  * THIS MODULE IS THE CASCADE'S SINGLE HOME: every derived store joins it as
- * it lands. Today that is the metadata tables, the encrypted content cache
- * (task-39.3), and the plaintext visit buffers; TDT cluster tables (task-36)
- * and RAG vectors (task-31) are added here when those stores exist (both
- * tasks carry an acceptance criterion pointing back at this module).
+ * it lands. Today that is the metadata tables, the TDT page-vector cache
+ * (`topic_page_vector`, task-36.3.1), the encrypted content cache (task-39.3),
+ * and the plaintext visit buffers; the TDT cluster tables (task-36.6) and RAG
+ * vectors (task-31) are added here when those stores exist (each carries an
+ * acceptance criterion pointing back at this module). Page vectors live in the
+ * metadata file and are keyed by `page_session_id`, so they are deleted by the
+ * resolved id set inside the metadata transaction — atomic with the rows they
+ * derive from, with no separate-file ordering concern.
  *
  * Ordering and atomicity, honestly: the metadata-side deletes run in one
  * transaction on a dedicated connection (the empty-tree sweep necessarily
@@ -41,6 +45,7 @@ import * as fs from "fs";
 import * as path from "path";
 import {
   DuckDB,
+  TOPIC_PAGE_VECTOR_TABLE,
   WEBPAGE_ACTIVITY_SESSIONS_TABLE,
   WEBPAGE_CAPTURE_TABLE,
   WEBPAGE_FETCH_TABLE,
@@ -61,6 +66,8 @@ export interface ForgetReport {
   page_session_ids: number;
   /** Distinct URLs the forget swept (resolved plus the selector's own). */
   urls: number;
+  /** TDT page vectors deleted from `topic_page_vector` for the forgotten pages. */
+  page_vectors_deleted: number;
   /** Whether the content-cache cascade ran (false when no cache exists). */
   content_cache_swept: boolean;
   /** Plaintext buffer files (visit inbox + dev replay ring) removed. */
@@ -271,6 +278,13 @@ export async function forget(
     }
   }
 
+  // Page vectors are keyed by page_session_id and live in the metadata file, so
+  // they are counted here and deleted inside forget_metadata's transaction.
+  const page_vectors_deleted = await count_page_vectors(
+    metadata_db,
+    targets.page_session_ids
+  );
+
   if (targets.page_session_ids.length > 0 || targets.urls.length > 0) {
     await forget_metadata(metadata_db, selector, targets);
   }
@@ -287,9 +301,32 @@ export async function forget(
   return {
     page_session_ids: targets.page_session_ids.length,
     urls: targets.urls.length,
+    page_vectors_deleted,
     content_cache_swept: content_cache !== null,
     files_removed,
   };
+}
+
+/**
+ * Counts the page vectors the cascade will delete — the rows in
+ * `topic_page_vector` for the resolved sessions, across every embedding model.
+ * Read before the metadata transaction removes them, so the report can state
+ * how many vectors the forget destroyed.
+ */
+async function count_page_vectors(
+  metadata_db: DuckDB,
+  page_session_ids: string[]
+): Promise<number> {
+  if (page_session_ids.length === 0) {
+    return 0;
+  }
+  const ids = in_list(page_session_ids, "id");
+  const row = await metadata_db.query_first<{ n: unknown }>(
+    `SELECT count(*) AS n FROM ${TOPIC_PAGE_VECTOR_TABLE}
+     WHERE page_session_id IN (${ids.placeholders})`,
+    ids.params
+  );
+  return Number(row?.n ?? 0);
 }
 
 /**
@@ -332,6 +369,16 @@ async function forget_metadata(
       await run(
         `DELETE FROM ${WEBPAGE_ACTIVITY_SESSIONS_TABLE}
          WHERE id IN (${ids.placeholders})`,
+        ids.params
+      );
+      // TDT page vectors derive from these pages and key on page_session_id, so
+      // they are forgotten by the resolved id set — atomically, in the same
+      // metadata transaction (no separate-file ordering concern). A url/origin/
+      // time-range selector resolves to these ids, so id-matching covers all
+      // selector kinds; vectors carry no URL, so there is nothing else to match.
+      await run(
+        `DELETE FROM ${TOPIC_PAGE_VECTOR_TABLE}
+         WHERE page_session_id IN (${ids.placeholders})`,
         ids.params
       );
     }
