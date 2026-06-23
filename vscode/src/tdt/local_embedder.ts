@@ -22,6 +22,17 @@
  * Lifecycle: load the pipeline once, reuse it for every page in a pass, and
  * {@link LocalEmbedder.dispose} it when the pass ends — the model is resident
  * only while a pass runs, not for the extension's lifetime.
+ *
+ * MAINTENANCE — load-bearing version pin. `@huggingface/transformers` is pinned
+ * EXACT (3.7.6) for two reasons: (1) its `onnxruntime-node` (1.21.0) still ships
+ * the **darwin-x64** native binary the Intel-Mac dev target needs — 4.x's 1.24
+ * dropped it; (2) the `dtype`/`env` API and the single-thread determinism are
+ * verified only empirically on this stack (see
+ * backlog/drafts/tdt-embedding-model-selection.md §Determinism — bitwise identity
+ * is "best-effort", not proven across all platforms). Do NOT bump the version
+ * without re-running `npm run verify:embedder` (scripts/verify-embedder.mjs:
+ * checks 384-d output, byte-identical determinism, and the strict-offline guard)
+ * and confirming the bumped onnxruntime-node still carries a darwin-x64 binary.
  */
 import * as fs from "fs";
 import {
@@ -32,7 +43,7 @@ import {
 import type { EmbedFn } from "@bergamot/tdt";
 import {
   PAGE_EMBEDDING_DTYPE,
-  PAGE_EMBEDDING_MODEL_NAME,
+  PAGE_EMBEDDING_MODEL_REPO,
 } from "./embedding_config";
 
 /** A loaded embedder: the injected {@link EmbedFn} plus a model release. */
@@ -73,7 +84,7 @@ export async function load_local_embedder(
   env.allowLocalModels = true;
 
   const load = (): Promise<FeatureExtractionPipeline> =>
-    pipeline("feature-extraction", PAGE_EMBEDDING_MODEL_NAME, {
+    pipeline("feature-extraction", PAGE_EMBEDDING_MODEL_REPO, {
       dtype: PAGE_EMBEDDING_DTYPE,
       session_options: DETERMINISTIC_SESSION_OPTIONS,
     });

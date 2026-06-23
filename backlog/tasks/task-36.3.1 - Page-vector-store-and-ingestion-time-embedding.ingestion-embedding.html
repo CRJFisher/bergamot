@@ -76,6 +76,7 @@
   .meta .chip { padding: .2em .6em; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-alt); color: var(--fg-dim); }
   .meta .chip strong { color: var(--accent); font-weight: 600; }
   .meta .chip.todo { border-color: var(--accent); color: var(--accent); }
+  .meta .chip.done { border-color: var(--green); color: var(--green); }
 
   a { color: var(--accent-2); }
   code { font-family: var(--mono); font-size: .88em; }
@@ -174,7 +175,7 @@
   <span class="home">on this page</span>
   <a href="#change">What changes</a>
   <a href="#pass">The embed pass</a>
-  <a href="#thread">Decision 1 · off the event loop</a>
+  <a href="#thread">Decision 1 · no worker thread</a>
   <a href="#determinism">Decision 2 · determinism</a>
   <a href="#store">The DuckDB VectorStore</a>
   <a href="#embedder">The local embedder</a>
@@ -187,13 +188,14 @@
 <header class="page">
   <div class="crumb">Bergamot · TDT micro tier · task-36.3.1 · branch tdt</div>
   <h1>The page vector is produced by a batched embed pass, ahead of TDT</h1>
-  <p class="lead">The pure page-vectorisation library (36.3) gains its production home. The page vector is built by a batched embed pass that runs ahead of a clustering run — not per-page on the capture hot path. The pass reads the already-cached public content, embeds every page missing a current-model vector in one batch off the event loop, and stores the result.</p>
+  <p class="lead">The pure page-vectorisation library (36.3) gains its production home. The page vector is built by a batched embed pass that runs ahead of a clustering run — not per-page on the capture hot path. The pass reads the already-cached public content, embeds every page missing a current-model vector in one plain async loop off the JS event loop, and stores the result through the single writer.</p>
   <div class="meta">
-    <span class="chip todo"><strong>status</strong> to do</span>
+    <span class="chip done"><strong>status</strong> done</span>
     <span class="chip"><strong>parent</strong> task-36.3</span>
-    <span class="chip"><strong>build step</strong> plan §11 3a</span>
+    <span class="chip"><strong>code</strong> vscode/src/tdt/*</span>
     <span class="chip"><strong>depends</strong> 36.3 library · 39.2 corpus</span>
     <span class="chip"><strong>model</strong> bge-small-en-v1.5 / q8 / 384d</span>
+    <span class="chip"><strong>pinned</strong> @huggingface/transformers 3.7.6 · onnxruntime-node 1.21.0 (darwin-x64)</span>
   </div>
 </header>
 
@@ -203,15 +205,16 @@
     <li><code>task-36.3.1 ….md</code> — the spec (description + 7 acceptance criteria, batched-embed-pass design)</li>
     <li><code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> — §3 single-writer · §4 "Where vectorisation runs" · §8 <code>topic_page_vector</code> DDL · build order 3a</li>
     <li><code>backlog/drafts/tdt-embedding-model-selection.md</code> — model pick, lifecycle (load-once-per-pass / release), determinism strategy</li>
-    <li><code>tdt/src/page_vectors.ts</code> · <code>ports.ts</code> · <code>types.ts</code> · <code>config.ts</code> — the pure library the pass calls</li>
-    <li><code>vscode/src/redownload/corpus.ts</code> · <code>cached_corpus.ts</code> · <code>content_cache.ts</code> — the cached public corpus + the encrypted store to mirror</li>
-    <li><code>vscode/src/right_to_forget.ts</code> — the cascade to extend</li>
+    <li><code>vscode/src/tdt/{page_vector_store,local_embedder,embed_pass,embedding_config,single_flight}.ts</code> — the as-built store, embedder, pass, config, and coalescing latch</li>
+    <li><code>vscode/src/server/server_manager.ts</code> — <code>embed_pages()</code>, the single-flight seam a clustering run calls</li>
+    <li><code>vscode/src/right_to_forget.ts</code> — the cascade <code>topic_page_vector</code> now joins</li>
+    <li><code>scripts/verify-embedder.mjs</code> — the out-of-process real-model check (<code>npm run verify:embedder</code>)</li>
   </ul>
 </div>
 
 <div class="callout key">
   <span class="label">The one sentence</span>
-  <p>Embedding is a batched pass over the already-cached public corpus, run ahead of clustering on a worker off the event loop — built once per page via <code>resolve_page_vector</code> build-on-miss, written to <code>topic_page_vector</code> through the single writer; the capture path does no embedding at all, and TDT and RAG only ever read.</p>
+  <p>Embedding is a batched async pass over the already-cached public corpus, run ahead of clustering with inference off the JS event loop (no worker thread) — built once per page via <code>resolve_page_vector</code> build-on-miss, written to <code>topic_page_vector</code> through the single writer; the capture path does no embedding at all, and TDT and RAG only ever read.</p>
 </div>
 
 <!-- ============================================ WHAT CHANGES (before/after) -->
@@ -247,7 +250,7 @@
   </div>
   <div class="arrow">→</div>
   <div class="panel plan">
-    <span class="tag">After 36.3.1 — capture path UNCHANGED + a separate pass</span>
+    <span class="tag">In 36.3.1 — capture path UNCHANGED + a separate pass</span>
     <svg viewBox="0 0 520 300" role="img" aria-label="After this subtask, the capture path is byte-for-byte unchanged: still metadata plus eager re-download into the encrypted content cache, no embedding. The new work is an entirely separate batched embed pass, triggered ahead of a TDT clustering run, that reads the cached public corpus and produces vectors. The capture path and the embed pass share only the content cache.">
       <defs>
         <marker id="pa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
@@ -268,7 +271,7 @@
       <text x="244" y="200" fill="#7ee787" font-size="8" text-anchor="middle">reads</text>
       <rect x="288" y="60" width="216" height="220" rx="10" fill="rgba(126,231,135,.06)" stroke="#7ee787" stroke-width="1.5"/>
       <text x="396" y="80" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">NEW · batched embed pass</text>
-      <text x="396" y="93" fill="#768390" font-size="8" text-anchor="middle">ahead of a TDT run · on a worker</text>
+      <text x="396" y="93" fill="#768390" font-size="8" text-anchor="middle">ahead of a TDT run · plain async loop</text>
       <rect x="300" y="104" width="192" height="38" rx="6" fill="#161b22" stroke="#7ee787"/>
       <text x="396" y="121" fill="#7ee787" font-size="8.5" text-anchor="middle">iter_public_pages()</text>
       <text x="396" y="133" fill="#768390" font-size="7.5" text-anchor="middle">cache-served public subset</text>
@@ -278,8 +281,8 @@
       <rect x="300" y="196" width="192" height="38" rx="6" fill="#161b22" stroke="#7ee787"/>
       <text x="396" y="213" fill="#7ee787" font-size="8.5" text-anchor="middle">VectorStore.put</text>
       <text x="396" y="225" fill="#768390" font-size="7.5" text-anchor="middle">single writer → topic_page_vector</text>
-      <text x="396" y="252" fill="#768390" font-size="8" text-anchor="middle">model loaded once per pass,</text>
-      <text x="396" y="264" fill="#768390" font-size="8" text-anchor="middle">released after · zero hot-path CPU</text>
+      <text x="396" y="252" fill="#768390" font-size="8" text-anchor="middle">inference off the JS loop (libuv),</text>
+      <text x="396" y="264" fill="#768390" font-size="8" text-anchor="middle">model loaded once per pass · zero hot-path CPU</text>
     </svg>
   </div>
 </div>
@@ -296,7 +299,7 @@
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1180 360" role="img" aria-label="The batched embed pass, end to end, on a worker off the extension-host event loop. A trigger (ahead of a TDT clustering run, or standalone) starts the pass. The worker constructs the feature-extraction pipeline once: bge-small-en-v1.5 q8 384d, fully offline. It iterates iter_public_pages, the cache-served re-downloadable public subset. For each page it calls resolve_page_vector with the canonical embedding_model_id and repr: a cache hit under the current model id is skipped with no embed; a miss builds the vector via build_page_vector and the injected EmbedFn, then persists via VectorStore.put through the single writer into topic_page_vector. After the last page the pipeline is released. A second pass over an unchanged corpus is a no-op because every page is now a hit.">
+<svg viewBox="0 0 1180 360" role="img" aria-label="The batched embed pass, end to end, with inference off the JS event loop (no worker thread). A trigger (a clustering run, or the bergamot.tdt.embedPages command) calls ServerManager.embed_pages, which coalesces concurrent triggers under a single-flight latch so only one pass runs. The pass constructs the feature-extraction pipeline once: bge-small-en-v1.5 q8 384d, fully offline. It iterates iter_public_pages, the cache-served re-downloadable public subset. For each page it calls resolve_page_vector with the canonical embedding_model_id and repr: a cache hit under the current model id is skipped with no embed; a miss builds the vector via build_page_vector and the injected EmbedFn, then persists via VectorStore.put through the single writer into topic_page_vector. A setImmediate yield between pages keeps the JS event loop free while onnxruntime-node runs inference off-loop on libuv. After the last page the pipeline is released. A second pass over an unchanged corpus is a no-op because every page is now a hit.">
   <defs>
     <marker id="fa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
     <marker id="fg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
@@ -304,13 +307,14 @@
   </defs>
 
   <rect x="20" y="150" width="150" height="60" rx="8" fill="#161b22" stroke="#f0a35e"/>
-  <text x="95" y="172" fill="#f0a35e" font-size="9.5" text-anchor="middle">trigger</text>
-  <text x="95" y="186" fill="#768390" font-size="8" text-anchor="middle">ahead of a TDT run</text>
-  <text x="95" y="198" fill="#768390" font-size="8" text-anchor="middle">or standalone</text>
+  <text x="95" y="170" fill="#f0a35e" font-size="9.5" text-anchor="middle">trigger</text>
+  <text x="95" y="183" fill="#768390" font-size="8" text-anchor="middle">embed_pages()</text>
+  <text x="95" y="194" fill="#768390" font-size="7.5" text-anchor="middle">single-flight latch</text>
+  <text x="95" y="204" fill="#768390" font-size="7.5" text-anchor="middle">coalesces triggers</text>
   <line x1="170" y1="180" x2="206" y2="180" stroke="#f0a35e" stroke-width="1.6" marker-end="url(#fo)"/>
 
   <rect x="206" y="40" width="780" height="290" rx="12" fill="rgba(126,231,135,.03)" stroke="#7ee787" stroke-dasharray="4 3"/>
-  <text x="226" y="62" fill="#7ee787" font-size="11" font-weight="bold">worker thread — off the extension-host event loop (AC #3)</text>
+  <text x="226" y="62" fill="#7ee787" font-size="11" font-weight="bold">plain async pass — inference off the JS event loop on libuv (AC #3)</text>
 
   <rect x="226" y="78" width="220" height="56" rx="8" fill="rgba(126,231,135,.07)" stroke="#7ee787"/>
   <text x="336" y="98" fill="#7ee787" font-size="9.5" text-anchor="middle">load pipeline ONCE</text>
@@ -345,8 +349,9 @@
 
   <line x1="854" y1="220" x2="854" y2="250" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#fa)"/>
   <rect x="744" y="250" width="220" height="40" rx="8" fill="#161b22" stroke="#f0a35e"/>
-  <text x="854" y="268" fill="#f0a35e" font-size="9.5" text-anchor="middle">release pipeline after last page</text>
-  <text x="854" y="281" fill="#768390" font-size="8" text-anchor="middle">resident only while a pass runs</text>
+  <text x="854" y="265" fill="#f0a35e" font-size="9.5" text-anchor="middle">setImmediate yield, then release</text>
+  <text x="854" y="277" fill="#768390" font-size="7.5" text-anchor="middle">loop stays free · model resident</text>
+  <text x="854" y="287" fill="#768390" font-size="7.5" text-anchor="middle">only while a pass runs</text>
 
   <line x1="964" y1="185" x2="1010" y2="185" stroke="#7ee787" stroke-width="1.6" marker-end="url(#fg)"/>
   <rect x="1010" y="150" width="150" height="60" rx="8" fill="#0c0f14" stroke="#7ee787"/>
@@ -364,42 +369,42 @@
 </figure>
 
 <!-- ============================================ DECISION 1: OFF EVENT LOOP -->
-<h2 id="thread">Decision 1 — batched on a worker, model loaded per pass</h2>
+<h2 id="thread">Decision 1 — a plain async pass, no worker thread</h2>
 
-<p class="prose">The local embed is CPU-bound: <code>onnxruntime-node</code> inference is a synchronous, multi-second compute that would block the single-threaded event loop the <code>/visit</code> endpoint runs on. The settled design runs the pass on a worker, loads the model once per pass, and releases it after — so embedding never touches the capture hot path and the model is not resident around the clock.</p>
+<p class="prose">The embed pass is a plain async loop on the extension host, not a worker thread — inference already runs off the JS event loop on libuv, and a worker could not hold the single-writer DuckDB anyway.</p>
 
 <figure>
 <table>
   <thead><tr>
     <th>Criterion</th>
-    <th class="c">Per-page at ingestion<br><span class="gv">(rejected — on the capture pass)</span></th>
-    <th class="c">Batched pass on a worker<br><span class="gv">(chosen — ahead of TDT)</span></th>
+    <th class="c">worker_threads worker<br><span class="gv">(rejected)</span></th>
+    <th class="c">Plain async pass<br><span class="gv">(chosen — off-loop on libuv)</span></th>
   </tr></thead>
   <tbody>
     <tr>
-      <td>Zero CPU embed on the capture hot path</td>
-      <td class="c"><span class="glyph none"></span><span class="gv">no — per visit</span></td>
-      <td class="c"><span class="glyph full"></span><span class="gv">capture does no embedding</span></td>
+      <td>Inference kept off the JS event loop</td>
+      <td class="c"><span class="glyph full"></span><span class="gv">on a second thread</span></td>
+      <td class="c"><span class="glyph full"></span><span class="gv">onnxruntime-node run() already runs off-loop on libuv</span></td>
     </tr>
     <tr>
-      <td>CPU embed off the event loop</td>
-      <td class="c"><span class="glyph half"></span><span class="gv">needs its own worker anyway</span></td>
-      <td class="c"><span class="glyph full"></span><span class="gv">one worker for the whole batch</span></td>
+      <td>Can hold the single-writer DuckDB handle</td>
+      <td class="c"><span class="glyph none"></span><span class="gv">no — a worker cannot open the single-writer metadata DB to read the corpus or write the store</span></td>
+      <td class="c"><span class="glyph full"></span><span class="gv">runs on the host that owns the writer</span></td>
     </tr>
     <tr>
-      <td>Model residency</td>
-      <td class="c"><span class="glyph none"></span><span class="gv">resident 24/7 to embed on arrival</span></td>
-      <td class="c"><span class="glyph full"></span><span class="gv">loaded per pass, released after</span></td>
+      <td>/visit endpoint + UI stay responsive during a pass</td>
+      <td class="c"><span class="glyph half"></span><span class="gv">yes, but needs cross-thread plumbing</span></td>
+      <td class="c"><span class="glyph full"></span><span class="gv">a setImmediate yield between pages</span></td>
     </tr>
     <tr>
-      <td>Embedding efficiency</td>
-      <td class="c"><span class="glyph half"></span><span class="gv">one page at a time, model reload risk</span></td>
-      <td class="c"><span class="glyph full"></span><span class="gv">one batch, one model load</span></td>
+      <td>Capture hot path does zero embedding</td>
+      <td class="c"><span class="glyph full"></span><span class="gv">batched, ahead of a run</span></td>
+      <td class="c"><span class="glyph full"></span><span class="gv">batched, ahead of a run</span></td>
     </tr>
     <tr>
-      <td>Content already durable when embed runs</td>
-      <td class="c"><span class="glyph full"></span><span class="gv">just cached</span></td>
-      <td class="c"><span class="glyph full"></span><span class="gv">cached at capture; read from cache</span></td>
+      <td>Machinery / moving parts</td>
+      <td class="c"><span class="glyph none"></span><span class="gv">worker lifecycle, serialization, a DB proxy</span></td>
+      <td class="c"><span class="glyph full"></span><span class="gv">a for-await loop + one yield</span></td>
     </tr>
     <tr>
       <td>Reuses the pure library as designed</td>
@@ -416,8 +421,8 @@
 </div>
 
 <div class="callout decision">
-  <span class="label">Decision 1 — settled</span>
-  <p><span class="pick">Batched embed pass on a worker, model loaded once per pass and released after.</span> The content is already durably cached at capture time, so embedding need not happen on arrival; batching gives one model load per pass and keeps the capture hot path entirely free of CPU embed work, with the model resident only while a pass runs rather than 24/7.</p>
+  <span class="label">Decision 1 — settled (no worker)</span>
+  <p><span class="pick">A plain async embed pass with a setImmediate yield between pages — no worker thread.</span> Two facts make a worker unnecessary and unworkable: onnxruntime-node already runs inference off the JS event loop on libuv’s threadpool, so the loop never blocks; and a worker_threads worker could not open the single-writer metadata DuckDB to read the corpus or write the store. The pass runs on the host that owns the writer, batched ahead of a run, with the model loaded once per pass and released after.</p>
 </div>
 
 <!-- ============================================ DECISION 2: DETERMINISM -->
@@ -440,7 +445,7 @@
   <line x1="376" y1="84" x2="412" y2="84" stroke="#ff7b72" stroke-width="1.4" marker-end="url(#dr2)"/>
   <rect x="412" y="62" width="150" height="44" rx="7" fill="#161b22" stroke="#ff7b72"/><text x="487" y="80" fill="#ff7b72" font-size="9" text-anchor="middle">reproducible?</text><text x="487" y="94" fill="#768390" font-size="8" text-anchor="middle">only if bitwise-stable</text>
   <text x="40" y="138" fill="#d7dde4" font-size="9.5">Demands the embedder give byte-identical output across runs and restarts —</text>
-  <text x="40" y="156" fill="#d7dde4" font-size="9.5">an UNPROVEN property on transformers.js + onnxruntime-node + q8 on x64.</text>
+  <text x="40" y="156" fill="#d7dde4" font-size="9.5">unproven across platforms on transformers.js + onnxruntime-node + q8.</text>
   <text x="40" y="180" fill="#768390" font-size="9">A flaky vector flips MST ties → different labels → broken reproducibility.</text>
   <text x="40" y="200" fill="#768390" font-size="9">Pays K embeddings on every run, even unchanged windows.</text>
 
@@ -457,24 +462,25 @@
   <text x="620" y="200" fill="#768390" font-size="9">or a page re-embedded after its vector was forgotten.</text>
 </svg>
 </div>
-<figcaption>Because the embed pass builds each vector once and clustering only ever reads, downstream reproducibility flows from reading fixed bytes — so cross-run bitwise embedder determinism is not load-bearing. It still matters on the narrow cache-miss path, so the embedder is pinned single-threaded as best-effort and verified empirically, not as a hard gate.</figcaption>
+<figcaption>Because the embed pass builds each vector once and clustering only ever reads, downstream reproducibility flows from reading fixed bytes — so cross-run bitwise embedder determinism is not load-bearing. It still matters on the narrow cache-miss path, so the embedder is pinned single-threaded (intraOpNumThreads:1, interOpNumThreads:1, executionMode:"sequential") — verified byte-identical on the Intel x64 target, best-effort across other platforms, never a release gate.</figcaption>
 </figure>
 
 <div class="callout warn">
-  <span class="label">The mitigation, best-effort and verified — not a hard gate</span>
-  <p>Pin ONNX Runtime single-threaded (<code>intra_op_num_threads = 1</code>, <code>ORT_SEQUENTIAL</code>, <code>OMP_NUM_THREADS=1</code>) to remove the float-non-associativity of multithreaded reductions. Bitwise reproducibility on this exact stack (transformers.js + onnxruntime-node, q8, x64) is <strong>not proven</strong>; add a regression test asserting byte-identical Float32 output and verify empirically rather than relying on it as an invariant.</p>
+  <span class="label">The mitigation, verified on x64 — best-effort, not a hard gate</span>
+  <p>ONNX Runtime is pinned single-threaded sequential via the pipeline’s <code>session_options</code> (<code>intraOpNumThreads:1</code>, <code>interOpNumThreads:1</code>, <code>executionMode:"sequential"</code>), removing the float non-associativity of multithreaded reductions. On the Intel x64 / q8 stack the same text now embeds <strong>byte-identically</strong> across runs and a reload — verified out-of-process by <code>scripts/verify-embedder.mjs</code> (<code>npm run verify:embedder</code>), because onnxruntime-node’s native typed-array check is incompatible with jest’s VM realm. It stays best-effort across other platforms (built-once-and-read makes it non-load-bearing), never a release gate.</p>
 </div>
 
 <!-- ============================================ THE STORE -->
 <h2 id="store">The concrete DuckDB VectorStore — mirroring content_cache.ts</h2>
 
-<p class="prose">The store implements the pure library's <code>VectorStore</code> port (<code>get</code> / <code>put</code>) over the <code>topic_page_vector</code> table, in the encrypted metadata DuckDB file, written only through the single writer. It mirrors <code>content_cache.ts</code>: a <code>create_*_schema</code> step run by the writer, get / put, and the batch delete surface (<code>delete_items</code> / <code>delete_by_url</code> / <code>delete_by_origin</code>) with the <code>CHECKPOINT</code>-after-delete discipline the forget cascade depends on.</p>
+<p class="prose">The store implements the pure library's <code>VectorStore</code> port (<code>get</code> / <code>put</code>) over <code>topic_page_vector</code> in the encrypted metadata DuckDB file, written only through the single writer — upserting on the composite key, opening no connection of its own.</p>
 
 <div class="code">
-  <div class="file-label"><span class="new">new</span> vscode/src/tdt/page_vector_store.ts &nbsp;·&nbsp; the VectorStore over topic_page_vector (plan §8 DDL)</div>
+  <div class="file-label"><span class="new">new</span> vscode/src/tdt/page_vector_store.ts &nbsp;·&nbsp; the VectorStore over topic_page_vector (table created in create_metadata_schema)</div>
 <pre><span class="cm">// One embedding per (page, model) in the ENCRYPTED metadata DuckDB file.</span>
 <span class="cm">// Implements the @bergamot/tdt VectorStore port; written only via the single writer.</span>
-<span class="kw">export async function</span> <span class="fn">create_page_vector_schema</span>(db: <span class="typ">DuckDB</span>): <span class="typ">Promise</span>&lt;<span class="kw">void</span>&gt; {
+<span class="cm">// Created with the rest of the metadata schema (create_metadata_schema).</span>
+<span class="kw">async function</span> <span class="fn">create_topic_page_vector</span>(db: <span class="typ">DuckDB</span>): <span class="typ">Promise</span>&lt;<span class="kw">void</span>&gt; {
   <span class="kw">await</span> db.<span class="fn">exec</span>(<span class="str">`CREATE TABLE IF NOT EXISTS topic_page_vector (
     page_session_id    TEXT NOT NULL,      -- soft ref → activity_sessions.id
     embedding_model_id TEXT NOT NULL,      -- e.g. 'bge-small-en-v1.5/q8/384#repr-v1'
@@ -495,6 +501,8 @@
   }
 
   <span class="hl"><span class="kw">async</span> <span class="fn">put</span>(id: <span class="typ">string</span>, model_id: <span class="typ">string</span>, repr: <span class="typ">string</span>, vector: <span class="typ">Float32Array</span>) {</span>
+    <span class="kw">if</span> (vector.length === <span class="num">0</span> || !vector.<span class="fn">every</span>(<span class="typ">Number</span>.isFinite))
+      <span class="kw">throw new</span> <span class="typ">Error</span>(<span class="str">"refusing to store an empty/non-finite page vector"</span>);
     <span class="kw">await</span> db.<span class="fn">execute</span>(<span class="str">`INSERT INTO topic_page_vector
        (page_session_id, embedding_model_id, vector, repr, built_at)
        VALUES ($id, $m, $v, $r, $t)
@@ -503,8 +511,8 @@
       { id, m: model_id, v: <span class="typ">Array</span>.<span class="fn">from</span>(vector), r: repr, t: <span class="kw">new</span> <span class="typ">Date</span>().<span class="fn">toISOString</span>() });
   }
 
-  <span class="cm">// Right-to-forget surface — mirrors ContentCache; CHECKPOINT folds deletes out of the WAL.</span>
-  <span class="kw">async</span> <span class="fn">delete_items</span>(ids: <span class="typ">string</span>[]): <span class="typ">Promise</span>&lt;<span class="kw">void</span>&gt; { <span class="cm">/* DELETE … WHERE page_session_id IN (…) ; CHECKPOINT */</span> }
+  <span class="cm">// Last line of defence: never store a degenerate vector (AC #7).</span>
+  <span class="cm">// resolve_page_vector already excludes no-text / sub-epsilon pages upstream.</span>
 }</pre>
 </div>
 
@@ -518,14 +526,14 @@
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1180 200" role="img" aria-label="The production EmbedFn lifecycle. At pass start, construct the @huggingface/transformers feature-extraction pipeline for bge-small-en-v1.5 q8 384d with mean pooling and L2-normalize, no instruction prefix, with allowRemoteModels false so it loads from the bundled or cached artifact and never reaches the network — the privacy guarantee. During the pass, embed every pending page on the worker, single-threaded ONNX. At pass end, drop the reference to release the model so it is resident only while a pass runs.">
+<svg viewBox="0 0 1180 200" role="img" aria-label="The production EmbedFn lifecycle. At pass start, construct the @huggingface/transformers feature-extraction pipeline for bge-small-en-v1.5 q8 384d with mean pooling and L2-normalize, no instruction prefix, with allowRemoteModels false so it loads from the bundled or cached artifact and never reaches the network — the privacy guarantee. During the pass, embed every pending page single-threaded — onnxruntime-node run() executes off the JS event loop on libuv. At pass end, drop the reference to release the model so it is resident only while a pass runs.">
   <defs>
     <marker id="ma" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
   </defs>
   <rect x="20" y="70" width="280" height="70" rx="10" fill="rgba(126,231,135,.06)" stroke="#7ee787"/>
   <text x="160" y="92" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">pass start · construct ONCE</text>
-  <text x="160" y="110" fill="#768390" font-size="8.5" text-anchor="middle">feature-extraction pipeline</text>
-  <text x="160" y="124" fill="#768390" font-size="8.5" text-anchor="middle">mean-pool + L2-normalize · no prefix</text>
+  <text x="160" y="110" fill="#768390" font-size="8.5" text-anchor="middle">feature-extraction · pooling:"mean"</text>
+  <text x="160" y="124" fill="#768390" font-size="8.5" text-anchor="middle">normalize:false · no prefix (page layer owns L2)</text>
   <line x1="300" y1="105" x2="346" y2="105" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ma)"/>
 
   <rect x="346" y="70" width="280" height="70" rx="10" fill="#161b22" stroke="#6cb6ff"/>
@@ -537,7 +545,7 @@
   <rect x="672" y="70" width="240" height="70" rx="10" fill="#161b22" stroke="#7ee787"/>
   <text x="792" y="92" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">embed all pending pages</text>
   <text x="792" y="110" fill="#768390" font-size="8.5" text-anchor="middle">single-threaded ONNX</text>
-  <text x="792" y="124" fill="#768390" font-size="8.5" text-anchor="middle">on the worker · CPU-bound</text>
+  <text x="792" y="124" fill="#768390" font-size="8.5" text-anchor="middle">off the JS loop (libuv) · CPU-bound</text>
   <line x1="912" y1="105" x2="958" y2="105" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ma)"/>
 
   <rect x="958" y="70" width="200" height="70" rx="10" fill="rgba(240,163,94,.07)" stroke="#f0a35e"/>
@@ -546,15 +554,20 @@
   <text x="1058" y="124" fill="#768390" font-size="8.5" text-anchor="middle">resident only while a pass runs</text>
 </svg>
 </div>
-<figcaption>The production <code>EmbedFn</code> is <code>bge-small-en-v1.5</code> (q8, 384d) via <code>@huggingface/transformers</code>, constructed once per pass and released after — so the model is resident only while a pass runs, not around the clock (AC #4). <code>allowRemoteModels = false</code> loads it from the bundled/cached artifact and guarantees no network or API call.</figcaption>
+<figcaption>The production <code>EmbedFn</code> is <code>bge-small-en-v1.5</code> (q8, 384d) via <code>@huggingface/transformers</code> 3.7.6 (pinned exact), constructed once per pass and released after — resident only while a pass runs (AC #4). Each per-segment call is <code>pooling:"mean", normalize:false</code> because <code>build_page_vector</code> owns the single final L2-normalization. <code>allowRemoteModels = false</code> serves it from the on-disk cache and guarantees no network call — a one-time public-weights download provisions that cache on first use, then re-locks.</figcaption>
 </figure>
+
+<div class="callout warn">
+  <span class="label">Load-bearing version pin</span>
+  <p><code>@huggingface/transformers</code> is pinned EXACT at 3.7.6 because its <code>onnxruntime-node</code> 1.21.0 still ships the <strong>darwin-x64</strong> native binary the Intel-Mac target needs — the 4.x line (onnxruntime-node 1.24.x) dropped it. Bumping the package requires re-running <code>npm run verify:embedder</code> and confirming the new onnxruntime still carries a darwin-x64 binary.</p>
+</div>
 
 <!-- ============================================ RIGHT TO FORGET -->
 <h2 id="forget">Right-to-forget cascade — topic_page_vector joins it</h2>
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1180 230" role="img" aria-label="The right-to-forget cascade with the new vector store added. A forget selector by url, origin, or time-range resolves target page sessions and urls. Derived stores are deleted before metadata: the plaintext visit buffers are swept, the encrypted content cache rows are deleted, and the NEW step deletes topic_page_vector rows for the same page sessions; only then are the metadata capture and activity rows deleted in one transaction, followed by the referrer scrub and empty-tree sweep. Deleting derived before metadata keeps a failure on the safe side: metadata without content, never content without metadata.">
+<svg viewBox="0 0 1180 230" role="img" aria-label="The right-to-forget cascade with topic_page_vector joined in. A forget selector by url, origin, or time-range resolves target page session ids and urls. The cross-file derived stores are deleted first — plaintext visit buffers swept, encrypted content cache rows deleted — so a cross-store failure can only leave metadata without content, the privacy-safe direction. The page vectors live in the SAME metadata file, so they are deleted INSIDE forget_metadata's single transaction, keyed by the resolved page_session_ids (a url, origin, or time-range selector all resolve to those ids; vectors carry no URL), atomically with the capture and activity rows. The report carries page_vectors_deleted, counted just before the transaction.">
   <defs>
     <marker id="ra" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
     <marker id="rg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
@@ -565,31 +578,37 @@
   <text x="100" y="132" fill="#768390" font-size="8" text-anchor="middle">resolve_targets → ids + urls</text>
   <line x1="180" y1="114" x2="216" y2="114" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ra)"/>
 
-  <rect x="216" y="40" width="640" height="150" rx="10" fill="rgba(126,231,135,.03)" stroke="#7ee787" stroke-dasharray="4 3"/>
-  <text x="232" y="60" fill="#7ee787" font-size="10" font-weight="bold">derived artifacts FIRST (safe direction on partial failure)</text>
+  <rect x="216" y="40" width="430" height="150" rx="10" fill="rgba(108,182,255,.03)" stroke="#6cb6ff" stroke-dasharray="4 3"/>
+  <text x="232" y="60" fill="#6cb6ff" font-size="10" font-weight="bold">cross-file derived stores FIRST (safe direction)</text>
 
   <rect x="232" y="74" width="180" height="44" rx="7" fill="#161b22" stroke="#2a313a"/><text x="322" y="92" fill="#d7dde4" font-size="9" text-anchor="middle">sweep visit buffers</text><text x="322" y="106" fill="#768390" font-size="8" text-anchor="middle">inbox + replay (plaintext)</text>
-  <rect x="232" y="128" width="180" height="44" rx="7" fill="#161b22" stroke="#2a313a"/><text x="322" y="146" fill="#d7dde4" font-size="9" text-anchor="middle">content cache delete</text><text x="322" y="160" fill="#768390" font-size="8" text-anchor="middle">by id / url / origin</text>
+  <rect x="232" y="128" width="180" height="44" rx="7" fill="#161b22" stroke="#2a313a"/><text x="322" y="146" fill="#d7dde4" font-size="9" text-anchor="middle">content cache delete</text><text x="322" y="160" fill="#768390" font-size="8" text-anchor="middle">separate file · by id / url / origin</text>
 
-  <rect x="436" y="100" width="200" height="50" rx="8" fill="rgba(126,231,135,.08)" stroke="#7ee787" stroke-width="1.8"/>
-  <text x="536" y="120" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">NEW: page-vector delete</text>
-  <text x="536" y="135" fill="#768390" font-size="8" text-anchor="middle">topic_page_vector by id / url / origin</text>
-  <line x1="412" y1="125" x2="436" y2="125" stroke="#7ee787" stroke-width="1.6" marker-end="url(#rg)"/>
+  <rect x="432" y="96" width="200" height="56" rx="8" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="532" y="115" fill="#6cb6ff" font-size="9" text-anchor="middle" font-weight="bold">count_page_vectors</text>
+  <text x="532" y="129" fill="#768390" font-size="7.5" text-anchor="middle">read count BEFORE the txn</text>
+  <text x="532" y="141" fill="#768390" font-size="7.5" text-anchor="middle">→ report.page_vectors_deleted</text>
 
-  <text x="660" y="118" fill="#768390" font-size="8.5">module header already</text>
-  <text x="660" y="132" fill="#768390" font-size="8.5">reserves this slot:</text>
-  <text x="660" y="146" fill="#9aa6b2" font-size="8">"TDT … vectors … added</text>
-  <text x="660" y="158" fill="#9aa6b2" font-size="8">here when those stores exist"</text>
+  <line x1="646" y1="114" x2="680" y2="114" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ra)"/>
 
-  <line x1="856" y1="114" x2="892" y2="114" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ra)"/>
-  <rect x="892" y="74" width="220" height="80" rx="8" fill="#161b22" stroke="#f0a35e"/>
-  <text x="1002" y="94" fill="#f0a35e" font-size="10" text-anchor="middle">metadata LAST</text>
-  <text x="1002" y="110" fill="#768390" font-size="8" text-anchor="middle">one transaction: capture +</text>
-  <text x="1002" y="122" fill="#768390" font-size="8" text-anchor="middle">activity + fetch + referrer scrub</text>
-  <text x="1002" y="138" fill="#768390" font-size="8" text-anchor="middle">then sweep_empty_trees · CHECKPOINT</text>
+  <rect x="680" y="34" width="460" height="172" rx="10" fill="rgba(240,163,94,.04)" stroke="#f0a35e" stroke-dasharray="4 3"/>
+  <text x="696" y="54" fill="#f0a35e" font-size="10" font-weight="bold">forget_metadata — ONE transaction (atomic)</text>
+
+  <rect x="696" y="66" width="200" height="34" rx="6" fill="#161b22" stroke="#2a313a"/><text x="796" y="80" fill="#d7dde4" font-size="8.5" text-anchor="middle">fetch log</text><text x="796" y="92" fill="#768390" font-size="7.5" text-anchor="middle">by id · url · final_url</text>
+  <rect x="696" y="104" width="200" height="34" rx="6" fill="#161b22" stroke="#2a313a"/><text x="796" y="118" fill="#d7dde4" font-size="8.5" text-anchor="middle">capture + activity rows</text><text x="796" y="130" fill="#768390" font-size="7.5" text-anchor="middle">by page_session_id</text>
+
+  <rect x="910" y="66" width="216" height="72" rx="8" fill="rgba(126,231,135,.08)" stroke="#7ee787" stroke-width="1.8"/>
+  <text x="1018" y="86" fill="#7ee787" font-size="9.5" text-anchor="middle" font-weight="bold">NEW: topic_page_vector delete</text>
+  <text x="1018" y="101" fill="#768390" font-size="7.5" text-anchor="middle">DELETE … WHERE page_session_id IN (…)</text>
+  <text x="1018" y="113" fill="#768390" font-size="7.5" text-anchor="middle">same txn · vanishes atomically</text>
+  <text x="1018" y="125" fill="#9aa6b2" font-size="7.5" text-anchor="middle">fills the slot the module header reserved</text>
+
+  <rect x="696" y="150" width="430" height="40" rx="7" fill="#161b22" stroke="#f0a35e"/>
+  <text x="911" y="168" fill="#f0a35e" font-size="9" text-anchor="middle">referrer scrub on survivors · commit</text>
+  <text x="911" y="181" fill="#768390" font-size="7.5" text-anchor="middle">then sweep_empty_trees · CHECKPOINT</text>
 </svg>
 </div>
-<figcaption>The cascade already deletes derived stores before metadata so a cross-store failure can only leave metadata without content — the privacy-safe direction. The vector store slots in alongside the content cache: forgetting by url / origin / time-range deletes the affected pages' vectors (AC #6), and the cascade tests extend to cover it. The module header already reserves the slot.</figcaption>
+<figcaption>The cross-file derived stores (visit buffers, content cache) are deleted first, so a cross-store failure can only leave metadata without content — the privacy-safe direction. Page vectors live in the same metadata file, so they are deleted <strong>inside</strong> <code>forget_metadata</code>’s single transaction, keyed by the resolved <code>page_session_id</code>s, vanishing atomically with the capture and activity rows (AC #6). The report carries <code>page_vectors_deleted</code>; the cascade tests assert deletion on every selector and survival under a rolled-back forget.</figcaption>
 </figure>
 
 <!-- ============================================ EXCLUSION -->
@@ -670,13 +689,13 @@
     </tr>
     <tr>
       <td class="c">#3</td>
-      <td>The embed pass runs off the event loop (a worker); the capture / visit-queue path performs no embedding</td>
-      <td><strong>Decision 1</strong>: batched pass on a worker; the capture path is untouched — zero CPU embed on the hot path</td>
+      <td>The embed pass runs off the event loop; the capture / visit-queue path performs no embedding</td>
+      <td><strong>Decision 1</strong>: plain async pass — inference off-loop on libuv + a setImmediate yield; no worker thread; capture path untouched</td>
     </tr>
     <tr>
       <td class="c">#4</td>
       <td>The <code>EmbedFn</code> is the local bge model via <code>@huggingface/transformers</code> fully offline, loaded once per pass and released, ONNX single-threaded</td>
-      <td>The embedder lifecycle: construct-once-per-pass, <code>allowRemoteModels = false</code>, single-thread, release after</td>
+      <td>The embedder lifecycle: construct-once-per-pass, <code>allowRemoteModels = false</code>, single-thread sequential (verified byte-identical on x64), release after; package pinned 3.7.6</td>
     </tr>
     <tr>
       <td class="c">#5</td>
@@ -686,7 +705,7 @@
     <tr>
       <td class="c">#6</td>
       <td><code>topic_page_vector</code> joins the right-to-forget cascade; tests extended</td>
-      <td><code>right_to_forget.ts</code> deletes vectors before metadata, by id / url / origin; cascade tests extended</td>
+      <td><code>right_to_forget.ts</code> deletes <code>topic_page_vector</code> inside <code>forget_metadata</code>’s transaction by <code>page_session_id</code>; report carries <code>page_vectors_deleted</code>; cascade tests extended</td>
     </tr>
     <tr>
       <td class="c">#7</td>
@@ -710,39 +729,38 @@
     <div class="badge ok">2</div>
     <div class="body">
       <h3>The production local <code>EmbedFn</code></h3>
-      <p><code>@huggingface/transformers</code> <code>feature-extraction</code> with <code>bge-small-en-v1.5</code> (q8, 384d), mean-pool + L2-normalize, no prefix. Offline (<code>allowRemoteModels = false</code>), constructed once per pass, single-threaded ONNX, released after. Pin the package version.</p>
-      <span class="loc">AC #4 · embedding-model-selection doc · new EmbedFn impl</span>
+      <p><code>@huggingface/transformers</code> 3.7.6 (pinned exact) <code>feature-extraction</code> with <code>bge-small-en-v1.5</code> (q8, 384d); per-segment <code>pooling:"mean", normalize:false</code> (<code>build_page_vector</code> owns L2). Offline (<code>allowRemoteModels = false</code>), constructed once per pass, single-thread sequential ONNX, released after.</p>
+      <span class="loc">AC #4 · vscode/src/tdt/local_embedder.ts · embedding_config.ts</span>
     </div>
   </div>
   <div class="step">
     <div class="badge ok">3</div>
     <div class="body">
       <h3>The batched embed pass — vectorise ahead of TDT</h3>
-      <p>Iterate the cache-served public corpus, resolve each page via <code>resolve_page_vector</code> build-on-miss, persist via the store. Runs on a worker off the event loop; invokable standalone and as the step a TDT run executes before clustering. Incremental: one embed per new public page, a repeat pass a no-op.</p>
-      <span class="loc">AC #2, #3 · the embed-pass module + worker</span>
+      <p>Iterate the cache-served public corpus, resolve each page via <code>resolve_page_vector</code> build-on-miss, persist via the store. A plain async loop — inference off-loop on libuv, a <code>setImmediate</code> yield between pages, no worker thread. <code>ServerManager.embed_pages()</code> runs it under a single-flight latch (one model load, no racing writes); the <code>bergamot.tdt.embedPages</code> command triggers it, and it is the step a clustering run calls before reading vectors. Incremental: one embed per new public page, a repeat pass a no-op.</p>
+      <span class="loc">AC #2, #3 · vscode/src/tdt/embed_pass.ts · single_flight.ts · server_manager.ts</span>
     </div>
   </div>
   <div class="step">
     <div class="badge guard">4</div>
     <div class="body">
       <h3>Right-to-forget cascade entry + extended tests</h3>
-      <p>Add <code>topic_page_vector</code> deletion to <code>right_to_forget.ts</code> (before metadata, by id / url / origin), filling the slot the module header reserves. Extend the cascade tests to assert a forgotten page's vectors are gone.</p>
+      <p>Delete <code>topic_page_vector</code> inside <code>forget_metadata</code>’s transaction, keyed by the resolved <code>page_session_id</code>s, filling the slot the module header reserves; the report carries <code>page_vectors_deleted</code>. Cascade tests assert deletion on every selector and survival under a rolled-back forget.</p>
       <span class="loc">AC #6 · vscode/src/right_to_forget.ts + its tests</span>
     </div>
   </div>
 </div>
 
 <div class="callout good">
-  <span class="label">Verify (plan §11 step 3a)</span>
-  <p>Running the embed pass populates <code>topic_page_vector</code> for every public page without a clustering run having executed; a second pass over an unchanged corpus is a no-op; the pass never blocks the UI or the <code>/visit</code> endpoint; forgetting a page removes its vector; an excluded or no-text page stores no vector.</p>
+  <span class="label">Verified — 301 unit tests + a real-model out-of-process check</span>
+  <p>301 vscode unit tests cover the store round-trip (incl. byte-identity), embed-pass hit/skip/exclude/isolation/yield, the embedder’s offline/provision/dispose via a mock, single-flight coalescing, and right-to-forget across every selector. The wrapper is mock-tested in jest because onnxruntime-node’s native typed-array check is incompatible with jest’s VM realm; the real <code>bge-small-en-v1.5</code> q8 stack — 384-d output, byte-identical determinism, strict-offline refusal of the network — is verified out-of-process on Intel x64 macOS by <code>scripts/verify-embedder.mjs</code> (<code>npm run verify:embedder</code>).</p>
 </div>
 
 <footer>
-  Companion for <code>task-36.3.1</code> — page-vector store + batched embedder (vectorise ahead of TDT) · branch <code>tdt</code> ·
-  spec <code>task-36.3.1 ….md</code> (7 ACs) ·
-  plan <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> §3 / §4 / §8 / build 3a ·
+  Companion for <code>task-36.3.1</code> (status: Done) — page-vector store + batched embedder (vectorise ahead of TDT) · branch <code>tdt</code> ·
+  spec <code>task-36.3.1 ….md</code> (7 ACs · Implementation Notes) ·
   model <code>backlog/drafts/tdt-embedding-model-selection.md</code> ·
-  reads the cached public corpus <code>vscode/src/redownload/corpus.ts</code> · store mirror <code>content_cache.ts</code> · cascade <code>right_to_forget.ts</code> · library <code>tdt/src/page_vectors.ts</code>.
+  as-built code <code>vscode/src/tdt/{page_vector_store,local_embedder,embed_pass,embedding_config,single_flight}.ts</code> · seam <code>vscode/src/server/server_manager.ts</code> (embed_pages) · cascade <code>vscode/src/right_to_forget.ts</code> · check <code>scripts/verify-embedder.mjs</code>.
 </footer>
 
 </main>

@@ -67,7 +67,7 @@ const transformers = jest.requireMock("@huggingface/transformers") as {
 import { load_local_embedder } from "./local_embedder";
 import {
   PAGE_EMBEDDING_DTYPE,
-  PAGE_EMBEDDING_MODEL_NAME,
+  PAGE_EMBEDDING_MODEL_REPO,
 } from "./embedding_config";
 
 const CACHE_DIR = "/tmp/tdt-test-models";
@@ -84,7 +84,7 @@ describe("load_local_embedder", () => {
     expect(transformers.pipeline).toHaveBeenCalledTimes(1);
     const [task, name, options] = transformers.pipeline.mock.calls[0];
     expect(task).toBe("feature-extraction");
-    expect(name).toBe(PAGE_EMBEDDING_MODEL_NAME);
+    expect(name).toBe(PAGE_EMBEDDING_MODEL_REPO);
     expect(options.dtype).toBe(PAGE_EMBEDDING_DTYPE);
     expect(options.session_options).toEqual({
       intraOpNumThreads: 1,

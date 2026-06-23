@@ -17,13 +17,16 @@ import {
   type PageVectorConfig,
 } from "@bergamot/tdt";
 
-/** The transformers.js model repo id the local embedder loads. */
-export const PAGE_EMBEDDING_MODEL_NAME = "Xenova/bge-small-en-v1.5";
+/**
+ * The HuggingFace repo the local embedder loads (the value passed to
+ * `pipeline()`). Distinct from {@link PAGE_EMBEDDING_MODEL_ID}, the cache key.
+ */
+export const PAGE_EMBEDDING_MODEL_REPO = "Xenova/bge-small-en-v1.5";
 
 /** ONNX quantization variant selected via the pipeline `dtype` option. */
 export const PAGE_EMBEDDING_DTYPE = "q8";
 
-/** Embedding dimension `PAGE_EMBEDDING_MODEL_NAME` produces. */
+/** Embedding dimension `PAGE_EMBEDDING_MODEL_REPO` produces. */
 export const PAGE_EMBEDDING_DIM = 384;
 
 /**
@@ -43,7 +46,9 @@ export const PAGE_EMBEDDING_REPR: PageRepr = "main_content_extract";
 
 /**
  * The cache + clustering key: model + quantization + dim + representation-rule
- * version, e.g. `bge-small-en-v1.5/q8/384#repr-v1`.
+ * version, e.g. `bge-small-en-v1.5/q8/384#repr-v1`. The HuggingFace org prefix
+ * (`Xenova/`) is intentionally omitted — it is a mirror detail; the weights,
+ * quantization, dim, and representation rule are what define cache identity.
  */
 export const PAGE_EMBEDDING_MODEL_ID = `bge-small-en-v1.5/${PAGE_EMBEDDING_DTYPE}/${PAGE_EMBEDDING_DIM}#${PAGE_REPRESENTATION_VERSION}`;
 

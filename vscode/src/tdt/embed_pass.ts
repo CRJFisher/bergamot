@@ -86,9 +86,12 @@ export async function run_embed_pass(
   for await (const content of corpus.iter_public_pages()) {
     report.scanned++;
     try {
-      // The pre-read distinguishes a cache hit (skip) from a build (embed) for
-      // the report; resolve_page_vector remains the single source of the
-      // get-skip / build-on-miss / exclude semantics.
+      // resolve_page_vector is the single source of the get-skip / build-on-miss
+      // / exclude semantics; the extra cheap pre-read here only lets the report
+      // tell a cache hit apart from a fresh build. The classification truth table:
+      //   cached != null            -> skipped  (hit; resolve returned it, no embed)
+      //   cached == null, vec null  -> excluded (no-text / degenerate; nothing stored)
+      //   cached == null, vec != null -> embedded (built + stored this pass)
       const cached = await vector_store.get(
         content.page_session_id,
         embedding_model_id,

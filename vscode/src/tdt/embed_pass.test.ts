@@ -1,4 +1,5 @@
 import { DuckDB, create_metadata_schema } from "../duck_db";
+import { DEFAULT_PAGE_VECTOR_CONFIG } from "@bergamot/tdt";
 import type { EmbedFn } from "@bergamot/tdt";
 import type { ContentCorpus, CorpusContent, CorpusEntry } from "../redownload/corpus";
 import { PageVectorStore } from "./page_vector_store";
@@ -94,7 +95,7 @@ describe("run_embed_pass", () => {
     ]);
     const { embed } = counting_embed();
 
-    const report = await run_embed_pass(corpus, store, embed, MODEL_A, REPR, PAGE_CONFIG());
+    const report = await run_embed_pass(corpus, store, embed, MODEL_A, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
     expect(report).toEqual({ scanned: 3, embedded: 3, skipped: 0, excluded: 0, failed: 0 });
     for (const id of ["p1", "p2", "p3"]) {
@@ -113,7 +114,7 @@ describe("run_embed_pass", () => {
     await store.put("p1", MODEL_A, REPR, new Float32Array(DIM).fill(0).map((_, i) => (i === 0 ? 1 : 0)));
 
     const { embed, calls } = counting_embed();
-    const report = await run_embed_pass(corpus, store, embed, MODEL_A, REPR, PAGE_CONFIG());
+    const report = await run_embed_pass(corpus, store, embed, MODEL_A, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
     expect(report).toEqual({ scanned: 2, embedded: 1, skipped: 1, excluded: 0, failed: 0 });
     // p1's text is never embedded; only p2 is.
@@ -124,9 +125,9 @@ describe("run_embed_pass", () => {
   it("is incremental: a second pass over an unchanged corpus embeds nothing", async () => {
     const corpus = new FakeCorpus([corpus_content("p1", "alpha"), corpus_content("p2", "beta")]);
 
-    await run_embed_pass(corpus, store, counting_embed().embed, MODEL_A, REPR, PAGE_CONFIG());
+    await run_embed_pass(corpus, store, counting_embed().embed, MODEL_A, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
     const second = counting_embed();
-    const report = await run_embed_pass(corpus, store, second.embed, MODEL_A, REPR, PAGE_CONFIG());
+    const report = await run_embed_pass(corpus, store, second.embed, MODEL_A, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
     expect(report).toEqual({ scanned: 2, embedded: 0, skipped: 2, excluded: 0, failed: 0 });
     expect(second.calls).toHaveLength(0);
@@ -135,9 +136,9 @@ describe("run_embed_pass", () => {
   it("re-embeds under a new embedding_model_id (clean miss), keeping the old", async () => {
     const corpus = new FakeCorpus([corpus_content("p1", "alpha")]);
 
-    await run_embed_pass(corpus, store, counting_embed().embed, MODEL_A, REPR, PAGE_CONFIG());
+    await run_embed_pass(corpus, store, counting_embed().embed, MODEL_A, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
     const second = counting_embed();
-    const report = await run_embed_pass(corpus, store, second.embed, MODEL_B, REPR, PAGE_CONFIG());
+    const report = await run_embed_pass(corpus, store, second.embed, MODEL_B, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
     expect(report).toEqual({ scanned: 1, embedded: 1, skipped: 0, excluded: 0, failed: 0 });
     expect(second.calls.length).toBeGreaterThan(0); // it DID re-embed
@@ -150,7 +151,7 @@ describe("run_embed_pass", () => {
     const blank: CorpusContent = { ...corpus_content("empty", ""), title: "" };
     const corpus = new FakeCorpus([blank, corpus_content("ok", "real content")]);
 
-    const report = await run_embed_pass(corpus, store, counting_embed().embed, MODEL_A, REPR, PAGE_CONFIG());
+    const report = await run_embed_pass(corpus, store, counting_embed().embed, MODEL_A, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
     expect(report.excluded).toBe(1);
     expect(report.embedded).toBe(1);
@@ -162,7 +163,7 @@ describe("run_embed_pass", () => {
     const corpus = new FakeCorpus([corpus_content("zero", "zeroes here"), corpus_content("ok", "real")]);
     const { embed } = counting_embed({ zero_if: "zeroes" });
 
-    const report = await run_embed_pass(corpus, store, embed, MODEL_A, REPR, PAGE_CONFIG());
+    const report = await run_embed_pass(corpus, store, embed, MODEL_A, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
     expect(report.excluded).toBe(1);
     expect(await store.get("zero", MODEL_A)).toBeNull();
@@ -177,7 +178,7 @@ describe("run_embed_pass", () => {
     ]);
     const { embed } = counting_embed({ throw_if: "boom marker" });
 
-    const report = await run_embed_pass(corpus, store, embed, MODEL_A, REPR, PAGE_CONFIG());
+    const report = await run_embed_pass(corpus, store, embed, MODEL_A, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
     expect(report.failed).toBe(1);
     expect(report.embedded).toBe(2);
@@ -197,7 +198,7 @@ describe("run_embed_pass", () => {
       return new Float32Array(DIM).fill(0.5);
     };
 
-    await run_embed_pass(corpus, store, embed, MODEL_A, REPR, PAGE_CONFIG());
+    await run_embed_pass(corpus, store, embed, MODEL_A, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
     const loop_index = events.indexOf("loop");
     const second_embed_index = events.findIndex((e) => e.includes("two"));
@@ -205,13 +206,3 @@ describe("run_embed_pass", () => {
     expect(loop_index).toBeLessThan(second_embed_index);
   });
 });
-
-/** A small page-vector config matching the fake embedder's tiny segments. */
-function PAGE_CONFIG() {
-  return {
-    lead_chars: 1000,
-    segment_chars: 1600,
-    dispersion_min_mean_cosine: 0.35,
-    degenerate_norm_epsilon: 1e-6,
-  };
-}

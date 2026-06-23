@@ -13,7 +13,10 @@ embed pass (run ahead of a TDT clustering run) are built against.
 TDT embeds page text with **`bge-small-en-v1.5`** (the ONNX build published as
 `Xenova/bge-small-en-v1.5`), run **fully locally** through the
 **`@huggingface/transformers`** `feature-extraction` pipeline with
-`{ pooling: 'mean', normalize: true }`.
+`{ pooling: 'mean', normalize: false }` per call. The `EmbedFn` embeds one
+segment per call and returns the RAW (un-normalized) vector — `build_page_vector`
+pools the raw segment vectors and applies the single final L2-normalization
+itself, so `normalize` is `false` at the embedder (the page layer owns L2).
 
 | Property      | Value                                                             |
 | ------------- | ----------------------------------------------------------------- |
@@ -23,9 +26,16 @@ TDT embeds page text with **`bge-small-en-v1.5`** (the ONNX build published as
 | Params / size | ~33.4M; ONNX q8 ~34 MB on disk                                    |
 | Quantization  | `q8` (int8), selected via the pipeline `dtype` option             |
 | License       | MIT                                                               |
-| Library       | `@huggingface/transformers` (successor to `@xenova/transformers`) |
-| Node backend  | native `onnxruntime-node` CPU bindings                            |
+| Library       | `@huggingface/transformers` **3.7.6** (pinned exact)              |
+| Node backend  | `onnxruntime-node` **1.21.0** (ships the darwin-x64 binary)       |
 | Prefixes      | **none** — symmetric clustering omits all instruction prefixes    |
+
+**Version pin is load-bearing.** `@huggingface/transformers` 3.7.6 depends on
+`onnxruntime-node` 1.21.0, which still ships the **darwin-x64** native binary the
+Intel-Mac dev target needs; the 4.x line (onnxruntime-node 1.24.x) dropped
+darwin-x64. Bumping the package requires re-running `npm run verify:embedder`
+(checks 384-d output, byte-identical determinism, and the strict-offline guard)
+and confirming the new onnxruntime-node still carries a darwin-x64 binary.
 
 **`embedding_model_id` = `bge-small-en-v1.5/q8/384#repr-v1`** — model name +
 quantization + dimension + page-representation-rule version. A change to any
@@ -65,14 +75,17 @@ honours it, `OMP_NUM_THREADS=1`. Floating-point non-associativity in
 multithreaded parallel reductions is the documented mechanism that breaks
 run-to-run reproducibility; single-threaded CPU execution removes it.
 
-`@huggingface/transformers` does not directly expose these ONNX Runtime session
-options, so they are applied at the `onnxruntime-node` level or via process
-environment. Bitwise reproducibility on this exact stack
-(transformers.js + onnxruntime-node, Intel x64 macOS, q8) was **not** shown in
-any source — it must be verified with a regression test (embed the same text
-twice, assert byte-identical Float32 output) before the bitwise property is
-relied upon. Disabling graph optimizations is **not** required: the claim that
-extended-level fusions change numerical output was refuted.
+The session options ARE settable through `@huggingface/transformers`: pass
+`session_options: { intraOpNumThreads: 1, interOpNumThreads: 1, executionMode:
+"sequential" }` to `pipeline(...)`, which forwards them to the onnxruntime-node
+`InferenceSession`. **Verified on the Intel x64 macOS / q8 stack**: with these
+options the same text embeds **byte-identically** across runs and across a
+reload (`scripts/verify-embedder.mjs`, run by `npm run verify:embedder`). The
+property remains best-effort across other platforms — it is not a release gate,
+because a page vector is built once and stored and clustering only reads the
+stored bytes (re-embed on cache miss is the only path that depends on it).
+Disabling graph optimizations is **not** required: the claim that extended-level
+fusions change numerical output was refuted.
 
 ## Lifecycle (load-once, offline)
 
@@ -106,17 +119,20 @@ extended-level fusions change numerical output was refuted.
   Clustering ranking; the task-36.7 validation sweep is where the model is
   scored on real windows.
 
-## Open implementation questions (resolve during the build)
+## Open implementation questions
 
-1. Does the installed `@huggingface/transformers` expose a supported hook to set
-   `onnxruntime-node` session options (thread counts, execution mode), or must
-   determinism be enforced via process env (`OMP_NUM_THREADS=1`) / a custom
-   backend init?
-2. Empirically: does single-threaded `onnxruntime-node` CPU inference of
-   `Xenova/bge-small-en-v1.5` (q8) produce bitwise-identical 384-d vectors across
-   runs and restarts on Intel x64 macOS? Does q8 differ from fp32 here?
-3. Per-page latency and resident memory of the loaded q8 pipeline on the target
-   hardware, single-threaded — is embed-pass throughput acceptable?
+1. **Resolved.** `@huggingface/transformers` exposes the hook directly: a
+   `session_options` object on `pipeline(...)` is forwarded to the
+   onnxruntime-node `InferenceSession`. `{ intraOpNumThreads: 1, interOpNumThreads:
+   1, executionMode: "sequential" }` pins single-threaded sequential execution
+   without any process-env or custom backend init.
+2. **Resolved (on x64).** Single-threaded q8 inference of
+   `Xenova/bge-small-en-v1.5` produces bitwise-identical 384-d vectors across runs
+   and across a reload on Intel x64 macOS (`npm run verify:embedder`). The
+   property is treated as best-effort across other platforms (not a release gate).
+3. **Open.** Per-page latency and resident memory of the loaded q8 pipeline on
+   the target hardware, single-threaded — to be characterised by the task-36.7
+   validation sweep; embed-pass throughput has been acceptable in manual runs.
 
 ## Sources
 

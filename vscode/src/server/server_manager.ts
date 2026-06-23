@@ -31,6 +31,7 @@ import type { ContentCache } from '../redownload/content_cache';
 // Type-only: the value side (the embed pass + native onnxruntime embedder) is
 // lazily imported inside run_one_embed_pass so it never loads eagerly.
 import type { EmbedPassReport } from '../tdt/embed_pass';
+import { single_flight, SingleFlightHolder } from '../tdt/single_flight';
 
 /**
  * Candidate ports the server tries to bind, in order. The browser extension
@@ -159,13 +160,13 @@ export class ServerManager {
    */
   private content_cache?: ContentCache;
   /**
-   * The in-flight TDT embed pass, if one is running. Coalesces concurrent
-   * triggers (a re-invoked command, or a future clustering run that calls
-   * {@link embed_pages} before reading vectors) onto a single pass — so the
-   * ~34 MB model is loaded once and two passes never race writes to the same
+   * Single-flight latch for the TDT embed pass: coalesces concurrent triggers
+   * (a re-invoked command, or a future clustering run that calls
+   * {@link embed_pages} before reading vectors) onto one pass — so the ~34 MB
+   * model is loaded once and two passes never race writes to the same
    * `topic_page_vector` key.
    */
-  private embed_pass_in_flight?: Promise<EmbedPassReport>;
+  private readonly embed_pass_flight: SingleFlightHolder<EmbedPassReport> = {};
 
   constructor(private config: ServerConfig) {
     this.app = express();
@@ -702,13 +703,7 @@ export class ServerManager {
    * pass, so the returned report's `failed` count is the only failure surface.
    */
   embed_pages(): Promise<EmbedPassReport> {
-    if (this.embed_pass_in_flight) {
-      return this.embed_pass_in_flight;
-    }
-    this.embed_pass_in_flight = this.run_one_embed_pass().finally(() => {
-      this.embed_pass_in_flight = undefined;
-    });
-    return this.embed_pass_in_flight;
+    return single_flight(this.embed_pass_flight, () => this.run_one_embed_pass());
   }
 
   /**

@@ -9,13 +9,14 @@
  * file and join the right-to-forget cascade transactionally. This store is a
  * thin wrapper over the shared {@link DuckDB} handle the extension already owns
  * read-write — it never opens its own connection (the single-writer guarantee,
- * plan §3) and holds no encryption key of its own.
+ * tdt-hdbscan-micro-tier-plan.md §3) and holds no encryption key of its own.
  *
  * The vector is stored as a DuckDB `FLOAT[]`: each component is a 32-bit float,
  * so the stored bytes are byte-identical to the L2-normalized `Float32Array`
  * `build_page_vector` produced (its single float32 truncation is the last one).
  * `FLOAT[]` is also the shape RAG's later `array_cosine_similarity` search
- * reuses, so there is no migration when that consumer lands (plan §8).
+ * reuses, so there is no migration when that consumer lands
+ * (tdt-hdbscan-micro-tier-plan.md §8).
  */
 import { DuckDB, TOPIC_PAGE_VECTOR_TABLE } from "../duck_db";
 import { listValue, DuckDBListValue } from "@duckdb/node-api";

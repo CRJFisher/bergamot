@@ -4,9 +4,9 @@
   "private": true,
   "description": "Bergamot - Browser-based knowledge management through mindful web steeping",
   "workspaces": [
+    "tdt",
     "vscode",
-    "browser",
-    "tdt"
+    "browser"
   ],
   "scripts": {
     "build": "npm run build --workspaces",

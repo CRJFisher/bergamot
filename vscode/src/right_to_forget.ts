@@ -66,7 +66,13 @@ export interface ForgetReport {
   page_session_ids: number;
   /** Distinct URLs the forget swept (resolved plus the selector's own). */
   urls: number;
-  /** TDT page vectors deleted from `topic_page_vector` for the forgotten pages. */
+  /**
+   * TDT page vectors deleted from `topic_page_vector` for the forgotten pages.
+   * Counted before the cascade transaction, so under a concurrent embed pass the
+   * figure can drift (a vector written between the count and the DELETE is still
+   * deleted but not counted). The DELETE itself is authoritative; only this
+   * report number is best-effort.
+   */
   page_vectors_deleted: number;
   /** Whether the content-cache cascade ran (false when no cache exists). */
   content_cache_swept: boolean;
