@@ -70,7 +70,50 @@ export class CommandManager {
   register_all(): void {
     this.register_core_commands();
     this.register_forget_command();
+    this.register_embed_pages_command();
     this.register_dev_commands();
+  }
+
+  /**
+   * Registers the TDT page-vector embed command (TASK-36.3.1): vectorise every
+   * re-downloadable public page missing a current-model vector, ahead of a
+   * clustering run. Manual trigger for now; a clustering run drives the same
+   * pass later.
+   * @private
+   */
+  private register_embed_pages_command(): void {
+    const embed_command = vscode.commands.registerCommand(
+      'bergamot.tdt.embedPages',
+      () => this.run_embed_pages()
+    );
+    this.config.context.subscriptions.push(embed_command);
+    this.disposables.push(embed_command);
+  }
+
+  /**
+   * Runs one embed pass under a progress notification and reports the per-page
+   * outcome. The pass is single-flight in the server manager, so re-triggering
+   * while one runs joins the in-flight pass rather than starting a second.
+   * @private
+   */
+  private async run_embed_pages(): Promise<void> {
+    try {
+      const report = await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: 'Bergamot: embedding pages for topic detection…',
+        },
+        () => this.config.server_manager.embed_pages()
+      );
+      vscode.window.showInformationMessage(
+        `Bergamot: embedded ${report.embedded}, skipped ${report.skipped}, ` +
+          `excluded ${report.excluded}, failed ${report.failed} ` +
+          `(of ${report.scanned} page(s)).`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      vscode.window.showErrorMessage(`Bergamot: embed pass failed — ${message}`);
+    }
   }
 
   /**

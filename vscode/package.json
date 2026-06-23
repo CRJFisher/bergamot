@@ -38,6 +38,10 @@
       {
         "command": "bergamot.forget",
         "title": "Bergamot: Forget (delete by URL, origin, or time range)"
+      },
+      {
+        "command": "bergamot.tdt.embedPages",
+        "title": "Bergamot: Embed pages for topic detection"
       }
     ],
     "configuration": {

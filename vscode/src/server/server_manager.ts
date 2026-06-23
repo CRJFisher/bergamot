@@ -28,6 +28,9 @@ import { CachedCorpus } from '../redownload/cached_corpus';
 // open is a lazy dynamic import inside init_default_content_cache.
 import type * as vscode from 'vscode';
 import type { ContentCache } from '../redownload/content_cache';
+// Type-only: the value side (the embed pass + native onnxruntime embedder) is
+// lazily imported inside run_one_embed_pass so it never loads eagerly.
+import type { EmbedPassReport } from '../tdt/embed_pass';
 
 /**
  * Candidate ports the server tries to bind, in order. The browser extension
@@ -155,6 +158,14 @@ export class ServerManager {
    * DuckDB handle (one instance may attach the file at a time).
    */
   private content_cache?: ContentCache;
+  /**
+   * The in-flight TDT embed pass, if one is running. Coalesces concurrent
+   * triggers (a re-invoked command, or a future clustering run that calls
+   * {@link embed_pages} before reading vectors) onto a single pass — so the
+   * ~34 MB model is loaded once and two passes never race writes to the same
+   * `topic_page_vector` key.
+   */
+  private embed_pass_in_flight?: Promise<EmbedPassReport>;
 
   constructor(private config: ServerConfig) {
     this.app = express();
@@ -676,5 +687,68 @@ export class ServerManager {
    */
   get_content_cache(): ContentCache | null {
     return this.content_cache ?? null;
+  }
+
+  /**
+   * Runs one TDT page-vector embed pass: vectorise every re-downloadable public
+   * page missing a vector under the current embedding model, reading content
+   * from the cache-served corpus and writing through the single DuckDB writer.
+   * This is the "vectorise ahead of TDT" step (TASK-36.3.1) — invoked by the
+   * `bergamot.tdt.embedPages` command now, and by a clustering run before it
+   * reads vectors later.
+   *
+   * Single-flight: concurrent calls coalesce onto the running pass. The embed
+   * runs off the capture hot path; per-page failures are isolated inside the
+   * pass, so the returned report's `failed` count is the only failure surface.
+   */
+  embed_pages(): Promise<EmbedPassReport> {
+    if (this.embed_pass_in_flight) {
+      return this.embed_pass_in_flight;
+    }
+    this.embed_pass_in_flight = this.run_one_embed_pass().finally(() => {
+      this.embed_pass_in_flight = undefined;
+    });
+    return this.embed_pass_in_flight;
+  }
+
+  /**
+   * Loads the local embedder, runs the pass, and releases the model — so the
+   * model is resident only while a pass runs. The embedder, the pass, the store,
+   * and the config are lazily imported: the embedder pulls the native
+   * onnxruntime-node binding, which the bundled headless standalone neither has
+   * nor needs, so it must stay off the eager load path (mirroring the content
+   * cache's lazy import).
+   */
+  private async run_one_embed_pass(): Promise<EmbedPassReport> {
+    if (!this.config.storage_base) {
+      throw new Error(
+        'TDT embed pass requires a storage base for the local model cache'
+      );
+    }
+    const model_cache_dir = path.join(this.config.storage_base, 'tdt_models');
+
+    const { load_local_embedder } = await import('../tdt/local_embedder');
+    const { run_embed_pass } = await import('../tdt/embed_pass');
+    const { PageVectorStore } = await import('../tdt/page_vector_store');
+    const {
+      PAGE_EMBEDDING_MODEL_ID,
+      PAGE_EMBEDDING_REPR,
+      PAGE_EMBEDDING_CONFIG,
+    } = await import('../tdt/embedding_config');
+
+    const store = new PageVectorStore(this.config.duck_db);
+    const embedder = await load_local_embedder(model_cache_dir);
+    try {
+      return await run_embed_pass(
+        this.content_corpus,
+        store,
+        embedder.embed,
+        PAGE_EMBEDDING_MODEL_ID,
+        PAGE_EMBEDDING_REPR,
+        PAGE_EMBEDDING_CONFIG
+      );
+    } finally {
+      await embedder.dispose();
+    }
   }
 }
