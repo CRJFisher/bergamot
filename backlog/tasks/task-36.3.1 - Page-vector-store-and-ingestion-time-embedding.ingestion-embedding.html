@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>task-36.3.1 — Page-vector store + batched embedder (vectorise ahead of TDT)</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --bg-alt: #161b22;
+    --bg-code: #0c0f14;
+    --fg: #d7dde4;
+    --fg-dim: #9aa6b2;
+    --accent: #f0a35e;     /* bergamot orange */
+    --accent-2: #6cb6ff;
+    --green: #7ee787;
+    --red: #ff7b72;
+    --purple: #d2a8ff;
+    --border: #2a313a;
+    --kw: #ff7b72;
+    --str: #a5d6ff;
+    --com: #768390;
+    --typ: #d2a8ff;
+    --fn: #d2a8ff;
+    --num: #f0a35e;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--sans); }
+
+  nav.crossdoc {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg-alt); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    padding: .5rem 5%; font-family: var(--mono); font-size: .74rem;
+  }
+  nav.crossdoc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.crossdoc a, nav.crossdoc span.pending, nav.crossdoc span.cur {
+    padding: .22em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap;
+    border: 1px solid var(--border);
+  }
+  nav.crossdoc a { color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.crossdoc a:hover { background: rgba(108,182,255,.16); }
+  nav.crossdoc span.cur { color: #1a1208; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  nav.crossdoc span.pending { color: var(--com); }
+  nav.crossdoc .dot { display:inline-block; width:.5em; height:.5em; border-radius:50%; margin-right:.35em; vertical-align: middle; }
+  nav.crossdoc .dot.done { background: var(--green); }
+  nav.crossdoc .dot.now { background: var(--accent); }
+  nav.crossdoc .dot.todo { background: var(--com); }
+
+  nav.toc {
+    position: sticky; top: 38px; z-index: 9;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    padding: .45rem 5%; font-family: var(--mono); font-size: .72rem;
+  }
+  nav.toc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.toc a { padding: .2em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap; border: 1px solid var(--border); color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.toc a:hover { background: rgba(108,182,255,.16); }
+
+  main { width: 90%; max-width: 1500px; margin: 0 auto; padding: 1.6rem 0 6rem; }
+  header.page { border-bottom: 1px solid var(--border); padding-bottom: 1.2rem; margin-bottom: 1.4rem; }
+  .crumb { color: var(--fg-dim); font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; font-family: var(--mono); }
+  h1 { font-family: var(--serif); font-size: 2rem; margin: .5rem 0 .4rem; line-height: 1.15; font-weight: 600; }
+  h2 { font-size: 1.3rem; margin: 2.6rem 0 .5rem; padding-top: .7rem; border-top: 1px solid var(--border); color: var(--accent); scroll-margin-top: 100px; }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 .5rem; color: var(--accent-2); }
+  .lead { font-size: 1.05rem; max-width: 80ch; color: var(--fg); }
+  figcaption { font-size: .84rem; color: var(--fg-dim); margin: .5rem 0 0; font-style: italic; max-width: 96ch; }
+  figure { margin: 1rem 0 1.4rem; }
+  .prose { max-width: 74ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .7rem; font-family: var(--mono); font-size: .72rem; }
+  .meta .chip { padding: .2em .6em; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-alt); color: var(--fg-dim); }
+  .meta .chip strong { color: var(--accent); font-weight: 600; }
+  .meta .chip.todo { border-color: var(--accent); color: var(--accent); }
+
+  a { color: var(--accent-2); }
+  code { font-family: var(--mono); font-size: .88em; }
+  p code, li code, td code, figcaption code { background: var(--bg-code); padding: .1em .38em; border-radius: 4px; border: 1px solid var(--border); color: var(--accent); }
+
+  .callout { border-radius: 6px; padding: .8rem 1.1rem; margin: 1.1rem 0; max-width: 100ch; }
+  .callout.key { background: var(--bg-alt); border-left: 4px solid var(--accent); }
+  .callout.info { background: rgba(108,182,255,.07); border-left: 4px solid var(--accent-2); }
+  .callout.warn { background: rgba(255,123,114,.08); border-left: 4px solid var(--red); }
+  .callout.good { background: rgba(126,231,135,.07); border-left: 4px solid var(--green); }
+  .callout .label { font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .09em; font-weight: 700; display: block; margin-bottom: .3rem; }
+  .callout.key .label { color: var(--accent); }
+  .callout.info .label { color: var(--accent-2); }
+  .callout.warn .label { color: var(--red); }
+  .callout.good .label { color: var(--green); }
+  .callout p { margin: .3rem 0; }
+  .callout.decision { background: var(--bg-alt); border: 1px solid var(--accent); border-left: 4px solid var(--accent); }
+  .callout .pick { color: var(--green); font-weight: 700; }
+
+  .prompt-box { border: 1px solid var(--border); border-left: 3px solid var(--fg-dim); border-radius: 6px; background: var(--bg-alt); padding: .8rem 1.1rem; margin: 1rem 0; }
+  .prompt-box .label { font-family: var(--mono); font-size: .66rem; text-transform: uppercase; letter-spacing: .09em; color: var(--fg-dim); display: block; margin-bottom: .35rem; }
+  .prompt-box ul { margin: .2rem 0; padding-left: 1.2rem; }
+  .prompt-box code { color: var(--accent-2); }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .88rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--bg-alt); color: var(--accent); font-weight: 600; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  td code, th code { font-family: var(--mono); }
+  td.c { text-align: center; font-family: var(--mono); }
+
+  /* feature matrix glyphs */
+  .glyph { display: inline-block; width: 15px; height: 15px; border-radius: 50%; vertical-align: middle; }
+  .glyph.full { background: var(--green); }
+  .glyph.half { background: linear-gradient(90deg, var(--accent) 50%, transparent 50%); border: 1.5px solid var(--accent); }
+  .glyph.none { background: transparent; border: 1.5px solid var(--red); }
+  td.c .gv { font-size: .72rem; color: var(--fg-dim); margin-left: .35em; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; font-family: var(--mono); font-size: .76rem; color: var(--fg-dim); margin: .6rem 0; }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; }
+  .legend .box { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+  .legend .box.add { border-color: var(--green); background: rgba(126,231,135,.18); }
+  .legend .box.rm { border-color: var(--red); background: rgba(255,123,114,.18); }
+  .legend .box.mod { border-color: var(--accent); background: rgba(240,163,94,.18); }
+  .legend .box.same { border-color: var(--border); background: var(--bg-alt); }
+
+  .diagram { width: 100%; }
+  svg { display: block; max-width: 100%; height: auto; }
+  text { font-family: var(--mono); }
+
+  .ba-pair { display: grid; grid-template-columns: 1fr auto 1fr; gap: .5rem; align-items: stretch; }
+  .ba-pair .panel { border: 1px solid var(--border); border-radius: 8px; background: var(--bg-alt); padding: .6rem; }
+  .ba-pair .panel .tag { font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .09em; display: block; margin-bottom: .3rem; }
+  .ba-pair .panel.cur .tag { color: var(--fg-dim); }
+  .ba-pair .panel.plan .tag { color: var(--green); }
+  .ba-pair .arrow { display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 1.4rem; font-family: var(--mono); }
+  @media (max-width: 920px) { .ba-pair { grid-template-columns: 1fr; } .ba-pair .arrow { transform: rotate(90deg); padding: .3rem 0; } }
+
+  /* code panel */
+  .code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px; margin: 1rem 0; overflow: hidden; }
+  .code .file-label { font-family: var(--mono); font-size: .72rem; color: var(--fg-dim); padding: .45rem .9rem; border-bottom: 1px solid var(--border); background: var(--bg-alt); }
+  .code .file-label .new { color: var(--green); }
+  .code .file-label .edit { color: var(--accent); }
+  .code pre { margin: 0; padding: .9rem 1rem; overflow-x: auto; font-family: var(--mono); font-size: .8rem; line-height: 1.55; color: var(--fg); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .cm { color: var(--com); font-style: italic; }
+  .fn { color: var(--fn); } .typ { color: var(--typ); } .num { color: var(--num); }
+  .hl { background: rgba(240,163,94,.13); display: inline-block; width: 100%; }
+  .add { background: rgba(126,231,135,.13); display: inline-block; width: 100%; }
+  .del { background: rgba(255,123,114,.10); display: inline-block; width: 100%; }
+
+  /* numbered step list */
+  .steps { margin: 1rem 0; }
+  .step { display: grid; grid-template-columns: 44px 1fr; gap: .9rem; margin-bottom: .9rem; align-items: start; }
+  .step .badge { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 700; font-size: .9rem; border: 1.5px solid; }
+  .step .badge.ok { border-color: var(--green); color: var(--green); background: rgba(126,231,135,.1); }
+  .step .badge.guard { border-color: var(--accent); color: var(--accent); background: rgba(240,163,94,.1); }
+  .step .badge.excl { border-color: var(--red); color: var(--red); background: rgba(255,123,114,.1); }
+  .step .body h3 { margin: .1rem 0 .25rem; color: var(--fg); }
+  .step .body p { margin: 0; font-size: .9rem; color: var(--fg-dim); max-width: 96ch; }
+  .step .body .loc { font-family: var(--mono); font-size: .72rem; color: var(--accent-2); }
+
+  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .82rem; font-family: var(--mono); max-width: 100ch; }
+  @media (max-width: 820px) { h2 { scroll-margin-top: 60px; } }
+</style>
+</head>
+<body>
+
+<nav class="crossdoc" aria-label="Task family">
+  <span class="home">task-36.3 family</span>
+  <a href="task-36.3 - Page-vectorisation-TDT-owned-embedding-of-captured-pages.overview.html"><span class="dot now"></span>36.3 Overview</a>
+  <a href="task-36.3 - Page-vectorisation-TDT-owned-embedding-of-captured-pages.page-vectors.html"><span class="dot done"></span>36.3 Pure library</a>
+  <span class="cur">36.3.1 Store + batched embedder</span>
+</nav>
+
+<nav class="toc" aria-label="On this page">
+  <span class="home">on this page</span>
+  <a href="#change">What changes</a>
+  <a href="#pass">The embed pass</a>
+  <a href="#thread">Decision 1 · off the event loop</a>
+  <a href="#determinism">Decision 2 · determinism</a>
+  <a href="#store">The DuckDB VectorStore</a>
+  <a href="#embedder">The local embedder</a>
+  <a href="#forget">Right-to-forget cascade</a>
+  <a href="#exclusion">Exclusion guarantee</a>
+  <a href="#ac">Acceptance criteria</a>
+</nav>
+
+<main>
+<header class="page">
+  <div class="crumb">Bergamot · TDT micro tier · task-36.3.1 · branch tdt</div>
+  <h1>The page vector is produced by a batched embed pass, ahead of TDT</h1>
+  <p class="lead">The pure page-vectorisation library (36.3) gains its production home. The page vector is built by a batched embed pass that runs ahead of a clustering run — not per-page on the capture hot path. The pass reads the already-cached public content, embeds every page missing a current-model vector in one batch off the event loop, and stores the result.</p>
+  <div class="meta">
+    <span class="chip todo"><strong>status</strong> to do</span>
+    <span class="chip"><strong>parent</strong> task-36.3</span>
+    <span class="chip"><strong>build step</strong> plan §11 3a</span>
+    <span class="chip"><strong>depends</strong> 36.3 library · 39.2 corpus</span>
+    <span class="chip"><strong>model</strong> bge-small-en-v1.5 / q8 / 384d</span>
+  </div>
+</header>
+
+<div class="prompt-box">
+  <span class="label">Source of truth read to build this page</span>
+  <ul>
+    <li><code>task-36.3.1 ….md</code> — the spec (description + 7 acceptance criteria, batched-embed-pass design)</li>
+    <li><code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> — §3 single-writer · §4 "Where vectorisation runs" · §8 <code>topic_page_vector</code> DDL · build order 3a</li>
+    <li><code>backlog/drafts/tdt-embedding-model-selection.md</code> — model pick, lifecycle (load-once-per-pass / release), determinism strategy</li>
+    <li><code>tdt/src/page_vectors.ts</code> · <code>ports.ts</code> · <code>types.ts</code> · <code>config.ts</code> — the pure library the pass calls</li>
+    <li><code>vscode/src/redownload/corpus.ts</code> · <code>cached_corpus.ts</code> · <code>content_cache.ts</code> — the cached public corpus + the encrypted store to mirror</li>
+    <li><code>vscode/src/right_to_forget.ts</code> — the cascade to extend</li>
+  </ul>
+</div>
+
+<div class="callout key">
+  <span class="label">The one sentence</span>
+  <p>Embedding is a batched pass over the already-cached public corpus, run ahead of clustering on a worker off the event loop — built once per page via <code>resolve_page_vector</code> build-on-miss, written to <code>topic_page_vector</code> through the single writer; the capture path does no embedding at all, and TDT and RAG only ever read.</p>
+</div>
+
+<!-- ============================================ WHAT CHANGES (before/after) -->
+<h2 id="change">What changes — the capture path stays clean, a separate pass vectorises</h2>
+
+<figure>
+<div class="ba-pair">
+  <div class="panel cur">
+    <span class="tag">Capture path — today (39.2 shipped)</span>
+    <svg viewBox="0 0 520 300" role="img" aria-label="The capture path: handle_successful_visit commits the metadata row then fires on_captured fire-and-forget; trigger_eager_redownload void-awaits content_corpus.get_content, which re-downloads the URL, parses it once to markdown, and writes it to the encrypted content cache. No embedding happens here, today or after this subtask.">
+      <defs>
+        <marker id="ca" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+      </defs>
+      <rect x="20" y="20" width="200" height="44" rx="8" fill="#161b22" stroke="#2a313a"/>
+      <text x="120" y="40" fill="#d7dde4" font-size="10" text-anchor="middle">handle_successful_visit</text>
+      <text x="120" y="55" fill="#768390" font-size="8" text-anchor="middle">metadata row committed</text>
+      <line x1="120" y1="64" x2="120" y2="90" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ca)"/>
+      <rect x="20" y="90" width="200" height="44" rx="8" fill="#161b22" stroke="#f0a35e"/>
+      <text x="120" y="110" fill="#f0a35e" font-size="10" text-anchor="middle">on_captured(id)</text>
+      <text x="120" y="125" fill="#768390" font-size="8" text-anchor="middle">fire-and-forget · never awaited</text>
+      <line x1="120" y1="134" x2="120" y2="160" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ca)"/>
+      <rect x="20" y="160" width="200" height="48" rx="8" fill="#161b22" stroke="#6cb6ff"/>
+      <text x="120" y="180" fill="#6cb6ff" font-size="10" text-anchor="middle">eager re-download</text>
+      <text x="120" y="195" fill="#768390" font-size="8" text-anchor="middle">void get_content() · I/O-bound</text>
+      <line x1="120" y1="208" x2="120" y2="234" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ca)"/>
+      <rect x="20" y="234" width="200" height="44" rx="8" fill="#0c0f14" stroke="#6cb6ff"/>
+      <text x="120" y="254" fill="#6cb6ff" font-size="9.5" text-anchor="middle">encrypted content cache</text>
+      <text x="120" y="269" fill="#768390" font-size="8" text-anchor="middle">markdown stored (CachedCorpus)</text>
+      <rect x="300" y="160" width="200" height="48" rx="8" fill="#0f1419" stroke="#2a313a" stroke-dasharray="4 3"/>
+      <text x="400" y="182" fill="#768390" font-size="9.5" text-anchor="middle">no embedding here</text>
+      <text x="400" y="197" fill="#768390" font-size="8" text-anchor="middle">content durable; vector not built yet</text>
+    </svg>
+  </div>
+  <div class="arrow">→</div>
+  <div class="panel plan">
+    <span class="tag">After 36.3.1 — capture path UNCHANGED + a separate pass</span>
+    <svg viewBox="0 0 520 300" role="img" aria-label="After this subtask, the capture path is byte-for-byte unchanged: still metadata plus eager re-download into the encrypted content cache, no embedding. The new work is an entirely separate batched embed pass, triggered ahead of a TDT clustering run, that reads the cached public corpus and produces vectors. The capture path and the embed pass share only the content cache.">
+      <defs>
+        <marker id="pa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+        <marker id="pg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+      </defs>
+      <rect x="20" y="20" width="200" height="40" rx="8" fill="#161b22" stroke="#2a313a"/>
+      <text x="120" y="38" fill="#d7dde4" font-size="9.5" text-anchor="middle">capture path</text>
+      <text x="120" y="51" fill="#768390" font-size="8" text-anchor="middle">metadata + on_captured (unchanged)</text>
+      <line x1="120" y1="60" x2="120" y2="84" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#pa)"/>
+      <rect x="20" y="84" width="200" height="40" rx="8" fill="#161b22" stroke="#6cb6ff"/>
+      <text x="120" y="102" fill="#6cb6ff" font-size="9.5" text-anchor="middle">eager re-download</text>
+      <text x="120" y="115" fill="#768390" font-size="8" text-anchor="middle">I/O-bound · no embed</text>
+      <line x1="120" y1="124" x2="120" y2="148" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#pa)"/>
+      <rect x="20" y="148" width="200" height="44" rx="8" fill="#0c0f14" stroke="#6cb6ff"/>
+      <text x="120" y="167" fill="#6cb6ff" font-size="9.5" text-anchor="middle">encrypted content cache</text>
+      <text x="120" y="181" fill="#768390" font-size="8" text-anchor="middle">durable public content</text>
+      <line x1="220" y1="170" x2="288" y2="220" stroke="#7ee787" stroke-width="1.8" marker-end="url(#pg)"/>
+      <text x="244" y="200" fill="#7ee787" font-size="8" text-anchor="middle">reads</text>
+      <rect x="288" y="60" width="216" height="220" rx="10" fill="rgba(126,231,135,.06)" stroke="#7ee787" stroke-width="1.5"/>
+      <text x="396" y="80" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">NEW · batched embed pass</text>
+      <text x="396" y="93" fill="#768390" font-size="8" text-anchor="middle">ahead of a TDT run · on a worker</text>
+      <rect x="300" y="104" width="192" height="38" rx="6" fill="#161b22" stroke="#7ee787"/>
+      <text x="396" y="121" fill="#7ee787" font-size="8.5" text-anchor="middle">iter_public_pages()</text>
+      <text x="396" y="133" fill="#768390" font-size="7.5" text-anchor="middle">cache-served public subset</text>
+      <rect x="300" y="148" width="192" height="42" rx="6" fill="#161b22" stroke="#7ee787"/>
+      <text x="396" y="165" fill="#7ee787" font-size="8.5" text-anchor="middle">resolve_page_vector (per page)</text>
+      <text x="396" y="178" fill="#768390" font-size="7.5" text-anchor="middle">build-on-miss · hit → skip</text>
+      <rect x="300" y="196" width="192" height="38" rx="6" fill="#161b22" stroke="#7ee787"/>
+      <text x="396" y="213" fill="#7ee787" font-size="8.5" text-anchor="middle">VectorStore.put</text>
+      <text x="396" y="225" fill="#768390" font-size="7.5" text-anchor="middle">single writer → topic_page_vector</text>
+      <text x="396" y="252" fill="#768390" font-size="8" text-anchor="middle">model loaded once per pass,</text>
+      <text x="396" y="264" fill="#768390" font-size="8" text-anchor="middle">released after · zero hot-path CPU</text>
+    </svg>
+  </div>
+</div>
+<figcaption>The capture path is untouched: it still records metadata and warms the content cache, and does no embedding. The new work is a separate batched pass, triggered ahead of a clustering run, that reads the cached public corpus and produces vectors. The two share only the content cache — capture pays zero CPU for embedding.</figcaption>
+</figure>
+
+<div class="legend">
+  <span><span class="box same"></span> unchanged (39.2 capture path)</span>
+  <span><span class="box add"></span> new in 36.3.1 (separate pass)</span>
+</div>
+
+<!-- ============================================ THE EMBED PASS -->
+<h2 id="pass">The batched embed pass — incremental over the cached corpus</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 360" role="img" aria-label="The batched embed pass, end to end, on a worker off the extension-host event loop. A trigger (ahead of a TDT clustering run, or standalone) starts the pass. The worker constructs the feature-extraction pipeline once: bge-small-en-v1.5 q8 384d, fully offline. It iterates iter_public_pages, the cache-served re-downloadable public subset. For each page it calls resolve_page_vector with the canonical embedding_model_id and repr: a cache hit under the current model id is skipped with no embed; a miss builds the vector via build_page_vector and the injected EmbedFn, then persists via VectorStore.put through the single writer into topic_page_vector. After the last page the pipeline is released. A second pass over an unchanged corpus is a no-op because every page is now a hit.">
+  <defs>
+    <marker id="fa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+    <marker id="fg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+    <marker id="fo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#f0a35e"/></marker>
+  </defs>
+
+  <rect x="20" y="150" width="150" height="60" rx="8" fill="#161b22" stroke="#f0a35e"/>
+  <text x="95" y="172" fill="#f0a35e" font-size="9.5" text-anchor="middle">trigger</text>
+  <text x="95" y="186" fill="#768390" font-size="8" text-anchor="middle">ahead of a TDT run</text>
+  <text x="95" y="198" fill="#768390" font-size="8" text-anchor="middle">or standalone</text>
+  <line x1="170" y1="180" x2="206" y2="180" stroke="#f0a35e" stroke-width="1.6" marker-end="url(#fo)"/>
+
+  <rect x="206" y="40" width="780" height="290" rx="12" fill="rgba(126,231,135,.03)" stroke="#7ee787" stroke-dasharray="4 3"/>
+  <text x="226" y="62" fill="#7ee787" font-size="11" font-weight="bold">worker thread — off the extension-host event loop (AC #3)</text>
+
+  <rect x="226" y="78" width="220" height="56" rx="8" fill="rgba(126,231,135,.07)" stroke="#7ee787"/>
+  <text x="336" y="98" fill="#7ee787" font-size="9.5" text-anchor="middle">load pipeline ONCE</text>
+  <text x="336" y="112" fill="#768390" font-size="8" text-anchor="middle">bge-small-en-v1.5 · q8 · 384d</text>
+  <text x="336" y="124" fill="#768390" font-size="8" text-anchor="middle">offline · allowRemoteModels=false</text>
+
+  <line x1="336" y1="134" x2="336" y2="158" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#fa)"/>
+  <rect x="226" y="158" width="220" height="54" rx="8" fill="#0c0f14" stroke="#6cb6ff"/>
+  <text x="336" y="178" fill="#6cb6ff" font-size="9.5" text-anchor="middle">iter_public_pages()</text>
+  <text x="336" y="192" fill="#768390" font-size="8" text-anchor="middle">cache-served (CachedCorpus)</text>
+  <text x="336" y="204" fill="#768390" font-size="8" text-anchor="middle">ok public subset only</text>
+
+  <line x1="446" y1="185" x2="500" y2="185" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#fa)"/>
+  <text x="473" y="176" fill="#768390" font-size="8" text-anchor="middle">per page</text>
+  <rect x="500" y="150" width="200" height="70" rx="8" fill="#161b22" stroke="#7ee787"/>
+  <text x="600" y="172" fill="#7ee787" font-size="9.5" text-anchor="middle">resolve_page_vector</text>
+  <text x="600" y="186" fill="#768390" font-size="8" text-anchor="middle">get(id, model_id)?</text>
+  <text x="600" y="200" fill="#768390" font-size="8" text-anchor="middle">canonical model + repr</text>
+
+  <line x1="600" y1="150" x2="600" y2="110" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#fa)"/>
+  <text x="624" y="132" fill="#768390" font-size="8.5">HIT</text>
+  <rect x="500" y="76" width="200" height="34" rx="6" fill="#161b22" stroke="#2a313a"/>
+  <text x="600" y="93" fill="#d7dde4" font-size="9" text-anchor="middle">skip — no embed</text>
+  <text x="600" y="105" fill="#768390" font-size="7.5" text-anchor="middle">already current under model_id</text>
+
+  <line x1="700" y1="185" x2="744" y2="185" stroke="#7ee787" stroke-width="1.6" marker-end="url(#fg)"/>
+  <text x="722" y="176" fill="#7ee787" font-size="8.5">MISS</text>
+  <rect x="744" y="150" width="220" height="70" rx="8" fill="rgba(126,231,135,.07)" stroke="#7ee787"/>
+  <text x="854" y="172" fill="#7ee787" font-size="9.5" text-anchor="middle">build_page_vector + EmbedFn</text>
+  <text x="854" y="186" fill="#768390" font-size="8" text-anchor="middle">CPU-bound · L2-normalized</text>
+  <text x="854" y="200" fill="#768390" font-size="8" text-anchor="middle">→ VectorStore.put (single writer)</text>
+
+  <line x1="854" y1="220" x2="854" y2="250" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#fa)"/>
+  <rect x="744" y="250" width="220" height="40" rx="8" fill="#161b22" stroke="#f0a35e"/>
+  <text x="854" y="268" fill="#f0a35e" font-size="9.5" text-anchor="middle">release pipeline after last page</text>
+  <text x="854" y="281" fill="#768390" font-size="8" text-anchor="middle">resident only while a pass runs</text>
+
+  <line x1="964" y1="185" x2="1010" y2="185" stroke="#7ee787" stroke-width="1.6" marker-end="url(#fg)"/>
+  <rect x="1010" y="150" width="150" height="60" rx="8" fill="#0c0f14" stroke="#7ee787"/>
+  <text x="1085" y="172" fill="#7ee787" font-size="9.5" text-anchor="middle">topic_page_vector</text>
+  <text x="1085" y="187" fill="#768390" font-size="8" text-anchor="middle">encrypted metadata file</text>
+  <text x="1085" y="200" fill="#768390" font-size="8" text-anchor="middle">one vector / new page</text>
+
+  <rect x="1010" y="240" width="150" height="50" rx="8" fill="#161b22" stroke="#2a313a"/>
+  <text x="1085" y="260" fill="#d7dde4" font-size="8.5" text-anchor="middle">2nd pass = no-op</text>
+  <text x="1085" y="274" fill="#768390" font-size="7.5" text-anchor="middle">every page a hit;</text>
+  <text x="1085" y="284" fill="#768390" font-size="7.5" text-anchor="middle">incremental by design</text>
+</svg>
+</div>
+<figcaption>The pass loads the model once, iterates the cache-served public corpus, and resolves each page through the cache: an already-vectorised page is a <span style="color:var(--fg-dim)">hit and skipped</span>; only a <span style="color:var(--green)">miss</span> embeds and persists. So a pass costs one embed per new public page, and a second pass over an unchanged corpus is a no-op (AC #2).</figcaption>
+</figure>
+
+<!-- ============================================ DECISION 1: OFF EVENT LOOP -->
+<h2 id="thread">Decision 1 — batched on a worker, model loaded per pass</h2>
+
+<p class="prose">The local embed is CPU-bound: <code>onnxruntime-node</code> inference is a synchronous, multi-second compute that would block the single-threaded event loop the <code>/visit</code> endpoint runs on. The settled design runs the pass on a worker, loads the model once per pass, and releases it after — so embedding never touches the capture hot path and the model is not resident around the clock.</p>
+
+<figure>
+<table>
+  <thead><tr>
+    <th>Criterion</th>
+    <th class="c">Per-page at ingestion<br><span class="gv">(rejected — on the capture pass)</span></th>
+    <th class="c">Batched pass on a worker<br><span class="gv">(chosen — ahead of TDT)</span></th>
+  </tr></thead>
+  <tbody>
+    <tr>
+      <td>Zero CPU embed on the capture hot path</td>
+      <td class="c"><span class="glyph none"></span><span class="gv">no — per visit</span></td>
+      <td class="c"><span class="glyph full"></span><span class="gv">capture does no embedding</span></td>
+    </tr>
+    <tr>
+      <td>CPU embed off the event loop</td>
+      <td class="c"><span class="glyph half"></span><span class="gv">needs its own worker anyway</span></td>
+      <td class="c"><span class="glyph full"></span><span class="gv">one worker for the whole batch</span></td>
+    </tr>
+    <tr>
+      <td>Model residency</td>
+      <td class="c"><span class="glyph none"></span><span class="gv">resident 24/7 to embed on arrival</span></td>
+      <td class="c"><span class="glyph full"></span><span class="gv">loaded per pass, released after</span></td>
+    </tr>
+    <tr>
+      <td>Embedding efficiency</td>
+      <td class="c"><span class="glyph half"></span><span class="gv">one page at a time, model reload risk</span></td>
+      <td class="c"><span class="glyph full"></span><span class="gv">one batch, one model load</span></td>
+    </tr>
+    <tr>
+      <td>Content already durable when embed runs</td>
+      <td class="c"><span class="glyph full"></span><span class="gv">just cached</span></td>
+      <td class="c"><span class="glyph full"></span><span class="gv">cached at capture; read from cache</span></td>
+    </tr>
+    <tr>
+      <td>Reuses the pure library as designed</td>
+      <td class="c"><span class="glyph full"></span><span class="gv">resolve_page_vector</span></td>
+      <td class="c"><span class="glyph full"></span><span class="gv">resolve_page_vector build-on-miss, exactly</span></td>
+    </tr>
+  </tbody>
+</table>
+</figure>
+<div class="legend">
+  <span><span class="glyph full"></span> meets it</span>
+  <span><span class="glyph half"></span> partial / caveat</span>
+  <span><span class="glyph none"></span> fails it</span>
+</div>
+
+<div class="callout decision">
+  <span class="label">Decision 1 — settled</span>
+  <p><span class="pick">Batched embed pass on a worker, model loaded once per pass and released after.</span> The content is already durably cached at capture time, so embedding need not happen on arrival; batching gives one model load per pass and keeps the capture hot path entirely free of CPU embed work, with the model resident only while a pass runs rather than 24/7.</p>
+</div>
+
+<!-- ============================================ DECISION 2: DETERMINISM -->
+<h2 id="determinism">Decision 2 — what build-once-and-read does to determinism</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 250" role="img" aria-label="Two models of when embedding happens. Rejected: re-embed on every clustering run — each run re-embeds pages, so reproducible clusters would demand a bitwise-deterministic embedder across runs, an unproven property on this stack. Adopted: the batched embed pass builds each vector once and stores it, and clustering only ever reads — so reproducibility comes from reading the same fixed bytes, not from re-embedding; the embedder's run-to-run stability only matters on a cache miss (a new model or repr, or a page re-embedded after forgetting).">
+  <defs>
+    <marker id="da" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+    <marker id="dr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff7b72"/></marker>
+    <marker id="dg2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+  </defs>
+
+  <rect x="20" y="24" width="560" height="200" rx="10" fill="rgba(255,123,114,.04)" stroke="#ff7b72" stroke-dasharray="4 3"/>
+  <text x="40" y="46" fill="#ff7b72" font-size="11" font-weight="bold">REJECTED · re-embed every clustering run</text>
+  <rect x="40" y="62" width="150" height="44" rx="7" fill="#161b22" stroke="#2a313a"/><text x="115" y="80" fill="#d7dde4" font-size="9" text-anchor="middle">clustering run</text><text x="115" y="94" fill="#768390" font-size="8" text-anchor="middle">over a window</text>
+  <line x1="190" y1="84" x2="226" y2="84" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#da)"/>
+  <rect x="226" y="62" width="150" height="44" rx="7" fill="rgba(255,123,114,.08)" stroke="#ff7b72"/><text x="301" y="80" fill="#ff7b72" font-size="9" text-anchor="middle">re-embed pages</text><text x="301" y="94" fill="#768390" font-size="8" text-anchor="middle">each run</text>
+  <line x1="376" y1="84" x2="412" y2="84" stroke="#ff7b72" stroke-width="1.4" marker-end="url(#dr2)"/>
+  <rect x="412" y="62" width="150" height="44" rx="7" fill="#161b22" stroke="#ff7b72"/><text x="487" y="80" fill="#ff7b72" font-size="9" text-anchor="middle">reproducible?</text><text x="487" y="94" fill="#768390" font-size="8" text-anchor="middle">only if bitwise-stable</text>
+  <text x="40" y="138" fill="#d7dde4" font-size="9.5">Demands the embedder give byte-identical output across runs and restarts —</text>
+  <text x="40" y="156" fill="#d7dde4" font-size="9.5">an UNPROVEN property on transformers.js + onnxruntime-node + q8 on x64.</text>
+  <text x="40" y="180" fill="#768390" font-size="9">A flaky vector flips MST ties → different labels → broken reproducibility.</text>
+  <text x="40" y="200" fill="#768390" font-size="9">Pays K embeddings on every run, even unchanged windows.</text>
+
+  <rect x="600" y="24" width="560" height="200" rx="10" fill="rgba(126,231,135,.04)" stroke="#7ee787" stroke-dasharray="4 3"/>
+  <text x="620" y="46" fill="#7ee787" font-size="11" font-weight="bold">ADOPTED · embed pass builds once, runs only read</text>
+  <rect x="620" y="62" width="150" height="44" rx="7" fill="rgba(126,231,135,.08)" stroke="#7ee787"/><text x="695" y="80" fill="#7ee787" font-size="9" text-anchor="middle">batched embed pass</text><text x="695" y="94" fill="#768390" font-size="8" text-anchor="middle">once per page</text>
+  <line x1="770" y1="84" x2="806" y2="84" stroke="#7ee787" stroke-width="1.4" marker-end="url(#dg2)"/>
+  <rect x="806" y="62" width="150" height="44" rx="7" fill="#0c0f14" stroke="#7ee787"/><text x="881" y="80" fill="#7ee787" font-size="9" text-anchor="middle">topic_page_vector</text><text x="881" y="94" fill="#768390" font-size="8" text-anchor="middle">fixed stored bytes</text>
+  <line x1="956" y1="84" x2="992" y2="84" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#da)"/>
+  <rect x="992" y="62" width="150" height="44" rx="7" fill="#161b22" stroke="#7ee787"/><text x="1067" y="80" fill="#7ee787" font-size="9" text-anchor="middle">runs READ it</text><text x="1067" y="94" fill="#768390" font-size="8" text-anchor="middle">reproducible by reading</text>
+  <text x="620" y="138" fill="#d7dde4" font-size="9.5">Clustering is reproducible because it reads the SAME stored bytes —</text>
+  <text x="620" y="156" fill="#d7dde4" font-size="9.5">not because it re-embeds. So bitwise embedder identity is NOT load-bearing.</text>
+  <text x="620" y="180" fill="#768390" font-size="9">Embedder stability matters only on a cache MISS: new model/repr, backfill,</text>
+  <text x="620" y="200" fill="#768390" font-size="9">or a page re-embedded after its vector was forgotten.</text>
+</svg>
+</div>
+<figcaption>Because the embed pass builds each vector once and clustering only ever reads, downstream reproducibility flows from reading fixed bytes — so cross-run bitwise embedder determinism is not load-bearing. It still matters on the narrow cache-miss path, so the embedder is pinned single-threaded as best-effort and verified empirically, not as a hard gate.</figcaption>
+</figure>
+
+<div class="callout warn">
+  <span class="label">The mitigation, best-effort and verified — not a hard gate</span>
+  <p>Pin ONNX Runtime single-threaded (<code>intra_op_num_threads = 1</code>, <code>ORT_SEQUENTIAL</code>, <code>OMP_NUM_THREADS=1</code>) to remove the float-non-associativity of multithreaded reductions. Bitwise reproducibility on this exact stack (transformers.js + onnxruntime-node, q8, x64) is <strong>not proven</strong>; add a regression test asserting byte-identical Float32 output and verify empirically rather than relying on it as an invariant.</p>
+</div>
+
+<!-- ============================================ THE STORE -->
+<h2 id="store">The concrete DuckDB VectorStore — mirroring content_cache.ts</h2>
+
+<p class="prose">The store implements the pure library's <code>VectorStore</code> port (<code>get</code> / <code>put</code>) over the <code>topic_page_vector</code> table, in the encrypted metadata DuckDB file, written only through the single writer. It mirrors <code>content_cache.ts</code>: a <code>create_*_schema</code> step run by the writer, get / put, and the batch delete surface (<code>delete_items</code> / <code>delete_by_url</code> / <code>delete_by_origin</code>) with the <code>CHECKPOINT</code>-after-delete discipline the forget cascade depends on.</p>
+
+<div class="code">
+  <div class="file-label"><span class="new">new</span> vscode/src/tdt/page_vector_store.ts &nbsp;·&nbsp; the VectorStore over topic_page_vector (plan §8 DDL)</div>
+<pre><span class="cm">// One embedding per (page, model) in the ENCRYPTED metadata DuckDB file.</span>
+<span class="cm">// Implements the @bergamot/tdt VectorStore port; written only via the single writer.</span>
+<span class="kw">export async function</span> <span class="fn">create_page_vector_schema</span>(db: <span class="typ">DuckDB</span>): <span class="typ">Promise</span>&lt;<span class="kw">void</span>&gt; {
+  <span class="kw">await</span> db.<span class="fn">exec</span>(<span class="str">`CREATE TABLE IF NOT EXISTS topic_page_vector (
+    page_session_id    TEXT NOT NULL,      -- soft ref → activity_sessions.id
+    embedding_model_id TEXT NOT NULL,      -- e.g. 'bge-small-en-v1.5/q8/384#repr-v1'
+    vector             FLOAT[] NOT NULL,   -- L2-normalized; dim fixed by the model id
+    repr               TEXT NOT NULL,      -- forensic column, NOT part of the key
+    built_at           TEXT NOT NULL,
+    PRIMARY KEY (page_session_id, embedding_model_id)
+  )`</span>);
+}
+
+<span class="kw">export class</span> <span class="typ">PageVectorStore</span> <span class="kw">implements</span> <span class="typ">VectorStore</span> {
+  <span class="kw">constructor</span>(<span class="kw">private readonly</span> db: <span class="typ">DuckDB</span>) {}
+
+  <span class="hl"><span class="kw">async</span> <span class="fn">get</span>(id: <span class="typ">string</span>, model_id: <span class="typ">string</span>): <span class="typ">Promise</span>&lt;<span class="typ">Float32Array</span> | <span class="kw">null</span>&gt; {</span>
+    <span class="kw">const</span> row = <span class="kw">await</span> db.<span class="fn">query_first</span>(<span class="str">`SELECT vector FROM topic_page_vector
+       WHERE page_session_id = $id AND embedding_model_id = $m`</span>, { id, m: model_id });
+    <span class="kw">return</span> row ? <span class="typ">Float32Array</span>.<span class="fn">from</span>(row.vector <span class="kw">as</span> <span class="typ">number</span>[]) : <span class="kw">null</span>;
+  }
+
+  <span class="hl"><span class="kw">async</span> <span class="fn">put</span>(id: <span class="typ">string</span>, model_id: <span class="typ">string</span>, repr: <span class="typ">string</span>, vector: <span class="typ">Float32Array</span>) {</span>
+    <span class="kw">await</span> db.<span class="fn">execute</span>(<span class="str">`INSERT INTO topic_page_vector
+       (page_session_id, embedding_model_id, vector, repr, built_at)
+       VALUES ($id, $m, $v, $r, $t)
+       ON CONFLICT (page_session_id, embedding_model_id) DO UPDATE SET
+         vector = excluded.vector, repr = excluded.repr, built_at = excluded.built_at`</span>,
+      { id, m: model_id, v: <span class="typ">Array</span>.<span class="fn">from</span>(vector), r: repr, t: <span class="kw">new</span> <span class="typ">Date</span>().<span class="fn">toISOString</span>() });
+  }
+
+  <span class="cm">// Right-to-forget surface — mirrors ContentCache; CHECKPOINT folds deletes out of the WAL.</span>
+  <span class="kw">async</span> <span class="fn">delete_items</span>(ids: <span class="typ">string</span>[]): <span class="typ">Promise</span>&lt;<span class="kw">void</span>&gt; { <span class="cm">/* DELETE … WHERE page_session_id IN (…) ; CHECKPOINT */</span> }
+}</pre>
+</div>
+
+<div class="callout info">
+  <span class="label">Why it lives in the metadata file, not a second store</span>
+  <p>LanceDB was rejected — it cannot be encrypted at rest while searchable, and content-derived vectors are sensitive. DuckDB serves similarity search natively via <code>array_cosine_similarity</code> over fixed-size <code>FLOAT[dim]</code> columns, so the encrypted metadata store covers both the get/put cache (all TDT needs now) and the deferred RAG search path. Under the single-writer rule the store opens no file handle of its own.</p>
+</div>
+
+<!-- ============================================ THE EMBEDDER -->
+<h2 id="embedder">The local embedder — offline, load-once-per-pass, single-thread</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 200" role="img" aria-label="The production EmbedFn lifecycle. At pass start, construct the @huggingface/transformers feature-extraction pipeline for bge-small-en-v1.5 q8 384d with mean pooling and L2-normalize, no instruction prefix, with allowRemoteModels false so it loads from the bundled or cached artifact and never reaches the network — the privacy guarantee. During the pass, embed every pending page on the worker, single-threaded ONNX. At pass end, drop the reference to release the model so it is resident only while a pass runs.">
+  <defs>
+    <marker id="ma" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+  </defs>
+  <rect x="20" y="70" width="280" height="70" rx="10" fill="rgba(126,231,135,.06)" stroke="#7ee787"/>
+  <text x="160" y="92" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">pass start · construct ONCE</text>
+  <text x="160" y="110" fill="#768390" font-size="8.5" text-anchor="middle">feature-extraction pipeline</text>
+  <text x="160" y="124" fill="#768390" font-size="8.5" text-anchor="middle">mean-pool + L2-normalize · no prefix</text>
+  <line x1="300" y1="105" x2="346" y2="105" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ma)"/>
+
+  <rect x="346" y="70" width="280" height="70" rx="10" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="486" y="92" fill="#6cb6ff" font-size="10" text-anchor="middle" font-weight="bold">offline · privacy guarantee</text>
+  <text x="486" y="110" fill="#768390" font-size="8.5" text-anchor="middle">allowRemoteModels = false</text>
+  <text x="486" y="124" fill="#768390" font-size="8.5" text-anchor="middle">bundled/cached artifact · no network/API</text>
+  <line x1="626" y1="105" x2="672" y2="105" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ma)"/>
+
+  <rect x="672" y="70" width="240" height="70" rx="10" fill="#161b22" stroke="#7ee787"/>
+  <text x="792" y="92" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">embed all pending pages</text>
+  <text x="792" y="110" fill="#768390" font-size="8.5" text-anchor="middle">single-threaded ONNX</text>
+  <text x="792" y="124" fill="#768390" font-size="8.5" text-anchor="middle">on the worker · CPU-bound</text>
+  <line x1="912" y1="105" x2="958" y2="105" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ma)"/>
+
+  <rect x="958" y="70" width="200" height="70" rx="10" fill="rgba(240,163,94,.07)" stroke="#f0a35e"/>
+  <text x="1058" y="92" fill="#f0a35e" font-size="10" text-anchor="middle" font-weight="bold">pass end · release</text>
+  <text x="1058" y="110" fill="#768390" font-size="8.5" text-anchor="middle">drop the reference</text>
+  <text x="1058" y="124" fill="#768390" font-size="8.5" text-anchor="middle">resident only while a pass runs</text>
+</svg>
+</div>
+<figcaption>The production <code>EmbedFn</code> is <code>bge-small-en-v1.5</code> (q8, 384d) via <code>@huggingface/transformers</code>, constructed once per pass and released after — so the model is resident only while a pass runs, not around the clock (AC #4). <code>allowRemoteModels = false</code> loads it from the bundled/cached artifact and guarantees no network or API call.</figcaption>
+</figure>
+
+<!-- ============================================ RIGHT TO FORGET -->
+<h2 id="forget">Right-to-forget cascade — topic_page_vector joins it</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 230" role="img" aria-label="The right-to-forget cascade with the new vector store added. A forget selector by url, origin, or time-range resolves target page sessions and urls. Derived stores are deleted before metadata: the plaintext visit buffers are swept, the encrypted content cache rows are deleted, and the NEW step deletes topic_page_vector rows for the same page sessions; only then are the metadata capture and activity rows deleted in one transaction, followed by the referrer scrub and empty-tree sweep. Deleting derived before metadata keeps a failure on the safe side: metadata without content, never content without metadata.">
+  <defs>
+    <marker id="ra" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+    <marker id="rg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+  </defs>
+  <rect x="20" y="84" width="160" height="60" rx="8" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="100" y="106" fill="#6cb6ff" font-size="10" text-anchor="middle">forget(selector)</text>
+  <text x="100" y="120" fill="#768390" font-size="8" text-anchor="middle">url | origin | time-range</text>
+  <text x="100" y="132" fill="#768390" font-size="8" text-anchor="middle">resolve_targets → ids + urls</text>
+  <line x1="180" y1="114" x2="216" y2="114" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ra)"/>
+
+  <rect x="216" y="40" width="640" height="150" rx="10" fill="rgba(126,231,135,.03)" stroke="#7ee787" stroke-dasharray="4 3"/>
+  <text x="232" y="60" fill="#7ee787" font-size="10" font-weight="bold">derived artifacts FIRST (safe direction on partial failure)</text>
+
+  <rect x="232" y="74" width="180" height="44" rx="7" fill="#161b22" stroke="#2a313a"/><text x="322" y="92" fill="#d7dde4" font-size="9" text-anchor="middle">sweep visit buffers</text><text x="322" y="106" fill="#768390" font-size="8" text-anchor="middle">inbox + replay (plaintext)</text>
+  <rect x="232" y="128" width="180" height="44" rx="7" fill="#161b22" stroke="#2a313a"/><text x="322" y="146" fill="#d7dde4" font-size="9" text-anchor="middle">content cache delete</text><text x="322" y="160" fill="#768390" font-size="8" text-anchor="middle">by id / url / origin</text>
+
+  <rect x="436" y="100" width="200" height="50" rx="8" fill="rgba(126,231,135,.08)" stroke="#7ee787" stroke-width="1.8"/>
+  <text x="536" y="120" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">NEW: page-vector delete</text>
+  <text x="536" y="135" fill="#768390" font-size="8" text-anchor="middle">topic_page_vector by id / url / origin</text>
+  <line x1="412" y1="125" x2="436" y2="125" stroke="#7ee787" stroke-width="1.6" marker-end="url(#rg)"/>
+
+  <text x="660" y="118" fill="#768390" font-size="8.5">module header already</text>
+  <text x="660" y="132" fill="#768390" font-size="8.5">reserves this slot:</text>
+  <text x="660" y="146" fill="#9aa6b2" font-size="8">"TDT … vectors … added</text>
+  <text x="660" y="158" fill="#9aa6b2" font-size="8">here when those stores exist"</text>
+
+  <line x1="856" y1="114" x2="892" y2="114" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ra)"/>
+  <rect x="892" y="74" width="220" height="80" rx="8" fill="#161b22" stroke="#f0a35e"/>
+  <text x="1002" y="94" fill="#f0a35e" font-size="10" text-anchor="middle">metadata LAST</text>
+  <text x="1002" y="110" fill="#768390" font-size="8" text-anchor="middle">one transaction: capture +</text>
+  <text x="1002" y="122" fill="#768390" font-size="8" text-anchor="middle">activity + fetch + referrer scrub</text>
+  <text x="1002" y="138" fill="#768390" font-size="8" text-anchor="middle">then sweep_empty_trees · CHECKPOINT</text>
+</svg>
+</div>
+<figcaption>The cascade already deletes derived stores before metadata so a cross-store failure can only leave metadata without content — the privacy-safe direction. The vector store slots in alongside the content cache: forgetting by url / origin / time-range deletes the affected pages' vectors (AC #6), and the cascade tests extend to cover it. The module header already reserves the slot.</figcaption>
+</figure>
+
+<!-- ============================================ EXCLUSION -->
+<h2 id="exclusion">Exclusion guarantee — two layers, never a zero or NaN vector</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 250" role="img" aria-label="Two stacked guards keep a meaningless vector out of the store. Layer one, the privacy filter at the corpus boundary: auth-walled, paywalled, dead, and non-HTML pages are reported as exclusions and never emitted by iter_public_pages, so the embed pass never even receives them. Layer two, the correctness guard inside build_page_vector: a page with no extractable text, or one whose embedding is truly degenerate below epsilon even after the medoid fallback, returns null. Only a real L2-normalized vector reaches VectorStore.put.">
+  <defs>
+    <marker id="ea" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+    <marker id="er" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff7b72"/></marker>
+    <marker id="eg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+  </defs>
+
+  <rect x="20" y="100" width="150" height="50" rx="8" fill="#161b22" stroke="#2a313a"/>
+  <text x="95" y="122" fill="#d7dde4" font-size="9.5" text-anchor="middle">corpus page</text>
+  <text x="95" y="136" fill="#768390" font-size="8" text-anchor="middle">any captured page</text>
+  <line x1="170" y1="125" x2="206" y2="125" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ea)"/>
+
+  <rect x="206" y="76" width="230" height="98" rx="10" fill="rgba(108,182,255,.05)" stroke="#6cb6ff"/>
+  <text x="321" y="96" fill="#6cb6ff" font-size="10" text-anchor="middle" font-weight="bold">Layer 1 · privacy filter</text>
+  <text x="321" y="110" fill="#768390" font-size="8" text-anchor="middle">corpus boundary (39.2)</text>
+  <text x="321" y="128" fill="#d7dde4" font-size="8.5" text-anchor="middle">iter_public_pages yields</text>
+  <text x="321" y="140" fill="#d7dde4" font-size="8.5" text-anchor="middle">only ok content</text>
+  <text x="321" y="158" fill="#768390" font-size="8" text-anchor="middle">login wall = the filter</text>
+  <line x1="321" y1="174" x2="321" y2="206" stroke="#ff7b72" stroke-width="1.5" marker-end="url(#er)"/>
+  <rect x="196" y="206" width="250" height="34" rx="6" fill="rgba(255,123,114,.07)" stroke="#ff7b72" stroke-dasharray="3 2"/>
+  <text x="321" y="222" fill="#ff7b72" font-size="8.5" text-anchor="middle">auth / paywall / dead / non-HTML</text>
+  <text x="321" y="234" fill="#768390" font-size="8" text-anchor="middle">not emitted — pass never sees them</text>
+
+  <line x1="436" y1="110" x2="472" y2="110" stroke="#7ee787" stroke-width="1.6" marker-end="url(#eg)"/>
+  <text x="454" y="100" fill="#7ee787" font-size="8" text-anchor="middle">ok</text>
+
+  <rect x="472" y="76" width="250" height="98" rx="10" fill="rgba(126,231,135,.05)" stroke="#7ee787"/>
+  <text x="597" y="96" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">Layer 2 · correctness guard</text>
+  <text x="597" y="110" fill="#768390" font-size="8" text-anchor="middle">inside build_page_vector</text>
+  <text x="597" y="128" fill="#d7dde4" font-size="8.5" text-anchor="middle">no extractable text → null</text>
+  <text x="597" y="142" fill="#d7dde4" font-size="8.5" text-anchor="middle">truly degenerate (&lt; ε) → null</text>
+  <text x="597" y="158" fill="#768390" font-size="8" text-anchor="middle">never divides by ≈0 (no NaN/Inf)</text>
+  <line x1="597" y1="174" x2="597" y2="206" stroke="#ff7b72" stroke-width="1.5" marker-end="url(#er)"/>
+  <rect x="487" y="206" width="220" height="34" rx="6" fill="rgba(255,123,114,.07)" stroke="#ff7b72" stroke-dasharray="3 2"/>
+  <text x="597" y="222" fill="#ff7b72" font-size="8.5" text-anchor="middle">return null · cache nothing</text>
+  <text x="597" y="234" fill="#768390" font-size="8" text-anchor="middle">no exclusion tombstone</text>
+
+  <line x1="722" y1="110" x2="758" y2="110" stroke="#7ee787" stroke-width="1.6" marker-end="url(#eg)"/>
+  <text x="740" y="100" fill="#7ee787" font-size="8" text-anchor="middle">vector</text>
+
+  <rect x="758" y="84" width="220" height="52" rx="8" fill="rgba(126,231,135,.07)" stroke="#7ee787" stroke-width="1.8"/>
+  <text x="868" y="104" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">VectorStore.put</text>
+  <text x="868" y="120" fill="#768390" font-size="8" text-anchor="middle">only real L2-normalized vectors</text>
+  <text x="868" y="132" fill="#768390" font-size="8" text-anchor="middle">no zero / NaN ever stored (AC #7)</text>
+
+  <text x="1000" y="100" fill="#768390" font-size="8.5">privacy + correctness</text>
+  <text x="1000" y="114" fill="#768390" font-size="8.5">working together:</text>
+  <text x="1000" y="130" fill="#9aa6b2" font-size="8">excluded pages are absent</text>
+  <text x="1000" y="142" fill="#9aa6b2" font-size="8">AND a degenerate ok-page</text>
+  <text x="1000" y="154" fill="#9aa6b2" font-size="8">still cannot store junk.</text>
+</svg>
+</div>
+<figcaption>Two independent layers guarantee AC #7. The <span style="color:var(--accent-2)">privacy filter</span> at the corpus boundary means auth-walled / paywalled / dead / non-HTML pages are never emitted, so the embed pass never receives them. The <span style="color:var(--green)">correctness guard</span> inside <code>build_page_vector</code> returns <code>null</code> for a no-text or truly degenerate ok-page rather than dividing by ≈0. Only a real L2-normalized vector ever reaches <code>put</code>.</figcaption>
+</figure>
+
+<!-- ============================================ ACCEPTANCE CRITERIA -->
+<h2 id="ac">The seven acceptance criteria, mapped to where they are satisfied</h2>
+
+<table>
+  <thead><tr><th class="c">AC</th><th>Criterion</th><th>Satisfied by</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="c">#1</td>
+      <td>DuckDB <code>VectorStore</code> over <code>topic_page_vector</code> in the encrypted metadata file, written only through the single writer</td>
+      <td><code>PageVectorStore</code> implementing the port; <code>create_page_vector_schema</code> run by the writer; mirrors <code>content_cache.ts</code></td>
+    </tr>
+    <tr>
+      <td class="c">#2</td>
+      <td>Running the batched embed pass populates <code>topic_page_vector</code> via <code>resolve_page_vector</code> build-on-miss; an already-vectorised page is skipped (cache hit)</td>
+      <td>The embed pass over <code>iter_public_pages()</code>: get → on miss build + put; hit under the current model id is skipped</td>
+    </tr>
+    <tr>
+      <td class="c">#3</td>
+      <td>The embed pass runs off the event loop (a worker); the capture / visit-queue path performs no embedding</td>
+      <td><strong>Decision 1</strong>: batched pass on a worker; the capture path is untouched — zero CPU embed on the hot path</td>
+    </tr>
+    <tr>
+      <td class="c">#4</td>
+      <td>The <code>EmbedFn</code> is the local bge model via <code>@huggingface/transformers</code> fully offline, loaded once per pass and released, ONNX single-threaded</td>
+      <td>The embedder lifecycle: construct-once-per-pass, <code>allowRemoteModels = false</code>, single-thread, release after</td>
+    </tr>
+    <tr>
+      <td class="c">#5</td>
+      <td>Model + representation are config; a change yields a new <code>embedding_model_id</code>; the next pass re-embeds via build-on-miss</td>
+      <td>The <code>embedding_model_id</code> key (<code>bge-small-en-v1.5/q8/384#repr-v1</code>); a change is a clean miss the next pass rebuilds</td>
+    </tr>
+    <tr>
+      <td class="c">#6</td>
+      <td><code>topic_page_vector</code> joins the right-to-forget cascade; tests extended</td>
+      <td><code>right_to_forget.ts</code> deletes vectors before metadata, by id / url / origin; cascade tests extended</td>
+    </tr>
+    <tr>
+      <td class="c">#7</td>
+      <td>Excluded pages produce no vector; no zero / NaN vector ever stored</td>
+      <td><strong>Two layers</strong>: corpus-boundary privacy filter + <code>build_page_vector</code> null guard</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>What this subtask delivers — four pieces</h3>
+<div class="steps">
+  <div class="step">
+    <div class="badge ok">1</div>
+    <div class="body">
+      <h3>The concrete <code>VectorStore</code> over <code>topic_page_vector</code></h3>
+      <p>Schema step + class with <code>get</code> / <code>put</code> and the delete surface, in the encrypted metadata DuckDB file, through the single writer. Mirrors <code>content_cache.ts</code> open / schema / CHECKPOINT discipline.</p>
+      <span class="loc">AC #1 · vscode/src/tdt/page_vector_store.ts (new)</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge ok">2</div>
+    <div class="body">
+      <h3>The production local <code>EmbedFn</code></h3>
+      <p><code>@huggingface/transformers</code> <code>feature-extraction</code> with <code>bge-small-en-v1.5</code> (q8, 384d), mean-pool + L2-normalize, no prefix. Offline (<code>allowRemoteModels = false</code>), constructed once per pass, single-threaded ONNX, released after. Pin the package version.</p>
+      <span class="loc">AC #4 · embedding-model-selection doc · new EmbedFn impl</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge ok">3</div>
+    <div class="body">
+      <h3>The batched embed pass — vectorise ahead of TDT</h3>
+      <p>Iterate the cache-served public corpus, resolve each page via <code>resolve_page_vector</code> build-on-miss, persist via the store. Runs on a worker off the event loop; invokable standalone and as the step a TDT run executes before clustering. Incremental: one embed per new public page, a repeat pass a no-op.</p>
+      <span class="loc">AC #2, #3 · the embed-pass module + worker</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge guard">4</div>
+    <div class="body">
+      <h3>Right-to-forget cascade entry + extended tests</h3>
+      <p>Add <code>topic_page_vector</code> deletion to <code>right_to_forget.ts</code> (before metadata, by id / url / origin), filling the slot the module header reserves. Extend the cascade tests to assert a forgotten page's vectors are gone.</p>
+      <span class="loc">AC #6 · vscode/src/right_to_forget.ts + its tests</span>
+    </div>
+  </div>
+</div>
+
+<div class="callout good">
+  <span class="label">Verify (plan §11 step 3a)</span>
+  <p>Running the embed pass populates <code>topic_page_vector</code> for every public page without a clustering run having executed; a second pass over an unchanged corpus is a no-op; the pass never blocks the UI or the <code>/visit</code> endpoint; forgetting a page removes its vector; an excluded or no-text page stores no vector.</p>
+</div>
+
+<footer>
+  Companion for <code>task-36.3.1</code> — page-vector store + batched embedder (vectorise ahead of TDT) · branch <code>tdt</code> ·
+  spec <code>task-36.3.1 ….md</code> (7 ACs) ·
+  plan <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> §3 / §4 / §8 / build 3a ·
+  model <code>backlog/drafts/tdt-embedding-model-selection.md</code> ·
+  reads the cached public corpus <code>vscode/src/redownload/corpus.ts</code> · store mirror <code>content_cache.ts</code> · cascade <code>right_to_forget.ts</code> · library <code>tdt/src/page_vectors.ts</code>.
+</footer>
+
+</main>
+</body>
+</html>

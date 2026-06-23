@@ -1,6 +1,6 @@
 ---
 id: TASK-36.3.1
-title: "Page-vector store + ingestion-time embedding"
+title: "Page-vector store + batched embedder (vectorise ahead of TDT)"
 status: To Do
 assignee: []
 created_date: "2026-06-23 00:00"
@@ -11,6 +11,7 @@ dependencies:
   - TASK-39.2
 references:
   - backlog/drafts/tdt-hdbscan-micro-tier-plan.md
+  - backlog/drafts/tdt-embedding-model-selection.md
 parent_task_id: TASK-36.3
 ---
 
@@ -20,17 +21,18 @@ parent_task_id: TASK-36.3
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
 
-Production integration of the pure page-vectorisation library (TASK-36.3): make the page vector a durable artifact produced **at ingestion**, when a page reaches the extension, rather than lazily on TDT's own schedule. This is the natural extension of the eager re-download — the same `on_captured` pass that re-downloads a freshly captured page and warms the encrypted content cache also embeds it once and stores the vector, so every downstream consumer (TDT clustering, later RAG) only ever **reads** vectors.
+Production integration of the pure page-vectorisation library (TASK-36.3): make the page vector a durable artifact, produced by a **batched embed pass that runs ahead of a TDT clustering run** rather than per-page on the capture hot path. The content is already durably cached at capture time (the eager re-download warms the encrypted content cache), so embedding does not need to happen at ingestion — the embed pass reads the already-extracted public content from the cache, vectorises every page missing a current-model vector in one batched pass off the extension-host event loop, and stores the result. Every downstream consumer (TDT clustering, later RAG) then only ever **reads** vectors.
 
-This subtask delivers three pieces that TASK-36.3 deliberately left out of the pure library:
+This subtask delivers four pieces that TASK-36.3 deliberately left out of the pure library:
 
 1. **Concrete `VectorStore`** — a DuckDB-backed implementation of the `@bergamot/tdt` `VectorStore` port over a `topic_page_vector(page_session_id, embedding_model_id, vector, repr, built_at)` table in the existing encrypted metadata DuckDB file, written only through the extension's single writer. (Vectors stay in the encrypted store — LanceDB was evaluated and rejected; see TASK-36.3 decisions. Similarity search via `array_cosine_similarity` / `vss` is deferred to RAG/TASK-31.)
-2. **Ingestion-time embedding** — extend the visit-queue `on_captured` flow ([vscode/src/visit_queue_processor.ts](../../vscode/src/visit_queue_processor.ts)) so that, after the eager re-download extracts a page's public content, the extension maps that `CorpusContent` → `PageContent`, calls `build_page_vector` with the canonical model + representation, and persists the result via the concrete `VectorStore`. This runs **off the capture hot path** (fire-and-forget, on a worker / off the extension-host event loop, mirroring the clustering-worker pattern) so a slow or failing embed never stalls capture. `resolve_page_vector`'s build-on-miss becomes the backfill / alternate-model-or-repr path.
-3. **Right-to-forget cascade** — add `topic_page_vector` to the cascade in [vscode/src/right_to_forget.ts](../../vscode/src/right_to_forget.ts) (constitution principle 4): forgetting a page deletes its vectors, with the cascade tests extended to cover it. The cascade module already reserves this slot ("TDT … vectors … added here when those stores exist").
+2. **Local embedder (production `EmbedFn`)** — the canonical model, `bge-small-en-v1.5` (q8, 384-d), run **fully offline** through `@huggingface/transformers` (`feature-extraction`, mean-pool + L2-normalize, no instruction prefix). Loaded from a bundled/cached artifact with `allowRemoteModels=false` (no network / no API call — the privacy guarantee), constructed once per pass and released after. ONNX Runtime is pinned to single-threaded sequential execution for best-effort reproducibility. See backlog/drafts/tdt-embedding-model-selection.md.
+3. **Batched embed pass (vectorise ahead of TDT)** — a pass that iterates the re-downloadable public corpus (`iter_public_pages()`, cache-served) and, for each page, resolves its vector via `resolve_page_vector` build-on-miss with the canonical model + representation, persisting through the concrete `VectorStore`. A page already vectorised under the current `embedding_model_id` is a cache hit and is skipped. The pass runs **off the extension-host event loop** (a worker, mirroring the planned clustering-worker pattern) so the CPU-bound embed never blocks the UI or the `/visit` capture endpoint — and never touches the capture hot path at all. It is invokable as a standalone trigger and is the step a later TDT run executes before clustering.
+4. **Right-to-forget cascade** — add `topic_page_vector` to the cascade in [vscode/src/right_to_forget.ts](../../vscode/src/right_to_forget.ts) (constitution principle 4): forgetting a page deletes its vectors, with the cascade tests extended to cover it. The cascade module already reserves this slot ("TDT … vectors … added here when those stores exist").
 
-The canonical embedding model + representation become extension/ingestion config (the local model is loaded in the extension host). A model or representation change yields a new `embedding_model_id` (the representation-rule version is folded into it), so historical pages are re-embedded lazily via `resolve_page_vector`'s build-on-miss or an explicit backfill pass.
+The canonical embedding model + representation are extension config. A model or representation change yields a new `embedding_model_id` (the representation-rule version is folded into it: `bge-small-en-v1.5/q8/384#repr-v1`), so historical pages are re-embedded by the next embed pass via `resolve_page_vector` build-on-miss — a clean cache miss, not a stale hit.
 
-Design reference: backlog/drafts/tdt-hdbscan-micro-tier-plan.md §3 (single-writer store), §4 ("Where vectorisation runs"), §8 (`topic_page_vector` DDL), build order step 3a.
+Design reference: backlog/drafts/tdt-hdbscan-micro-tier-plan.md §3 (single-writer store), §4 ("Where vectorisation runs"), §8 (`topic_page_vector` DDL), build order step 3a; backlog/drafts/tdt-embedding-model-selection.md (model, lifecycle, determinism).
 
 <!-- SECTION:DESCRIPTION:END -->
 
@@ -39,10 +41,11 @@ Design reference: backlog/drafts/tdt-hdbscan-micro-tier-plan.md §3 (single-writ
 <!-- AC:BEGIN -->
 
 - [ ] #1 A DuckDB-backed VectorStore implements the @bergamot/tdt VectorStore port over topic_page_vector in the encrypted metadata file, written only through the extension's single writer
-- [ ] #2 A captured public page's L2-normalized vector is present in topic_page_vector after ingestion (the on_captured eager-re-download pass), without TDT or any clustering run having executed
-- [ ] #3 Embedding runs off the capture hot path: a slow or failing embed never stalls or delays visit-queue throughput
-- [ ] #4 The canonical embedding model + representation are configuration; a model or representation change yields a new embedding_model_id and historical pages re-embed via build-on-miss or an explicit backfill
-- [ ] #5 topic_page_vector joins the right-to-forget cascade in right_to_forget.ts — forgetting by url / origin / time-range deletes the affected page vectors — and the cascade tests are extended to cover it
-- [ ] #6 Auth-walled / paywalled / dead / non-HTML pages (absent from the re-download corpus) produce no vector; no zero/NaN vector is ever stored
+- [ ] #2 Running the batched embed pass populates topic_page_vector with an L2-normalized vector for each re-downloadable public page (content served from the durable cache) via resolve_page_vector build-on-miss; a page already vectorised under the current embedding_model_id is skipped (cache hit, no re-embed)
+- [ ] #3 The embed pass runs off the capture path and does not block the extension-host event loop: the capture/visit-queue path performs no embedding, and the inference (async onnxruntime-node, executed off the JS event loop) plus inter-page yielding keep the UI and the /visit endpoint responsive during a pass
+- [ ] #4 The production EmbedFn is the local bge-small-en-v1.5 model run via @huggingface/transformers fully offline (allowRemoteModels=false, no network/API call), loaded once per pass from a bundled/cached artifact and released after, with ONNX pinned to single-threaded sequential execution
+- [ ] #5 The canonical embedding model + representation are configuration; a model or representation change yields a new embedding_model_id (bge-small-en-v1.5/q8/384#repr-v1) and the next embed pass re-embeds affected pages via build-on-miss
+- [ ] #6 topic_page_vector joins the right-to-forget cascade in right_to_forget.ts — forgetting by url / origin / time-range deletes the affected page vectors — and the cascade tests are extended to cover it
+- [ ] #7 Auth-walled / paywalled / dead / non-HTML pages (absent from the re-download corpus) produce no vector; no zero/NaN vector is ever stored
 
 <!-- AC:END -->

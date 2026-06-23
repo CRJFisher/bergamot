@@ -277,21 +277,32 @@ only relative to a given re-download; the run records the fetch fidelity metadat
 (`fetched_at`, `http_status`, content hash) so drift and changes in corpus membership are
 visible across re-clusters.
 
-### Where vectorisation runs (ingestion-time) & cold start
+### Where vectorisation runs (batched, ahead of TDT)
 
-**The page vector is produced at ingestion, not on TDT's schedule.** The eager re-download
-(task-39.2) already fetches and extracts a page's public content the moment it is captured (the
-`on_captured` hook in the visit-queue processor); embedding is the next step in that same pass,
-so the canonical page vector is built once at capture time and written to `topic_page_vector`.
-TDT (and RAG) only **read** vectors — `build_page_vector` is owned by TDT as the definition of
-the page representation + model, but it **runs in the ingestion pipeline**, off the capture hot
-path. `resolve_page_vector`'s build-on-miss is then the backfill / alternate-model-or-repr path
-(a new `embedding_model_id` is a clean miss → rebuild), not the common case.
+**The page vector is produced by a batched embed pass that runs ahead of a clustering run, not
+per-page on the capture hot path.** The capture path stays metadata-only plus the eager
+re-download (task-39.2), which fetches and extracts each page's public content and warms the
+encrypted content cache. Because that content is durably cached, embedding does not need to
+happen at capture time. The embed pass iterates the re-downloadable public corpus
+(`iter_public_pages()`, cache-served) and, for each page missing a current-model vector, runs
+`resolve_page_vector` build-on-miss — embedding with TDT's own local model, L2-normalizing, and
+writing to `topic_page_vector`. A page already vectorised under the current `embedding_model_id`
+is a cache hit and is skipped, so the pass is incremental: its marginal cost is one embed per new
+public page. TDT (and RAG) only ever **read** the stored vectors.
 
-Cold start is therefore a non-issue: vectors accumulate as the user browses, so when TDT runs a
-window the vectors it needs are already present. TDT never waits on the RAG pipeline. (The
-concrete `topic_page_vector` store, the `on_captured` embedding wiring, and the right-to-forget
-cascade entry are TASK-36.3.1.)
+The pass runs **off the extension-host event loop** (a worker, mirroring the clustering-worker
+pattern §11 step 9) because the local embed is CPU-bound — it must not block the UI or the
+`/visit` capture endpoint. Loading the embedding model is a per-pass cost, not a per-page one:
+the model is constructed once at the start of a pass and released after, so it is resident only
+while a pass runs, never for the lifetime of the extension. This is the step a TDT run executes
+before reading vectors and clustering; it is also invokable standalone (a trigger / scheduled
+tick).
+
+Cold start is a non-issue: a first pass embeds the backlog of cached public pages, and thereafter
+each pass embeds only what is new. TDT never waits on the RAG pipeline. (The concrete
+`topic_page_vector` store, the production local embedder + lifecycle, the batched embed pass, and
+the right-to-forget cascade entry are TASK-36.3.1; the local model is `bge-small-en-v1.5` q8/384
+via `@huggingface/transformers`, see `tdt-embedding-model-selection.md`.)
 
 **The one deferred seam (an option, not a dependency).** If cross-feature work is ever wanted
 — grouping RAG search hits by project cluster, or the later macro→micro LLM linkage reasoning
@@ -903,11 +914,14 @@ A phased, testable delivery sequence for THIS module. Each phase is independentl
    port), `dedupe_visits`, the dispersion/degenerate/no-text guards, and fixed-order float64
    segment accumulation. _Verified:_ determinism test (same content + pinned model → identical
    page vector), no-text exclusion, and cache hit / invalidation on model-or-repr change.
-   3a. **Page-vector store + ingestion-time embedding (task-36.3.1).** The concrete DuckDB
-   `topic_page_vector` `VectorStore`, the `on_captured` wiring that builds the page vector at
-   ingestion (off the capture hot path) in the same eager-re-download pass, and the
-   right-to-forget cascade entry for the store. _Verify:_ a captured page's vector is present in
-   `topic_page_vector` after ingestion without TDT running; forgetting a page removes its vector.
+   3a. **Page-vector store + batched embedder (task-36.3.1).** The concrete DuckDB
+   `topic_page_vector` `VectorStore`, the production local embedder (`bge-small-en-v1.5` q8/384
+   via `@huggingface/transformers`, offline, load-once-per-pass) wrapping the injected `EmbedFn`,
+   the batched embed pass that vectorises the re-downloadable public corpus ahead of a clustering
+   run (off the extension-host event loop, via `resolve_page_vector` build-on-miss), and the
+   right-to-forget cascade entry for the store. _Verify:_ running the embed pass populates
+   `topic_page_vector` for cached public pages without any clustering having run; a second pass is
+   a no-op (cache hits); forgetting a page removes its vector.
 4. **Distance + HDBSCAN integration.** `build_cosine_distance_matrix` (clamp/diag/symmetrize)
    - the isolated `cluster_window.ts` call. _Verify:_ bitwise reproducibility test (same
      window twice → identical `labels_` and `probabilities_`); pinned tf backend.
