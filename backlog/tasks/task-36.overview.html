@@ -142,11 +142,12 @@
   <a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html"><span class="dot done"></span>36.2 Windowing</a>
   <a href="task-36.3 - Page-vectorisation-TDT-owned-embedding-of-captured-pages.page-vectors.html"><span class="dot todo"></span>36.3 Vectorise</a>
   <a href="task-36.4 - Cosine-distance-matrix-and-HDBSCAN-clustering-core.clustering-core.html"><span class="dot done"></span>36.4 Distance + HDBSCAN</a>
-  <a href="task-36.5 - Cluster-representations-and-deterministic-labeler.representations-labeler.html"><span class="dot now"></span>36.5 Representations + labeler</a>
+  <a href="task-36.5 - Cluster-representations-and-deterministic-labeler.representations-labeler.html"><span class="dot done"></span>36.5 Representations + labeler</a>
   <span class="pending"><span class="dot todo"></span>36.6 Persistence · not yet generated</span>
   <span class="pending"><span class="dot todo"></span>36.7 Validation · not yet generated</span>
   <a href="task-36.8.concept-decision.html"><span class="dot todo"></span>36.8 Surface decision · concept set</a>
   <span class="pending"><span class="dot todo"></span>36.9 Orchestration · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.10 LLM naming · not yet generated</span>
 </nav>
 
 <nav class="concepts" aria-label="Concept pages">
@@ -373,66 +374,78 @@
 </figure>
 
 <!-- ============================================================ BUILD ORDER -->
-<h2>Build order — nine sub-tasks</h2>
+<h2>Build order — ten sub-tasks</h2>
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1100 250" role="img" aria-label="Nine sub-tasks as a progress strip: 36.1 and 36.2 done, 36.3 through 36.9 to do, with 36.4 gated on external clustering-tfjs work and 36.8 a surface-decision spike.">
+<svg viewBox="0 0 1180 270" role="img" aria-label="Ten sub-tasks as a progress strip: 36.1, 36.2, 36.4 and 36.5 done, 36.3 and 36.6 through 36.10 to do, with 36.4 gated on external clustering-tfjs work, 36.8 a surface-decision spike, and 36.10 the opt-in LLM-naming job that depends on 36.5 and 36.6.">
   <defs>
     <marker id="bo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#768390"/></marker>
+    <marker id="bop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d2a8ff"/></marker>
   </defs>
   <!-- spine -->
-  <line x1="55" y1="70" x2="1045" y2="70" stroke="#2a313a" stroke-width="2"/>
+  <line x1="55" y1="70" x2="1125" y2="70" stroke="#2a313a" stroke-width="2"/>
 
-  <!-- helper: 9 nodes -->
+  <!-- helper: 10 nodes, evenly spaced ~119px apart from x=60 to x=1130 -->
   <g font-size="10" text-anchor="middle">
     <!-- 36.1 -->
     <circle cx="60" cy="70" r="13" fill="rgba(126,231,135,.18)" stroke="#7ee787"/><text x="60" y="74" fill="#7ee787" font-size="11">1</text>
     <text x="60" y="100" fill="#7ee787" font-size="9.5">DONE</text>
     <text x="60" y="124" fill="#d7dde4">Scaffold</text><text x="60" y="138" fill="#768390" font-size="8.5">package + ports</text>
     <!-- 36.2 -->
-    <circle cx="183" cy="70" r="13" fill="rgba(126,231,135,.18)" stroke="#7ee787"/><text x="183" y="74" fill="#7ee787" font-size="11">2</text>
-    <text x="183" y="100" fill="#7ee787" font-size="9.5">DONE</text>
-    <text x="183" y="124" fill="#d7dde4">Windowing</text><text x="183" y="138" fill="#768390" font-size="8.5">bounded frames</text>
+    <circle cx="179" cy="70" r="13" fill="rgba(126,231,135,.18)" stroke="#7ee787"/><text x="179" y="74" fill="#7ee787" font-size="11">2</text>
+    <text x="179" y="100" fill="#7ee787" font-size="9.5">DONE</text>
+    <text x="179" y="124" fill="#d7dde4">Windowing</text><text x="179" y="138" fill="#768390" font-size="8.5">bounded frames</text>
     <!-- 36.3 -->
-    <circle cx="306" cy="70" r="13" fill="rgba(240,163,94,.14)" stroke="#f0a35e"/><text x="306" y="74" fill="#f0a35e" font-size="11">3</text>
-    <text x="306" y="100" fill="#f0a35e" font-size="9.5">to do · companion</text>
-    <text x="306" y="124" fill="#d7dde4">Vectorise</text><text x="306" y="138" fill="#768390" font-size="8.5">read content+embed</text>
+    <circle cx="298" cy="70" r="13" fill="rgba(240,163,94,.14)" stroke="#f0a35e"/><text x="298" y="74" fill="#f0a35e" font-size="11">3</text>
+    <text x="298" y="100" fill="#f0a35e" font-size="9.5">to do · companion</text>
+    <text x="298" y="124" fill="#d7dde4">Vectorise</text><text x="298" y="138" fill="#768390" font-size="8.5">read content+embed</text>
     <!-- 36.4 gated -->
-    <circle cx="429" cy="70" r="13" fill="rgba(126,231,135,.18)" stroke="#7ee787"/><text x="429" y="74" fill="#7ee787" font-size="11">4</text>
-    <text x="429" y="100" fill="#7ee787" font-size="9.5">DONE · companion</text>
-    <text x="429" y="124" fill="#d7dde4">Distance + HDBSCAN</text><text x="429" y="138" fill="#768390" font-size="8.5">only tfjs call</text>
+    <circle cx="417" cy="70" r="13" fill="rgba(126,231,135,.18)" stroke="#7ee787"/><text x="417" y="74" fill="#7ee787" font-size="11">4</text>
+    <text x="417" y="100" fill="#7ee787" font-size="9.5">DONE · companion</text>
+    <text x="417" y="124" fill="#d7dde4">Distance + HDBSCAN</text><text x="417" y="138" fill="#768390" font-size="8.5">only tfjs call</text>
     <!-- 36.5 -->
-    <circle cx="552" cy="70" r="13" fill="rgba(240,163,94,.14)" stroke="#f0a35e"/><text x="552" y="74" fill="#f0a35e" font-size="11">5</text>
-    <text x="552" y="100" fill="#f0a35e" font-size="9.5">to do · companion</text>
-    <text x="552" y="124" fill="#d7dde4">Representations</text><text x="552" y="138" fill="#768390" font-size="8.5">+ labeler</text>
+    <circle cx="536" cy="70" r="13" fill="rgba(126,231,135,.18)" stroke="#7ee787"/><text x="536" y="74" fill="#7ee787" font-size="11">5</text>
+    <text x="536" y="100" fill="#7ee787" font-size="9.5">DONE · companion</text>
+    <text x="536" y="124" fill="#d7dde4">Representations</text><text x="536" y="138" fill="#768390" font-size="8.5">+ labeler</text>
     <!-- 36.6 -->
-    <circle cx="675" cy="70" r="13" fill="#161b22" stroke="#768390"/><text x="675" y="74" fill="#768390" font-size="11">6</text>
-    <text x="675" y="100" fill="#768390" font-size="9.5">to do</text>
-    <text x="675" y="124" fill="#d7dde4">Persistence</text><text x="675" y="138" fill="#768390" font-size="8.5">cluster tables</text>
+    <circle cx="655" cy="70" r="13" fill="#161b22" stroke="#768390"/><text x="655" y="74" fill="#768390" font-size="11">6</text>
+    <text x="655" y="100" fill="#768390" font-size="9.5">to do</text>
+    <text x="655" y="124" fill="#d7dde4">Persistence</text><text x="655" y="138" fill="#768390" font-size="8.5">cluster tables</text>
     <!-- 36.7 -->
-    <circle cx="798" cy="70" r="13" fill="#161b22" stroke="#768390"/><text x="798" y="74" fill="#768390" font-size="11">7</text>
-    <text x="798" y="100" fill="#768390" font-size="9.5">to do</text>
-    <text x="798" y="124" fill="#d7dde4">Validation</text><text x="798" y="138" fill="#768390" font-size="8.5">sweep → config</text>
+    <circle cx="774" cy="70" r="13" fill="#161b22" stroke="#768390"/><text x="774" y="74" fill="#768390" font-size="11">7</text>
+    <text x="774" y="100" fill="#768390" font-size="9.5">to do</text>
+    <text x="774" y="124" fill="#d7dde4">Validation</text><text x="774" y="138" fill="#768390" font-size="8.5">sweep → config</text>
     <!-- 36.8 spike -->
-    <circle cx="921" cy="70" r="13" fill="rgba(210,168,255,.14)" stroke="#d2a8ff"/><text x="921" y="74" fill="#d2a8ff" font-size="11">8</text>
-    <text x="921" y="100" fill="#d2a8ff" font-size="9.5">SPIKE</text>
-    <text x="921" y="124" fill="#d7dde4">Surface decision</text><text x="921" y="138" fill="#768390" font-size="8.5">ADR → sub-tasks</text>
+    <circle cx="893" cy="70" r="13" fill="rgba(210,168,255,.14)" stroke="#d2a8ff"/><text x="893" y="74" fill="#d2a8ff" font-size="11">8</text>
+    <text x="893" y="100" fill="#d2a8ff" font-size="9.5">SPIKE</text>
+    <text x="893" y="124" fill="#d7dde4">Surface decision</text><text x="893" y="138" fill="#768390" font-size="8.5">ADR → sub-tasks</text>
     <!-- 36.9 -->
-    <circle cx="1044" cy="70" r="13" fill="#161b22" stroke="#768390"/><text x="1044" y="74" fill="#768390" font-size="11">9</text>
-    <text x="1044" y="100" fill="#768390" font-size="9.5">to do</text>
-    <text x="1044" y="124" fill="#d7dde4">Orchestration</text><text x="1044" y="138" fill="#768390" font-size="8.5">off-thread trigger</text>
+    <circle cx="1012" cy="70" r="13" fill="#161b22" stroke="#768390"/><text x="1012" y="74" fill="#768390" font-size="11">9</text>
+    <text x="1012" y="100" fill="#768390" font-size="9.5">to do</text>
+    <text x="1012" y="124" fill="#d7dde4">Orchestration</text><text x="1012" y="138" fill="#768390" font-size="8.5">off-thread trigger</text>
+    <!-- 36.10 -->
+    <circle cx="1131" cy="70" r="13" fill="#161b22" stroke="#768390"/><text x="1131" y="74" fill="#768390" font-size="11">10</text>
+    <text x="1131" y="100" fill="#768390" font-size="9.5">to do</text>
+    <text x="1131" y="124" fill="#d7dde4">LLM naming</text><text x="1131" y="138" fill="#768390" font-size="8.5">todo-pile job runner</text>
   </g>
 
   <!-- external gate on 36.4 -->
-  <rect x="330" y="178" width="320" height="56" rx="8" fill="rgba(255,123,114,.06)" stroke="#ff7b72" stroke-dasharray="4 3"/>
-  <text x="490" y="198" fill="#ff7b72" font-size="10.5" text-anchor="middle" font-weight="bold">EXTERNAL GATE on 36.4</text>
-  <text x="490" y="214" fill="#d7dde4" font-size="9.5" text-anchor="middle">clustering-tfjs HDBSCAN upgrade (Phases 0/2/3)</text>
-  <text x="490" y="228" fill="#768390" font-size="9" text-anchor="middle">separate repo, tasks 49–55</text>
-  <line x1="429" y1="178" x2="429" y2="86" stroke="#ff7b72" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#bo)"/>
+  <rect x="318" y="178" width="320" height="56" rx="8" fill="rgba(255,123,114,.06)" stroke="#ff7b72" stroke-dasharray="4 3"/>
+  <text x="478" y="198" fill="#ff7b72" font-size="10.5" text-anchor="middle" font-weight="bold">EXTERNAL GATE on 36.4</text>
+  <text x="478" y="214" fill="#d7dde4" font-size="9.5" text-anchor="middle">clustering-tfjs HDBSCAN upgrade (Phases 0/2/3)</text>
+  <text x="478" y="228" fill="#768390" font-size="9" text-anchor="middle">separate repo, tasks 49–55</text>
+  <line x1="417" y1="178" x2="417" y2="86" stroke="#ff7b72" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#bo)"/>
+
+  <!-- dependency note on 36.10: depends on 36.5 + 36.6 -->
+  <rect x="760" y="186" width="270" height="56" rx="8" fill="rgba(210,168,255,.06)" stroke="#d2a8ff" stroke-dasharray="4 3"/>
+  <text x="895" y="206" fill="#d2a8ff" font-size="10.5" text-anchor="middle" font-weight="bold">OPT-IN, DEFERRED LLM JOB</text>
+  <text x="895" y="221" fill="#d7dde4" font-size="9.5" text-anchor="middle">depends on 36.5 (seam) + 36.6 (persist)</text>
+  <text x="895" y="235" fill="#768390" font-size="9" text-anchor="middle">runs only on explicit user opt-in</text>
+  <line x1="1131" y1="186" x2="1131" y2="86" stroke="#d2a8ff" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#bop)"/>
 </svg>
 </div>
-<figcaption>36.1 and 36.2 are complete on the <code>tdt</code> branch; 36.3–36.9 are to do, and 36.3 now has a companion. 36.4 is complete and 36.5 (representations + labeler) is the active sub-task. 36.8 is a <span style="color:var(--purple)">surface-decision spike</span> — it outputs a decision record and spun-off implementation sub-tasks, not a shipped UI, and has its own five-page concept set.</figcaption>
+<figcaption>36.1, 36.2, 36.4 and 36.5 are complete on the <code>tdt</code> branch; 36.3 and 36.6–36.10 are to do, and 36.3 has a companion. 36.5 (representations + labeler) is now done — its deterministic labeler left a no-LLM seam, and the chain now extends through 36.10, which wraps that seam in an opt-in todo-pile job runner. 36.8 is a <span style="color:var(--purple)">surface-decision spike</span> — it outputs a decision record and spun-off implementation sub-tasks, not a shipped UI, and has its own five-page concept set.</figcaption>
 </figure>
 
 <table>
@@ -442,11 +455,12 @@
     <tr><td class="ac">36.2</td><td>Windowing &amp; data-scale</td><td>Slice the visit stream into bounded frames under the sample ceiling; deterministic subdivision; skip sparse frames.</td><td><span class="pill done">done</span></td><td><a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html">companion →</a></td></tr>
     <tr><td class="ac">36.3</td><td>Page vectorisation</td><td>Read each re-downloadable page's already-extracted content from the task-39.2 corpus, build deterministic page text, embed with TDT's own model, L2-normalize, and cache. The re-download and HTML parse happen upstream; TDT consumes <code>CorpusContent</code> and never fetches. Ships the dispersion / degenerate / no-text guards and the dedup-before-clustering step.</td><td><span class="pill todo">to do</span></td><td><a href="task-36.3 - Page-vectorisation-TDT-owned-embedding-of-captured-pages.page-vectors.html">companion →</a></td></tr>
     <tr><td class="ac">36.4</td><td>Distance + HDBSCAN core</td><td>Build the cosine distance matrix and run <code>HDBSCAN.fit</code> — the only <code>clustering-tfjs</code> call.</td><td><span class="pill done">done</span></td><td><a href="task-36.4 - Cosine-distance-matrix-and-HDBSCAN-clustering-core.clustering-core.html">companion &rarr;</a></td></tr>
-    <tr><td class="ac">36.5</td><td>Representations + labeler</td><td>Pick the representative page, freeze the representative vector, compose a deterministic label bundle — <code>headline_title</code>, <code>scope</code>, <code>keyphrases</code>, <code>display_label</code>, <code>representation_version</code> (no LLM).</td><td><span class="pill now">to do</span></td><td><a href="task-36.5 - Cluster-representations-and-deterministic-labeler.representations-labeler.html">companion &rarr;</a></td></tr>
+    <tr><td class="ac">36.5</td><td>Representations + labeler</td><td>Pick the representative page, freeze the representative vector, compose a deterministic label bundle — <code>headline_title</code>, <code>scope</code>, <code>keyphrases</code>, <code>display_label</code>, <code>representation_version</code> (no LLM). Leaves the <code>ClusterNamer</code> seam (<code>llm_naming_seam.ts</code>) that 36.10 fills.</td><td><span class="pill done">done</span></td><td><a href="task-36.5 - Cluster-representations-and-deterministic-labeler.representations-labeler.html">companion &rarr;</a></td></tr>
     <tr><td class="ac">36.6</td><td>Persistence</td><td>Write <code>topic_run</code> / <code>topic_cluster</code> / <code>topic_cluster_member</code>; run keying; idempotency.</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
     <tr><td class="ac">36.7</td><td>Validation + sweep</td><td>Sweep parameters on real windows; score by native validity + noise rate; persist the chosen operating point.</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
     <tr><td class="ac">36.8</td><td>Decide the user-facing surface</td><td>A UI investigation, not an implementation. Split the thin host-agnostic read API (the integration primitive over the cluster + label-bundle tables) from the user-facing surface(s) — a Claude skill over scripts, note-stub write-back into <code>bergamot.staging/</code>, a VS Code webview — and decide how they layer. Output is a decision record (ADR) plus spun-off implementation sub-tasks.</td><td><span class="pill spike">spike</span></td><td><a href="task-36.8.concept-decision.html">concept set →</a></td></tr>
     <tr><td class="ac">36.9</td><td>Trigger + orchestration</td><td>A manual VS Code command and an automatic in-host trigger over one <code>rebuild_clusters</code> entry; compute runs off the event loop so a dense fit never freezes capture. Cadence is configurable (default once/day), its value an evidence-based judgement from the 36.7 sweep; an OS cron + headless writer and count-based triggers are rejected.</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
+    <tr><td class="ac">36.10</td><td>LLM naming via a todo-pile job runner</td><td>Optional LLM-rewritten cluster names, surfaced as an opt-in job from a todo pile read by a SessionStart hook. Two coupled pieces: a standalone, job-agnostic todo-pile runner (durable pile, enqueue/dedupe/dequeue, kind→handler registry) and the LLM-naming job that fills the <code>ClusterNamer</code> seam — rewriting the deterministic label bundle into one display phrase, gated by a config flag and cached on the <code>ClusterFingerprint</code>. A completed run enqueues the job rather than running it inline; capture and clustering stay zero-LLM and offline, and only the deterministic bundle (no page content) ever leaves the machine, on explicit user opt-in. Depends on 36.5 + 36.6.</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
   </tbody>
 </table>
 
