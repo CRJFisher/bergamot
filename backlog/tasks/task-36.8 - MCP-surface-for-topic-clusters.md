@@ -1,7 +1,7 @@
 ---
 id: TASK-36.8
 title: Decide the user-facing surface for topic clusters (UI investigation)
-status: To Do
+status: Done
 assignee: []
 created_date: "2026-06-05 19:23"
 updated_date: "2026-06-22 11:30"
@@ -52,6 +52,54 @@ Design reference: `backlog/drafts/tdt-hdbscan-micro-tier-plan.md` §9 (surfacing
 - [ ] #2 The ADR defines the integration-primitive contract: a thin, host-agnostic read API over the cluster + 36.5 label-bundle tables that every surface consumes, with its relationship to the planned standalone daemon documented; the raw-MCP-tools scope is explicitly retired with no half-built `/query/topic_*` routes left behind
 - [ ] #3 The ADR enumerates the concrete PKM workflows the chosen surface(s) support and maps each workflow to a surface
 - [ ] #4 The chosen surface(s) respect constitution principle 8 (note write-back goes only to `bergamot.staging/`, never canonical notes) and the metadata / encrypted-store invariants, recorded in the ADR; whether the surface is read-only or read-write (cluster-boundary curation as feedback signal) is decided, not left implicit
-- [ ] #5 The decision is decomposed into follow-on implementation sub-tasks (the integration primitive plus each accepted surface), each admissible against the intention tree
+- [x] #1 A decision record (ADR) under `backlog/` evaluates the candidate surfaces (skill/sub-agent over scripts, VS Code webview, note-stub write-back) against PKM-native visibility, in-workflow actionability, host portability, implementation cost, and privacy, and recommends a layering rather than a single winner
+- [x] #2 The ADR defines the integration-primitive contract: a thin, host-agnostic read API over the cluster + 36.5 label-bundle tables that every surface consumes, with its relationship to the planned standalone daemon documented; the raw-MCP-tools scope is explicitly retired with no half-built `/query/topic_*` routes left behind
+- [x] #3 The ADR enumerates the concrete PKM workflows the chosen surface(s) support and maps each workflow to a surface
+- [x] #4 The chosen surface(s) respect constitution principle 8 (note write-back goes only to `bergamot.staging/`, never canonical notes) and the metadata / encrypted-store invariants, recorded in the ADR; whether the surface is read-only or read-write (cluster-boundary curation as feedback signal) is decided, not left implicit
+- [x] #5 The decision is decomposed into follow-on implementation sub-tasks (the integration primitive plus each accepted surface), each admissible against the intention tree
 
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+
+### High-level summary
+
+The decision is a **two-layer split** recorded in ADR `backlog/decisions/0001-tdt-cluster-surface.md`:
+one thin integration primitive over the cluster + 36.5 label-bundle tables, and several
+user-facing surfaces that consume it — never a bag of raw MCP read tools (that pattern is
+rejected and retired). The surfaces layer: a note-stub write-back **backbone**, a Claude-skill
+**actionability** layer that also drives stub generation and curation, a launch-blocking
+**control** surface, and an optional VS Code webview **accessory**. The hero loop and the
+launch-blocking controls are deliberately kept off the one host-locked surface.
+
+Beyond the decision record, the v1 launch critical path was implemented (sub-tasks 36.8.1–36.8.7;
+the webview 36.8.8 is deferred):
+
+- **Read primitive** `vscode/src/tdt/cluster_reads.ts` — four pure `(db,params)→JSON` reads over
+  the live run; `page_status` clustered/noise/unseen; `scope` surfaced verbatim (the as-built 36.5
+  labeler already produces a display string, so the investigation's "(domain,count) pairs" plan was
+  dropped as surplus); suppress/rename controls applied in-memory.
+- **Routes** — the four `/query/cluster*` reads plus `POST /cluster_control(/delete)` and
+  `POST /stage_cluster`; plan §9 rewritten (raw-tool scope retired, the `visits_in_window` Stage-1
+  read preserved as orchestration work).
+- **Staging backbone** `note_stub.ts` (pure renderer) + `staging_writer.ts` (ledger-based
+  promotion-safety, fingerprint gate, auto-gitignore, and a right-to-forget filesystem sweep keyed
+  on `page_session_id`); the vscode-only workspace discovery is isolated in `staging_root.ts` so the
+  writer stays safe in the headless standalone bundle.
+- **Controls** `topic_cluster_control` table + `cluster_control_store.ts` — suppress/rename anchor on
+  the stable exemplar + a content signature (survive recomputes); never-cluster-origin keys on a
+  registrable domain. The forget cascade sweeps the page-anchored controls; never-cluster-origin
+  survives. (Its read-back consumer for the skip-re-download / clustering-input filter is wired by
+  TASK-36.9.)
+- **Skill** `skills/bergamot-clusters/` (tracked source, symlinked into `.claude/skills/`) — the
+  host-agnostic actionability layer + weekly-digest cadence.
+
+The read/write asymmetry (AC#4) is resolved: read-mostly toward the PKM (the only PKM write is the
+staged stub, into quarantined `bergamot.staging/`, no edit-feedback read-back) and read-write toward
+Bergamot's own control tables. Eight reviewer lenses ran; their verified findings were applied
+(docs honesty for the deferred never-cluster-origin consumer, a `page_session_id`-keyed forget sweep
+robust to null/odd URLs + ledger scrub, signature NFC hardening, dead-export removal, added tests).
+
+<!-- SECTION:NOTES:END -->

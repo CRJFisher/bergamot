@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>task-36.8 — The surface decision: why not raw MCP, and the two-layer split</title>
+<title>task-36.8 — The cluster surface: why not raw MCP, and the two-layer split</title>
 <style>
   :root {
     --bg: #0f1419; --bg-alt: #161b22; --bg-code: #0c0f14;
@@ -90,6 +90,8 @@
   .role-ctrl { color: var(--accent); background: rgba(240,163,94,.10); }
   .role-acc { color: var(--purple); background: rgba(210,168,255,.08); }
   .role-plumb { color: var(--fg-dim); background: rgba(255,255,255,.02); }
+  .built { font-family: var(--mono); font-size: .6rem; text-transform: uppercase; letter-spacing: .06em; padding: .1em .45em; border-radius: 999px; border: 1px solid var(--green); color: var(--green); background: rgba(126,231,135,.1); white-space: nowrap; }
+  .deferred { font-family: var(--mono); font-size: .6rem; text-transform: uppercase; letter-spacing: .06em; padding: .1em .45em; border-radius: 999px; border: 1px solid var(--purple); color: var(--purple); background: rgba(210,168,255,.1); white-space: nowrap; }
 
   footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .82rem; font-family: var(--mono); max-width: 96ch; }
   @media (max-width: 720px) { nav.outline { display: none; } h2 { scroll-margin-top: 90px; } }
@@ -100,7 +102,7 @@
 <nav class="crossdoc" aria-label="Task family build order">
   <span class="home">task-36 family</span>
   <a href="task-36.overview.html">Overview</a>
-  <span class="pending"><span class="dot done"></span>36.8 surface-decision concept set</span>
+  <span class="cur"><span class="dot done"></span>36.8 cluster surface · concept set</span>
 </nav>
 
 <nav class="concepts" aria-label="Surface-decision concept pages">
@@ -122,10 +124,15 @@
 
 <main>
 <header class="page">
-  <div class="crumb">Bergamot · TDT micro tier · task 36.8 surface decision · branch tdt</div>
-  <h1>The surface decision — why not raw MCP, and the two-layer split</h1>
-  <p class="lead">Temporal Topic Detection produces topic clusters with a 36.5 label bundle. How does a user <em>see</em> and <em>act</em> on them? The answer is a <strong>two-layer split</strong>: one thin integration primitive at the database, and several user-facing surfaces that layer on top of it — never a bag of raw MCP tools that lets the schema dictate the experience.</p>
+  <div class="crumb">Bergamot · TDT micro tier · task 36.8 cluster surface · branch tdt · ADR 0001 ACCEPTED</div>
+  <h1>The cluster surface — why not raw MCP, and the two-layer split</h1>
+  <p class="lead">Temporal Topic Detection produces topic clusters with a 36.5 label bundle. How does a user <em>see</em> and <em>act</em> on them? The shipped answer is a <strong>two-layer split</strong>: one thin integration primitive at the database, and several user-facing surfaces that layer on top of it — never a bag of raw MCP tools that lets the schema dictate the experience. This decision is recorded in <code>ADR 0001</code> and the v1 surface is built.</p>
 </header>
+
+<div class="callout good">
+  <span class="label">Status — accepted and built (ADR 0001, 2026-06-26)</span>
+  <p>The decision below is the one shipped on the <code>tdt</code> branch: the read primitive <code>cluster_reads.ts</code>, four <code>/query/cluster*</code> routes, the note-stub write-back into <code>bergamot.staging/</code>, the <code>bergamot-clusters</code> skill, and the launch-blocking control table + route. The VS Code webview (36.8.8) is the one deferred accessory. The full record is <code>backlog/decisions/0001-tdt-cluster-surface.md</code>.</p>
+</div>
 
 <!-- ============================================================ QUESTION -->
 <h2 id="question">The question, and the reflex that is rejected</h2>
@@ -136,7 +143,7 @@
   <defs>
     <marker id="qx" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff7b72"/></marker>
   </defs>
-  <text x="40" y="28" fill="#768390" font-size="11">THE DEFAULT REFLEX — mirror the five read tools the standalone MCP server already ships (mcp_server_standalone.ts:74-176)</text>
+  <text x="40" y="28" fill="#768390" font-size="11">THE DEFAULT REFLEX — mirror the five read tools the standalone MCP server already ships</text>
 
   <rect x="40" y="48" width="300" height="120" rx="10" fill="#0c0f14" stroke="#2a313a"/>
   <text x="190" y="72" fill="#d7dde4" font-size="11" text-anchor="middle" font-weight="bold">cluster + label-bundle tables</text>
@@ -166,7 +173,7 @@
   <line x1="750" y1="110" x2="840" y2="110" stroke="#ff7b72" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#qx)"/>
 </svg>
 </div>
-<figcaption>The default reflex exposes three raw read tools over <code>/query/topic_*</code> routes, mirroring the five read-only tools the standalone MCP server already ships (<code>get_webpage_content</code>, <code>get_visit_by_url</code>, … at <code>mcp_server_standalone.ts:74-176</code>). That pattern is rejected as the <em>primary</em> surface: it makes the database schema the user experience.</figcaption>
+<figcaption>The default reflex exposes three raw read tools over <code>/query/topic_*</code> routes, mirroring the five read-only tools the standalone MCP server already ships. That pattern is rejected as the <em>primary</em> surface: it makes the database schema the user experience. No such <code>/query/topic_*</code> routes were ever created.</figcaption>
 </figure>
 
 <!-- ============================================================ FAILURE -->
@@ -176,23 +183,23 @@
   <thead><tr><th>The raw-tool failure mode</th><th>What the user actually faces</th></tr></thead>
   <tbody>
     <tr>
-      <td><strong>Opaque keys.</strong> <code>list_topic_clusters</code> returns a JSON array keyed by <code>run_id</code> and a hash <code>id</code> (<code>ClusterRecord.id = hash(run_id | local_label)</code>, <code>types.ts:56</code>).</td>
+      <td><strong>Opaque keys.</strong> <code>list_topic_clusters</code> would return a JSON array keyed by <code>run_id</code> and a hash <code>id</code> (<code>id = hash(run_id | local_label)</code>).</td>
       <td>To see members they must call <code>get_topic_cluster(id)</code> with an opaque id, and to know which run is current they must understand the <code>status='complete'</code> lifecycle and filter superseded runs <em>themselves</em>.</td>
     </tr>
     <tr>
-      <td><strong>Double-surfacing.</strong> Retained historical runs (<code>"running" | "complete" | "failed" | "superseded"</code>, <code>types.ts:50</code>) are not filtered for them.</td>
+      <td><strong>Double-surfacing.</strong> Retained historical runs (<code>"running" | "complete" | "failed" | "superseded"</code>) are not filtered for them.</td>
       <td>The same page appears across multiple retained runs — read as <em>instability</em> rather than history.</td>
     </tr>
     <tr>
-      <td><strong>Leaked DB encodings.</strong> <code>scope</code> is a <code>TEXT</code> column with an unpinned serialization (<code>types.ts:66</code>); <code>keyphrases</code> is a raw array; <code>representation_version</code> is internal lineage.</td>
+      <td><strong>Leaked DB encodings.</strong> <code>scope</code> is a <code>TEXT</code> column; <code>keyphrases</code> a raw array; <code>representation_version</code> internal lineage.</td>
       <td>Each consumer must re-derive meaning from a raw DB-encoded blob.</td>
     </tr>
     <tr>
-      <td><strong>The triple-edit tax.</strong> Any new cluster capability means a new <code>ListTools</code> entry <em>plus</em> a <code>CallTool</code> switch case <em>plus</em> a <code>/query/topic_*</code> route — the exact pattern at <code>mcp_server_standalone.ts:74-176</code>.</td>
+      <td><strong>The triple-edit tax.</strong> Any new cluster capability means a new <code>ListTools</code> entry <em>plus</em> a <code>CallTool</code> switch case <em>plus</em> a <code>/query/topic_*</code> route.</td>
       <td>The schema's shape dictates the call graph; growth is mechanical edit-in-three-places.</td>
     </tr>
     <tr>
-      <td><strong>Surfaces nothing on its own.</strong> The constitution requires clusters be <em>pushed</em> at a habit anchor (<code>constitution.md:127</code>: "a VS Code panel that opens on launch and/or a weekly notification — not left purely pull").</td>
+      <td><strong>Surfaces nothing on its own.</strong> The constitution requires clusters be <em>pushed</em> at a habit anchor, "not left purely pull."</td>
       <td>A bag of pull-only tools cannot satisfy a push-surface mandate; the hero loop becomes something the user must remember to invoke — which means it is never seen.</td>
     </tr>
   </tbody>
@@ -208,7 +215,7 @@
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1100 420" role="img" aria-label="One thin host-agnostic integration primitive is the only code that touches the cluster tables; three user-facing surfaces — note-stub write-back, a Claude skill, a VS Code webview — each consume that primitive's JSON contract and own their own experience.">
+<svg viewBox="0 0 1100 420" role="img" aria-label="One thin host-agnostic integration primitive is the only code that touches the cluster tables; the surfaces — note-stub write-back, a Claude skill, a deferred VS Code webview — each consume that primitive's JSON contract and own their own experience.">
   <defs>
     <marker id="pr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#6cb6ff"/></marker>
     <marker id="pc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d2a8ff"/></marker>
@@ -227,7 +234,7 @@
   <text x="300" y="26" fill="#6cb6ff" font-size="11">LAYER 1 · the only DB-touching code</text>
   <rect x="300" y="140" width="240" height="150" rx="12" fill="rgba(108,182,255,.06)" stroke="#6cb6ff" stroke-width="1.5"/>
   <text x="420" y="166" fill="#6cb6ff" font-size="12" text-anchor="middle" font-weight="bold">integration primitive</text>
-  <text x="420" y="182" fill="#d7dde4" font-size="9.5" text-anchor="middle" font-family="var(--mono)">cluster_reads.ts</text>
+  <text x="420" y="182" fill="#d7dde4" font-size="9.5" text-anchor="middle">cluster_reads.ts</text>
   <text x="420" y="202" fill="#768390" font-size="9" text-anchor="middle">ONE thin, host-agnostic read API</text>
   <text x="420" y="216" fill="#768390" font-size="9" text-anchor="middle">the ONLY layer that JOINs the tables</text>
   <text x="420" y="236" fill="#d7dde4" font-size="9" text-anchor="middle">returns plain JSON — no MCP,</text>
@@ -239,27 +246,27 @@
   <!-- LAYER 2: surfaces -->
   <text x="610" y="26" fill="#d2a8ff" font-size="11">LAYER 2 · consumers — each owns its own experience, none touches DuckDB</text>
   <rect x="600" y="40" width="470" height="116" rx="10" fill="#161b22" stroke="#7ee787"/>
-  <text x="616" y="64" fill="#7ee787" font-size="11" font-weight="bold">note-stub write-back  →  bergamot.staging/</text>
+  <text x="616" y="64" fill="#7ee787" font-size="11" font-weight="bold">note-stub write-back  →  bergamot.staging/  · SHIPPED</text>
   <text x="616" y="84" fill="#768390" font-size="9">a markdown note in the user's own vault</text>
   <text x="616" y="98" fill="#768390" font-size="9">pure filesystem write — couples to zero PKM API</text>
   <text x="616" y="116" fill="#768390" font-size="9">→ usable by EVERY PKM host (universal fallback)</text>
   <text x="616" y="135" fill="#768390" font-size="9">in-process import of the primitive</text>
 
   <rect x="600" y="166" width="470" height="98" rx="10" fill="#161b22" stroke="#6cb6ff"/>
-  <text x="616" y="190" fill="#6cb6ff" font-size="11" font-weight="bold">Claude skill / sub-agent over scripts</text>
-  <text x="616" y="210" fill="#768390" font-size="9">a SKILL.md + thin scripts over the primitive</text>
-  <text x="616" y="224" fill="#768390" font-size="9">hits the routes over stdio/HTTP — ANY host</text>
+  <text x="616" y="190" fill="#6cb6ff" font-size="11" font-weight="bold">bergamot-clusters skill  · SHIPPED</text>
+  <text x="616" y="210" fill="#768390" font-size="9">a SKILL.md + a dependency-free Node dispatcher</text>
+  <text x="616" y="224" fill="#768390" font-size="9">hits the loopback routes — ANY host</text>
   <text x="616" y="243" fill="#768390" font-size="9">→ ships without the webview existing</text>
 
-  <rect x="600" y="274" width="470" height="98" rx="10" fill="#161b22" stroke="#f0a35e"/>
-  <text x="616" y="298" fill="#f0a35e" font-size="11" font-weight="bold">VS Code webview — cluster cards / timeline</text>
-  <text x="616" y="318" fill="#768390" font-size="9">imports the primitive in-process</text>
-  <text x="616" y="332" fill="#768390" font-size="9">ships for VS Code host without the skill existing</text>
-  <text x="616" y="351" fill="#768390" font-size="9">→ serves Wave 1 only</text>
+  <rect x="600" y="274" width="470" height="98" rx="10" fill="#0c0f14" stroke="#f0a35e" stroke-dasharray="5 4"/>
+  <text x="616" y="298" fill="#f0a35e" font-size="11" font-weight="bold">VS Code webview · DEFERRED (36.8.8)</text>
+  <text x="616" y="318" fill="#768390" font-size="9">would import the primitive in-process</text>
+  <text x="616" y="332" fill="#768390" font-size="9">VS Code host only · post-launch accessory</text>
+  <text x="616" y="351" fill="#768390" font-size="9">→ off the launch critical path</text>
 
   <line x1="540" y1="200" x2="600" y2="98" stroke="#d2a8ff" stroke-width="2" marker-end="url(#pc)"/>
   <line x1="540" y1="212" x2="600" y2="215" stroke="#d2a8ff" stroke-width="2" marker-end="url(#pc)"/>
-  <line x1="540" y1="226" x2="600" y2="323" stroke="#d2a8ff" stroke-width="2" marker-end="url(#pc)"/>
+  <line x1="540" y1="226" x2="600" y2="323" stroke="#d2a8ff" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#pc)"/>
   <text x="572" y="150" fill="#d2a8ff" font-size="8.5" text-anchor="middle">consume the</text>
   <text x="572" y="162" fill="#d2a8ff" font-size="8.5" text-anchor="middle">JSON contract</text>
 
@@ -267,11 +274,11 @@
   <rect x="40" y="318" width="500" height="74" rx="8" fill="rgba(255,123,114,.05)" stroke="#ff7b72" stroke-dasharray="4 3"/>
   <text x="56" y="340" fill="#ff7b72" font-size="9.5" font-weight="bold">NOT this primitive — the Stage-1 pipeline read</text>
   <text x="56" y="358" fill="#768390" font-size="8.5">GET /query/visits_in_window — reads webpage_* visit rows, feeds clustering,</text>
-  <text x="56" y="370" fill="#768390" font-size="8.5">not a human. Distinct, still-required deliverable. Does NOT exist in</text>
-  <text x="56" y="382" fill="#768390" font-size="8.5">server_manager.ts today; survives the raw-tool retirement untouched.</text>
+  <text x="56" y="370" fill="#768390" font-size="8.5">not a human. A distinct concern owned by the orchestration adapter (TASK-36.9);</text>
+  <text x="56" y="382" fill="#768390" font-size="8.5">survives the raw-tool retirement untouched.</text>
 </svg>
 </div>
-<figcaption>The split makes the contract a <strong>JSON shape rather than a table shape</strong>: a webview ships for VS Code without the skill, the skill ships over stdio/HTTP for any host without the webview, and the write-back is a pure filesystem op usable by every PKM platform. The primitive needs only <code>port.json</code> + a <code>db</code> handle and binds <strong>in-process or via the sidecar daemon per each host's Wave-0 outcome</strong> — <code>(db, port.json) → JSON</code> is identical either way.</figcaption>
+<figcaption>The split makes the contract a <strong>JSON shape rather than a table shape</strong>: the write-back is a pure filesystem op usable by every PKM platform, the skill ships over the loopback for any host without the webview, and a webview can later ship for VS Code without the skill. The primitive needs only <code>port.json</code> + a <code>db</code> handle and binds <strong>in-process or via the sidecar daemon per each host's Wave-0 outcome</strong> — <code>(db, port.json) → JSON</code> is identical either way.</figcaption>
 </figure>
 
 <table>
@@ -311,22 +318,22 @@
   </thead>
   <tbody>
     <tr>
-      <td><strong>Integration primitive</strong> <span class="rolelbl role-plumb">plumbing</span></td>
+      <td><strong>Integration primitive</strong> <span class="rolelbl role-plumb">plumbing</span> <span class="built">built</span></td>
       <td class="score s2">2</td><td class="score s4">4</td><td class="score s5">5</td><td class="score s4">4</td><td class="score s5">5</td>
       <td>Surfaces nothing itself, but is the host-agnostic JSON contract every surface needs; reuses existing relay mechanics, read-only over metadata-only tables.</td>
     </tr>
     <tr>
-      <td><strong>Note-stub write-back</strong> <span style="color:var(--fg-dim);font-size:.78em">→ bergamot.staging/</span> <span class="rolelbl role-back">backbone</span></td>
+      <td><strong>Note-stub write-back</strong> <span style="color:var(--fg-dim);font-size:.78em">→ bergamot.staging/</span> <span class="rolelbl role-back">backbone</span> <span class="built">built</span></td>
       <td class="score s5">5</td><td class="score s4">4</td><td class="score s5">5</td><td class="score s2">2</td><td class="score s4">4</td>
       <td>A literal note in the user's own vault, surfaced ambiently by their file-watcher — the hero-loop deliverable; couples to zero PKM API; but net-new staging module + idempotency over unstable ids + filesystem forget sweep, and staging sits in PKM territory.</td>
     </tr>
     <tr>
-      <td><strong>Skill / sub-agent over scripts</strong> <span class="rolelbl role-act">actionability</span></td>
+      <td><strong>Skill over scripts</strong> <span class="rolelbl role-act">actionability</span> <span class="built">built</span></td>
       <td class="score s2">2</td><td class="score s5">5</td><td class="score s5">5</td><td class="score s4">4</td><td class="score s5">5</td>
-      <td>Thin SKILL.md + scripts over one primitive (the task-31.12 pattern); injects clusters + live member URLs into the active task and can draft a stub in the same breath; host-agnostic; but pull-not-push, so weak ambient visibility on its own.</td>
+      <td>Thin SKILL.md + a dependency-free dispatcher over one primitive; injects clusters + live member URLs into the active task and can draft a stub in the same breath; host-agnostic; but pull-not-push, so weak ambient visibility on its own.</td>
     </tr>
     <tr>
-      <td><strong>VS Code webview</strong> <span style="color:var(--fg-dim);font-size:.78em">cluster cards / timeline</span> <span class="rolelbl role-acc">accessory</span></td>
+      <td><strong>VS Code webview</strong> <span style="color:var(--fg-dim);font-size:.78em">cards / timeline</span> <span class="rolelbl role-acc">accessory</span> <span class="deferred">deferred</span></td>
       <td class="score s4">4</td><td class="score s3">3</td><td class="score s1">1</td><td class="score s2">2</td><td class="score s5">5</td>
       <td>Richest home for the control surface on the VS Code host and the constitution's named push surface ("a VS Code panel that opens on launch"); but VS-Code-host-specific (serves only Wave 1), highest build+maintenance cost, re-localizes visibility into one host.</td>
     </tr>
@@ -335,7 +342,7 @@
 
 <div class="callout info">
   <span class="label">How to read the columns</span>
-  <p>Scan a <em>column</em>, not a row. <strong>Host portability</strong> separates the field hardest: primitive / write-back / skill all score 5; the webview alone scores 1 — that single column is why the webview lands off the launch critical path. <strong>PKM visibility</strong> is the write-back's column (5): a note in the user's own vault, surfaced without asking. <strong>Actionability</strong> is the skill's column (5). No single surface wins every column — which is exactly why they layer.</p>
+  <p>Scan a <em>column</em>, not a row. <strong>Host portability</strong> separates the field hardest: primitive / write-back / skill all score 5; the webview alone scores 1 — that single column is why the webview lands off the launch critical path and stays deferred. <strong>PKM visibility</strong> is the write-back's column (5): a note in the user's own vault, surfaced without asking. <strong>Actionability</strong> is the skill's column (5). No single surface wins every column — which is exactly why they layer.</p>
 </div>
 
 <!-- ============================================================ LAYERING -->
@@ -343,7 +350,7 @@
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1100 360" role="img" aria-label="The recommendation: note-stub write-back is the backbone, the Claude skill is the actionability layer and drives stub generation, the launch-blocking control surface ships host-agnostic via the skill plus a control route, and the VS Code webview is an optional accessory off the launch critical path.">
+<svg viewBox="0 0 1100 360" role="img" aria-label="The shipped layering: note-stub write-back is the backbone, the Claude skill is the actionability layer and drives stub generation, the launch-blocking control surface ships host-agnostic via the skill plus a control route, and the VS Code webview is a deferred accessory off the launch critical path.">
   <defs>
     <marker id="lr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#6cb6ff"/></marker>
     <marker id="lg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
@@ -357,31 +364,31 @@
 
   <!-- BACKBONE -->
   <rect x="300" y="40" width="320" height="80" rx="10" fill="#161b22" stroke="#7ee787" stroke-width="1.5"/>
-  <text x="320" y="64" fill="#7ee787" font-size="11" font-weight="bold">BACKBONE · note-stub write-back</text>
+  <text x="320" y="64" fill="#7ee787" font-size="11" font-weight="bold">BACKBONE · note-stub write-back · built</text>
   <text x="320" y="84" fill="#768390" font-size="9">→ bergamot.staging/ · the SURFACE-node spine</text>
   <text x="320" y="100" fill="#768390" font-size="9">most PKM-native · the universal fallback (every host)</text>
 
   <!-- ACTIONABILITY -->
   <rect x="300" y="135" width="320" height="80" rx="10" fill="#161b22" stroke="#6cb6ff" stroke-width="1.5"/>
-  <text x="320" y="159" fill="#6cb6ff" font-size="11" font-weight="bold">ACTIONABILITY · the Claude skill</text>
+  <text x="320" y="159" fill="#6cb6ff" font-size="11" font-weight="bold">ACTIONABILITY · the cluster skill · built</text>
   <text x="320" y="179" fill="#768390" font-size="9">answers "what was I reading about X" mid-task</text>
-  <text x="320" y="195" fill="#768390" font-size="9">summarise_cluster → draft_note_stub SEEDS the backbone</text>
+  <text x="320" y="195" fill="#768390" font-size="9">cluster → stub SEEDS the backbone (the hero loop)</text>
   <text x="320" y="209" fill="#768390" font-size="9">host-agnostic push: on-demand + scheduled weekly digest</text>
 
   <!-- CONTROL -->
   <rect x="300" y="230" width="320" height="76" rx="10" fill="rgba(240,163,94,.06)" stroke="#f0a35e" stroke-width="1.5"/>
-  <text x="320" y="252" fill="#f0a35e" font-size="11" font-weight="bold">USER CONTROLS · required on day one</text>
+  <text x="320" y="252" fill="#f0a35e" font-size="11" font-weight="bold">USER CONTROLS · launch-blocking · built</text>
   <text x="320" y="270" fill="#768390" font-size="9">user fixes clusters: rename · hide · "never cluster this site"</text>
   <text x="320" y="283" fill="#768390" font-size="9">the skill records them to a Bergamot-owned table —</text>
   <text x="320" y="296" fill="#768390" font-size="9">so they work on every host, not just the VS Code webview</text>
 
   <!-- ACCESSORY -->
-  <rect x="700" y="120" width="360" height="120" rx="10" fill="#161b22" stroke="#d2a8ff" stroke-dasharray="5 4"/>
-  <text x="720" y="146" fill="#d2a8ff" font-size="11" font-weight="bold">OPTIONAL ACCESSORY · VS Code webview</text>
+  <rect x="700" y="120" width="360" height="120" rx="10" fill="#0c0f14" stroke="#d2a8ff" stroke-dasharray="5 4"/>
+  <text x="720" y="146" fill="#d2a8ff" font-size="11" font-weight="bold">DEFERRED ACCESSORY · VS Code webview (36.8.8)</text>
   <text x="720" y="168" fill="#768390" font-size="9">rich-visibility accessory for the VS Code host ONLY</text>
   <text x="720" y="184" fill="#768390" font-size="9">the literal "panel that opens on launch" for VS Code users</text>
-  <text x="720" y="200" fill="#768390" font-size="9">serves Wave 1 only · costs the most · does not port to daemon</text>
-  <text x="720" y="222" fill="#d2a8ff" font-size="9">build AFTER the backbone + skill prove the loop · no PKM</text>
+  <text x="720" y="200" fill="#768390" font-size="9">costs the most · does not port to the daemon future</text>
+  <text x="720" y="222" fill="#d2a8ff" font-size="9">built AFTER the backbone + skill prove the loop · no PKM</text>
   <text x="720" y="234" fill="#d2a8ff" font-size="9">writes from card clicks — any note write goes only to staging</text>
 
   <!-- arrows from primitive -->
@@ -398,55 +405,56 @@
   <text x="540" y="226" fill="#f0a35e" font-size="8.5" text-anchor="middle">drives</text>
 </svg>
 </div>
-<figcaption>The recommendation layers four roles over one primitive. The hero loop and the required day-one user controls are <strong>never bet on the one host-locked, most-expensive surface</strong> — the webview is the only role off the launch critical path.</figcaption>
+<figcaption>The shipped surface layers four roles over one primitive. The hero loop and the day-one user controls are <strong>never bet on the one host-locked, most-expensive surface</strong> — the webview is the only role off the launch critical path, and the only deferred one.</figcaption>
 </figure>
 
 <div class="callout info">
   <span class="label">Two terms used below</span>
-  <p><strong>Required day-one user controls.</strong> The user must be able to manage the clusters Bergamot shows them: <em>rename</em> a mislabeled cluster, <em>hide</em> one they don't want, and tell Bergamot to <em>never cluster a given site</em> (e.g. a bank or health portal). The constitution requires these to ship together with the very first surface — "the control surface is what converts <em>surveilled</em> into <em>seen</em>" (<code>constitution.md:128</code>). "Launch-blocking" just means we cannot ship clusters to users without them.</p>
-  <p><strong>Where they live.</strong> These actions are recorded by the skill into one small Bergamot-owned table (not the user's notes — see the privacy doc). Because the skill runs on every host, the controls work everywhere. Building them only into the VS Code webview would leave users on other PKM hosts unable to control their own clusters, so the webview is an <em>extra</em> place to expose them, never the only one.</p>
+  <p><strong>Required day-one user controls.</strong> The user must be able to manage the clusters Bergamot shows them: <em>rename</em> a mislabeled cluster, <em>hide</em> one they don't want, and tell Bergamot to <em>never cluster a given site</em> (e.g. a bank or health portal). The constitution requires these to ship together with the very first surface — "the control surface is what converts <em>surveilled</em> into <em>seen</em>." "Launch-blocking" means clusters cannot ship to users without them.</p>
+  <p><strong>Where they live.</strong> These actions are recorded by the skill into one small Bergamot-owned table (<code>topic_cluster_control</code>, not the user's notes — see the privacy page). Because the skill runs on every host, the controls work everywhere. Building them only into the VS Code webview would leave users on other PKM hosts unable to control their own clusters, so the webview is an <em>extra</em> place to expose them, never the only one.</p>
 </div>
 
 <table>
   <thead><tr><th style="width:18%">Role</th><th style="width:26%">Surface</th><th>Why it earns this role</th></tr></thead>
   <tbody>
     <tr>
-      <td><span class="rolelbl role-back">backbone</span></td>
+      <td><span class="rolelbl role-back">backbone</span> <span class="built">built</span></td>
       <td><strong>Note-stub write-back</strong> → <code>bergamot.staging/</code></td>
       <td>The most PKM-native surface and the literal hero-loop deliverable: a markdown note in the user's own tool, surfaced ambiently without asking. As a pure filesystem write it is the universal fallback that ports to every PKM host. This is the SURFACE-node spine.</td>
     </tr>
     <tr>
-      <td><span class="rolelbl role-act">actionability</span></td>
-      <td><strong>The Claude skill</strong> (also drives stub generation)</td>
-      <td>Invoked mid-task it answers "what have I been reading about X" and pulls cluster members with live exemplar URLs into the conversation. Crucially <code>summarise_cluster → draft_note_stub</code> <em>seeds the backbone</em> — one skill both answers in-context and writes staged stubs. Host-agnostic push vehicle (on-demand + scheduled weekly digest); cheapest surface; mirrors the proven <code>weekly-interests</code> template.</td>
+      <td><span class="rolelbl role-act">actionability</span> <span class="built">built</span></td>
+      <td><strong>The bergamot-clusters skill</strong> (also drives stub generation)</td>
+      <td>Invoked mid-task it answers "what have I been reading about X" and pulls cluster members with live exemplar URLs into the conversation. Crucially the <code>cluster → stub</code> path <em>seeds the backbone</em> — one skill both answers in-context and writes staged stubs. Host-agnostic push vehicle (on-demand + scheduled weekly digest); cheapest surface; mirrors the proven <code>weekly-interests</code> template.</td>
     </tr>
     <tr>
-      <td><span class="rolelbl role-ctrl">user controls · required day one</span></td>
+      <td><span class="rolelbl role-ctrl">user controls · launch-blocking</span> <span class="built">built</span></td>
       <td><strong>The skill, writing to a control table</strong> (works on every host)</td>
-      <td>The user must be able to correct the clusters they're shown — <strong>rename</strong> a mislabeled one, <strong>hide</strong> one, and mark a site as <strong>never-to-be-clustered</strong>. The constitution makes this required on the first day any surface ships (<code>constitution.md:128</code>): clustering someone's browsing without giving them these controls is surveillance, not a feature. The skill records each action by writing to one small Bergamot-owned table, so the controls work everywhere the skill runs. The webview can offer the same buttons more visibly for VS Code users, but it is never their <em>only</em> home — otherwise users on other hosts would have no way to control their clusters.</td>
+      <td>The user corrects the clusters they're shown — <strong>rename</strong> a mislabeled one, <strong>hide</strong> one, and mark a site as <strong>never-to-be-clustered</strong>. The constitution makes this required on the first day any surface ships: clustering someone's browsing without these controls is surveillance, not a feature. The skill records each action by writing to <code>topic_cluster_control</code>, so the controls work everywhere the skill runs.</td>
     </tr>
     <tr>
-      <td><span class="rolelbl role-acc">optional accessory</span></td>
+      <td><span class="rolelbl role-acc">accessory</span> <span class="deferred">deferred · 36.8.8</span></td>
       <td><strong>VS Code webview</strong></td>
-      <td>Justified <em>only</em> for the VS Code host as a rich-visibility accessory and the most discoverable home for the control surface and launch panel. Explicitly NOT the cross-host strategy and NOT on the launch critical path: it serves only Wave 1, costs the most, and does not port to the daemon future. Build it after the backbone + skill prove the loop; resist scope creep — no PKM-write affordances from card clicks.</td>
+      <td>Justified <em>only</em> for the VS Code host as a rich-visibility accessory and the most discoverable home for the control surface and launch panel. Explicitly NOT the cross-host strategy and NOT on the launch critical path: it serves only Wave 1, costs the most, and does not port to the daemon future. The one deferred accessory, built after the backbone + skill + control route prove the loop; resist scope creep — no PKM-write affordances from card clicks.</td>
     </tr>
   </tbody>
 </table>
 
 <div class="callout key">
   <span class="label">What this layering buys</span>
-  <p>It directly satisfies <strong>AC#2</strong> ("every surface consumes one primitive") and the constitution's <strong>push-surface mandate</strong> without betting the hero loop — or the launch-blocking control surface — on the one host-locked, most-expensive surface. The push anchor for everyone is the skill's scheduled digest + the staged weekly stub; the control surface for everyone is the skill + control route; the webview is a richer home for VS Code users only.</p>
+  <p>It satisfies the contract goal ("every surface consumes one primitive") and the constitution's <strong>push-surface mandate</strong> without betting the hero loop — or the launch-blocking control surface — on the one host-locked, most-expensive surface. The push anchor for everyone is the skill's scheduled digest + the staged weekly stub; the control surface for everyone is the skill + control route; the webview is a richer home for VS Code users only, and is the one piece deferred past launch.</p>
 </div>
 
 <div class="callout info">
   <span class="label">Read on</span>
-  <p>This is the landing page. The four detail pages expand it: <a href="task-36.8.concept-surfaces.html">Surfaces</a> compares the three candidates in depth; <a href="task-36.8.concept-primitive.html">Primitive</a> pins the four-function <code>cluster_reads.ts</code> contract and the <code>/query/topic_*</code> retirement; <a href="task-36.8.concept-workflows.html">Workflows</a> maps all six PKM workflows onto surfaces; <a href="task-36.8.concept-privacy-and-roadmap.html">Privacy &amp; roadmap</a> resolves the read/write asymmetry and sequences the nine sub-tasks.</p>
+  <p>This is the landing page. The four detail pages expand it: <a href="task-36.8.concept-surfaces.html">Surfaces</a> compares the three candidates in depth; <a href="task-36.8.concept-primitive.html">Primitive</a> pins the four-function <code>cluster_reads.ts</code> contract and the shipped <code>/query/cluster*</code> routes; <a href="task-36.8.concept-workflows.html">Workflows</a> maps all six PKM workflows onto surfaces; <a href="task-36.8.concept-privacy-and-roadmap.html">Privacy &amp; roadmap</a> resolves the read/write asymmetry and tracks the eight implementation sub-tasks (36.8.1–36.8.8).</p>
 </div>
 
 <footer>
-  Surface-decision landing page for <code>task-36.8</code> · Temporal Topic Detection, micro tier · branch <code>tdt</code> ·
-  canonical source: the 36.8 decision brief (synthesis of surface evaluations) ·
-  key refs <code>tdt/src/types.ts</code> · <code>vscode/src/mcp_server_standalone.ts:74-176</code> · <code>vscode/src/server/server_manager.ts</code> · <code>docs/constitution.md §3, principles 7/8</code> ·
+  Cluster-surface landing page for <code>task-36.8</code> · Temporal Topic Detection, micro tier · branch <code>tdt</code> ·
+  canonical decision <code>backlog/decisions/0001-tdt-cluster-surface.md</code> (Accepted, 2026-06-26) ·
+  read primitive <code>vscode/src/tdt/cluster_reads.ts</code> · routes <code>vscode/src/server/server_manager.ts</code> ·
+  controls <code>vscode/src/tdt/cluster_control_store.ts</code> · skill <code>skills/bergamot-clusters/SKILL.md</code> ·
   <a href="task-36.overview.html">← back to the task-36 overview</a>
 </footer>
 

@@ -6,8 +6,10 @@
  *   - **suppress** — hide a cluster the user does not want surfaced.
  *   - **rename** — override a cluster's `display_label`.
  *   - **never_cluster_origin** — a registrable domain the user never wants
- *     clustered (e.g. a bank or health portal); also feeds the capture / skip-
- *     re-download list so the origin never re-enters the corpus.
+ *     clustered (e.g. a bank or health portal). The preference is RECORDED here
+ *     now; the consumer that excludes the origin from re-download and clustering
+ *     input reads it via {@link ClusterControlStore.list_never_cluster_origins}
+ *     and is wired by the orchestration adapter (TASK-36.9).
  *
  * This is Bergamot's OWN state, not a PKM write — it lives in the encrypted
  * metadata store, so principle 8 (no agent writes to canonical notes) does not
@@ -102,11 +104,15 @@ export function compute_content_signature(parts: {
   scope: string | null;
   keyphrases: string[];
 }): string {
+  // Normalize every field identically (NFC + lowercase) so the signature is robust
+  // regardless of upstream labeler discipline — keyphrases included, not just the
+  // title/scope. Keyphrases are sorted so member-order changes do not perturb it.
+  const norm = (s: string): string => s.normalize("NFC").trim().toLowerCase();
   return sha256_hex(
     canonical_json({
-      t: (parts.headline_title ?? "").trim().toLowerCase(),
-      s: (parts.scope ?? "").trim().toLowerCase(),
-      k: [...parts.keyphrases].sort(),
+      t: norm(parts.headline_title ?? ""),
+      s: norm(parts.scope ?? ""),
+      k: parts.keyphrases.map(norm).sort(),
     }),
   );
 }
@@ -221,9 +227,9 @@ export class ClusterControlStore {
   }
 
   /**
-   * The registrable domains the user has blocked. Single source of truth for the
-   * skip-re-download filter and the clustering-input filter, so the two cannot
-   * drift.
+   * The registrable domains the user has blocked. The intended single source of
+   * truth for the skip-re-download and clustering-input filters; the consumer that
+   * applies it is wired by the orchestration adapter (TASK-36.9).
    */
   async list_never_cluster_origins(): Promise<string[]> {
     const rows = await this.db.query<{ target_origin: string }>(

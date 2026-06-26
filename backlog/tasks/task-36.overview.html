@@ -145,7 +145,7 @@
   <a href="task-36.5 - Cluster-representations-and-deterministic-labeler.representations-labeler.html"><span class="dot done"></span>36.5 Representations + labeler</a>
   <a href="task-36.6 - Persistence-cluster-tables-run-keying-idempotency.persistence-idempotency.html"><span class="dot done"></span>36.6 Persistence + idempotency</a>
   <a href="task-36.7 - Validation-harness-and-parameter-sweep.validation-sweep.html"><span class="dot done"></span>36.7 Validation + sweep</a>
-  <a href="task-36.8.concept-decision.html"><span class="dot todo"></span>36.8 Surface decision · concept set</a>
+  <a href="task-36.8.concept-decision.html"><span class="dot done"></span>36.8 Cluster surface · concept set</a>
   <span class="pending"><span class="dot todo"></span>36.9 Orchestration · not yet generated</span>
   <span class="pending"><span class="dot todo"></span>36.10 LLM naming · not yet generated</span>
 </nav>
@@ -311,7 +311,7 @@
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1100 320" role="img" aria-label="Left to right: visit stream, windowing, page vectors, cosine distance, HDBSCAN fit, representations and labeler, persist, then a thin host-agnostic read API feeding a still-undecided set of user-facing surfaces — with three exclusion branches.">
+<svg viewBox="0 0 1100 320" role="img" aria-label="Left to right: visit stream, windowing, page vectors, cosine distance, HDBSCAN fit, representations and labeler, persist, then a thin host-agnostic read API feeding the shipped cluster surfaces — with three exclusion branches.">
   <defs>
     <marker id="pf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
     <marker id="pfr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff7b72"/></marker>
@@ -345,11 +345,11 @@
   <text x="954" y="234" fill="#768390" font-size="8.5" text-anchor="middle">36.8 · one thin read API · the only layer on the DB</text>
   <line x1="954" y1="150" x2="954" y2="200" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#pf)"/>
 
-  <!-- the undecided surfaces it feeds -->
-  <rect x="612" y="270" width="428" height="42" rx="8" fill="rgba(210,168,255,.06)" stroke="#d2a8ff" stroke-dasharray="4 3"/>
-  <text x="826" y="288" fill="#d2a8ff" font-size="10" text-anchor="middle">user-facing surface(s) — DECISION PENDING (36.8 spike)</text>
-  <text x="826" y="302" fill="#768390" font-size="8.5" text-anchor="middle">skill · note-stub write-back · VS Code webview — layered, each a consumer of the primitive</text>
-  <line x1="900" y1="246" x2="854" y2="270" stroke="#d2a8ff" stroke-width="1.5" marker-end="url(#pfp)"/>
+  <!-- the shipped surfaces it feeds -->
+  <rect x="612" y="270" width="428" height="42" rx="8" fill="rgba(126,231,135,.06)" stroke="#7ee787"/>
+  <text x="826" y="288" fill="#7ee787" font-size="10" text-anchor="middle">cluster surfaces — SHIPPED (36.8 · ADR 0001)</text>
+  <text x="826" y="302" fill="#768390" font-size="8.5" text-anchor="middle">note-stub write-back · skill · control route — layered; webview (36.8.8) deferred</text>
+  <line x1="900" y1="246" x2="854" y2="270" stroke="#7ee787" stroke-width="1.5" marker-end="url(#pfp)"/>
 
   <!-- exclusion branch 1: sparse window -> skip -->
   <line x1="227" y1="150" x2="227" y2="200" stroke="#f0a35e" stroke-width="1.5" marker-end="url(#pfc)"/>
@@ -370,7 +370,7 @@
   <text x="671" y="230" fill="#768390" font-size="8.5" text-anchor="middle">surfaced, not forced</text>
 </svg>
 </div>
-<figcaption>A straight line from the visit stream to persisted clusters; each stage owns one sub-task. <strong>36.3 reads already-extracted content</strong> from the task-39.2 corpus and embeds it — the re-download and HTML parse happen upstream, eagerly, and are cached. Past persistence the path splits in two: one thin host-agnostic read API is the <em>only</em> layer that touches the DB, and the user-facing surface that consumes it — a Claude skill, note-stub write-back, a VS Code webview, layered together — is an open decision 36.8 resolves. Three things leave the line: a sparse window is skipped, an auth-walled / failed page is excluded upstream at the corpus, and a <code>−1</code> page is surfaced as noise. <a href="task-36.concept-pipeline-and-guarantees.html">Pipeline stages &amp; the guarantees →</a></figcaption>
+<figcaption>A straight line from the visit stream to persisted clusters; each stage owns one sub-task. <strong>36.3 reads already-extracted content</strong> from the task-39.2 corpus and embeds it — the re-download and HTML parse happen upstream, eagerly, and are cached. Past persistence the path splits in two: one thin host-agnostic read API is the <em>only</em> layer that touches the DB, and the user-facing surfaces that consume it — note-stub write-back, the bergamot-clusters skill, and the control route, layered together — are shipped (36.8, ADR 0001), with the VS Code webview (36.8.8) the one deferred accessory. Three things leave the line: a sparse window is skipped, an auth-walled / failed page is excluded upstream at the corpus, and a <code>−1</code> page is surfaced as noise. <a href="task-36.concept-pipeline-and-guarantees.html">Pipeline stages &amp; the guarantees →</a></figcaption>
 </figure>
 
 <!-- ============================================================ BUILD ORDER -->
@@ -378,7 +378,7 @@
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1180 270" role="img" aria-label="Ten sub-tasks as a progress strip: 36.1, 36.2, 36.4, 36.5, 36.6 and 36.7 done, 36.3 and 36.8 through 36.10 still open, with 36.4 gated on external clustering-tfjs work, 36.8 a surface-decision spike, and 36.10 the opt-in LLM-naming job that depends on 36.5 and 36.6.">
+<svg viewBox="0 0 1180 270" role="img" aria-label="Ten sub-tasks as a progress strip: 36.1, 36.2, 36.4, 36.5, 36.6, 36.7 and 36.8 done, 36.3, 36.9 and 36.10 still open, with 36.4 gated on external clustering-tfjs work, 36.8 the cluster surface shipped via ADR 0001, and 36.10 the opt-in LLM-naming job that depends on 36.5 and 36.6.">
   <defs>
     <marker id="bo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#768390"/></marker>
     <marker id="bop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d2a8ff"/></marker>
@@ -416,10 +416,10 @@
     <circle cx="774" cy="70" r="13" fill="rgba(126,231,135,.18)" stroke="#7ee787"/><text x="774" y="74" fill="#7ee787" font-size="11">7</text>
     <text x="774" y="100" fill="#7ee787" font-size="9.5">DONE · companion</text>
     <text x="774" y="124" fill="#d7dde4">Validation</text><text x="774" y="138" fill="#768390" font-size="8.5">sweep → config</text>
-    <!-- 36.8 spike -->
-    <circle cx="893" cy="70" r="13" fill="rgba(210,168,255,.14)" stroke="#d2a8ff"/><text x="893" y="74" fill="#d2a8ff" font-size="11">8</text>
-    <text x="893" y="100" fill="#d2a8ff" font-size="9.5">SPIKE</text>
-    <text x="893" y="124" fill="#d7dde4">Surface decision</text><text x="893" y="138" fill="#768390" font-size="8.5">ADR → sub-tasks</text>
+    <!-- 36.8 cluster surface -->
+    <circle cx="893" cy="70" r="13" fill="rgba(126,231,135,.18)" stroke="#7ee787"/><text x="893" y="74" fill="#7ee787" font-size="11">8</text>
+    <text x="893" y="100" fill="#7ee787" font-size="9.5">DONE · concept set</text>
+    <text x="893" y="124" fill="#d7dde4">Cluster surface</text><text x="893" y="138" fill="#768390" font-size="8.5">v1 built · ADR 0001</text>
     <!-- 36.9 -->
     <circle cx="1012" cy="70" r="13" fill="#161b22" stroke="#768390"/><text x="1012" y="74" fill="#768390" font-size="11">9</text>
     <text x="1012" y="100" fill="#768390" font-size="9.5">to do</text>
@@ -445,7 +445,7 @@
   <line x1="1131" y1="186" x2="1131" y2="86" stroke="#d2a8ff" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#bop)"/>
 </svg>
 </div>
-<figcaption>36.1, 36.2 and 36.4–36.7 are complete on the <code>tdt</code> branch, each with a companion; 36.3 (page vectorisation) and 36.9–36.10 remain to do. 36.7 (validation + sweep) now ships the deterministic parameter harness in <code>tdt/src/validation/</code> and seeds <code>operating_point.json</code>. 36.8 is a <span style="color:var(--purple)">surface-decision spike</span> — it outputs a decision record and spun-off implementation sub-tasks, not a shipped UI, and has its own five-page concept set.</figcaption>
+<figcaption>36.1, 36.2 and 36.4–36.8 are complete on the <code>tdt</code> branch, each with a companion; 36.3 (page vectorisation) and 36.9–36.10 remain to do. 36.7 (validation + sweep) ships the deterministic parameter harness in <code>tdt/src/validation/</code> and seeds <code>operating_point.json</code>. 36.8 ships the v1 cluster surface — the read primitive, the <code>/query/cluster*</code> routes, the note-stub write-back, the <code>bergamot-clusters</code> skill, and the launch-blocking control table + route — recorded in <span style="color:var(--green)">ADR 0001</span>; the VS Code webview (36.8.8) is the one deferred accessory. 36.8 has its own five-page concept set.</figcaption>
 </figure>
 
 <table>
@@ -455,18 +455,18 @@
     <tr><td class="ac">36.2</td><td>Windowing &amp; data-scale</td><td>Slice the visit stream into bounded frames under the sample ceiling; deterministic subdivision; skip sparse frames.</td><td><span class="pill done">done</span></td><td><a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html">companion →</a></td></tr>
     <tr><td class="ac">36.3</td><td>Page vectorisation</td><td>Read each re-downloadable page's already-extracted content from the task-39.2 corpus, build deterministic page text, embed with TDT's own model, L2-normalize, and cache. The re-download and HTML parse happen upstream; TDT consumes <code>CorpusContent</code> and never fetches. Ships the dispersion / degenerate / no-text guards and the dedup-before-clustering step.</td><td><span class="pill todo">to do</span></td><td><a href="task-36.3 - Page-vectorisation-TDT-owned-embedding-of-captured-pages.page-vectors.html">companion →</a></td></tr>
     <tr><td class="ac">36.4</td><td>Distance + HDBSCAN core</td><td>Build the cosine distance matrix and run <code>HDBSCAN.fit</code> — the only <code>clustering-tfjs</code> call.</td><td><span class="pill done">done</span></td><td><a href="task-36.4 - Cosine-distance-matrix-and-HDBSCAN-clustering-core.clustering-core.html">companion &rarr;</a></td></tr>
-    <tr><td class="ac">36.5</td><td>Representations + labeler</td><td>Pick the representative page, freeze the representative vector, compose a deterministic label bundle — <code>headline_title</code>, <code>scope</code>, <code>keyphrases</code>, <code>display_label</code>, <code>representation_version</code> (no LLM). Leaves the <code>ClusterNamer</code> seam (<code>llm_naming_seam.ts</code>) that 36.10 fills.</td><td><span class="pill done">done</span></td><td><a href="task-36.5 - Cluster-representations-and-deterministic-labeler.representations-labeler.html">companion &rarr;</a></td></tr>
+    <tr><td class="ac">36.5</td><td>Representations + labeler</td><td>Pick the representative page, freeze the representative vector, compose a deterministic label bundle — <code>headline_title</code>, <code>scope</code> (a display-ready string), <code>keyphrases</code>, <code>display_label</code>, <code>representation_version</code> (no LLM). Leaves the <code>ClusterNamer</code> seam (<code>llm_naming_seam.ts</code>) that 36.10 fills.</td><td><span class="pill done">done</span></td><td><a href="task-36.5 - Cluster-representations-and-deterministic-labeler.representations-labeler.html">companion &rarr;</a></td></tr>
     <tr><td class="ac">36.6</td><td>Persistence</td><td>Write <code>topic_run</code> / <code>topic_cluster</code> / <code>topic_cluster_member</code> via the extension's single writer. A run is keyed by a <code>run_id</code> hash; re-running decides no-op / atomic-replace / supersede in one transaction, with <code>input_fingerprint</code> catching re-embedding and late visits. Noise persists as member rows so coverage is queryable. Reshapes <code>ClusterSink</code> to one <code>persist(bundle)</code>.</td><td><span class="pill done">done</span></td><td><a href="task-36.6 - Persistence-cluster-tables-run-keying-idempotency.persistence-idempotency.html">companion &rarr;</a></td></tr>
     <tr><td class="ac">36.7</td><td>Validation + sweep</td><td>A deterministic harness in <code>tdt/src/validation/</code> sweeps the grid (<code>minClusterSize</code> × <code>minSamples</code> × <code>epsilon</code> × <code>raw</code>/<code>PCA-50</code>, crossed with window length) over real windows, scoring each cell by HDBSCAN-native validity — <strong>mean membership probability</strong>, not the unusable Euclidean silhouette — plus noise fraction, always excluding <code>−1</code>. It runs the raw-vs-PCA-50 A/B with a known-project recovery gate, defines a noise/hubness guardrail whose PCA-promotion path a test exercises, reports cross-window variance and a boundary-fragmentation count, and records the visits-per-month distribution + per-run re-download volume that justify the 36.9 cadence. The chosen operating point is persisted as <code>operating_point.json</code> (data, not code), parameterized by window size.</td><td><span class="pill done">done</span></td><td><a href="task-36.7 - Validation-harness-and-parameter-sweep.validation-sweep.html">companion &rarr;</a></td></tr>
-    <tr><td class="ac">36.8</td><td>Decide the user-facing surface</td><td>A UI investigation, not an implementation. Split the thin host-agnostic read API (the integration primitive over the cluster + label-bundle tables) from the user-facing surface(s) — a Claude skill over scripts, note-stub write-back into <code>bergamot.staging/</code>, a VS Code webview — and decide how they layer. Output is a decision record (ADR) plus spun-off implementation sub-tasks.</td><td><span class="pill spike">spike</span></td><td><a href="task-36.8.concept-decision.html">concept set →</a></td></tr>
-    <tr><td class="ac">36.9</td><td>Trigger + orchestration</td><td>A manual VS Code command and an automatic in-host trigger over one <code>rebuild_clusters</code> entry; compute runs off the event loop so a dense fit never freezes capture. Cadence is configurable (default once/day), its value an evidence-based judgement from the 36.7 sweep; an OS cron + headless writer and count-based triggers are rejected.</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
+    <tr><td class="ac">36.8</td><td>The user-facing cluster surface</td><td>Split the thin host-agnostic read API (the integration primitive over the cluster + label-bundle tables) from the user-facing surfaces, and ship the v1 surface: <code>cluster_reads.ts</code> + four <code>/query/cluster*</code> routes, note-stub write-back into <code>bergamot.staging/</code>, the <code>bergamot-clusters</code> skill (with the launch-blocking suppress / rename / never-cluster-origin controls), and a weekly digest cadence. The decision is recorded in <code>ADR 0001</code>; the VS Code webview (36.8.8) is the one deferred accessory.</td><td><span class="pill done">done</span></td><td><a href="task-36.8.concept-decision.html">concept set →</a></td></tr>
+    <tr><td class="ac">36.9</td><td>Trigger + orchestration</td><td>A manual VS Code command and an automatic in-host trigger over one <code>rebuild_clusters</code> entry; compute runs off the event loop so a dense fit never freezes capture. Cadence is configurable (default once/day), its value an evidence-based judgement from the 36.7 sweep; an OS cron + headless writer and count-based triggers are rejected. Also wires the <code>never_cluster_origin</code> filter that 36.8 records — excluding a blocked origin from re-download and clustering input.</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
     <tr><td class="ac">36.10</td><td>LLM naming via a todo-pile job runner</td><td>Optional LLM-rewritten cluster names, surfaced as an opt-in job from a todo pile read by a SessionStart hook. Two coupled pieces: a standalone, job-agnostic todo-pile runner (durable pile, enqueue/dedupe/dequeue, kind→handler registry) and the LLM-naming job that fills the <code>ClusterNamer</code> seam — rewriting the deterministic label bundle into one display phrase, gated by a config flag and cached on the <code>ClusterFingerprint</code>. A completed run enqueues the job rather than running it inline; capture and clustering stay zero-LLM and offline, and only the deterministic bundle (no page content) ever leaves the machine, on explicit user opt-in. Depends on 36.5 + 36.6.</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
   </tbody>
 </table>
 
 <div class="callout key">
   <span class="label">The surface is split into two layers</span>
-  <p>Past persistence, exactly one thin <strong>integration primitive</strong> — a host-agnostic read API over the cluster + 36.5 label-bundle tables — touches the database; its natural home is the standalone Bergamot daemon. Every <strong>user-facing surface</strong> is a <em>consumer</em> of that one primitive, so surfaces ship independently and per-host. The likely shape, which 36.8 confirms: <strong>note-stub write-back</strong> (into a quarantined <code>bergamot.staging/</code> directory, never canonical notes) as the PKM-native backbone, a <strong>Claude skill</strong> as the in-workflow actionability layer that also drives stub generation, and a <strong>VS Code webview</strong> as an optional rich-visibility accessory. These surfaces layer; they do not compete.</p>
+  <p>Past persistence, exactly one thin <strong>integration primitive</strong> — a host-agnostic read API over the cluster + 36.5 label-bundle tables (<code>cluster_reads.ts</code>) — touches the database; its natural home is the standalone Bergamot daemon. Every <strong>user-facing surface</strong> is a <em>consumer</em> of that one primitive, so surfaces ship independently and per-host. The shipped v1 shape, recorded in <code>ADR 0001</code>: <strong>note-stub write-back</strong> (into a quarantined <code>bergamot.staging/</code> directory, never canonical notes) as the PKM-native backbone, the <strong>bergamot-clusters skill</strong> as the in-workflow actionability layer that also drives stub generation and records the launch-blocking controls, and a <strong>VS Code webview</strong> (36.8.8) as the one deferred rich-visibility accessory. These surfaces layer; they do not compete.</p>
 </div>
 
 <!-- ============================================================ ACCEPTANCE -->
@@ -515,26 +515,26 @@
   </a>
 </div>
 
-<h2>36.8 surface-decision concept set — the user-facing surface, investigated</h2>
-<p class="prose">The companion set for the 36.8 surface investigation: why raw MCP tools are rejected, the three candidate surfaces, the one host-agnostic integration primitive, the PKM-workflow mapping, and the privacy guarantees plus sub-task roadmap.</p>
+<h2>36.8 cluster-surface concept set — the user-facing surface, built</h2>
+<p class="prose">The companion set for the 36.8 cluster surface, now shipped: why raw MCP tools are rejected, the three candidate surfaces, the one host-agnostic integration primitive, the PKM-workflow mapping, and the privacy guarantees plus the eight-sub-task decomposition. The decision is recorded in <code>backlog/decisions/0001-tdt-cluster-surface.md</code>.</p>
 
 <div class="cards">
   <a class="card" href="task-36.8.concept-decision.html">
     <span class="num">36.8 · A</span>
-    <h3>The surface decision</h3>
-    <p>Why raw MCP is rejected, the two-layer split (one primitive, layered surfaces), the five-criteria scorecard, and the layering recommendation.</p>
+    <h3>The cluster surface decision</h3>
+    <p>Why raw MCP is rejected, the two-layer split (one primitive, layered surfaces), the five-criteria scorecard, and the layering recommendation — accepted and built.</p>
     <span class="go">Read →</span>
   </a>
   <a class="card" href="task-36.8.concept-surfaces.html">
     <span class="num">36.8 · B</span>
     <h3>Three candidate surfaces</h3>
-    <p>Note-stub write-back, a Claude skill, and a VS Code webview — anatomy, mockups, per-criterion scores, and the role each plays in the layering.</p>
+    <p>Note-stub write-back, the skill, and the deferred VS Code webview — anatomy, mockups, per-criterion scores, and the role each plays in the layering.</p>
     <span class="go">Read →</span>
   </a>
   <a class="card" href="task-36.8.concept-primitive.html">
     <span class="num">36.8 · C</span>
     <h3>The integration primitive</h3>
-    <p>One thin host-agnostic read API over the cluster + label-bundle tables — the only layer on the DB — and the clean retirement of the raw <code>/query/topic_*</code> routes.</p>
+    <p>One thin host-agnostic read API over the cluster + label-bundle tables — the only layer on the DB — its four functions, and the shipped <code>/query/cluster*</code> routes.</p>
     <span class="go">Read →</span>
   </a>
   <a class="card" href="task-36.8.concept-workflows.html">
@@ -546,7 +546,7 @@
   <a class="card" href="task-36.8.concept-privacy-and-roadmap.html">
     <span class="num">36.8 · E</span>
     <h3>Privacy &amp; roadmap</h3>
-    <p>Principle-8 staging-only write-back, the store invariants, the read-vs-write decision, and the decomposition into sequenced sub-tasks.</p>
+    <p>Principle-8 staging-only write-back, the store invariants, the read-vs-write decision, and the eight implementation sub-tasks (36.8.1–36.8.8).</p>
     <span class="go">Read →</span>
   </a>
 </div>
@@ -554,6 +554,7 @@
 <footer>
   Overview for <code>task-36</code> — Temporal Topic Detection, micro tier · branch <code>tdt</code> ·
   canonical reference <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> ·
+  cluster-surface decision <code>backlog/decisions/0001-tdt-cluster-surface.md</code> ·
   broader two-tier vision <code>backlog/drafts/tdt-temporal-topic-architecture.md</code>.
 </footer>
 

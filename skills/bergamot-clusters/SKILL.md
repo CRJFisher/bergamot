@@ -23,7 +23,9 @@ DuckDB. Run the bundled script with `node`:
 node ${CLAUDE_SKILL_DIR}/scripts/bergamot_clusters.js <command> [flags]
 ```
 
-All commands accept `--json` for machine-readable output. Cluster ids rotate every
+The examples below abbreviate this to `node scripts/bergamot_clusters.js …`; always
+prefix with `${CLAUDE_SKILL_DIR}/` (the skill's install directory) so they run from
+any working directory. All commands accept `--json` for machine-readable output. Cluster ids rotate every
 time clustering recomputes, so always take an id from a fresh `recent` call in the
 SAME turn and pass it straight to `cluster` / `stub` / `suppress` / `rename`; never
 reuse an id from an earlier session.
@@ -68,9 +70,10 @@ node scripts/bergamot_clusters.js unsuppress --id <id> | unrename --id <id> | un
 
 These write to Bergamot's own control tables (never the PKM), and persist across
 recomputes by keying on a stable identity rather than the per-run cluster id.
-`block` also keeps the origin out of future re-downloads and clustering. Because the
-skill runs on every host, these controls work everywhere — they do not depend on any
-VS Code panel.
+`block` records the origin as never-to-be-clustered; the filter that also keeps it out
+of future re-downloads and clustering input is wired by the orchestration work
+(TASK-36.9). Because the skill runs on every host, these controls work everywhere —
+they do not depend on any VS Code panel.
 
 ## Weekly digest (the host-agnostic push anchor)
 

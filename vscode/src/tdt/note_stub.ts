@@ -29,7 +29,10 @@ export interface ParsedCitation {
   url: string;
 }
 
-const CITE_RE = /<!--\s*bergamot:cite\s+page_session_id=(\S+)\s+url=(\S+?)\s*-->/g;
+// The URL is percent-encoded in the citation so it always round-trips: any
+// whitespace or a literal "-->" in a stored URL would otherwise break the match
+// the right-to-forget sweep depends on.
+const CITE_RE = /<!--\s*bergamot:cite\s+page_session_id=(\S+)\s+url=(\S*)\s*-->/g;
 
 function sha256_hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
@@ -76,6 +79,10 @@ function cluster_label(cluster: ClusterDetail["cluster"]): string {
  * per-run cluster id is deliberately NOT used (it rotates every recompute). When
  * the label is empty the exemplar id anchors a stable fallback. (`lifeline_id`
  * will be the authoritative anchor once Phase-4 lineage tracking lands.)
+ *
+ * Residual: two distinct clusters with the same week + label slug collide on one
+ * filename, so the second overwrites the first's stub. Accepted for v1 — same-week
+ * identical-label threads are rare; `lifeline_id` is the clean fix.
  */
 export function compute_lineage_key(cluster: ClusterDetail): string {
   const week = iso_week(cluster.cluster.time_span.start);
@@ -136,7 +143,7 @@ function member_line(m: ClusterMember): string {
   const link = url ? `[${text}](${url})` : text;
   return (
     `- ${link}${pin}\n` +
-    `<!-- bergamot:cite page_session_id=${m.page_session_id} url=${url} -->`
+    `<!-- bergamot:cite page_session_id=${m.page_session_id} url=${encodeURIComponent(url)} -->`
   );
 }
 
@@ -201,7 +208,13 @@ export function render_note_stub(
 export function parse_citations(markdown: string): ParsedCitation[] {
   const out: ParsedCitation[] = [];
   for (const match of markdown.matchAll(CITE_RE)) {
-    out.push({ page_session_id: match[1], url: match[2] });
+    let url = "";
+    try {
+      url = decodeURIComponent(match[2]);
+    } catch {
+      url = match[2]; // tolerate a malformed encoding rather than drop the citation
+    }
+    out.push({ page_session_id: match[1], url });
   }
   return out;
 }

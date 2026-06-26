@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>task-36.8 — Three candidate surfaces: skill, webview, note-stub write-back</title>
+<title>task-36.8 — Three cluster surfaces: skill, webview, note-stub write-back</title>
 <style>
   :root {
     --bg: #0f1419; --bg-alt: #161b22; --bg-code: #0c0f14;
@@ -93,6 +93,9 @@
   .surf.accessory .tag { background: rgba(240,163,94,.12); color: var(--accent); border: 1px solid var(--accent); }
   .surf .head .name { font-family: var(--serif); font-size: 1.18rem; font-weight: 600; }
   .surf .head .role { font-family: var(--mono); font-size: .72rem; color: var(--fg-dim); }
+  .surf .head .stat { font-family: var(--mono); font-size: .62rem; text-transform: uppercase; letter-spacing: .06em; padding: .12em .5em; border-radius: 999px; }
+  .surf .head .stat.built { color: var(--green); border: 1px solid var(--green); background: rgba(126,231,135,.1); }
+  .surf .head .stat.deferred { color: var(--purple); border: 1px solid var(--purple); background: rgba(210,168,255,.1); }
   .surf .body { padding: .4rem 1.1rem 1.1rem; }
 
   .mock { background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px; font-family: var(--mono); font-size: .78rem; line-height: 1.5; padding: .9rem 1rem; overflow-x: auto; white-space: pre; color: var(--fg); margin: .6rem 0; }
@@ -132,7 +135,7 @@
 <nav class="crossdoc" aria-label="Task family">
   <span class="home">task-36 family</span>
   <a href="task-36.overview.html">Overview</a>
-  <span class="pending"><span class="dot todo"></span>36.8 surface-decision concept set</span>
+  <span class="pending"><span class="dot done"></span>36.8 cluster surface · concept set</span>
 </nav>
 
 <nav class="concepts" aria-label="Concept pages">
@@ -147,7 +150,7 @@
 <nav class="outline" aria-label="On this page">
   <a href="#map">The three candidates</a>
   <a href="#stub">Note-stub write-back</a>
-  <a href="#skill">Claude skill</a>
+  <a href="#skill">The cluster skill</a>
   <a href="#webview">VS Code webview</a>
   <a href="#scores">Scorecard</a>
   <a href="#layer">How they layer</a>
@@ -155,9 +158,9 @@
 
 <main>
 <header class="page">
-  <div class="crumb">Bergamot · TDT micro tier · task 36.8 surface decision · branch tdt</div>
-  <h1>Three candidate surfaces — skill, webview, note-stub write-back</h1>
-  <p class="lead">All three consume the <strong>one</strong> integration primitive over the cluster + 36.5 label-bundle tables — none touches DuckDB. They <strong>layer</strong>, they do not compete: a note-stub backbone, a skill that acts and drives the backbone, and a VS Code webview accessory.</p>
+  <div class="crumb">Bergamot · TDT micro tier · task 36.8 cluster surface · branch tdt</div>
+  <h1>Three cluster surfaces — skill, webview, note-stub write-back</h1>
+  <p class="lead">All three consume the <strong>one</strong> integration primitive over the cluster + 36.5 label-bundle tables — none touches DuckDB. They <strong>layer</strong>, they do not compete: a note-stub backbone and a skill that acts and drives it both ship in v1; the VS Code webview is the one deferred accessory.</p>
 </header>
 
 <!-- ============================================================ MAP -->
@@ -165,7 +168,7 @@
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1100 320" role="img" aria-label="The cluster and label-bundle tables are read by exactly one host-agnostic integration primitive; three candidate surfaces — note-stub write-back, a Claude skill, and a VS Code webview — each consume that primitive, and the skill additionally drives the note-stub generation.">
+<svg viewBox="0 0 1100 320" role="img" aria-label="The cluster and label-bundle tables are read by exactly one host-agnostic integration primitive; three candidate surfaces — note-stub write-back, a Claude skill, and a deferred VS Code webview — each consume that primitive, and the skill additionally drives the note-stub generation.">
   <defs>
     <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#6cb6ff"/></marker>
     <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
@@ -188,23 +191,23 @@
 
   <!-- three surfaces -->
   <rect x="560" y="20" width="500" height="80" rx="10" fill="#161b22" stroke="#7ee787" stroke-width="1.5"/>
-  <text x="575" y="46" fill="#7ee787" font-size="11.5" font-weight="bold">① note-stub write-back → bergamot.staging/</text>
+  <text x="575" y="46" fill="#7ee787" font-size="11.5" font-weight="bold">① note-stub write-back → bergamot.staging/  · SHIPPED</text>
   <text x="575" y="64" fill="#768390" font-size="9">BACKBONE · the hero-loop deliverable · universal fallback</text>
   <text x="575" y="80" fill="#768390" font-size="9">a literal markdown note in the user's own vault</text>
 
   <rect x="560" y="120" width="500" height="80" rx="10" fill="#161b22" stroke="#6cb6ff" stroke-width="1.5"/>
-  <text x="575" y="146" fill="#6cb6ff" font-size="11.5" font-weight="bold">② Claude skill / sub-agent over scripts</text>
+  <text x="575" y="146" fill="#6cb6ff" font-size="11.5" font-weight="bold">② bergamot-clusters skill  · SHIPPED</text>
   <text x="575" y="164" fill="#768390" font-size="9">ACTIONABILITY · in-workflow recall + host-agnostic push</text>
-  <text x="575" y="180" fill="#768390" font-size="9">also DRIVES the backbone: summarise_cluster → draft_note_stub</text>
+  <text x="575" y="180" fill="#768390" font-size="9">also DRIVES the backbone: cluster → stub (POST /stage_cluster)</text>
 
-  <rect x="560" y="220" width="500" height="80" rx="10" fill="#161b22" stroke="#f0a35e" stroke-dasharray="5 4"/>
-  <text x="575" y="246" fill="#f0a35e" font-size="11.5" font-weight="bold">③ VS Code webview · cards + timeline</text>
-  <text x="575" y="264" fill="#768390" font-size="9">OPTIONAL ACCESSORY · richest visibility, VS-Code host only</text>
+  <rect x="560" y="220" width="500" height="80" rx="10" fill="#0c0f14" stroke="#f0a35e" stroke-dasharray="5 4"/>
+  <text x="575" y="246" fill="#f0a35e" font-size="11.5" font-weight="bold">③ VS Code webview · cards + timeline · DEFERRED</text>
+  <text x="575" y="264" fill="#768390" font-size="9">ACCESSORY (36.8.8) · richest visibility, VS-Code host only</text>
   <text x="575" y="280" fill="#768390" font-size="9">serves only Wave 1 · highest cost · NOT launch-blocking</text>
 
   <line x1="480" y1="150" x2="560" y2="60" stroke="#6cb6ff" stroke-width="1.8" marker-end="url(#r)"/>
   <line x1="480" y1="160" x2="560" y2="160" stroke="#6cb6ff" stroke-width="1.8" marker-end="url(#r)"/>
-  <line x1="480" y1="172" x2="560" y2="258" stroke="#6cb6ff" stroke-width="1.8" marker-end="url(#r)"/>
+  <line x1="480" y1="172" x2="560" y2="258" stroke="#6cb6ff" stroke-width="1.8" stroke-dasharray="4 3" marker-end="url(#r)"/>
   <text x="520" y="100" fill="#6cb6ff" font-size="8.5" text-anchor="middle">consume</text>
 
   <!-- skill drives stub -->
@@ -212,7 +215,7 @@
   <text x="760" y="112" fill="#7ee787" font-size="8.5" text-anchor="middle">drives ↑</text>
 </svg>
 </div>
-<figcaption>One read API; three consumers that <strong>layer</strong>. The skill additionally drives the note-stub backbone — <code>summarise_cluster → draft_note_stub</code> is the in-workflow path that seeds the staged stubs. Detail on the contract lives in <a href="task-36.8.concept-primitive.html">Primitive →</a>.</figcaption>
+<figcaption>One read API; three consumers that <strong>layer</strong>. The skill additionally drives the note-stub backbone — its <code>stub</code> command POSTs to <code>/stage_cluster</code>, the in-workflow path that seeds the staged stubs. Detail on the contract lives in <a href="task-36.8.concept-primitive.html">Primitive →</a>.</figcaption>
 </figure>
 
 <div class="callout info">
@@ -227,52 +230,59 @@
   <div class="head">
     <span class="tag">backbone</span>
     <span class="name">Note-stub write-back → <code>bergamot.staging/</code></span>
-    <span class="role">the SURFACE-node spine · the literal hero-loop deliverable</span>
+    <span class="role">the SURFACE-node spine · the hero-loop deliverable</span>
+    <span class="stat built">shipped</span>
   </div>
   <div class="body">
 
-  <p class="prose">Topic clusters become agent-authored markdown stubs written <strong>only</strong> into a quarantined <code>bergamot.staging/</code> directory, never canonical notes (constitution principle 8). The user promotes a stub by hand. It is the most PKM-native of the three, surfaced ambiently by the user's own file-watcher — and the careful piece, because it is the one surface that writes into PKM territory.</p>
+  <p class="prose">Topic clusters become agent-authored markdown stubs written <strong>only</strong> into a quarantined <code>bergamot.staging/</code> directory, never canonical notes (constitution principle 8). The user promotes a stub by hand. It is the most PKM-native of the three, surfaced ambiently by the user's own file-watcher — and the careful piece, because it is the one surface that writes into PKM territory. The renderer (<code>note_stub.ts</code>) is pure; the writer (<code>staging_writer.ts</code>) owns every filesystem effect.</p>
 
   <h3>Anatomy of a staged stub</h3>
   <div class="mock"><span class="m"># bergamot.staging/2026-W25--local-graph-clustering.md   (agent-authored, promote by hand)</span>
 <span class="m">---</span>
 <span class="k">bergamot_agent_authored:</span> <span class="a">true</span>
-<span class="k">run_id:</span>        <span class="a">7f3a…c12</span>      <span class="m"># lineage; survives the forget sweep</span>
+<span class="k">run_id:</span>        <span class="a">7f3a…c12</span>
 <span class="k">generated_at:</span>  <span class="a">2026-06-22T08:03:11Z</span>
-<span class="k">tags:</span> [<span class="a">hdbscan</span>, <span class="a">graph-clustering</span>, <span class="a">embeddings</span>]   <span class="m"># ← keyphrases</span>
+<span class="k">lineage_key:</span>   <span class="a">2026-W25--local-graph-clustering</span>   <span class="m"># ISO-week + slug(label)</span>
+<span class="k">fingerprint:</span>   <span class="a">a91c…</span>      <span class="m"># content gate: skip an unchanged rewrite</span>
+<span class="k">window_start:</span>  <span class="a">2026-06-16T…</span>   <span class="m"># read by the time-range forget sweep</span>
+<span class="k">window_end:</span>    <span class="a">2026-06-22T…</span>
+<span class="k">tags:</span>
+  - <span class="a">hdbscan</span>
+  - <span class="a">graph-clustering</span>   <span class="m"># ← keyphrases</span>
 <span class="m">---</span>
 
 <span class="h"># Local graph clustering for topic detection</span>      <span class="m">← headline_title (H1)</span>
 
-<span class="m">Six pages over Jun 16–22 · scope: arxiv.org (3), github.com (2), distill.pub (1)</span>
+<span class="m">Scope: arxiv.org, github.com +1 site · 2026-06-16 → 2026-06-22</span>   <span class="m">← scope verbatim</span>
+
+<span class="m">&gt; 6 pages cohered around Local graph clustering … Review and promote to make it yours.</span>
 
 <span class="h">## Pages in this thread</span>
-- [HDBSCAN: density-based clustering](https://…)  <span class="m">← exemplar, pinned</span>
-  <span class="m">&lt;!-- bergamot:cite page_session_id=ps_91a url=https://… --&gt;</span>
+- [HDBSCAN: density-based clustering](https://…) (exemplar, pinned)
+  <span class="m">&lt;!-- bergamot:cite page_session_id=ps_91a url=https%3A%2F%2F… --&gt;</span>
 - [Hierarchical density estimates](https://…)
-  <span class="m">&lt;!-- bergamot:cite page_session_id=ps_44e url=https://… --&gt;</span>
-- … 4 more members, ranked by membership probability
-
-<span class="m">&gt; One-line summary, drafted by the skill. Review and promote to make it yours.</span></div>
-  <figcaption>Each member link carries a machine-matchable citation comment (<code>page_session_id</code> + URL) so the right-to-forget filesystem sweep can find and delete stubs citing a forgotten URL or origin. Content is fixed by the constitution: title + member links + one-line summary.</figcaption>
+  <span class="m">&lt;!-- bergamot:cite page_session_id=ps_44e url=https%3A%2F%2F… --&gt;</span>
+- … 4 more members, ranked by membership probability</div>
+  <figcaption>Each member link carries a machine-matchable citation comment — <code>page_session_id</code> + a percent-encoded URL — so the right-to-forget filesystem sweep can find and delete stubs citing a forgotten page. The scope line is the labeler's display-ready string, rendered verbatim. The exemplar is pinned first.</figcaption>
 
   <div class="sw">
     <div class="col pro"><h4>Strengths</h4>
       <ul>
         <li>PKM-native by construction — output is a note in the user's own tool, surfaced by their own file-watcher; the literal hero-loop deliverable, not a proxy.</li>
-        <li>Constitutionally the cleanest write surface scoped to staging: principle 8 satisfied by design (append-only, agent-tagged, hand-promoted, canonical never mutated). The one write the inviolables bless.</li>
+        <li>Constitutionally the cleanest write surface scoped to staging: principle 8 satisfied by design (append-only at the canonical boundary, agent-tagged, hand-promoted, canonical never mutated).</li>
         <li>Host-portable as a filesystem primitive — a markdown-file write couples to zero PKM API, so it is the universal write-back fallback for every Wave (Foam, Dendron, Logseq, TiddlyWiki, Emacs, Anytype, Memos).</li>
         <li>Ambient visibility without the user asking; beats the pull-only skill on passive surfacing.</li>
         <li>Validated externally: Nooscope queues output to a vault inbox, Note Companion lands suggestions in an Inbox folder — the same quarantine-then-promote review gate.</li>
       </ul>
     </div>
-    <div class="col con"><h4>Weaknesses</h4>
+    <div class="col con"><h4>Residuals (the cost, now paid)</h4>
       <ul>
-        <li>Net-new, most-code surface of the three: no staging module, workspace discovery, renderer, promotion-detection, or staging cascade exists today.</li>
-        <li>Idempotency over unstable cluster identity is hard — run-local labels plus full recompute; without the (unbuilt) lifeline tracker a re-run can emit a second stub for the same project.</li>
-        <li>Promotion is lossy to detect: a moved/renamed stub is indistinguishable from a deleted one, risking resurrection of a discarded stub.</li>
-        <li>Right-to-forget gap: staged stubs are plaintext <em>outside</em> the encrypted stores, so the cascade needs a new filesystem sweep keyed on the citation comment.</li>
-        <li>Quarantine fragile: a staging dir inside a PKM/git repo risks commit or sync despite principle 6 — needs auto-gitignore.</li>
+        <li>The most-code surface of the three: a staging module, workspace discovery, renderer, ledger-based promotion-safety, and a forget sweep — all now shipped in <code>note_stub.ts</code> / <code>staging_writer.ts</code> / <code>staging_root.ts</code>.</li>
+        <li>Cluster identity is per-run, so the filename keys on a stable lineage (ISO-week + label slug). Until <code>lifeline_id</code> lands, a same-week label change can spawn a second stub; the fingerprint gate and ledger bound the churn.</li>
+        <li>Promotion is inferred from the filesystem: a <code>.bergamot-ledger.json</code> records every emitted lineage so a promoted-out file is never recreated and a user-owned file (absent from the ledger) is never clobbered.</li>
+        <li>Staged stubs are plaintext <em>outside</em> the encrypted stores, so the forget cascade includes a filesystem sweep matching on the citation comment.</li>
+        <li>A staging dir inside a PKM/git repo risks commit or sync — defended by an auto-written <code>.gitignore</code> (<code>*</code>).</li>
       </ul>
     </div>
   </div>
@@ -289,58 +299,58 @@
   </table>
 
   <div class="callout good">
-    <span class="label">Role in the recommended layering</span>
+    <span class="label">Role in the shipped layering</span>
     <p>The <strong>backbone</strong>. The most PKM-native surface and the literal hero-loop deliverable: a markdown note in the user's own tool, surfaced ambiently without asking. As a pure filesystem write it is the universal fallback that ports to every PKM host — the SURFACE-node spine.</p>
   </div>
   </div>
 </div>
 
 <!-- ============================================================ SKILL -->
-<h2 id="skill">② Claude skill / sub-agent over scripts — actionability + stub driver</h2>
+<h2 id="skill">② The bergamot-clusters skill — actionability + stub driver</h2>
 
 <div class="surf action">
   <div class="head">
     <span class="tag">actionability</span>
-    <span class="name">Claude skill — SKILL.md + thin scripts</span>
+    <span class="name">bergamot-clusters skill — SKILL.md + a Node dispatcher</span>
     <span class="role">in-workflow layer · host-agnostic push · drives the backbone</span>
+    <span class="stat built">shipped</span>
   </div>
   <div class="body">
 
-  <p class="prose">A thin orchestrator over the integration primitive (the task-31.12 pattern) doing <strong>no DB access of its own</strong>. Scripts read <code>~/.bergamot/port.json</code> and hit the <code>/query/cluster*</code> routes over the loopback relay, exactly as <code>mcp_server_standalone.ts</code> does today. SKILL.md frontmatter follows the proven <code>weekly-interests</code> template (name, description, scoped allowed-tools). Three scripts: <code>fetch_recent_clusters</code>, <code>summarise_cluster</code>, <code>draft_note_stub</code> — and <code>summarise_cluster → draft_note_stub</code> is the in-workflow path that <strong>seeds the backbone</strong>.</p>
+  <p class="prose">A thin orchestrator over the integration primitive doing <strong>no DB access of its own</strong>. It lives at <code>skills/bergamot-clusters/</code> as tracked source, symlinked into <code>.claude/skills/</code> (which is gitignored). A single dependency-free Node dispatcher reads <code>~/.bergamot/port.json</code> and hits the <code>/query/cluster*</code> routes over the loopback relay; subcommands cover the whole surface: <code>recent</code>, <code>page</code>, <code>cluster</code>, <code>coverage</code>, <code>stub</code>, <code>suppress</code>, <code>rename</code>, <code>block</code> (and their inverses). The <code>cluster → stub</code> path is the in-workflow loop that <strong>seeds the backbone</strong> by POSTing to <code>/stage_cluster</code>.</p>
 
   <h3>An in-context recall invocation, mid-draft</h3>
   <div class="mock"><span class="u">user:</span> what have I been reading about graph clustering lately?
 
-<span class="m">  → skill: fetch_recent_clusters(from=last 7d) · GET /query/clusters</span>
+<span class="m">  → skill: node bergamot_clusters.js recent --days 7 · GET /query/clusters</span>
 <span class="m">  → 100-row cap (MAX_QUERY_LIMIT) · live run only (status='complete')</span>
 
 <span class="a">assistant:</span> You have one active thread this week:
 
   <span class="h">▸ Local graph clustering for topic detection</span>  <span class="m">(6 pages · coherence 0.71)</span>
-    scope: arxiv.org (3), github.com (2), distill.pub (1)
+    scope: arxiv.org, github.com +1 site
     exemplar: HDBSCAN: density-based clustering — https://…
     members: 6 pages ranked by membership probability
 
-  <span class="m">Want me to draft a Map-of-Content stub for it?  → draft_note_stub</span>
-  <span class="m">(writes to bergamot.staging/ only — you promote it by hand)</span></div>
-  <figcaption>Invoked mid-task it answers "what was I researching about X" and pulls cluster members with live exemplar URLs into the conversation — then can draft the staged stub in the same breath. On a weekly cron it emits a digest + optional desktop notification (the host-agnostic push anchor).</figcaption>
+  <span class="m">Want me to draft a Map-of-Content stub for it?  → cluster --id … then stub --id …</span>
+  <span class="m">(stub POSTs /stage_cluster → bergamot.staging/ only — you promote it by hand)</span></div>
+  <figcaption>Invoked mid-task it answers "what was I researching about X" and pulls cluster members with live exemplar URLs into the conversation — then can draft the staged stub in the same breath. Cluster ids rotate every recompute, so the skill always takes an id from a fresh <code>recent</code> call in the same turn. The scope is the labeler's display string, rendered as-is.</figcaption>
 
   <div class="sw">
     <div class="col pro"><h4>Strengths</h4>
       <ul>
-        <li>Matches Bergamot's preferred integration pattern exactly: a thin SKILL.md + scripts over a single read primitive — the model specified in task-31.12 and proven by <code>weekly-interests</code>.</li>
+        <li>Matches Bergamot's preferred integration pattern exactly: a thin SKILL.md + a dispatcher over a single read primitive — the model proven by <code>weekly-interests</code>.</li>
         <li>Host-agnostic by construction — needs only <code>port.json</code> + HTTP, so it runs against the future standalone daemon identically to today's extension backend; no VS-Code coupling.</li>
-        <li>Strongest in-workflow actionability: injects clusters + live member URLs into the active task where the user is already writing, and can act (draft a stub) in the same breath.</li>
-        <li>The natural DRIVER of the note-stub backbone — one skill both answers in-context and writes the staged stubs.</li>
-        <li>Cheapest surface; the only write is append-only into the quarantined staging dir, fully within principle 8.</li>
+        <li>Strongest in-workflow actionability: injects clusters + live member URLs into the active task where the user is already writing, and can act (draft a stub, curate a cluster) in the same breath.</li>
+        <li>The DRIVER of the note-stub backbone and the host-agnostic home of the launch-blocking controls — one skill answers in-context, writes staged stubs, and records suppress/rename/block.</li>
+        <li>Dependency-free and cheapest surface; the only writes are append-only staged stubs and curation rows.</li>
       </ul>
     </div>
-    <div class="col con"><h4>Weaknesses</h4>
+    <div class="col con"><h4>Residuals</h4>
       <ul>
-        <li>Weak passive/ambient visibility — it is pull, not push. It does not satisfy the constitution's habit-anchor "opens on launch / weekly notification" on its own; a scheduled routine only partially mitigates.</li>
-        <li>Depends on the primitive that does not exist yet — it cannot ship before <code>cluster_reads.ts</code> + the <code>/query/cluster*</code> routes are built.</li>
-        <li><code>draft_note_stub</code> is the net-new, careful piece — append-only + agent-tagging + promote-by-hand is the real cost, not the skill wiring.</li>
-        <li>Cluster identity dangles across recomputes (<code>run_id</code> supersedes), so the skill must resolve clusters by current window each invocation, never a cached id.</li>
+        <li>Weak passive/ambient visibility — it is pull, not push. The constitution's habit-anchor "opens on launch / weekly notification" is met by a scheduled digest routine, not by the skill on its own.</li>
+        <li>Cluster ids dangle across recomputes, so every command resolves a cluster by a fresh id in the same turn, never a cached one — a discipline the SKILL.md spells out.</li>
+        <li>If the extension is not open, the loopback routes are down; the script reports "Bergamot server not running" and asks the user to open it.</li>
       </ul>
     </div>
   </div>
@@ -357,26 +367,27 @@
   </table>
 
   <div class="callout info">
-    <span class="label">Role in the recommended layering</span>
-    <p>The <strong>actionability layer</strong>, and it DRIVES stub generation — <code>summarise_cluster → draft_note_stub</code> seeds the backbone. It is also where the <strong>required user controls</strong> live: when the user renames a cluster, hides one, or marks a site as never-to-be-clustered, the skill writes that to a small Bergamot-owned table. Because the skill runs on every host, these day-one-required controls work everywhere — they don't depend on the VS Code webview being built.</p>
+    <span class="label">Role in the shipped layering</span>
+    <p>The <strong>actionability layer</strong>, and it DRIVES stub generation — the <code>stub</code> command POSTs to <code>/stage_cluster</code> to seed the backbone. It is also where the <strong>launch-blocking controls</strong> live: <code>suppress</code> / <code>rename</code> / <code>block</code> POST to the control route. Because the skill runs on every host, these day-one controls work everywhere — they do not depend on the VS Code webview being built. The weekly digest is a <code>/schedule</code> routine that runs <code>recent</code> + <code>coverage</code> and summarises.</p>
   </div>
   </div>
 </div>
 
 <!-- ============================================================ WEBVIEW -->
-<h2 id="webview">③ VS Code webview — optional rich-visibility accessory</h2>
+<h2 id="webview">③ VS Code webview — the one deferred accessory (36.8.8)</h2>
 
 <div class="surf accessory">
   <div class="head">
-    <span class="tag">optional accessory</span>
+    <span class="tag">accessory</span>
     <span class="name">VS Code webview — cluster cards + timeline</span>
     <span class="role">richest visibility · VS-Code host only · NOT launch-blocking</span>
+    <span class="stat deferred">deferred · 36.8.8</span>
   </div>
   <div class="body">
 
-  <p class="prose">A net-new <code>WebviewView</code>/<code>Panel</code> from the extension host — none exists today (current UI is a <code>TreeDataProvider</code> + <code>HoverProvider</code> only). The webview never touches DuckDB: the extension host reads <code>port.json</code>, fetches the <code>/query/cluster*</code> routes with the per-extension capability token, and <code>postMessage</code>s results to a sandboxed CSP/nonce webview that renders timeline + cards client-side. It is the literal example of the constitution's named push surface — "a VS Code panel that opens on launch."</p>
+  <p class="prose">The one surface NOT in v1. It would be a net-new <code>WebviewView</code>/<code>Panel</code> from the extension host (current UI is a <code>TreeDataProvider</code> + <code>HoverProvider</code> only). The webview would never touch DuckDB: the extension host reads <code>port.json</code>, fetches the <code>/query/cluster*</code> routes with the per-extension capability token, and <code>postMessage</code>s results to a sandboxed CSP/nonce webview that renders timeline + cards client-side. It is the literal example of the constitution's named push surface — "a VS Code panel that opens on launch" — but host-locked, highest-cost, and explicitly off the launch critical path, so it lands as a post-launch accessory.</p>
 
-  <h3>Dashboard wireframe</h3>
+  <h3>Dashboard wireframe (planned shape)</h3>
   <div class="mock"><span class="m">┌─ BERGAMOT · Topic clusters ───────────────────── ⟳ this week ▾ ─┐</span>
 <span class="m">│</span>  <span class="h">timeline</span>   Jun 16 ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬ Jun 22       <span class="m">│</span>
 <span class="m">│              ●───graph clustering───●    ●─auth flows─●        │</span>
@@ -384,25 +395,25 @@
 <span class="m">│</span>  <span class="h">┌────────────────────────┐  ┌────────────────────────┐</span>      <span class="m">│</span>
 <span class="m">│</span>  <span class="h">│</span> Local graph clustering  <span class="h">│</span>  <span class="h">│</span> OAuth device-flow auth  <span class="h">│</span>      <span class="m">│</span>
 <span class="m">│</span>  <span class="h">│</span> <span class="k">#hdbscan #embeddings</span>     <span class="h">│</span>  <span class="h">│</span> <span class="k">#oauth #pkce</span>            <span class="h">│</span>      <span class="m">│</span>
-<span class="m">│</span>  <span class="h">│</span> 6 pages · arxiv,github  <span class="h">│</span>  <span class="h">│</span> 4 pages · github,ietf   <span class="h">│</span>      <span class="m">│</span>
+<span class="m">│</span>  <span class="h">│</span> 6 pages · arxiv +1 site <span class="h">│</span>  <span class="h">│</span> 4 pages · github +1     <span class="h">│</span>      <span class="m">│</span>
 <span class="m">│</span>  <span class="h">│</span> ▸ open members          <span class="h">│</span>  <span class="h">│</span> ▸ open members          <span class="h">│</span>      <span class="m">│</span>
 <span class="m">│</span>  <span class="h">│</span> <span class="w">⊘ suppress</span> ✎ rename …    <span class="h">│</span>  <span class="h">│</span> <span class="w">⊘ suppress</span> ✎ rename …    <span class="h">│</span>      <span class="m">│</span>
 <span class="m">│</span>  <span class="h">└────────────────────────┘  └────────────────────────┘</span>      <span class="m">│</span>
 <span class="m">└──────────────────────────────────────────────────────────────┘</span>
-   <span class="m">card controls → postMessage → host → POST /control  (Bergamot tables, never PKM)</span></div>
-  <figcaption>Cards make the launch-blocking suppress / rename / never-cluster-origin controls discoverable as one-click actions — but those are an <em>optional richer host</em> for affordances the skill + control route already provide everywhere. Any note write goes only to staging, never from a card click into canonical notes.</figcaption>
+   <span class="m">card controls → postMessage → host → POST /cluster_control  (Bergamot tables, never PKM)</span></div>
+  <figcaption>Cards would make the launch-blocking suppress / rename / never-cluster-origin controls discoverable as one-click actions — but those are an <em>optional richer host</em> for affordances the skill + control route already provide everywhere. Any note write would go only to staging, never from a card click into canonical notes.</figcaption>
 
   <div class="sw">
     <div class="col pro"><h4>Strengths</h4>
       <ul>
         <li>Directly satisfies the constitution's named push-surface — "a VS Code panel that opens on launch" is the literal example. The strongest ambient-visibility candidate inside VS Code: clusters are SEEN without asking.</li>
         <li>Richest home for the control surface — visual cards make suppress / rename / never-cluster-origin discoverable and one-click; curation writes go to Bergamot's own tables, constitutionally clean.</li>
-        <li>Consumes the primitive cleanly with an in-repo template (<code>port.json</code> discovery + token-authed fetch); the panel never opens DuckDB, preserving single-writer ownership.</li>
+        <li>Consumes the primitive cleanly with <code>port.json</code> discovery + token-authed fetch; the panel never opens DuckDB, preserving single-writer ownership.</li>
         <li>Excellent privacy posture — client-side render over loopback fetches of derived metadata + labels only; no new store, no egress, no PKM writes.</li>
         <li>Best fit for timeline / weekly-review / dormant-thread workflows where spatial layout beats a text-only answer.</li>
       </ul>
     </div>
-    <div class="col con"><h4>Weaknesses</h4>
+    <div class="col con"><h4>Weaknesses — why it is deferred</h4>
       <ul>
         <li>Host lock-in is the central tension — VS-Code-host-specific UI, serves only Wave 1 (Foam/Dendron). It re-localizes visibility into one host, opposing the portability vision the same task is built around.</li>
         <li>Highest build AND maintenance cost: net-new HTML/CSS/JS bundle, a build step, CSP/nonce handling, a message-passing protocol, theming, and ongoing VS Code API churn.</li>
@@ -425,8 +436,8 @@
   </table>
 
   <div class="callout warn">
-    <span class="label">Role in the recommended layering</span>
-    <p>An <strong>optional accessory</strong>, justified only for the VS Code host. Explicitly NOT the cross-host strategy and NOT on the launch critical path: it serves only Wave 1, costs the most, and does not port to the daemon future. Build it after the backbone + skill prove the loop — and resist scope creep (no PKM-write affordances from card clicks).</p>
+    <span class="label">Role in the layering — the one deferred piece</span>
+    <p>An <strong>accessory</strong>, justified only for the VS Code host, and the single surface not in v1. Explicitly NOT the cross-host strategy and NOT on the launch critical path: it serves only Wave 1, costs the most, and does not port to the daemon future. Build it after the backbone + skill prove the loop — and resist scope creep (no PKM-write affordances from card clicks).</p>
   </div>
   </div>
 </div>
@@ -440,24 +451,24 @@
   </tr></thead>
   <tbody>
     <tr>
-      <td><strong>Integration primitive</strong><br><span style="color:var(--com);font-size:.8em">plumbing</span></td>
+      <td><strong>Integration primitive</strong><br><span style="color:var(--com);font-size:.8em">plumbing · built</span></td>
       <td>2</td><td>4</td><td>5</td><td>4</td><td>5</td>
       <td>Surfaces nothing itself, but is the host-agnostic JSON contract every surface needs; reuses existing relay mechanics, read-only over metadata-only tables.</td>
     </tr>
     <tr>
-      <td><strong>Note-stub write-back</strong><br><span style="color:var(--green);font-size:.8em">→ backbone</span></td>
+      <td><strong>Note-stub write-back</strong><br><span style="color:var(--green);font-size:.8em">→ backbone · built</span></td>
       <td>5</td><td>4</td><td>5</td><td>2</td><td>4</td>
-      <td>A literal note in the user's own vault, surfaced ambiently — the hero-loop deliverable; markdown write couples to zero PKM API; but net-new staging module + idempotency over unstable ids + filesystem forget sweep.</td>
+      <td>A literal note in the user's own vault, surfaced ambiently — the hero-loop deliverable; markdown write couples to zero PKM API; the cost was the staging module + idempotency over unstable ids + filesystem forget sweep, all now shipped.</td>
     </tr>
     <tr>
-      <td><strong>Claude skill</strong><br><span style="color:var(--accent-2);font-size:.8em">→ actionability</span></td>
+      <td><strong>bergamot-clusters skill</strong><br><span style="color:var(--accent-2);font-size:.8em">→ actionability · built</span></td>
       <td>2</td><td>5</td><td>5</td><td>4</td><td>5</td>
-      <td>Thin SKILL.md + scripts over one primitive; injects clusters + live member URLs into the active task and drafts a stub in the same breath; host-agnostic; but pull-not-push, so weak ambient visibility on its own.</td>
+      <td>Thin SKILL.md + a dependency-free dispatcher over one primitive; injects clusters + live member URLs into the active task and drafts a stub in the same breath; host-agnostic; but pull-not-push, so weak ambient visibility on its own.</td>
     </tr>
     <tr>
-      <td><strong>VS Code webview</strong><br><span style="color:var(--accent);font-size:.8em">→ accessory</span></td>
+      <td><strong>VS Code webview</strong><br><span style="color:var(--accent);font-size:.8em">→ accessory · deferred</span></td>
       <td>4</td><td>3</td><td>1</td><td>2</td><td>5</td>
-      <td>Richest home for the control surface on the VS Code host and the literal "panel that opens on launch"; but VS-Code-host-specific (serves only Wave 1), highest build+maintenance cost.</td>
+      <td>Richest home for the control surface on the VS Code host and the literal "panel that opens on launch"; but VS-Code-host-specific (serves only Wave 1), highest build+maintenance cost — the one deferred surface.</td>
     </tr>
   </tbody>
 </table>
@@ -467,40 +478,40 @@
 </div>
 
 <!-- ============================================================ LAYER -->
-<h2 id="layer">How they layer — the recommendation</h2>
+<h2 id="layer">How they layer — the shipped surface</h2>
 
 <div class="role-strip">
   <div class="node backbone">
-    <span class="rk">backbone</span>
+    <span class="rk">backbone · built</span>
     <strong>Note-stub write-back</strong>
     <p>The SURFACE-node spine: a markdown note in the user's own tool, surfaced ambiently. The universal fallback that ports to every PKM host.</p>
   </div>
   <div class="node action">
-    <span class="rk">actionability</span>
-    <strong>Claude skill</strong>
+    <span class="rk">actionability · built</span>
+    <strong>bergamot-clusters skill</strong>
     <p>The in-workflow layer that also DRIVES the backbone. The host-agnostic push vehicle (on-demand + scheduled weekly digest). Cheapest surface.</p>
   </div>
   <div class="node control">
-    <span class="rk">user controls (required)</span>
+    <span class="rk">user controls · launch-blocking · built</span>
     <strong>The skill, writing to a control table</strong>
-    <p>The user must be able to fix the clusters they're shown: <strong>rename</strong> a mislabeled one, <strong>hide</strong> one they don't want, and mark a site as <strong>"never cluster this origin."</strong> The constitution requires these to ship on day one — clustering without them is surveillance, not a feature. The skill records each action by writing to one small Bergamot-owned table, so the controls work on every host. They are NOT built only into the webview, which would strand non-VS-Code users.</p>
+    <p>The user fixes the clusters they're shown: <strong>rename</strong> a mislabeled one, <strong>hide</strong> one they don't want, and mark a site as <strong>"never cluster this origin."</strong> The skill records each action by writing to <code>topic_cluster_control</code>, so the controls work on every host. They are NOT built only into the webview, which would strand non-VS-Code users.</p>
   </div>
   <div class="node accessory">
-    <span class="rk">optional accessory</span>
+    <span class="rk">accessory · deferred (36.8.8)</span>
     <strong>VS Code webview</strong>
-    <p>A rich-visibility accessory for the VS Code host only. Off the launch critical path; build after the backbone + skill prove the loop.</p>
+    <p>A rich-visibility accessory for the VS Code host only. Off the launch critical path; built after the backbone + skill prove the loop. The one piece deferred past v1.</p>
   </div>
 </div>
 
 <div class="callout key">
-  <span class="label">The recommendation</span>
-  <p><strong>Backbone</strong> = note-stub write-back into <code>bergamot.staging/</code> (most PKM-native, universal fallback). <strong>Actionability layer</strong> = the Claude skill, which also drives stub generation. <strong>Required user controls</strong> = rename / hide / never-cluster-a-site, recorded by the skill into a Bergamot-owned table so they work on every host — never built only into the webview. <strong>Optional accessory</strong> = the VS Code webview, for VS Code users only, after the loop is proven. This satisfies AC#2 ("every surface consumes one primitive") and the constitution's push-surface mandate without betting the hero loop — or the required day-one controls — on the one host-locked, most-expensive surface.</p>
+  <span class="label">The shipped surface</span>
+  <p><strong>Backbone</strong> = note-stub write-back into <code>bergamot.staging/</code> (most PKM-native, universal fallback). <strong>Actionability layer</strong> = the bergamot-clusters skill, which also drives stub generation. <strong>Launch-blocking controls</strong> = rename / hide / never-cluster-a-site, recorded by the skill into <code>topic_cluster_control</code> so they work on every host — never built only into the webview. <strong>Deferred accessory</strong> = the VS Code webview, for VS Code users only, built after the loop is proven. This satisfies the contract goal ("every surface consumes one primitive") and the constitution's push-surface mandate without betting the hero loop — or the day-one controls — on the one host-locked, most-expensive surface.</p>
 </div>
 
 <footer>
-  Concept · task-36.8 surface decision · branch <code>tdt</code> ·
-  drawn from the 36.8 decision brief §4 (scorecard &amp; layering) and the per-surface evaluations ·
-  canonical reference <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md §9</code> ·
+  Concept · task-36.8 cluster surface · branch <code>tdt</code> ·
+  read primitive <code>vscode/src/tdt/cluster_reads.ts</code> · stub renderer/writer <code>note_stub.ts</code> / <code>staging_writer.ts</code> ·
+  skill <code>skills/bergamot-clusters/SKILL.md</code> · canonical decision <code>backlog/decisions/0001-tdt-cluster-surface.md</code> ·
   <a href="task-36.overview.html">← back to the overview</a> ·
   <a href="task-36.8.concept-decision.html">Decision →</a>
 </footer>

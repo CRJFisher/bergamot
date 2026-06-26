@@ -138,6 +138,31 @@ describe("staging_writer", () => {
       expect(removed).toBe(0);
     });
 
+    it("matches by forgotten page_session_id even when the member has no URL", () => {
+      const cluster = make_cluster_detail();
+      cluster.members[0].url = null; // unencodable/absent URL
+      stage_note_stub(root, cluster, CTX);
+      // A url/origin selector can't match a null-URL citation, but the resolved id can.
+      const removed = sweep_staged_stubs(
+        root,
+        { kind: "url", url: "https://nothing.example/x" },
+        ["ps_exemplar"],
+      );
+      expect(removed).toBe(1);
+    });
+
+    it("scrubs a promoted stub's ledger entry citing a forgotten page", () => {
+      const out = stage_note_stub(root, make_cluster_detail(), CTX);
+      fs.unlinkSync(path.join(root, out.filename)); // user promoted it out
+      sweep_staged_stubs(root, { kind: "url", url: "https://arxiv.org/abs/hdbscan" }, [
+        "ps_exemplar",
+      ]);
+      const ledger = JSON.parse(
+        fs.readFileSync(path.join(root, ".bergamot-ledger.json"), "utf8"),
+      );
+      expect(Object.keys(ledger.entries)).toHaveLength(0);
+    });
+
     it("is idempotent and never throws on an empty/absent dir", () => {
       expect(sweep_staged_stubs(path.join(root, "nope"), { kind: "url", url: "x" })).toBe(0);
       stage_note_stub(root, make_cluster_detail(), CTX);

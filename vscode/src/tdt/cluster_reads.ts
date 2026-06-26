@@ -205,6 +205,9 @@ export async function list_clusters_in_range(
      FROM ${TOPIC_CLUSTER_TABLE} c
      JOIN ${TOPIC_RUN_TABLE} r ON r.id = c.run_id
      WHERE r.status = 'complete'
+       -- time_span_* are INCLUSIVE member-time bounds, so a cluster ending exactly
+       -- at $from still overlaps: time_span_end >= $from (cf. window_coverage,
+       -- whose run window_end is half-open → window_end > $from).
        AND c.time_span_start < $to
        AND c.time_span_end >= $from
      ORDER BY c.time_span_start DESC, c.id`,
@@ -394,6 +397,8 @@ export async function window_coverage(
      FROM ${TOPIC_RUN_TABLE} r
      LEFT JOIN ${TOPIC_CLUSTER_MEMBER_TABLE} m ON m.run_id = r.id
      WHERE r.status = 'complete'
+       -- run window bounds are HALF-OPEN [start, end), so end > $from (cf.
+       -- list_clusters_in_range, whose cluster time_span_end is inclusive → >= $from).
        AND r.window_start < $to
        AND r.window_end > $from
      GROUP BY r.window_start, r.window_end

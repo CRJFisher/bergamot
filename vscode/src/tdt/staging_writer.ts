@@ -17,8 +17,10 @@
  *   - **Change-gated.** An unchanged content fingerprint skips the write, so
  *     mtimes (and the user's file-watcher) do not churn.
  *
- * Quarantine is enforced by an auto-written `.gitignore` (`*`) so a staging dir
- * nested in a PKM/git repo can never be committed or synced (principle 6).
+ * Quarantine is enforced by an auto-written `.gitignore` (`*`) so a freshly-created
+ * staging dir nested in a PKM/git repo is not committed or synced (principle 6).
+ * (`.gitignore` does not retroactively untrack files already committed before it
+ * existed — a non-issue for a dir Bergamot creates.)
  */
 import * as fs from "fs";
 import * as path from "path";
@@ -124,14 +126,6 @@ export function stage_note_stub(
   return { kind: "written", filename: rendered.filename };
 }
 
-export function stage_note_stubs(
-  staging_root: string,
-  clusters: ClusterDetail[],
-  ctx: { run_id: string; generated_at: string },
-): StageOutcome[] {
-  return clusters.map((c) => stage_note_stub(staging_root, c, ctx));
-}
-
 /** Origin equality via URL parse (mirrors right_to_forget.has_origin). */
 function url_has_origin(url: string, origin: string): boolean {
   try {
@@ -149,7 +143,20 @@ function read_window(markdown: string): { start: string; end: string } | null {
 }
 
 /** True when the stub at `markdown` cites content the selector forgets. */
-function stub_matches(markdown: string, selector: ForgetSelector): boolean {
+function stub_matches(
+  markdown: string,
+  selector: ForgetSelector,
+  forgotten_ids: Set<string>,
+): boolean {
+  const citations = parse_citations(markdown);
+  // Primary match: a cited page is in the resolved forget set. This is URL-
+  // independent, so it reaches a stub even when a member has no URL or an
+  // unencodable one — the page_session_id is always present and clean.
+  if (forgotten_ids.size > 0) {
+    for (const cite of citations) {
+      if (forgotten_ids.has(cite.page_session_id)) return true;
+    }
+  }
   if (selector.kind === "time_range") {
     // Citations carry no per-page timestamp; a stub is a derived aggregate, so if
     // its window overlaps the forget range it MAY encode a forgotten page — delete
@@ -162,7 +169,9 @@ function stub_matches(markdown: string, selector: ForgetSelector): boolean {
     const we = Date.parse(window.end);
     return ws <= to && we >= from;
   }
-  for (const cite of parse_citations(markdown)) {
+  // Fallback for a url/origin selector that resolved no live id (e.g. an orphan
+  // URL): match the cited URL directly.
+  for (const cite of citations) {
     if (selector.kind === "url" && cite.url === selector.url) return true;
     if (selector.kind === "origin" && url_has_origin(cite.url, selector.origin))
       return true;
@@ -171,17 +180,26 @@ function stub_matches(markdown: string, selector: ForgetSelector): boolean {
 }
 
 /**
- * Delete every staged stub citing content the selector forgets, and drop its
- * ledger entry so a future run may legitimately re-stage surviving threads. A
- * forgotten stub's ledger entry is REMOVED (eligible to recreate from non-
- * forgotten data) — distinct from a user-promoted stub, whose entry stays and
- * whose file-absence means "skip". Idempotent; unreadable entries are left alone.
+ * Delete every staged stub citing content the selector forgets, and scrub the
+ * ledger so no forgotten page id survives (principle 4). On-disk stubs that match
+ * are unlinked and their ledger entry dropped. Ledger entries whose file is gone
+ * (a user-PROMOTED stub) but whose cited pages are in the forget set are also
+ * dropped — the file is the user's now and is left alone, but the ledger must not
+ * keep encoding a forgotten `page_session_id`. A forgotten lineage becomes
+ * eligible to re-stage from surviving data, distinct from a promotion the user
+ * made with no forget, whose entry stays so its file-absence means "skip".
+ * Idempotent; unreadable entries are left alone.
+ *
+ * @param forgotten_page_session_ids - the pages the forget resolved; the primary,
+ *   URL-independent match key.
  */
 export function sweep_staged_stubs(
   staging_root: string,
   selector: ForgetSelector,
+  forgotten_page_session_ids: string[] = [],
 ): number {
   let removed = 0;
+  const forgotten_ids = new Set(forgotten_page_session_ids);
   let entries: string[];
   try {
     entries = fs.readdirSync(staging_root).filter((f) => f.endsWith(".md"));
@@ -193,11 +211,12 @@ export function sweep_staged_stubs(
     Object.values(ledger.entries).map((e) => [e.filename, e.lineage_key]),
   );
   let ledger_dirty = false;
+  const on_disk = new Set(entries);
   for (const entry of entries) {
     const file_path = path.join(staging_root, entry);
     try {
       const markdown = fs.readFileSync(file_path, "utf8");
-      if (!stub_matches(markdown, selector)) continue;
+      if (!stub_matches(markdown, selector, forgotten_ids)) continue;
       fs.unlinkSync(file_path);
       removed++;
       const lineage_key = by_filename.get(entry);
@@ -207,6 +226,16 @@ export function sweep_staged_stubs(
       }
     } catch {
       // Unreadable or already-removed — not this sweep's problem.
+    }
+  }
+  // Scrub promoted-out ledger entries (file gone) that still cite a forgotten page.
+  if (forgotten_ids.size > 0) {
+    for (const [lineage_key, e] of Object.entries(ledger.entries)) {
+      if (on_disk.has(e.filename)) continue;
+      if (e.cited_page_session_ids.some((id) => forgotten_ids.has(id))) {
+        delete ledger.entries[lineage_key];
+        ledger_dirty = true;
+      }
     }
   }
   if (ledger_dirty) write_ledger(staging_root, ledger);

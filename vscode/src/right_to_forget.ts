@@ -317,9 +317,10 @@ export async function forget(
     : 0;
 
   // Plaintext staged stubs live outside the encrypted stores, so they are swept
-  // on the filesystem (derived-first, like the visit buffers above).
+  // on the filesystem (derived-first, like the visit buffers above). The resolved
+  // id set is the primary, URL-independent match key.
   const staged_stubs_removed = options.staging_root
-    ? sweep_staged_stubs(options.staging_root, selector)
+    ? sweep_staged_stubs(options.staging_root, selector, targets.page_session_ids)
     : 0;
 
   // Derived content before metadata (see module header).

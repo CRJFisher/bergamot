@@ -1404,8 +1404,8 @@ export async function create_metadata_schema(db: DuckDB): Promise<void> {
                  ON ${TOPIC_CLUSTER_MEMBER_TABLE}(page_session_id)`);
 
   // Cluster controls (TASK-36.8): resolve_controls reads by kind; the forget
-  // cascade sweeps suppress/rename by target_page_session_id; the input filter
-  // reads never-cluster origins by target_origin.
+  // cascade sweeps suppress/rename by target_page_session_id; never-cluster origins
+  // are read by target_origin (the consumer is wired in TASK-36.9).
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_cluster_control_kind
                  ON ${TOPIC_CLUSTER_CONTROL_TABLE}(kind)`);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_cluster_control_page

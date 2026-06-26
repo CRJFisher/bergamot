@@ -168,6 +168,39 @@ describe("cluster routes (task-36.8)", () => {
     });
   });
 
+  describe("POST /cluster_control/delete", () => {
+    it("un-suppress restores the cluster to reads", async () => {
+      await request(app)
+        .post("/cluster_control")
+        .send({ kind: "suppress", cluster_id: "c0" })
+        .expect(200);
+      let res = await request(app)
+        .get("/query/clusters")
+        .query({ from: W_START, to: W_END });
+      expect(res.body).toHaveLength(0);
+
+      await request(app)
+        .post("/cluster_control/delete")
+        .send({ kind: "suppress", cluster_id: "c0" })
+        .expect(200);
+      res = await request(app).get("/query/clusters").query({ from: W_START, to: W_END });
+      expect(res.body).toHaveLength(1);
+    });
+
+    it("unblock removes a never-cluster origin", async () => {
+      const { ClusterControlStore } = await import("../tdt/cluster_control_store");
+      await request(app)
+        .post("/cluster_control")
+        .send({ kind: "never_cluster_origin", origin: "bank.com" })
+        .expect(200);
+      await request(app)
+        .post("/cluster_control/delete")
+        .send({ kind: "never_cluster_origin", origin: "bank.com" })
+        .expect(200);
+      expect(await new ClusterControlStore(db).list_never_cluster_origins()).toEqual([]);
+    });
+  });
+
   describe("POST /stage_cluster", () => {
     it("writes a stub for a live cluster", async () => {
       const res = await request(app)

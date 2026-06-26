@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>task-36.8 — The integration primitive: one host-agnostic read API — TDT surface decision</title>
+<title>task-36.8 — The integration primitive: one host-agnostic read API — TDT surface</title>
 <style>
   :root {
     --bg: #0f1419; --bg-alt: #161b22; --bg-code: #0c0f14;
@@ -93,7 +93,7 @@
 <nav class="crossdoc" aria-label="Task family build order">
   <span class="home">task-36 family</span>
   <a href="task-36.overview.html">Overview</a>
-  <span class="cur">36.8 surface decision · concept set</span>
+  <span class="cur"><span class="dot done"></span>36.8 cluster surface · concept set</span>
 </nav>
 
 <nav class="concepts" aria-label="Concept pages">
@@ -111,15 +111,15 @@
   <a href="#pins">Decisions it pins</a>
   <a href="#notstage1">Not the Stage-1 read</a>
   <a href="#transport">Transport-agnostic</a>
-  <a href="#beforeafter">Before / after</a>
+  <a href="#routes">Tables → primitive → routes</a>
   <a href="#place">Where it sits</a>
 </nav>
 
 <main>
 <header class="page">
-  <div class="crumb">Bergamot · TDT micro tier · task 36.8 surface decision · branch tdt</div>
+  <div class="crumb">Bergamot · TDT micro tier · task 36.8 cluster surface · branch tdt</div>
   <h1>The integration primitive — one host-agnostic read API</h1>
-  <p class="lead">Every surface — the note-stub write-back, the Claude skill, the VS Code webview — reads clusters through <strong>one</strong> thin module, <code>cluster_reads.ts</code>: four pure <code>(db, params) → JSON</code> functions over the live run. It is the only code that touches the cluster tables.</p>
+  <p class="lead">Every surface — the note-stub write-back, the Claude skill, a future VS Code webview — reads clusters through <strong>one</strong> shipped module, <code>vscode/src/tdt/cluster_reads.ts</code>: four pure <code>(db, params) → JSON</code> functions over the live run. It is the only code that JOINs the cluster tables, and user curation is applied inside it.</p>
 </header>
 
 <!-- ============================================================ WHAT -->
@@ -127,12 +127,12 @@
 
 <div class="callout key">
   <span class="label">The contract in one line</span>
-  <p><code>cluster_reads.ts</code> is the <strong>only</strong> surface-facing code that JOINs <code>topic_run × topic_cluster × topic_cluster_member</code>. It returns plain JSON-serializable objects — no MCP types, no HTTP types, no VS Code types — drawn verbatim from the persisted 36.5 label-bundle fields, and reads only the live (<code>status='complete'</code>) run.</p>
+  <p><code>cluster_reads.ts</code> is the <strong>only</strong> surface-facing code that JOINs <code>topic_run × topic_cluster × topic_cluster_member</code> (plus <code>webpage_*</code> for page fields). It returns plain JSON-serializable objects — no MCP types, no HTTP types, no VS Code types — drawn from the persisted 36.5 label-bundle fields, reads only the live (<code>status='complete'</code>) run, and applies the user's suppress/rename controls in-memory before any consumer sees a cluster.</p>
 </div>
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1100 250" role="img" aria-label="Three cluster tables are joined by exactly one module, cluster_reads.ts, exposing four pure functions that return plain JSON.">
+<svg viewBox="0 0 1100 260" role="img" aria-label="Three cluster tables are joined by exactly one module, cluster_reads.ts, which applies controls in-memory and exposes four pure functions that return plain JSON.">
   <defs>
     <marker id="j1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#6cb6ff"/></marker>
     <marker id="j2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#f0a35e"/></marker>
@@ -143,14 +143,16 @@
   <rect x="40" y="100" width="200" height="44" rx="7" fill="#0c0f14" stroke="#f0a35e"/><text x="140" y="127" fill="#f0a35e" font-size="11" text-anchor="middle">topic_cluster</text>
   <rect x="40" y="156" width="200" height="44" rx="7" fill="#0c0f14" stroke="#f0a35e"/><text x="140" y="183" fill="#f0a35e" font-size="11" text-anchor="middle">topic_cluster_member</text>
   <text x="40" y="222" fill="#768390" font-size="9">+ webpage_* joined for url / title / page_loaded_at</text>
+  <text x="40" y="238" fill="#768390" font-size="9">+ topic_cluster_control applied IN-MEMORY (not SQL-joined)</text>
 
   <!-- the one module -->
-  <rect x="380" y="62" width="280" height="120" rx="12" fill="rgba(108,182,255,.06)" stroke="#6cb6ff" stroke-width="1.5"/>
-  <text x="520" y="92" fill="#6cb6ff" font-size="13" text-anchor="middle" font-weight="bold">cluster_reads.ts</text>
-  <text x="520" y="112" fill="#d7dde4" font-size="9.5" text-anchor="middle">the ONLY layer that JOINs the tables</text>
-  <text x="520" y="130" fill="#d7dde4" font-size="9.5" text-anchor="middle">four pure (db, params) → JSON fns</text>
-  <text x="520" y="150" fill="#768390" font-size="9" text-anchor="middle">no MCP / HTTP / VS Code types</text>
-  <text x="520" y="166" fill="#768390" font-size="9" text-anchor="middle">read live, never cache</text>
+  <rect x="380" y="58" width="280" height="130" rx="12" fill="rgba(108,182,255,.06)" stroke="#6cb6ff" stroke-width="1.5"/>
+  <text x="520" y="86" fill="#6cb6ff" font-size="13" text-anchor="middle" font-weight="bold">cluster_reads.ts</text>
+  <text x="520" y="106" fill="#d7dde4" font-size="9.5" text-anchor="middle">the ONLY layer that JOINs the tables</text>
+  <text x="520" y="124" fill="#d7dde4" font-size="9.5" text-anchor="middle">four pure (db, params) → JSON fns</text>
+  <text x="520" y="142" fill="#768390" font-size="9" text-anchor="middle">curate(): drop suppressed, apply renames</text>
+  <text x="520" y="160" fill="#768390" font-size="9" text-anchor="middle">no MCP / HTTP / VS Code types</text>
+  <text x="520" y="176" fill="#768390" font-size="9" text-anchor="middle">read live, never cache</text>
 
   <line x1="240" y1="66" x2="380" y2="100" stroke="#6cb6ff" stroke-width="2" marker-end="url(#j1)"/>
   <line x1="240" y1="122" x2="380" y2="122" stroke="#6cb6ff" stroke-width="2" marker-end="url(#j1)"/>
@@ -170,95 +172,102 @@
   <line x1="660" y1="148" x2="730" y2="204" stroke="#f0a35e" stroke-width="1.5" marker-end="url(#j2)"/>
 </svg>
 </div>
-<figcaption>Exactly one module joins the three cluster tables (plus <code>webpage_*</code> for page fields) and exposes four pure functions returning plain JSON. Reads are live, never cached — a cache outside the DB would defeat the right-to-forget cascade.</figcaption>
+<figcaption>Exactly one module joins the three cluster tables (plus <code>webpage_*</code> for page fields) and exposes four pure functions returning plain JSON. Controls are applied in-memory, not SQL-joined, because they key on a stable page identity rather than the per-run cluster id. Reads are live, never cached — a cache outside the DB would defeat the right-to-forget cascade.</figcaption>
 </figure>
 
 <!-- ============================================================ OPS -->
 <h2 id="ops">The four operations — return shapes from the real 36.5 fields</h2>
 
 <table>
-  <thead><tr><th>Operation</th><th>Returns (drawn verbatim from <code>ClusterRecord</code> / <code>MemberRecord</code> / <code>RunRecord</code>)</th></tr></thead>
+  <thead><tr><th>Operation</th><th>Returns (from the persisted cluster / member / run rows)</th></tr></thead>
   <tbody>
     <tr>
-      <td><code>list_clusters_in_range(from, to, limit)</code><br><span style="color:var(--com);font-size:.78rem">clusters overlapping <code>[from, to)</code>, live run, newest-first</span></td>
-      <td><code>{ id, run_id, display_label, headline_title, scope, keyphrases, size, coherence, time_span:{start, end}, representation_version }</code><br><span style="color:var(--red);font-size:.78rem">Excludes <code>representative_vector</code> — internal tracking input, no surface consumer (YAGNI).</span></td>
+      <td><code>list_clusters_in_range(from, to, limit)</code><br><span style="color:var(--com);font-size:.78rem">clusters overlapping <code>[from, to)</code>, live run, newest-first; suppressed dropped + renames applied before the limit</span></td>
+      <td><code>{ id, run_id, display_label, headline_title, scope, keyphrases, size, coherence, time_span:{start, end}, representation_version }</code><br><span style="color:var(--red);font-size:.78rem">Excludes <code>representative_vector</code> — internal tracking input, no surface consumer (YAGNI). The exemplar id is selected for control matching but dropped from the returned summary.</span></td>
     </tr>
     <tr>
-      <td><code>get_cluster(id)</code><br><span style="color:var(--com);font-size:.78rem">members ordered <code>probability DESC, page_session_id</code>, capped at <code>MAX_QUERY_LIMIT</code></span></td>
-      <td><code>{ cluster:{…summary fields…}, exemplar_page:{page_session_id, url, title, page_loaded_at}, members:[{page_session_id, url, title, page_loaded_at, probability, is_exemplar}] }</code><br><span style="color:var(--com);font-size:.78rem">Page fields joined to <code>webpage_*</code> via member <code>page_session_id</code>.</span></td>
+      <td><code>get_cluster(id)</code><br><span style="color:var(--com);font-size:.78rem">members ordered <code>probability DESC, page_session_id</code>, capped at <code>MAX_QUERY_LIMIT</code>; <code>null</code> when unknown, not live, or suppressed</span></td>
+      <td><code>{ cluster:{…summary…}, exemplar_page:{page_session_id, url, title, page_loaded_at}, members:[{page_session_id, url, title, page_loaded_at, probability, is_exemplar}] }</code><br><span style="color:var(--com);font-size:.78rem">Page fields LEFT-joined to <code>webpage_activity_sessions</code> + <code>webpage_capture</code>; the exemplar is resolved directly so it is present even if it falls past the member cap.</span></td>
     </tr>
     <tr>
       <td><code>list_clusters_for_page(page_session_id)</code><br><span style="color:var(--com);font-size:.78rem">live-run clusters containing that page</span></td>
-      <td><code>{ clusters:[…], page_status }</code> where <code>page_status ∈ {"clustered", "noise", "unseen"}</code>.<br><span style="color:var(--com);font-size:.78rem">The honest −1 is surfaced as <code>"noise"</code> with an empty <code>clusters</code> array — distinct from <code>"unseen"</code>.</span></td>
+      <td><code>{ clusters:[…], page_status }</code> where <code>page_status ∈ {"clustered", "noise", "unseen"}</code>.<br><span style="color:var(--com);font-size:.78rem"><code>page_status</code> reflects the raw data; <code>clusters</code> reflects only non-suppressed clusters, so a clustered-but-suppressed page returns <code>"clustered"</code> with an empty array.</span></td>
     </tr>
     <tr>
-      <td><code>window_coverage(from, to)</code><br><span style="color:var(--com);font-size:.78rem">from <code>topic_run</code>, per overlapping live run</span></td>
-      <td><code>{ window:{start, end}, input_count, cluster_count, noise_count, coverage }</code> where <code>coverage = (input_count − noise_count) / input_count</code>.<br><span style="color:var(--com);font-size:.78rem">Derivable from <code>RunRecord</code> alone.</span></td>
+      <td><code>window_coverage(from, to)</code><br><span style="color:var(--com);font-size:.78rem">per overlapping live run; control-independent</span></td>
+      <td><code>{ window:{start, end}, input_count, cluster_count, noise_count, coverage }</code> where <code>coverage = (input_count − noise_count) / input_count</code>.<br><span style="color:var(--com);font-size:.78rem">Derivable from <code>topic_cluster_member</code> alone; suppressing a cluster does not change that its pages were clustered.</span></td>
     </tr>
   </tbody>
 </table>
 
 <div class="callout info">
   <span class="label">The three page-status answers are distinct rows in the data</span>
-  <p>Noise is carried explicitly: a <code>MemberRecord</code> with <code>is_noise = true, cluster_id = null</code> (<code>types.ts:76-77</code>). So <code>list_clusters_for_page</code> distinguishes <code>"clustered"</code> (one or more clusters) from <code>"noise"</code> (processed in a live-run window but landed as HDBSCAN noise) from <code>"unseen"</code> (in no live-run window at all). Returning a bare empty array would conflate <em>processed-and-noise</em> with <em>never-seen</em> — the provenance and recall workflows depend on telling them apart, so that conflation is rejected.</p>
+  <p>Noise is carried explicitly: a member row with <code>is_noise = true</code>. So <code>list_clusters_for_page</code> distinguishes <code>"clustered"</code> (a non-noise member of ≥1 live cluster) from <code>"noise"</code> (processed in a live run but landed as HDBSCAN noise — an honest "this was a one-off in its window") from <code>"unseen"</code> (in no live run at all). Returning a bare empty array would conflate <em>processed-and-noise</em> with <em>never-seen</em>; the provenance and recall workflows depend on telling them apart.</p>
 </div>
 
 <!-- the code shape -->
 <figure>
 <div class="code">
-  <div class="file-label">tdt/src/cluster_reads.ts — the contract, sketched</div>
-<pre><span class="cm">// One module. Four pure functions. Live run only. No transport types.</span>
-<span class="kw">export function</span> <span class="fn">list_clusters_in_range</span>(db, { from, to, limit }) {
+  <div class="file-label">vscode/src/tdt/cluster_reads.ts — the four functions, as shipped</div>
+<pre><span class="cm">// One module. Four pure functions. Live run only. Controls applied in-memory.</span>
+<span class="kw">export async function</span> <span class="fn">list_clusters_in_range</span>(db, { from, to, limit }) {
   <span class="cm">// status='complete' run; time_span overlaps [from, to); newest-first</span>
-  <span class="cm">// scope serialized to its PINNED JSON shape: top-k (domain, count) pairs</span>
+  <span class="cm">// scope surfaced VERBATIM as the labeler stored it — not re-parsed</span>
   <span class="cm">// representative_vector NEVER selected</span>
-  <span class="kw">return</span> rows; <span class="cm">// {{ id, run_id, display_label, headline_title, scope, keyphrases,</span>
-              <span class="cm">//    size, coherence, time_span, representation_version }}</span>
+  <span class="kw">const</span> controls = <span class="kw">await new</span> <span class="fn">ClusterControlStore</span>(db).<span class="fn">resolve_controls</span>();
+  <span class="kw">return</span> <span class="fn">curate</span>(rows, controls).<span class="fn">slice</span>(<span class="num">0</span>, limit); <span class="cm">// drop suppressed, rename survivors</span>
 }
 
-<span class="kw">export function</span> <span class="fn">get_cluster</span>(db, { id }) {
+<span class="kw">export async function</span> <span class="fn">get_cluster</span>(db, { id }) {
   <span class="cm">// members ORDER BY probability DESC, page_session_id; capped MAX_QUERY_LIMIT</span>
+  <span class="cm">// returns null when the cluster is unknown, not live, or suppressed</span>
   <span class="kw">return</span> { cluster, exemplar_page, members };
 }
 
-<span class="kw">export function</span> <span class="fn">list_clusters_for_page</span>(db, { page_session_id }) {
+<span class="kw">export async function</span> <span class="fn">list_clusters_for_page</span>(db, { page_session_id }) {
   <span class="kw">return</span> { clusters, page_status }; <span class="cm">// 'clustered' | 'noise' | 'unseen'</span>
 }
 
-<span class="kw">export function</span> <span class="fn">window_coverage</span>(db, { from, to }) {
+<span class="kw">export async function</span> <span class="fn">window_coverage</span>(db, { from, to }) {
   <span class="kw">return</span> { window, input_count, cluster_count, noise_count,
            coverage: (input_count <span class="hl">-</span> noise_count) <span class="hl">/</span> input_count };
 }</pre>
 </div>
-<figcaption>The functions take a <code>db</code> handle and return plain objects. The same four functions bind unchanged whether <code>db</code> is in-process or behind the daemon socket.</figcaption>
+<figcaption>The functions take a <code>db</code> handle and return plain objects. The same four functions bind unchanged whether <code>db</code> is in-process (the stub writer, a future webview) or behind a loopback route (the skill).</figcaption>
 </figure>
 
 <!-- ============================================================ PINS -->
-<h2 id="pins">Decisions this contract pins — recorded, not left implicit</h2>
+<h2 id="pins">Decisions this contract pins</h2>
 
 <table>
   <thead><tr><th>Decision</th><th>What it pins</th><th>Why</th></tr></thead>
   <tbody>
-    <tr><td>Expose <code>coherence</code>; hide <code>representative_vector</code></td><td><code>coherence</code> is a cheap cluster-health signal; the FROZEN L2-normalized mean vector stays internal.</td><td>The vector is a tracking input with no surface consumer — it bloats payloads and leaks an internal artifact (YAGNI).</td></tr>
-    <tr><td>Pin <code>scope</code>'s JSON shape at the boundary</td><td>Top-k <code>(domain, count)</code> pairs.</td><td><code>scope</code> is a <code>TEXT</code> column with an unpinned serialization; consumers must never parse a raw DB-encoded blob.</td></tr>
-    <tr><td><code>list_clusters_for_page</code> distinguishes <code>clustered</code> / <code>noise</code> / <code>unseen</code></td><td>Noise lives as an explicit row (<code>is_noise = true, cluster_id = null</code>).</td><td>"You read this but it was a one-off in its window" is a different, honest answer from "this page has not been clustered."</td></tr>
-    <tr><td>Filter to <code>status='complete'</code> live runs in every operation</td><td>Superseded/running runs retained in history are excluded.</td><td>Otherwise the same page or window double-surfaces and the user reads it as instability.</td></tr>
+    <tr><td>Expose <code>coherence</code>; hide <code>representative_vector</code></td><td><code>coherence</code> is a cheap cluster-health signal; the frozen L2-normalized mean vector stays internal and is never selected.</td><td>The vector is a tracking input with no surface consumer — it bloats payloads and leaks an internal artifact (YAGNI).</td></tr>
+    <tr><td>Surface <code>scope</code> <strong>verbatim</strong></td><td>The display-ready string the 36.5 labeler stored, e.g. <code>"nextjs.org, github.com +3 sites"</code> — returned as-is.</td><td>The labeler already produces a display-ready string, so the primitive does not re-parse it or invent a structured shape. Describe the system as it is (YAGNI).</td></tr>
+    <tr><td>Apply controls <strong>in-memory</strong>, not via a SQL JOIN</td><td><code>curate()</code> drops suppressed clusters and applies renames against the resolved control maps inside <code>cluster_reads</code>.</td><td>Controls key on a stable page identity (exemplar + label signature), never the per-run cluster id — they cannot be SQL-joined to a row that rotates each recompute. Applying them here makes this the single place curation takes effect.</td></tr>
+    <tr><td><code>list_clusters_for_page</code> distinguishes <code>clustered</code> / <code>noise</code> / <code>unseen</code></td><td>Noise lives as an explicit member row (<code>is_noise = true</code>).</td><td>"You read this but it was a one-off in its window" is a different, honest answer from "this page has not been clustered."</td></tr>
+    <tr><td>Filter to <code>status='complete'</code> live runs in every operation</td><td>Superseded / running / failed runs retained in history are excluded.</td><td>Otherwise the same page or window double-surfaces and the user reads it as instability.</td></tr>
     <tr><td>Multi-window reads, not "latest run" only</td><td><code>list_clusters_in_range</code> / <code>window_coverage</code> take <code>(from, to)</code>.</td><td>Dormant-thread resurfacing needs a time-range read across historical windows — <code>run_id</code> is per-window.</td></tr>
-    <tr><td>Read live, never cache</td><td>No results held outside the DB.</td><td>A cache would defeat the right-to-forget cascade (<code>right_to_forget.ts:13</code>).</td></tr>
+    <tr><td>Read live, never cache</td><td>No results held outside the DB.</td><td>A cache would defeat the right-to-forget cascade.</td></tr>
   </tbody>
 </table>
+
+<div class="callout good">
+  <span class="label">Scope is a string, not a structured shape</span>
+  <p>An earlier pre-build sketch assumed <code>scope</code> needed pinning to <code>(domain, count)</code> pairs. The shipped 36.5 labeler already emits a display-ready string (e.g. <code>"nextjs.org, github.com +3 sites"</code>), so <code>cluster_reads</code> surfaces it <strong>verbatim</strong> — no re-parsing, no invented shape. Every surface renders the string directly.</p>
+</div>
 
 <!-- ============================================================ NOT STAGE 1 -->
 <h2 id="notstage1">What the primitive is NOT — the Stage-1 pipeline read</h2>
 
 <div class="callout warn">
-  <span class="label">visits_in_window is a separate, still-required deliverable</span>
-  <p>The clustering pipeline reads its own input — captured visit metadata for a window — via <code>GET /query/visits_in_window?from=&amp;to=</code> (plan §9). This route <strong>does not exist in <code>server_manager.ts</code> today</strong>. It is NOT part of <code>cluster_reads.ts</code> and NOT a user-facing surface: it reads <code>webpage_*</code> visit rows, not cluster rows, and feeds clustering, not a human. The §3 rename and the plan-§9 rewrite must <strong>preserve</strong> this requirement — it belongs to the pipeline's input path and survives the retirement of the raw-tool surface untouched.</p>
+  <span class="label">visits_in_window is a separate concern, owned by the orchestration work</span>
+  <p>The clustering pipeline reads its own input — captured visit metadata for a window — via a Stage-1 bulk read (<code>GET /query/visits_in_window</code>, plan §9). That is NOT part of <code>cluster_reads.ts</code> and NOT a user-facing surface: it reads <code>webpage_*</code> visit rows, not cluster rows, and feeds clustering, not a human. It belongs to the orchestration adapter (TASK-36.9) — the §9 rewrite preserves it untouched while retiring the raw-tool surface scope.</p>
 </div>
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1100 170" role="img" aria-label="The webpage tables feed two different reads: the Stage-1 visits_in_window bulk read into the clustering pipeline, and the four cluster_reads functions out to surfaces. They are separate concerns.">
+<svg viewBox="0 0 1100 170" role="img" aria-label="The webpage tables feed two different reads: the Stage-1 visits_in_window bulk read into the clustering pipeline, owned by TASK-36.9, and the four cluster_reads functions out to surfaces. They are separate concerns.">
   <defs>
     <marker id="n1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
     <marker id="n2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#6cb6ff"/></marker>
@@ -269,8 +278,8 @@
 
   <!-- stage 1 -->
   <rect x="320" y="20" width="320" height="52" rx="9" fill="#161b22" stroke="#9aa6b2" stroke-dasharray="4 3"/>
-  <text x="480" y="42" fill="#d7dde4" font-size="10.5" text-anchor="middle" font-weight="bold">GET /query/visits_in_window  (Stage-1 fetch)</text>
-  <text x="480" y="58" fill="#768390" font-size="9" text-anchor="middle">NOT this primitive · feeds clustering · route does not exist yet</text>
+  <text x="480" y="42" fill="#d7dde4" font-size="10.5" text-anchor="middle" font-weight="bold">Stage-1 visits_in_window bulk read</text>
+  <text x="480" y="58" fill="#768390" font-size="9" text-anchor="middle">NOT this primitive · feeds clustering · owned by TASK-36.9</text>
   <line x1="220" y1="80" x2="320" y2="52" stroke="#9aa6b2" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#n1)"/>
   <rect x="700" y="20" width="200" height="52" rx="9" fill="#0c0f14" stroke="#9aa6b2" stroke-dasharray="4 3"/>
   <text x="800" y="50" fill="#9aa6b2" font-size="10.5" text-anchor="middle">clustering pipeline</text>
@@ -286,7 +295,7 @@
   <line x1="640" y1="126" x2="700" y2="126" stroke="#6cb6ff" stroke-width="1.5" marker-end="url(#n2)"/>
 </svg>
 </div>
-<figcaption>Two reads sit over the same captured data and must not be conflated: the Stage-1 <code>visits_in_window</code> bulk read feeds clustering (still to build, preserved through the §9 rewrite), and the four <code>cluster_reads</code> functions feed the surfaces.</figcaption>
+<figcaption>Two reads sit over the same captured data and must not be conflated: the Stage-1 <code>visits_in_window</code> bulk read feeds clustering (owned by the orchestration adapter, TASK-36.9), and the four <code>cluster_reads</code> functions feed the surfaces.</figcaption>
 </figure>
 
 <!-- ============================================================ TRANSPORT -->
@@ -295,129 +304,126 @@
 <table>
   <thead><tr><th>Consumer</th><th>How it reaches the primitive</th><th>Transport</th></tr></thead>
   <tbody>
-    <tr><td><strong>VS Code webview</strong></td><td>Imports the module directly in-process.</td><td><code>in-process</code></td></tr>
-    <tr><td><strong>Claude skill / sub-agent</strong></td><td>Hits the four <code>/query/cluster*</code> routes over relay.</td><td><code>HTTP / stdio</code></td></tr>
-    <tr><td><strong>Note-stub generator</strong></td><td>Imports the module in-process.</td><td><code>in-process</code></td></tr>
+    <tr><td><strong>Note-stub writer</strong></td><td>The stub renderer is fed a <code>ClusterDetail</code> from <code>get_cluster</code> in-process; the <code>POST /stage_cluster</code> route calls it server-side.</td><td><code>in-process</code></td></tr>
+    <tr><td><strong>Claude skill</strong></td><td>Hits the four <code>/query/cluster*</code> routes over the loopback relay (reads <code>~/.bergamot/port.json</code>).</td><td><code>HTTP loopback</code></td></tr>
+    <tr><td><strong>VS Code webview (deferred)</strong></td><td>Would import the module directly in-process, exactly as the stub writer does.</td><td><code>in-process</code></td></tr>
   </tbody>
 </table>
 
 <div class="callout good">
-  <span class="label">(db, port.json) → JSON is identical whether db is in-process or behind the daemon socket</span>
-  <p>In the daemon the functions bind to four Express routes reusing the proven relay mechanics verbatim — <code>port.json</code> discovery, param validation (400 on missing), <code>MAX_QUERY_LIMIT = 100</code> clamping (<code>server_manager.ts:72</code>), <code>res.json</code>. Because the contract is a JSON shape rather than a table shape, a webview can ship for the VS Code host without the skill existing, the skill ships over stdio/HTTP for <em>any</em> host without the webview, and the write-back ships as a pure filesystem operation usable everywhere.</p>
+  <span class="label">(db, port.json) → JSON is identical whether db is in-process or behind a loopback route</span>
+  <p>The routes reuse the proven relay mechanics verbatim — <code>port.json</code> discovery, param validation (400 on missing), <code>MAX_QUERY_LIMIT = 100</code> clamping (mirrored both in the route and inside <code>cluster_reads</code>), <code>res.json</code>. Because the contract is a JSON shape rather than a table shape, the skill ships over the loopback for any host without a webview, the write-back ships as a pure filesystem op usable everywhere, and a webview can later ship for VS Code without changing the contract.</p>
 </div>
 
-<!-- ============================================================ BEFORE / AFTER -->
-<h2 id="beforeafter">Before / after — the retired raw tools mapped onto one primitive</h2>
+<!-- ============================================================ ROUTES -->
+<h2 id="routes">Tables → primitive → the shipped routes</h2>
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1100 360" role="img" aria-label="Before: three MCP tools and three /query/topic_* routes each take a triple edit. After: one primitive with four /query/cluster* routes and no MCP cases.">
+<svg viewBox="0 0 1100 320" role="img" aria-label="The cluster tables are read by one primitive with four functions, exposed over four GET /query/cluster routes plus a POST /stage_cluster and POST /cluster_control route — explicitly not /query/topic_* and with no MCP tool cases.">
   <defs>
-    <marker id="b1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff7b72"/></marker>
     <marker id="b2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
   </defs>
 
-  <!-- CURRENT (the reflex, rejected) -->
-  <text x="40" y="26" fill="#ff7b72" font-size="12" font-weight="bold">RETIRED — the DB-shaped reflex (AC#2 forbids re-creating it)</text>
-  <rect x="40" y="40" width="200" height="40" rx="6" fill="#161b22" stroke="#ff7b72"/><text x="140" y="64" fill="#ff7b72" font-size="9.5" text-anchor="middle">list_topic_clusters</text>
-  <rect x="40" y="90" width="200" height="40" rx="6" fill="#161b22" stroke="#ff7b72"/><text x="140" y="114" fill="#ff7b72" font-size="9.5" text-anchor="middle">get_topic_cluster</text>
-  <rect x="40" y="140" width="200" height="40" rx="6" fill="#161b22" stroke="#ff7b72"/><text x="140" y="164" fill="#ff7b72" font-size="9.5" text-anchor="middle">list_clusters_for_page</text>
-  <text x="140" y="200" fill="#768390" font-size="9" text-anchor="middle">three MCP tools, three /query/topic_* routes</text>
-  <text x="140" y="216" fill="#768390" font-size="9" text-anchor="middle">each new capability = ListTools + CallTool + route</text>
-  <text x="140" y="238" fill="#ff7b72" font-size="10" text-anchor="middle" font-weight="bold">schema shape dictates the call graph</text>
+  <!-- tables -->
+  <rect x="40" y="120" width="170" height="80" rx="10" fill="#0c0f14" stroke="#f0a35e"/>
+  <text x="125" y="150" fill="#f0a35e" font-size="10.5" text-anchor="middle" font-weight="bold">cluster + label-</text>
+  <text x="125" y="166" fill="#f0a35e" font-size="10.5" text-anchor="middle" font-weight="bold">bundle tables</text>
+  <text x="125" y="186" fill="#768390" font-size="8.5" text-anchor="middle">+ topic_cluster_control</text>
 
-  <!-- arrow across -->
-  <line x1="300" y1="130" x2="430" y2="130" stroke="#7ee787" stroke-width="2.5" marker-end="url(#b2)"/>
-  <text x="365" y="118" fill="#7ee787" font-size="11" text-anchor="middle" font-weight="bold">retired</text>
-  <text x="365" y="148" fill="#768390" font-size="9" text-anchor="middle">no half-built</text>
-  <text x="365" y="162" fill="#768390" font-size="9" text-anchor="middle">routes left behind</text>
+  <!-- primitive -->
+  <rect x="280" y="110" width="240" height="160" rx="12" fill="rgba(108,182,255,.06)" stroke="#6cb6ff" stroke-width="1.5"/>
+  <text x="400" y="136" fill="#6cb6ff" font-size="12" text-anchor="middle" font-weight="bold">cluster_reads.ts</text>
+  <text x="400" y="152" fill="#768390" font-size="9" text-anchor="middle">four pure functions</text>
+  <rect x="296" y="164" width="208" height="22" rx="5" fill="#161b22" stroke="#2a313a"/><text x="306" y="179" fill="#d7dde4" font-size="9">list_clusters_in_range</text>
+  <rect x="296" y="190" width="208" height="22" rx="5" fill="#161b22" stroke="#2a313a"/><text x="306" y="205" fill="#d7dde4" font-size="9">get_cluster</text>
+  <rect x="296" y="216" width="208" height="22" rx="5" fill="#161b22" stroke="#2a313a"/><text x="306" y="231" fill="#d7dde4" font-size="9">list_clusters_for_page</text>
+  <rect x="296" y="242" width="208" height="22" rx="5" fill="#161b22" stroke="#2a313a"/><text x="306" y="257" fill="#d7dde4" font-size="9">window_coverage</text>
+  <line x1="210" y1="160" x2="280" y2="170" stroke="#6cb6ff" stroke-width="2" marker-end="url(#b2)"/>
+  <text x="245" y="150" fill="#6cb6ff" font-size="8" text-anchor="middle">JOINs</text>
 
-  <!-- PLANNED -->
-  <text x="470" y="26" fill="#7ee787" font-size="12" font-weight="bold">PLANNED — one primitive, renamed routes, no MCP cases</text>
-  <rect x="470" y="40" width="270" height="170" rx="12" fill="rgba(108,182,255,.06)" stroke="#6cb6ff" stroke-width="1.5"/>
-  <text x="605" y="66" fill="#6cb6ff" font-size="12" text-anchor="middle" font-weight="bold">cluster_reads.ts</text>
-  <text x="605" y="84" fill="#768390" font-size="9" text-anchor="middle">four pure functions</text>
-  <rect x="486" y="98" width="238" height="24" rx="5" fill="#161b22" stroke="#2a313a"/><text x="496" y="114" fill="#d7dde4" font-size="9">list_clusters_in_range</text>
-  <rect x="486" y="126" width="238" height="24" rx="5" fill="#161b22" stroke="#2a313a"/><text x="496" y="142" fill="#d7dde4" font-size="9">get_cluster</text>
-  <rect x="486" y="154" width="238" height="24" rx="5" fill="#161b22" stroke="#2a313a"/><text x="496" y="170" fill="#d7dde4" font-size="9">list_clusters_for_page</text>
-  <rect x="486" y="182" width="238" height="24" rx="5" fill="#161b22" stroke="#2a313a"/><text x="496" y="198" fill="#d7dde4" font-size="9">window_coverage</text>
-
-  <!-- routes -->
+  <!-- read routes -->
+  <text x="560" y="46" fill="#7ee787" font-size="11" font-weight="bold">SHIPPED read routes — over the loopback relay</text>
   <g font-size="9" text-anchor="start" fill="#7ee787">
-    <rect x="780" y="40" width="280" height="26" rx="5" fill="#161b22" stroke="#7ee787"/><text x="792" y="57">GET /query/clusters</text>
-    <rect x="780" y="72" width="280" height="26" rx="5" fill="#161b22" stroke="#7ee787"/><text x="792" y="89">GET /query/cluster</text>
-    <rect x="780" y="104" width="280" height="26" rx="5" fill="#161b22" stroke="#7ee787"/><text x="792" y="121">GET /query/clusters_for_page</text>
-    <rect x="780" y="136" width="280" height="26" rx="5" fill="#161b22" stroke="#7ee787"/><text x="792" y="153">GET /query/cluster_coverage</text>
+    <rect x="560" y="58" width="290" height="26" rx="5" fill="#161b22" stroke="#7ee787"/><text x="572" y="75">GET /query/clusters</text>
+    <rect x="560" y="90" width="290" height="26" rx="5" fill="#161b22" stroke="#7ee787"/><text x="572" y="107">GET /query/cluster</text>
+    <rect x="560" y="122" width="290" height="26" rx="5" fill="#161b22" stroke="#7ee787"/><text x="572" y="139">GET /query/clusters_for_page</text>
+    <rect x="560" y="154" width="290" height="26" rx="5" fill="#161b22" stroke="#7ee787"/><text x="572" y="171">GET /query/cluster_coverage</text>
   </g>
-  <text x="920" y="184" fill="#ff7b72" font-size="9.5" text-anchor="middle">explicitly NOT /query/topic_*</text>
-  <text x="920" y="200" fill="#768390" font-size="9" text-anchor="middle">NO new MCP ListTools / CallTool cases</text>
-  <line x1="740" y1="120" x2="780" y2="100" stroke="#7ee787" stroke-width="2" marker-end="url(#b2)"/>
+  <line x1="520" y1="175" x2="560" y2="120" stroke="#7ee787" stroke-width="1.8" marker-end="url(#b2)"/>
 
-  <!-- mapping lines: each retired tool -> primitive -->
-  <text x="40" y="270" fill="#768390" font-size="11">the three retired tools map cleanly onto the one primitive:</text>
-  <g font-size="9.5" fill="#d7dde4">
-    <rect x="40" y="284" width="320" height="26" rx="5" fill="#0c0f14" stroke="#2a313a"/><text x="52" y="301"><tspan fill="#ff7b72">list_topic_clusters</tspan>  →  <tspan fill="#7ee787">list_clusters_in_range</tspan></text>
-    <rect x="40" y="316" width="320" height="26" rx="5" fill="#0c0f14" stroke="#2a313a"/><text x="52" y="333"><tspan fill="#ff7b72">get_topic_cluster</tspan>  →  <tspan fill="#7ee787">get_cluster</tspan></text>
-    <rect x="380" y="284" width="360" height="26" rx="5" fill="#0c0f14" stroke="#2a313a"/><text x="392" y="301"><tspan fill="#ff7b72">list_clusters_for_page</tspan>  →  <tspan fill="#7ee787">list_clusters_for_page</tspan> <tspan fill="#768390">(+ page_status)</tspan></text>
-    <rect x="760" y="284" width="300" height="58" rx="5" fill="#0c0f14" stroke="#2a313a"/><text x="772" y="305" fill="#768390">new, no prior tool:</text><text x="772" y="324"><tspan fill="#7ee787">window_coverage</tspan> <tspan fill="#768390">(noise/coverage)</tspan></text>
+  <!-- write routes -->
+  <text x="560" y="206" fill="#f0a35e" font-size="11" font-weight="bold">SHIPPED write routes</text>
+  <g font-size="9" text-anchor="start" fill="#f0a35e">
+    <rect x="560" y="218" width="290" height="26" rx="5" fill="#161b22" stroke="#f0a35e"/><text x="572" y="235">POST /stage_cluster  (draft a stub)</text>
+    <rect x="560" y="250" width="290" height="26" rx="5" fill="#161b22" stroke="#f0a35e"/><text x="572" y="267">POST /cluster_control(/delete)</text>
   </g>
+  <line x1="520" y1="200" x2="560" y2="231" stroke="#f0a35e" stroke-width="1.8" marker-end="url(#b2)"/>
+
+  <!-- not -->
+  <rect x="890" y="100" width="180" height="120" rx="10" fill="rgba(255,123,114,.05)" stroke="#ff7b72" stroke-dasharray="4 3"/>
+  <text x="980" y="128" fill="#ff7b72" font-size="10" text-anchor="middle" font-weight="bold">NOT BUILT</text>
+  <text x="980" y="150" fill="#768390" font-size="9" text-anchor="middle">no /query/topic_*</text>
+  <text x="980" y="168" fill="#768390" font-size="9" text-anchor="middle">routes</text>
+  <text x="980" y="190" fill="#768390" font-size="9" text-anchor="middle">no MCP ListTools /</text>
+  <text x="980" y="206" fill="#768390" font-size="9" text-anchor="middle">CallTool cases</text>
 </svg>
 </div>
-<figcaption>The reflex was three MCP tools over <code>/query/topic_*</code>, each new capability a triple edit (ListTools + CallTool + route) — letting the schema shape the call graph. The planned shape is one primitive behind four renamed <code>/query/cluster*</code> routes with no MCP cases; the rename is the load-bearing distinction from the retired surface.</figcaption>
+<figcaption>The primitive is exposed over four <code>GET /query/cluster*</code> read routes, plus <code>POST /stage_cluster</code> (the skill's draft-stub trigger) and <code>POST /cluster_control(/delete)</code> (curation). There are deliberately no <code>/query/topic_*</code> routes and no MCP <code>ListTools</code>/<code>CallTool</code> cases for clusters — the raw-tool surface scope is retired, with no half-built routes left behind.</figcaption>
 </figure>
 
-<div class="callout warn">
-  <span class="label">No half-built routes — and plan §9 must be rewritten surgically</span>
-  <p>No <code>/query/topic_*</code> routes exist today, so the slate is clean — this is purely about not re-creating them. But plan §9 still literally specifies the retired three-tool / <code>/query/topic_*</code> pattern (lines 772–877): leaving it unedited leaves a canonical doc describing the retired pattern (a documentation-form shim, constitution principle 12) that will mislead implementers into rebuilding exactly what AC#2 forbids. The rewrite deletes the raw-surface spec ONLY and <strong>explicitly preserves the <code>visits_in_window</code> Stage-1 bulk-read requirement</strong> — dropping it would orphan Stage-1. The cluster tables are added to the right-to-forget cascade (<code>right_to_forget.ts:13</code> already names them).</p>
+<div class="callout key">
+  <span class="label">Why the split lets surfaces ship independently and per-host</span>
+  <p>Because the contract is a JSON shape, not a table shape, every surface depends on the stable JSON — never on the table layout. This is the market-validated pattern: Smart Connections exposes one embedding store through three intent-shaped surfaces (Connections / Lookup / Graph); Smart Graph treats "the graph as a decision surface" rather than a queryable table. Surfaces <strong>layer</strong>; they are not mutually exclusive.</p>
 </div>
 
 <!-- ============================================================ PLACE -->
-<h2 id="place">Where it sits — between the tables and the three surfaces, across hosts</h2>
+<h2 id="place">Where it sits — between the tables and the surfaces, across hosts</h2>
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1100 420" role="img" aria-label="The primitive sits between the cluster tables and three surfaces. Its runtime binding (in-process or sidecar daemon) is decided per host by the deploy waves, but the four functions are identical across all of them.">
+<svg viewBox="0 0 1100 360" role="img" aria-label="The primitive sits between the cluster tables and the surfaces. The note-stub write-back and the skill ship now; the VS Code webview is deferred. The runtime binding is decided per host, but the four functions are identical across all of them.">
   <defs>
     <marker id="p1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#6cb6ff"/></marker>
     <marker id="p2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d2a8ff"/></marker>
   </defs>
 
   <!-- tables -->
-  <rect x="40" y="160" width="180" height="90" rx="12" fill="#0c0f14" stroke="#f0a35e"/>
-  <text x="130" y="190" fill="#f0a35e" font-size="11" text-anchor="middle" font-weight="bold">cluster + label-</text>
-  <text x="130" y="206" fill="#f0a35e" font-size="11" text-anchor="middle" font-weight="bold">bundle tables</text>
-  <text x="130" y="226" fill="#768390" font-size="9" text-anchor="middle">one DuckDB file</text>
-  <text x="130" y="240" fill="#768390" font-size="9" text-anchor="middle">status='complete'</text>
+  <rect x="40" y="150" width="180" height="90" rx="12" fill="#0c0f14" stroke="#f0a35e"/>
+  <text x="130" y="180" fill="#f0a35e" font-size="11" text-anchor="middle" font-weight="bold">cluster + label-</text>
+  <text x="130" y="196" fill="#f0a35e" font-size="11" text-anchor="middle" font-weight="bold">bundle tables</text>
+  <text x="130" y="216" fill="#768390" font-size="9" text-anchor="middle">one DuckDB file</text>
+  <text x="130" y="230" fill="#768390" font-size="9" text-anchor="middle">status='complete'</text>
 
   <!-- the primitive -->
   <rect x="290" y="150" width="240" height="110" rx="12" fill="rgba(108,182,255,.07)" stroke="#6cb6ff" stroke-width="1.5"/>
   <text x="410" y="180" fill="#6cb6ff" font-size="12" text-anchor="middle" font-weight="bold">cluster_reads.ts</text>
   <text x="410" y="200" fill="#d7dde4" font-size="9" text-anchor="middle">four (db, params) → JSON fns</text>
-  <text x="410" y="218" fill="#768390" font-size="8.5" text-anchor="middle">binds in-process OR via the</text>
-  <text x="410" y="231" fill="#768390" font-size="8.5" text-anchor="middle">sidecar daemon — per host's</text>
-  <text x="410" y="244" fill="#768390" font-size="8.5" text-anchor="middle">Wave-0 outcome</text>
+  <text x="410" y="218" fill="#768390" font-size="8.5" text-anchor="middle">today on the extension's Express</text>
+  <text x="410" y="231" fill="#768390" font-size="8.5" text-anchor="middle">server; binds unchanged into the</text>
+  <text x="410" y="244" fill="#768390" font-size="8.5" text-anchor="middle">standalone daemon post-extraction</text>
   <line x1="220" y1="205" x2="290" y2="205" stroke="#6cb6ff" stroke-width="2" marker-end="url(#p1)"/>
   <text x="255" y="196" fill="#6cb6ff" font-size="8" text-anchor="middle">JOINs</text>
 
   <!-- three surfaces -->
   <rect x="600" y="36" width="460" height="60" rx="9" fill="#161b22" stroke="#7ee787"/>
-  <text x="610" y="58" fill="#7ee787" font-size="10.5" font-weight="bold">note-stub write-back</text>
+  <text x="610" y="58" fill="#7ee787" font-size="10.5" font-weight="bold">note-stub write-back — SHIPPED</text>
   <text x="610" y="76" fill="#768390" font-size="9">in-process · pure filesystem write → bergamot.staging/</text>
   <text x="610" y="89" fill="#768390" font-size="9">the PKM-native backbone · universal fallback, every host</text>
 
   <rect x="600" y="112" width="460" height="60" rx="9" fill="#161b22" stroke="#6cb6ff"/>
-  <text x="610" y="134" fill="#6cb6ff" font-size="10.5" font-weight="bold">Claude skill / sub-agent</text>
-  <text x="610" y="152" fill="#768390" font-size="9">stdio / HTTP relay · host-agnostic · also drives stub gen</text>
+  <text x="610" y="134" fill="#6cb6ff" font-size="10.5" font-weight="bold">bergamot-clusters skill — SHIPPED</text>
+  <text x="610" y="152" fill="#768390" font-size="9">loopback relay · host-agnostic · drives stubs + controls</text>
   <text x="610" y="165" fill="#768390" font-size="9">+ the host-agnostic home for the launch-blocking control route</text>
 
-  <rect x="600" y="188" width="460" height="60" rx="9" fill="#161b22" stroke="#f0a35e"/>
-  <text x="610" y="210" fill="#f0a35e" font-size="10.5" font-weight="bold">VS Code webview (optional accessory)</text>
-  <text x="610" y="228" fill="#768390" font-size="9">in-process · VS-Code host only (Wave 1) · richest visibility</text>
-  <text x="610" y="241" fill="#768390" font-size="9">NOT on the launch critical path · highest build cost</text>
+  <rect x="600" y="188" width="460" height="60" rx="9" fill="#0c0f14" stroke="#d2a8ff" stroke-dasharray="5 4"/>
+  <text x="610" y="210" fill="#d2a8ff" font-size="10.5" font-weight="bold">VS Code webview — DEFERRED (36.8.8)</text>
+  <text x="610" y="228" fill="#768390" font-size="9">in-process · VS-Code host only · richest visibility</text>
+  <text x="610" y="241" fill="#768390" font-size="9">NOT on the launch critical path · post-launch accessory</text>
 
   <line x1="530" y1="190" x2="600" y2="66"  stroke="#d2a8ff" stroke-width="2" marker-end="url(#p2)"/>
   <line x1="530" y1="205" x2="600" y2="142" stroke="#d2a8ff" stroke-width="2" marker-end="url(#p2)"/>
-  <line x1="530" y1="220" x2="600" y2="218" stroke="#d2a8ff" stroke-width="2" marker-end="url(#p2)"/>
+  <line x1="530" y1="220" x2="600" y2="218" stroke="#d2a8ff" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#p2)"/>
   <text x="565" y="150" fill="#d2a8ff" font-size="8.5" text-anchor="middle">consume</text>
 
   <!-- per-host runtime row -->
@@ -430,20 +436,15 @@
   </g>
 </svg>
 </div>
-<figcaption>The primitive sits between the cluster tables and the three surfaces. Its natural home is the standalone Bergamot daemon that <code>deploy-to-pkm-platforms</code> extracts; today the same functions live on the extension's Express server, reachable via <code>~/.bergamot/port.json</code> discovery, and bind unchanged post-extraction. Each deploy wave decides the runtime — in-process or sidecar — per host, but <code>(db, port.json) → JSON</code> is the same either way, which is exactly why the portability argument holds regardless of which Wave-0 outcomes land.</figcaption>
+<figcaption>The primitive sits between the cluster tables and the surfaces. Today the four functions live on the extension's Express server, reachable via <code>~/.bergamot/port.json</code> discovery; its natural home is the standalone Bergamot daemon that <code>deploy-to-pkm-platforms</code> extracts, and the functions bind unchanged post-extraction. Each deploy wave decides the runtime — in-process or sidecar — per host, but <code>(db, port.json) → JSON</code> is the same either way.</figcaption>
 </figure>
 
-<div class="callout key">
-  <span class="label">Why the split lets surfaces ship independently and per-host</span>
-  <p>Because the contract is a JSON shape, not a table shape, every surface depends on the stable JSON — never on the table layout. This is the market-validated pattern: Smart Connections exposes one embedding store through three intent-shaped surfaces (Connections / Lookup / Graph); Smart Graph treats "the graph as a decision surface" rather than a queryable table. Surfaces <strong>layer</strong>; they are not mutually exclusive.</p>
-</div>
-
 <footer>
-  Doc 3 of 5 · 36.8 surface-decision concept set for <code>task-36</code> · Temporal Topic Detection, micro tier · branch <code>tdt</code> ·
-  return shapes from <code>tdt/src/types.ts</code> (<code>ClusterRecord</code> / <code>MemberRecord</code> / <code>RunRecord</code>) ·
-  relay mechanics <code>vscode/src/server/server_manager.ts</code> ·
-  retired pattern + Stage-1 read <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md §9</code> ·
-  daemon &amp; wave model <code>backlog/drafts/deploy-to-pkm-platforms.md</code> ·
+  Doc 3 of 5 · 36.8 cluster-surface concept set for <code>task-36</code> · Temporal Topic Detection, micro tier · branch <code>tdt</code> ·
+  read primitive <code>vscode/src/tdt/cluster_reads.ts</code> ·
+  routes <code>vscode/src/server/server_manager.ts</code> ·
+  canonical decision <code>backlog/decisions/0001-tdt-cluster-surface.md</code> ·
+  Stage-1 read + §9 <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md §9</code> ·
   <a href="task-36.overview.html">← back to the overview</a>
 </footer>
 

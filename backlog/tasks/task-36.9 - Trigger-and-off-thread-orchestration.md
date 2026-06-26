@@ -26,7 +26,14 @@ Wire the end-to-end run behind two entry surfaces over one pure rebuild_clusters
 
 The automatic trigger is an in-host scheduler (a VS Code extension timer / activation-time check), not an OS cron + headless writer — a headless writer would violate the single-writer model (plan §3). The cadence is configurable; its default is an evidence-based judgement made from task-36.7's output (the live visits-per-month distribution and the measured per-run re-download volume), defaulting to once/day until that data narrows it. A single-flight guard prevents duplicate concurrent runs across multiple workspace windows and reloads. Cost on quiet days is bounded by §8 idempotency: a run over an unchanged window (same input_fingerprint) is a no-op, so a daily tick that finds no new visits costs ~nothing. Count-based triggers ("fire after N visits") are out of scope — the count guard is a windowing quality invariant (task-36.2), not a trigger — as is OS cron.
 
-Design reference: backlog/drafts/tdt-hdbscan-micro-tier-plan.md §11 step 9; cadence evidence from task-36.7; cost model in plan §8.
+This orchestration adapter also owns two input-path hooks left by TASK-36.8: it adds the
+`GET /query/visits_in_window?from=&to=` Stage-1 bulk read that feeds clustering (preserved in
+plan §9, not yet in server_manager.ts), and it applies the user's `never-cluster-origin`
+preferences — read via `ClusterControlStore.list_never_cluster_origins()` — to exclude those
+registrable domains from the clustering input (and from the skip-re-download list), satisfying
+constitution §3's "never-cluster-this-origin feeds the capture/skip-re-download list."
+
+Design reference: backlog/drafts/tdt-hdbscan-micro-tier-plan.md §11 step 9; cadence evidence from task-36.7; cost model in plan §8; the §8.8 control hooks from TASK-36.8 (backlog/decisions/0001-tdt-cluster-surface.md).
 
 <!-- SECTION:DESCRIPTION:END -->
 
@@ -40,4 +47,6 @@ Design reference: backlog/drafts/tdt-hdbscan-micro-tier-plan.md §11 step 9; cad
 - [ ] #4 An end-to-end test or documented manual verification clusters a real month and browses the result via the MCP surface without blocking capture
 - [ ] #5 An automatic in-host trigger fires rebuild_clusters on a configurable cadence (default once/day, the value justified by the task-36.7 evidence), with a single-flight guard that prevents duplicate concurrent runs across windows and reloads
 - [ ] #6 A scheduled run over an unchanged window performs no re-download and no re-fit (the §8 idempotency no-op), verified by a test
+- [ ] #7 The `GET /query/visits_in_window?from=&to=` Stage-1 bulk read (plan §9) is added, row-capped to a full window, feeding the clustering input
+- [ ] #8 `never-cluster-origin` controls (TASK-36.8) exclude their registrable domains from the clustering input and the skip-re-download list, via `list_never_cluster_origins()`
 <!-- AC:END -->

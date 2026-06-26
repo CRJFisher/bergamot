@@ -43,7 +43,9 @@ recommendation:
   drives stub generation (`summarise → draft stub`), and is the host-agnostic home for the
   controls and the weekly digest.
 - **Controls** — launch-blocking suppress / rename / never-cluster-origin, shipped via the
-  skill + a control route so they work on every host.
+  skill + a control route so they work on every host. (Suppress/rename take effect on read
+  now; the never-cluster-origin preference is recorded now, and the filter that excludes the
+  origin from re-download and clustering input is wired by the orchestration work, TASK-36.9.)
 - **Accessory** — a VS Code webview: the richest ambient surface for VS Code users, but
   host-locked, highest-cost, and explicitly NOT on the launch critical path.
 

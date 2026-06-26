@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>task-36.8 — Privacy guarantees &amp; the decomposition into sub-tasks — TDT surface decision</title>
+<title>task-36.8 — Privacy guarantees &amp; the decomposition into sub-tasks — TDT cluster surface</title>
 <style>
   :root {
     --bg: #0f1419; --bg-alt: #161b22; --bg-code: #0c0f14;
@@ -98,6 +98,8 @@
   .tag.rw { color: var(--purple); border-color: var(--purple); }
   .tag.ro { color: var(--green); border-color: var(--green); }
   .tag.dep { color: var(--accent); border-color: var(--accent); }
+  .tag.done { color: var(--green); border-color: var(--green); background: rgba(126,231,135,.1); }
+  .tag.deferred { color: var(--purple); border-color: var(--purple); background: rgba(210,168,255,.1); }
 
   footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .82rem; font-family: var(--mono); max-width: 96ch; }
   @media (max-width: 720px) { nav.outline { display: none; } h2 { scroll-margin-top: 90px; } }
@@ -108,10 +110,10 @@
 <nav class="crossdoc" aria-label="Task family build order">
   <span class="home">task-36 family</span>
   <a href="task-36.overview.html">Overview</a>
-  <span class="cur">36.8 surface-decision concept set</span>
+  <span class="cur"><span class="dot done"></span>36.8 cluster surface · concept set</span>
 </nav>
 
-<nav class="concepts" aria-label="Concept pages — 36.8 surface decision">
+<nav class="concepts" aria-label="Concept pages — 36.8 cluster surface">
   <span class="home">36.8 concepts</span>
   <a href="task-36.8.concept-decision.html">Decision</a>
   <a href="task-36.8.concept-surfaces.html">Surfaces</a>
@@ -125,15 +127,15 @@
   <a href="#p8">Principle 8 — staging only</a>
   <a href="#invariants">Store invariants</a>
   <a href="#decision">Read-only vs read-write</a>
-  <a href="#decomp">Decomposition roadmap</a>
-  <a href="#seq">Sequencing &amp; dependencies</a>
+  <a href="#decomp">Decomposition</a>
+  <a href="#seq">Sequencing &amp; status</a>
 </nav>
 
 <main>
 <header class="page">
-  <div class="crumb">Bergamot · TDT micro tier · task 36.8 surface decision · branch tdt</div>
+  <div class="crumb">Bergamot · TDT micro tier · task 36.8 cluster surface · branch tdt</div>
   <h1>Privacy guarantees &amp; the decomposition into sub-tasks</h1>
-  <p class="lead">The constitution forces a <strong>read/write asymmetry</strong> on every cluster surface. That asymmetry resolves the read-only-vs-read-write question, and the resolution decomposes into nine follow-on implementation sub-tasks — each justified against the <span style="color:var(--green)">UNDERSTAND</span> / <span style="color:var(--green)">SURFACE</span> spine.</p>
+  <p class="lead">The constitution forces a <strong>read/write asymmetry</strong> on every cluster surface. That asymmetry resolves the read-only-vs-read-write question, and the resolution decomposes into eight implementation sub-tasks (36.8.1–36.8.8) — seven of which ship the v1 launch path; the eighth (the VS Code webview) is the one deferred accessory. This task's own output is <code>ADR 0001</code>.</p>
 </header>
 
 <!-- ============================================================ ASYMMETRY -->
@@ -141,7 +143,7 @@
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1100 320" role="img" aria-label="Reads flow freely over metadata-only tables; writes split into two non-interchangeable kinds — note-stub write-back into a quarantined staging directory only, and cluster-boundary curation into Bergamot's own control tables, never the PKM's canonical notes.">
+<svg viewBox="0 0 1100 320" role="img" aria-label="Reads flow freely over metadata-only tables; writes split into two non-interchangeable kinds — note-stub write-back into a quarantined staging directory only, and cluster-boundary curation into Bergamot's own control table, never the PKM's canonical notes.">
   <defs>
     <marker id="ro" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
     <marker id="wa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d2a8ff"/></marker>
@@ -171,7 +173,7 @@
 
   <!-- WRITE (b): control -->
   <rect x="380" y="220" width="290" height="70" rx="10" fill="rgba(210,168,255,.05)" stroke="#d2a8ff"/>
-  <text x="525" y="243" fill="#d2a8ff" font-size="10.5" text-anchor="middle" font-weight="bold">WRITE (b) · curation → Bergamot control tables</text>
+  <text x="525" y="243" fill="#d2a8ff" font-size="10.5" text-anchor="middle" font-weight="bold">WRITE (b) · curation → topic_cluster_control</text>
   <text x="525" y="260" fill="#768390" font-size="9" text-anchor="middle">suppress / rename / never-cluster-origin</text>
   <text x="525" y="274" fill="#768390" font-size="9" text-anchor="middle">launch-blocking · NOT a principle-8 PKM write</text>
   <line x1="240" y1="170" x2="380" y2="250" stroke="#d2a8ff" stroke-width="2.5" marker-end="url(#wa)"/>
@@ -189,7 +191,7 @@
   <text x="735" y="200" fill="#ff7b72" font-size="8.5" text-anchor="middle">✗ no PKM-edit feedback</text>
 </svg>
 </div>
-<figcaption>Reads are unconstrained beyond auth + local-only over metadata-only tables. Writes split into two non-interchangeable kinds: <span style="color:var(--green)">(a)</span> the note-stub, write-only into a quarantined staging directory; <span style="color:var(--purple)">(b)</span> cluster-boundary curation, into Bergamot's own control tables. <span style="color:var(--red)">Neither ever touches canonical PKM notes, and nothing flows back from PKM edits</span> — treating a user's rename/move as an approval is brittle and skirts the principle-8 boundary.</figcaption>
+<figcaption>Reads are unconstrained beyond auth + local-only over metadata-only tables. Writes split into two non-interchangeable kinds: <span style="color:var(--green)">(a)</span> the note-stub, write-only into a quarantined staging directory; <span style="color:var(--purple)">(b)</span> cluster-boundary curation, into Bergamot's own <code>topic_cluster_control</code> table. <span style="color:var(--red)">Neither ever touches canonical PKM notes, and nothing flows back from PKM edits</span> — treating a user's rename/move as an approval is brittle and skirts the principle-8 boundary.</figcaption>
 </figure>
 
 <!-- ============================================================ PRINCIPLE 8 -->
@@ -198,12 +200,12 @@
 <div class="callout key">
   <span class="label">Constitution principle 8 — inviolable (relaxable only by user amendment)</span>
   <blockquote>"Autonomous agents never write to canonical PKM notes. Agents write append-only to a quarantined staging area the user promotes by hand. Agent-authored content is clearly tagged. The deterministic source of truth is never mutated by an agent."</blockquote>
-  <p style="font-family:var(--mono);font-size:.74rem;color:var(--com);margin-top:.4rem;">docs/constitution.md:90 · governs the canonical-note boundary</p>
+  <p style="font-family:var(--mono);font-size:.74rem;color:var(--com);margin-top:.4rem;">docs/constitution.md · governs the canonical-note boundary</p>
 </div>
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1100 240" role="img" aria-label="Append-only governs the canonical-note boundary, not per-stub-file immutability. The agent may overwrite an un-promoted draft in staging; once a stub is promoted out it is canonical and is never overwritten or resurrected.">
+<svg viewBox="0 0 1100 240" role="img" aria-label="Append-only governs the canonical-note boundary, not per-stub-file immutability. The agent may overwrite an un-promoted draft in staging; the ledger and fingerprint gate make this safe; once a stub is promoted out it is canonical and is never overwritten or resurrected.">
   <defs>
     <marker id="ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
     <marker id="no" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff7b72"/></marker>
@@ -215,7 +217,7 @@
 
   <rect x="70" y="86" width="170" height="56" rx="8" fill="#161b22" stroke="#7ee787"/>
   <text x="155" y="108" fill="#d7dde4" font-size="10" text-anchor="middle">un-promoted draft</text>
-  <text x="155" y="124" fill="#768390" font-size="8.5" text-anchor="middle">agent-tagged · run_id · generated-at</text>
+  <text x="155" y="124" fill="#768390" font-size="8.5" text-anchor="middle">ledger lineage + fingerprint</text>
 
   <!-- self overwrite loop -->
   <path d="M 110 142 C 80 175, 200 175, 175 144" fill="none" stroke="#7ee787" stroke-width="2" marker-end="url(#ok)"/>
@@ -234,23 +236,23 @@
   <rect x="630" y="60" width="420" height="120" rx="12" fill="#161b22" stroke="#ff7b72"/>
   <text x="840" y="92" fill="#ff7b72" font-size="11" text-anchor="middle" font-weight="bold">canonical notes — deterministic source of truth</text>
   <text x="840" y="118" fill="#d7dde4" font-size="10" text-anchor="middle">promoted stub is now canonical</text>
-  <text x="840" y="138" fill="#768390" font-size="9" text-anchor="middle">agent NEVER overwrites it</text>
-  <text x="840" y="156" fill="#768390" font-size="9" text-anchor="middle">agent NEVER resurrects a discarded one</text>
+  <text x="840" y="138" fill="#768390" font-size="9" text-anchor="middle">ledger marks the lineage promoted → never recreated</text>
+  <text x="840" y="156" fill="#768390" font-size="9" text-anchor="middle">agent NEVER overwrites it, NEVER resurrects a discarded one</text>
 
   <path d="M 840 60 C 840 30, 690 30, 660 70" fill="none" stroke="#ff7b72" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#no)"/>
   <text x="755" y="28" fill="#ff7b72" font-size="9" text-anchor="middle">✗ never re-touch / mutate</text>
 </svg>
 </div>
-<figcaption>"Append-only" governs the <strong>canonical-note boundary</strong>, not per-file immutability. The agent rewriting its own un-promoted draft in staging is permitted and is required by the idempotency design — it never touches a canonical note. Once the user promotes a stub out of staging it is canonical: the agent must never overwrite it nor resurrect a discarded one. This reading is pinned explicitly because principle 8 is an inviolable.</figcaption>
+<figcaption>"Append-only" governs the <strong>canonical-note boundary</strong>, not per-file immutability. The agent rewriting its own un-promoted draft in staging is permitted and required by idempotency — it never touches a canonical note. A <code>.bergamot-ledger.json</code> records every emitted lineage: a lineage in the ledger whose file is gone was promoted/discarded and is NEVER recreated; a file on disk that is absent from the ledger is treated as user-owned and never clobbered. The fingerprint gate skips an unchanged rewrite so mtimes do not churn.</figcaption>
 </figure>
 
 <div class="callout info">
   <span class="label">The external landscape validates the staging quarantine</span>
-  <p>Nooscope queues AI output in SQLite then <code>flush</code>es to a vault <em>inbox</em>, "maintaining a human review gate before permanent integration"; Note Companion lands suggestions in a dedicated Inbox folder. <code>bergamot.staging/</code> is the same quarantine pattern — its "human review gate" / "preserve intentionality" rationale is reusable language for the ADR (sub-task 9).</p>
+  <p>Nooscope queues AI output in SQLite then <code>flush</code>es to a vault <em>inbox</em>, "maintaining a human review gate before permanent integration"; Note Companion lands suggestions in a dedicated Inbox folder. <code>bergamot.staging/</code> is the same quarantine pattern — its "human review gate" rationale is quoted in <code>ADR 0001</code>.</p>
 </div>
 
 <!-- ============================================================ INVARIANTS -->
-<h2 id="invariants">Metadata / encrypted-store invariants every surface must respect</h2>
+<h2 id="invariants">Metadata / encrypted-store invariants every surface respects</h2>
 
 <table>
   <thead><tr><th>#</th><th>Invariant</th><th>What it forces on a surface</th></tr></thead>
@@ -263,20 +265,25 @@
     <tr>
       <td><code>2</code></td>
       <td>Re-downloaded content lives in a separate quarantined, encrypted, scoped, deletable tier — never git-tracked, never the PKM repo.</td>
-      <td>Two stores, two OS-keystore-backed DEKs (<code>encryption_key.ts</code>: <code>METADATA_DB_KEY_SECRET</code> / <code>CONTENT_CACHE_KEY_SECRET</code>); a surface never co-mingles them.</td>
+      <td>Two stores, two OS-keystore-backed DEKs; a surface never co-mingles them.</td>
     </tr>
     <tr>
       <td><code>3</code></td>
       <td>Staging is the privacy <em>seam</em> in write-back: staged stubs are plaintext markdown where the file-watcher sees them.</td>
-      <td>Defense is <strong>quarantine-by-directory + never-canonical + auto-gitignore</strong>, not encryption — a staging dir inside a PKM/git repo risks commit or sync despite principle 6 and must be auto-gitignored.</td>
+      <td>Defense is <strong>quarantine-by-directory + never-canonical + auto-gitignore</strong> (<code>*</code>), not encryption — a staging dir inside a PKM/git repo would otherwise risk commit or sync despite principle 6.</td>
     </tr>
     <tr>
       <td><code>4</code></td>
-      <td>Right-to-forget cascades (principle 4): forgetting by URL / origin / time-range deletes cluster memberships, vectors, AND derived staged stubs + curation state.</td>
-      <td>Staged stubs are plaintext outside the encrypted stores, so the cascade needs a <em>new filesystem sweep</em> matching on the per-link citation key (sub-task 3), ordered and idempotent like the existing cascade.</td>
+      <td>Right-to-forget cascades (principle 4): forgetting by URL / origin / time-range deletes cluster memberships, page-anchored controls, AND derived staged stubs.</td>
+      <td>Staged stubs are plaintext outside the encrypted stores, so the cascade runs a <strong>filesystem sweep</strong> (<code>sweep_staged_stubs</code>) matching primarily on the resolved forgotten <code>page_session_id</code> set, falling back to url/origin, and using the frontmatter window for a time-range forget. It also scrubs ledger entries of promoted-out stubs citing a forgotten page. The report grows two fields: <code>cluster_controls_deleted</code> + <code>staged_stubs_removed</code>.</td>
     </tr>
   </tbody>
 </table>
+
+<div class="callout good">
+  <span class="label">never_cluster_origin survives a forget — by design</span>
+  <p>The forget cascade deletes page-anchored controls (suppress / rename, keyed on the forgotten page) inside the metadata transaction. <strong>never_cluster_origin controls deliberately survive</strong> — a block on a site is a preference, not page-derived state, so it is excluded from the count and from the delete.</p>
+</div>
 
 <div class="callout good">
   <span class="label">Reads are clean by the privacy core's own design</span>
@@ -284,7 +291,7 @@
 </div>
 
 <!-- ============================================================ DECISION -->
-<h2 id="decision">The explicit read-only vs read-write decision (AC#4)</h2>
+<h2 id="decision">The explicit read-only vs read-write decision</h2>
 
 <table>
   <thead><tr><th>Direction</th><th>Mode</th><th>What is written</th><th>Constraint</th></tr></thead>
@@ -293,16 +300,21 @@
       <td><strong>Toward the PKM</strong></td>
       <td><span class="tag ro">read-mostly</span></td>
       <td>The note-stub only — <strong>write-only into <code>bergamot.staging/</code></strong>.</td>
-      <td>Append-only at the canonical boundary (per-file overwrite of un-promoted drafts permitted). <span style="color:var(--red)">No reading PKM edits back as signal</span> — a rename is not an approval; that feedback loop is explicitly out of scope.</td>
+      <td>Append-only at the canonical boundary (per-file overwrite of un-promoted drafts permitted, guarded by the ledger + fingerprint gate). <span style="color:var(--red)">No reading PKM edits back as signal</span> — a rename is not an approval; that feedback loop is explicitly out of scope.</td>
     </tr>
     <tr>
       <td><strong>Toward Bergamot's own state</strong></td>
       <td><span class="tag rw">read-write</span></td>
       <td>Cluster-boundary curation — suppress / rename / never-cluster-origin.</td>
-      <td>Writes to a new DuckDB control table in the encrypted metadata store. <strong>In scope now, launch-blocking</strong> (constitution §3), keyed to survive <code>run_id</code> recomputes, and itself a right-to-forget cascade target.</td>
+      <td>Writes to the <code>topic_cluster_control</code> table in the encrypted metadata store. <strong>In scope now, launch-blocking</strong> (constitution §3), keyed on the exemplar page + a content signature to survive <code>run_id</code> recomputes; suppress/rename are right-to-forget cascade targets, never_cluster_origin survives.</td>
     </tr>
   </tbody>
 </table>
+
+<div class="callout key">
+  <span class="label">Stable identity — the concrete keying</span>
+  <p>A cluster's id is <code>hash(run_id | local_label)</code> and rotates every recompute, so a control row cannot key on it. Suppress/rename anchor on the cluster's <strong>exemplar <code>page_session_id</code></strong> plus a <strong>content signature</strong> (NFC + lowercase of <code>headline_title</code> / <code>scope</code> / sorted <code>keyphrases</code>) as a secondary matcher; a control matches a cluster if <em>either</em> matches. <code>never_cluster_origin</code> keys on a registrable domain. Controls are applied in-memory inside <code>cluster_reads</code>, not SQL-joined. The note-stub filename uses the same lineage idea: ISO-week + a slug of the label, so a re-run of a thread overwrites its own stub rather than spawning a duplicate. (<code>lifeline_id</code> is the clean Phase-4 fix.)</p>
+</div>
 
 <div class="callout warn">
   <span class="label">The brittle trap to never conflate</span>
@@ -310,126 +322,126 @@
 </div>
 
 <!-- ============================================================ DECOMPOSITION -->
-<h2 id="decomp">Decomposition — the follow-on implementation sub-tasks</h2>
+<h2 id="decomp">Decomposition — the eight implementation sub-tasks</h2>
 
-<p class="prose">Nine sub-tasks, each justified against the intention tree: <strong style="color:var(--green)">UNDERSTAND</strong> (turn browsing into a queryable knowledge base) and <strong style="color:var(--green)">SURFACE</strong> (push the projects the user is actually working on at a habit anchor). The integration primitive is the blocking dependency for everything.</p>
+<p class="prose">Eight sub-tasks (36.8.1–36.8.8), each justified against the intention tree: <strong style="color:var(--green)">UNDERSTAND</strong> (turn browsing into a queryable knowledge base) and <strong style="color:var(--green)">SURFACE</strong> (push the projects the user is actually working on at a habit anchor). 36.8.1–36.8.7 are the v1 launch path and are done; 36.8.8 (the VS Code webview) is the one deferred accessory. The integration primitive is the blocking dependency for everything; this task's own output is <code>ADR 0001</code>.</p>
 
 <div class="legend">
   <span><span class="box" style="border-color:var(--accent);background:rgba(240,163,94,.15)"></span> blocking dependency</span>
   <span><span class="box" style="border-color:var(--green);background:rgba(126,231,135,.15)"></span> backbone / actionability surface</span>
-  <span><span class="box" style="border-color:var(--purple);background:rgba(210,168,255,.15)"></span> mandatory control state</span>
-  <span><span class="box" style="border-color:var(--accent-2);background:rgba(108,182,255,.15)"></span> optional accessory · ADR</span>
+  <span><span class="box" style="border-color:var(--purple);background:rgba(210,168,255,.15)"></span> launch-blocking control state</span>
+  <span><span class="box" style="border-color:var(--accent-2);background:rgba(108,182,255,.15)"></span> deferred accessory</span>
 </div>
 
-<div class="seq-label">Sequence 0 — blocking dependency (must ship first)</div>
+<div class="seq-label">Sequence 0 — blocking dependency (the primitive)</div>
 <div class="cards">
   <div class="card block">
-    <span class="num">01</span>
-    <span class="tag dep">depends-on: nothing</span> <span class="tag ro">read-only</span>
-    <h4>Implement the cluster read primitive (<code>cluster_reads.ts</code>)</h4>
-    <p class="scope">Four pure <code>(db, params) → JSON</code> functions filtered to <code>status='complete'</code> live runs: <code>list_clusters_in_range</code>, <code>get_cluster</code>, <code>list_clusters_for_page</code>, <code>window_coverage</code>. Return the label-bundle fields exactly (<code>headline_title</code>, <code>scope</code> with pinned JSON shape, <code>keyphrases</code>, <code>display_label</code>, <code>representation_version</code>), <code>size</code>, <code>coherence</code>, <code>time_span</code>; for members join <code>url</code>/<code>title</code>/<code>page_loaded_at</code>/<code>probability</code>/<code>is_exemplar</code>. Exclude <code>representative_vector</code>. <code>list_clusters_for_page</code> returns <code>page_status ∈ {clustered, noise, unseen}</code> distinguishing processed-noise (<code>is_noise = true</code>) from never-clustered. Clamp via <code>MAX_QUERY_LIMIT</code>. Colocated <code>cluster_reads.test.ts</code> with <code>__fixtures__/</code>.</p>
-    <p class="just"><b>UNDERSTAND:</b> the one queryable contract over the knowledge base; every surface and the whole SURFACE spine depend on it.</p>
+    <span class="num">36.8.1</span>
+    <span class="tag dep">depends-on: nothing</span> <span class="tag ro">read-only</span> <span class="tag done">done</span>
+    <h4>Cluster read primitive (<code>cluster_reads.ts</code>)</h4>
+    <p class="scope">Four pure <code>(db, params) → JSON</code> functions filtered to <code>status='complete'</code> live runs: <code>list_clusters_in_range</code>, <code>get_cluster</code>, <code>list_clusters_for_page</code>, <code>window_coverage</code>. Returns the label-bundle fields exactly — <code>scope</code> surfaced verbatim as the labeler's display string, members joined for <code>url</code>/<code>title</code>/<code>page_loaded_at</code>/<code>probability</code>/<code>is_exemplar</code>. Excludes <code>representative_vector</code>. <code>page_status ∈ {clustered, noise, unseen}</code> distinguishes processed-noise. Applies suppress/rename controls in-memory. Clamps via <code>MAX_QUERY_LIMIT</code>.</p>
+    <p class="just"><b>UNDERSTAND:</b> the one queryable contract over the knowledge base; every surface depends on it.</p>
   </div>
   <div class="card block">
-    <span class="num">02</span>
-    <span class="tag dep">depends-on: 01</span> <span class="tag ro">read-only</span>
-    <h4>Bind to four <code>/query/cluster*</code> routes + retire old scope, preserving <code>visits_in_window</code></h4>
-    <p class="scope">Add <code>GET /query/clusters</code>, <code>/query/cluster</code>, <code>/query/clusters_for_page</code>, <code>/query/cluster_coverage</code> mirroring the existing <code>/query/*</code> pattern (param validation, 400, <code>MAX_QUERY_LIMIT</code> clamp, <code>res.json</code>). Explicitly NOT <code>/query/topic_*</code> and NO new MCP <code>ListTools</code>/<code>CallTool</code> cases. <strong>Rewrite plan §9</strong> to describe this primitive and delete its retired three-tool/route spec — while <strong>explicitly preserving the <code>GET /query/visits_in_window?from=&amp;to=</code> Stage-1 bulk read</strong> (does not exist in <code>server_manager.ts</code> today; belongs to the clustering pipeline's input path, not the retired surface). Add cluster tables to the right-to-forget cascade.</p>
-    <p class="just"><b>AC#2 + principle 12:</b> retires the DB-shaped raw-tool scope cleanly with no half-built routes or stale canonical doc, without orphaning Stage-1.</p>
+    <span class="num">36.8.2</span>
+    <span class="tag dep">depends-on: 36.8.1</span> <span class="tag ro">read-only</span> <span class="tag done">done</span>
+    <h4>Four <code>/query/cluster*</code> routes + retire raw-tool scope</h4>
+    <p class="scope"><code>GET /query/clusters</code>, <code>/query/cluster</code>, <code>/query/clusters_for_page</code>, <code>/query/cluster_coverage</code> over the existing relay (param validation, 400, <code>MAX_QUERY_LIMIT</code> clamp, <code>res.json</code>). Explicitly NOT <code>/query/topic_*</code> and NO MCP <code>ListTools</code>/<code>CallTool</code> cases. Plan §9 is rewritten to describe the primitive while <strong>preserving</strong> the separate Stage-1 <code>visits_in_window</code> bulk read (owned by TASK-36.9). Cluster tables added to the right-to-forget cascade.</p>
+    <p class="just"><b>contract + principle 12:</b> retires the DB-shaped raw-tool scope cleanly with no half-built routes, without orphaning Stage-1.</p>
   </div>
 </div>
 
 <div class="seq-label">Sequence 1 — backbone + actionability (the hero loop)</div>
 <div class="cards">
   <div class="card surf">
-    <span class="num">03</span>
-    <span class="tag dep">depends-on: 01</span> <span class="tag rw">read-write → staging</span>
+    <span class="num">36.8.3</span>
+    <span class="tag dep">depends-on: 36.8.1</span> <span class="tag rw">read-write → staging</span> <span class="tag done">done</span>
     <h4>Note-stub renderer + staging writer (the backbone)</h4>
-    <p class="scope">Render one markdown stub per cluster (<code>display_label</code>/<code>headline_title</code> → H1, <code>keyphrases</code> → tags, member URLs → MoC links, exemplar pinned, one-line summary) into <code>bergamot.staging/</code> via pure filesystem write with workspace discovery, agent-tagged frontmatter (<code>run_id</code>, generated-at), auto-gitignore. <strong>Pin the per-link citation format here</strong>: each member link embeds <code>page_session_id</code> + URL in a machine-matchable form so the right-to-forget filesystem sweep can reliably match and delete stubs citing a forgotten URL/origin.</p>
-    <p class="just"><b>SURFACE:</b> the literal hero-loop deliverable, the PKM-native push surface, satisfying principle 8 by construction; the citation key is the contract the forget sweep matches on.</p>
+    <p class="scope">Render one markdown stub per cluster (<code>headline_title</code> → H1, scope verbatim, <code>keyphrases</code> → tags, member URLs → MoC links, exemplar pinned, one-line summary) into <code>bergamot.staging/</code> via a pure renderer (<code>note_stub.ts</code>) + a filesystem writer (<code>staging_writer.ts</code>), agent-tagged frontmatter, auto-gitignore. Each member link embeds <code>page_session_id</code> + a percent-encoded URL in a <code>&lt;!-- bergamot:cite … --&gt;</code> comment the forget sweep matches on. <code>POST /stage_cluster</code> triggers it server-side.</p>
+    <p class="just"><b>SURFACE:</b> the hero-loop deliverable, the PKM-native push surface, satisfying principle 8 by construction; the citation comment is the contract the forget sweep matches on.</p>
   </div>
   <div class="card surf">
-    <span class="num">04</span>
-    <span class="tag dep">depends-on: 03</span> <span class="tag rw">read-write → staging</span>
-    <h4>Staging idempotency + re-run/promotion behavior + forget sweep</h4>
-    <p class="scope">Deterministic filename per lineage (<code>lifeline_id</code> when present — currently NULL, a Phase-4 seam, <code>types.ts:70</code> — else <code>run_id</code> + local label). Re-run overwrites un-promoted stubs in place (permitted: rewrites the agent's own un-promoted draft, never a canonical note); never re-create a stub moved/promoted out, never resurrect a discarded one. Gate restaging to a changed fingerprint. Implement the right-to-forget filesystem sweep matching the sub-task-3 citation key, ordered and idempotent like the existing cascade.</p>
-    <p class="just"><b>SURFACE (trust + principle 4):</b> without idempotency, unstable run-local labels emit churning stubs and erode the hero loop's trust; without the keyed sweep, plaintext stubs escape the forget cascade.</p>
+    <span class="num">36.8.4</span>
+    <span class="tag dep">depends-on: 36.8.3</span> <span class="tag rw">read-write → staging</span> <span class="tag done">done</span>
+    <h4>Staging idempotency + right-to-forget filesystem sweep</h4>
+    <p class="scope">Deterministic filename per lineage (ISO-week + <code>slug(label)</code>); a re-run overwrites its own un-promoted draft in place. A <code>.bergamot-ledger.json</code> gives promotion-safety: a known lineage whose file is gone is never recreated; a file absent from the ledger is never clobbered. A content fingerprint gate skips unchanged rewrites. The forget sweep matches primarily by the resolved forgotten <code>page_session_id</code> set (URL-independent), falls back to url/origin, uses frontmatter window overlap for time-range, and scrubs ledger entries of promoted-out stubs citing a forgotten page.</p>
+    <p class="just"><b>SURFACE (trust + principle 4):</b> without idempotency, unstable run-local labels churn stubs and erode trust; without the keyed sweep, plaintext stubs escape the forget cascade.</p>
   </div>
   <div class="card surf">
-    <span class="num">05</span>
-    <span class="tag dep">depends-on: 02, 03, 07</span> <span class="tag ro">read</span> <span class="tag rw">drives writes</span>
-    <h4>Build the Bergamot cluster skill (SKILL.md + scripts)</h4>
-    <p class="scope">Author SKILL.md (frontmatter + scoped allowed-tools per the <code>weekly-interests</code> template) and <code>fetch_recent_clusters</code> + <code>summarise_cluster</code> + <code>draft_note_stub</code> scripts that call the primitive only, plus the curation actions (suppress / rename / never-cluster-origin) that POST to the control route (sub-task 7). The skill answers in-context recall, DRIVES stub generation (<code>summarise_cluster → draft_note_stub</code>), and is the host-agnostic driver for the launch-blocking control surface. Resolve clusters by current window each invocation (cluster ids dangle across recomputes).</p>
-    <p class="just"><b>SURFACE + UNDERSTAND:</b> the in-workflow actionability layer, the host-agnostic push vehicle, and the host-agnostic home for the launch-blocking control surface; cheapest surface, the task-31.12 pattern.</p>
+    <span class="num">36.8.5</span>
+    <span class="tag dep">depends-on: 36.8.2, 36.8.3, 36.8.7</span> <span class="tag ro">read</span> <span class="tag rw">drives writes</span> <span class="tag done">done</span>
+    <h4>The bergamot-clusters skill</h4>
+    <p class="scope">A SKILL.md + a dependency-free Node dispatcher at <code>skills/bergamot-clusters/</code> (tracked source, symlinked into the gitignored <code>.claude/skills/</code>). Subcommands <code>recent</code> / <code>page</code> / <code>cluster</code> / <code>coverage</code> / <code>stub</code> / <code>suppress</code> / <code>rename</code> / <code>block</code> (and inverses) call the loopback routes only — no DB access. It answers in-context recall, DRIVES stub generation (<code>cluster</code> → <code>stub</code> → <code>/stage_cluster</code>), and is the host-agnostic driver for the launch-blocking control surface. Resolves clusters by a fresh id each turn (ids dangle across recomputes).</p>
+    <p class="just"><b>SURFACE + UNDERSTAND:</b> the in-workflow actionability layer, the host-agnostic push vehicle, and the host-agnostic home for the launch-blocking control surface; cheapest surface.</p>
   </div>
   <div class="card surf">
-    <span class="num">06</span>
-    <span class="tag dep">depends-on: 05</span> <span class="tag ro">read</span> <span class="tag rw">opt-in staging write</span>
-    <h4>Schedule the cluster digest (weekly cron/routine)</h4>
-    <p class="scope">Wire the skill to run on a documented weekly cadence, parameterised by window, emitting a digest artifact + optional desktop notification, and a staged weekly-review stub.</p>
-    <p class="just"><b>SURFACE (constitution.md:127):</b> the host-agnostic push anchor — the pull-only mitigation — for hosts without a webview. Pull-first with opt-in weekly write to staging, per the notification-fatigue lesson: triaged, not a firehose.</p>
+    <span class="num">36.8.6</span>
+    <span class="tag dep">depends-on: 36.8.5</span> <span class="tag ro">read</span> <span class="tag rw">opt-in staging write</span> <span class="tag done">done</span>
+    <h4>Weekly cluster digest cadence</h4>
+    <p class="scope">The weekly cadence is a <code>/schedule</code> routine (e.g. Monday 08:00 local) that runs <code>recent --days 7</code> + <code>coverage --days 7</code> and summarises into a short digest, optionally staging a weekly-review stub. The routine IS the cadence — retune the cron there. Quiet by design: pull-first and triaged, opt-in writes/notifications, and a quiet week produces no stub.</p>
+    <p class="just"><b>SURFACE:</b> the host-agnostic push anchor for hosts without a panel. Pull-first with opt-in weekly write, per the notification-fatigue lesson: triaged, not a firehose.</p>
   </div>
 </div>
 
-<div class="seq-label">Sequence 2 — mandatory control state + optional accessory</div>
+<div class="seq-label">Sequence 2 — launch-blocking control + deferred accessory</div>
 <div class="cards">
   <div class="card ctrl">
-    <span class="num">07</span>
-    <span class="tag dep">depends-on: 01</span> <span class="tag lb">launch-blocking</span> <span class="tag rw">read-write → control</span>
-    <h4>Cluster-control table + write route (host-agnostic)</h4>
-    <p class="scope">New DuckDB control table (in the encrypted metadata store) + write endpoint for suppress / rename / never-cluster-this-origin, consumed by the skill (sub-task 5) so the launch-blocking control surface is host-agnostic and never gated on the webview. Suppression persists across recomputes keyed on stable identity; never-cluster-origin feeds the capture/skip-re-download list; the control state is a right-to-forget cascade target.</p>
-    <p class="just"><b>SURFACE (constitution.md:128, launch-blocking):</b> converts "surveilled" into "seen"; mandatory, not optional. Ships with the skill on the launch path.</p>
+    <span class="num">36.8.7</span>
+    <span class="tag dep">depends-on: 36.8.1</span> <span class="tag lb">launch-blocking</span> <span class="tag rw">read-write → control</span> <span class="tag done">done</span>
+    <h4>Cluster-control table + write route</h4>
+    <p class="scope">The <code>topic_cluster_control</code> table (encrypted metadata store) + <code>POST /cluster_control(/delete)</code>, consumed by the skill so the launch-blocking control surface is host-agnostic. Suppress/rename anchor on the exemplar page + a content signature (survive recomputes); <code>never_cluster_origin</code> keys on a registrable domain. The route translates the on-screen cluster id into the stable anchor. <code>never_cluster_origin</code> is RECORDED now; the filter that excludes the origin from re-download / clustering input is wired by TASK-36.9. Suppress/rename are right-to-forget targets; never_cluster_origin survives.</p>
+    <p class="just"><b>SURFACE (constitution §3, launch-blocking):</b> converts "surveilled" into "seen"; mandatory, not optional. Ships with the skill on the launch path.</p>
   </div>
   <div class="card acc">
-    <span class="num">08</span>
-    <span class="tag dep">depends-on: 02, 07</span> <span class="tag opt">optional · VS-Code host only</span>
+    <span class="num">36.8.8</span>
+    <span class="tag dep">depends-on: 36.8.2, 36.8.7</span> <span class="tag opt">deferred · VS-Code host only</span> <span class="tag deferred">deferred</span>
     <h4>VS Code webview cluster dashboard (NOT launch-blocking)</h4>
-    <p class="scope">Net-new <code>WebviewView</code>/<code>Panel</code>: timeline + cluster cards + member drill-down + domain scope, consuming the primitive via <code>port.json</code> + token-authed fetch in the extension host, <code>postMessage</code> to a sandboxed CSP/nonce webview; <code>viewsContainers</code> + a <code>bergamot.openClusters</code> command + opens-on-launch activation. Optionally hosts the control affordances from (7) as one-click card buttons — a richer host for them, never their only route.</p>
-    <p class="just"><b>SURFACE (constitution.md:127 for VS Code users):</b> the richest ambient-visibility accessory and a discoverable control host, but explicitly host-locked and off the launch critical path — build after the backbone + skill + control route prove the loop; resist any PKM-write affordance.</p>
+    <p class="scope">A net-new <code>WebviewView</code>/<code>Panel</code>: timeline + cluster cards + member drill-down + domain scope, consuming the primitive via <code>port.json</code> + token-authed fetch in the extension host, <code>postMessage</code> to a sandboxed CSP/nonce webview; an opens-on-launch activation. Optionally hosts the control affordances from 36.8.7 as one-click card buttons — a richer host, never their only route. The one accessory deferred past launch.</p>
+    <p class="just"><b>SURFACE (for VS Code users):</b> the richest ambient-visibility accessory and a discoverable control host, but host-locked and off the launch critical path — built after the backbone + skill + control route prove the loop; resist any PKM-write affordance.</p>
   </div>
   <div class="card acc">
-    <span class="num">09</span>
-    <span class="tag dep">depends-on: 03, 07</span> <span class="tag opt">ADR · record</span>
-    <h4>ADR for the read/write boundary (AC#4)</h4>
-    <p class="scope">Record: stub write-back is write-only toward <code>bergamot.staging/</code> (append-only at the canonical-note boundary, per-file overwrite of un-promoted drafts permitted) and feeds no signal back from PKM edits; cluster-boundary curation is a separate mandatory control surface over Bergamot's own tables (in scope now, launch-blocking, host-agnostic via the skill + control route), not inferred from promotion. Document the asymmetry, the "append-only governs the canonical boundary" reading of principle 8, and quote the Nooscope / Note Companion "human review gate" rationale.</p>
-    <p class="just"><b>principle 12:</b> the canonical record downstream surfaces are built against.</p>
+    <span class="num">ADR 0001</span>
+    <span class="tag dep">this task's output</span> <span class="tag done">accepted</span>
+    <h4>The decision record (<code>backlog/decisions/0001-tdt-cluster-surface.md</code>)</h4>
+    <p class="scope">The canonical record this task produces and the eight sub-tasks are built against: the two-layer split, the primitive contract, the workflow → surface map, the read/write asymmetry, the stable-identity decision, and the decomposition. Records that stub write-back is write-only toward staging and feeds no PKM-edit signal back; that cluster-boundary curation is a separate launch-blocking control surface over Bergamot's own table; and quotes the Nooscope / Note Companion "human review gate" rationale.</p>
+    <p class="just"><b>principle 12:</b> the canonical record downstream surfaces are built against. Accepted 2026-06-26.</p>
   </div>
 </div>
 
 <!-- ============================================================ SEQUENCING -->
-<h2 id="seq">Sequencing &amp; dependencies at a glance</h2>
+<h2 id="seq">Sequencing &amp; status at a glance</h2>
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1100 360" role="img" aria-label="The primitive (sub-tasks 1 and 2) blocks everything; the backbone stub writer and skill form the hero loop; the control table is launch-blocking and feeds the skill; the webview and ADR are optional accessories built last.">
+<svg viewBox="0 0 1100 360" role="img" aria-label="The primitive (36.8.1 and 36.8.2) blocks everything; the backbone stub writer and skill form the hero loop; the control table is launch-blocking and feeds the skill; sub-tasks 36.8.1 through 36.8.7 are done; the webview 36.8.8 is the one deferred accessory.">
   <defs>
     <marker id="dep" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
   </defs>
 
   <!-- Seq 0 -->
   <text x="120" y="28" fill="#f0a35e" font-size="11" text-anchor="middle" font-weight="bold">Seq 0 · blocking</text>
-  <rect x="30" y="40" width="180" height="50" rx="8" fill="rgba(240,163,94,.08)" stroke="#f0a35e"/>
-  <text x="120" y="62" fill="#f0a35e" font-size="10" text-anchor="middle" font-weight="bold">01 · cluster_reads.ts</text>
-  <text x="120" y="78" fill="#768390" font-size="9" text-anchor="middle">the read primitive</text>
-  <rect x="30" y="105" width="180" height="50" rx="8" fill="rgba(240,163,94,.08)" stroke="#f0a35e"/>
-  <text x="120" y="127" fill="#f0a35e" font-size="10" text-anchor="middle" font-weight="bold">02 · /query/cluster*</text>
-  <text x="120" y="143" fill="#768390" font-size="9" text-anchor="middle">routes + retire §9</text>
+  <rect x="30" y="40" width="180" height="50" rx="8" fill="rgba(126,231,135,.1)" stroke="#7ee787"/>
+  <text x="120" y="60" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">36.8.1 · cluster_reads.ts</text>
+  <text x="120" y="78" fill="#768390" font-size="8.5" text-anchor="middle">read primitive · DONE</text>
+  <rect x="30" y="105" width="180" height="50" rx="8" fill="rgba(126,231,135,.1)" stroke="#7ee787"/>
+  <text x="120" y="125" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">36.8.2 · /query/cluster*</text>
+  <text x="120" y="143" fill="#768390" font-size="8.5" text-anchor="middle">routes + retire §9 · DONE</text>
   <line x1="120" y1="90" x2="120" y2="105" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#dep)"/>
 
   <!-- Seq 1 -->
   <text x="475" y="28" fill="#7ee787" font-size="11" text-anchor="middle" font-weight="bold">Seq 1 · hero loop</text>
-  <rect x="320" y="40" width="170" height="50" rx="8" fill="rgba(126,231,135,.07)" stroke="#7ee787"/>
-  <text x="405" y="62" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">03 · stub writer</text>
-  <text x="405" y="78" fill="#768390" font-size="9" text-anchor="middle">backbone · staging</text>
-  <rect x="320" y="105" width="170" height="50" rx="8" fill="rgba(126,231,135,.07)" stroke="#7ee787"/>
-  <text x="405" y="127" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">04 · idempotency</text>
-  <text x="405" y="143" fill="#768390" font-size="9" text-anchor="middle">+ forget sweep</text>
-  <rect x="540" y="40" width="170" height="50" rx="8" fill="rgba(126,231,135,.07)" stroke="#7ee787"/>
-  <text x="625" y="62" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">05 · cluster skill</text>
-  <text x="625" y="78" fill="#768390" font-size="9" text-anchor="middle">drives stub + control</text>
-  <rect x="540" y="105" width="170" height="50" rx="8" fill="rgba(126,231,135,.07)" stroke="#7ee787"/>
-  <text x="625" y="127" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">06 · weekly digest</text>
-  <text x="625" y="143" fill="#768390" font-size="9" text-anchor="middle">push anchor</text>
+  <rect x="320" y="40" width="170" height="50" rx="8" fill="rgba(126,231,135,.1)" stroke="#7ee787"/>
+  <text x="405" y="60" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">36.8.3 · stub writer</text>
+  <text x="405" y="78" fill="#768390" font-size="8.5" text-anchor="middle">backbone · DONE</text>
+  <rect x="320" y="105" width="170" height="50" rx="8" fill="rgba(126,231,135,.1)" stroke="#7ee787"/>
+  <text x="405" y="125" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">36.8.4 · idempotency</text>
+  <text x="405" y="143" fill="#768390" font-size="8.5" text-anchor="middle">+ forget sweep · DONE</text>
+  <rect x="540" y="40" width="170" height="50" rx="8" fill="rgba(126,231,135,.1)" stroke="#7ee787"/>
+  <text x="625" y="60" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">36.8.5 · cluster skill</text>
+  <text x="625" y="78" fill="#768390" font-size="8.5" text-anchor="middle">drives stub + control · DONE</text>
+  <rect x="540" y="105" width="170" height="50" rx="8" fill="rgba(126,231,135,.1)" stroke="#7ee787"/>
+  <text x="625" y="125" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">36.8.6 · weekly digest</text>
+  <text x="625" y="143" fill="#768390" font-size="8.5" text-anchor="middle">/schedule routine · DONE</text>
 
   <line x1="405" y1="90" x2="405" y2="105" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#dep)"/>
   <line x1="625" y1="90" x2="625" y2="105" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#dep)"/>
@@ -437,49 +449,46 @@
 
   <!-- Seq 2 -->
   <text x="900" y="28" fill="#d2a8ff" font-size="11" text-anchor="middle" font-weight="bold">Seq 2 · control + accessory</text>
-  <rect x="790" y="40" width="220" height="50" rx="8" fill="rgba(210,168,255,.07)" stroke="#d2a8ff"/>
-  <text x="900" y="58" fill="#d2a8ff" font-size="10" text-anchor="middle" font-weight="bold">07 · control table + route</text>
-  <text x="900" y="74" fill="#ff7b72" font-size="8.5" text-anchor="middle">LAUNCH-BLOCKING · host-agnostic</text>
-  <rect x="790" y="105" width="220" height="50" rx="8" fill="rgba(108,182,255,.06)" stroke="#6cb6ff"/>
-  <text x="900" y="123" fill="#6cb6ff" font-size="10" text-anchor="middle" font-weight="bold">08 · VS Code webview</text>
-  <text x="900" y="139" fill="#768390" font-size="8.5" text-anchor="middle">optional · VS-Code host only</text>
+  <rect x="790" y="40" width="220" height="50" rx="8" fill="rgba(126,231,135,.1)" stroke="#7ee787"/>
+  <text x="900" y="58" fill="#7ee787" font-size="10" text-anchor="middle" font-weight="bold">36.8.7 · control table + route</text>
+  <text x="900" y="74" fill="#ff7b72" font-size="8.5" text-anchor="middle">LAUNCH-BLOCKING · DONE</text>
+  <rect x="790" y="105" width="220" height="50" rx="8" fill="#0c0f14" stroke="#d2a8ff" stroke-dasharray="5 4"/>
+  <text x="900" y="123" fill="#d2a8ff" font-size="10" text-anchor="middle" font-weight="bold">36.8.8 · VS Code webview</text>
+  <text x="900" y="139" fill="#768390" font-size="8.5" text-anchor="middle">DEFERRED · VS-Code host only</text>
 
-  <!-- Seq 3 -->
-  <rect x="790" y="170" width="220" height="50" rx="8" fill="rgba(108,182,255,.06)" stroke="#6cb6ff"/>
-  <text x="900" y="188" fill="#6cb6ff" font-size="10" text-anchor="middle" font-weight="bold">09 · ADR · read/write boundary</text>
-  <text x="900" y="204" fill="#768390" font-size="8.5" text-anchor="middle">Seq 3 · record the asymmetry</text>
+  <!-- ADR -->
+  <rect x="790" y="170" width="220" height="50" rx="8" fill="rgba(240,163,94,.08)" stroke="#f0a35e"/>
+  <text x="900" y="188" fill="#f0a35e" font-size="10" text-anchor="middle" font-weight="bold">ADR 0001 · this task's output</text>
+  <text x="900" y="204" fill="#768390" font-size="8.5" text-anchor="middle">accepted 2026-06-26</text>
 
   <!-- cross deps -->
   <line x1="210" y1="130" x2="320" y2="130" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#dep)"/>
-  <line x1="210" y1="135" x2="790" y2="65" stroke="#9aa6b2" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#dep)"/>
-  <line x1="710" y1="65" x2="790" y2="65" stroke="#9aa6b2" stroke-width="1" stroke-dasharray="3 3"/>
-  <line x1="710" y1="130" x2="790" y2="65" stroke="#9aa6b2" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#dep)"/>
-  <text x="745" y="100" fill="#768390" font-size="8" text-anchor="middle">07 feeds skill</text>
+  <line x1="710" y1="65" x2="790" y2="65" stroke="#9aa6b2" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#dep)"/>
+  <text x="745" y="56" fill="#768390" font-size="8" text-anchor="middle">07 feeds skill</text>
   <line x1="900" y1="90" x2="900" y2="105" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#dep)"/>
-  <line x1="900" y1="155" x2="900" y2="170" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#dep)"/>
 
   <!-- hero-loop arc -->
   <path d="M 490 165 C 540 200, 280 200, 320 168" fill="none" stroke="#7ee787" stroke-width="1.5" stroke-dasharray="4 3"/>
-  <text x="405" y="215" fill="#7ee787" font-size="9.5" text-anchor="middle">summarise_cluster → draft_note_stub = the hero loop</text>
+  <text x="405" y="215" fill="#7ee787" font-size="9.5" text-anchor="middle">cluster → stub = the hero loop</text>
 
   <!-- bottom note -->
-  <text x="550" y="280" fill="#768390" font-size="10" text-anchor="middle">Top-to-bottom is the rough build order. The primitive (01–02) blocks all surfaces.</text>
-  <text x="550" y="298" fill="#768390" font-size="10" text-anchor="middle">The control route (07) is launch-blocking and ships with the skill (05) on the launch path — never gated on the webview (08).</text>
+  <text x="550" y="280" fill="#768390" font-size="10" text-anchor="middle">36.8.1–36.8.7 are DONE (the v1 launch path). The primitive (36.8.1–36.8.2) blocks all surfaces.</text>
+  <text x="550" y="298" fill="#768390" font-size="10" text-anchor="middle">The control route (36.8.7) is launch-blocking and ships with the skill (36.8.5) — never gated on the webview (36.8.8), the one deferred accessory.</text>
 </svg>
 </div>
-<figcaption>The primitive (01–02) blocks everything. The backbone stub writer (03–04) and the skill (05–06) form the hero loop, where <code>summarise_cluster → draft_note_stub</code> seeds staged Maps-of-Content. The control table (07) is <span style="color:var(--red)">launch-blocking</span> and ships host-agnostic via the skill, never on the VS-Code-only critical path; the webview (08) and the ADR (09) are the optional accessories built last.</figcaption>
+<figcaption>The primitive (36.8.1–36.8.2) blocks everything. The backbone stub writer (36.8.3–36.8.4) and the skill (36.8.5–36.8.6) form the hero loop, where <code>cluster → stub</code> seeds staged Maps-of-Content. The control table (36.8.7) is <span style="color:var(--red)">launch-blocking</span> and ships host-agnostic via the skill, never on the VS-Code-only critical path. <span style="color:var(--green)">36.8.1–36.8.7 are done</span>; the webview (36.8.8) is the one deferred accessory, and <code>ADR 0001</code> is this task's output.</figcaption>
 </figure>
 
 <div class="callout key">
   <span class="label">The decomposition in one line</span>
-  <p>One read primitive, then a PKM-native staging backbone driven by a host-agnostic skill, then a launch-blocking control surface that ships with the skill — with the VS Code webview as an optional accessory and an ADR recording the read/write asymmetry. Every sub-task traces to <strong>UNDERSTAND</strong> or <strong>SURFACE</strong>, and no surplus surface is built (YAGNI): <code>representative_vector</code> stays hidden, raw <code>/query/topic_*</code> tools are never re-created, and PKM-edit feedback is out of scope.</p>
+  <p>One read primitive, then a PKM-native staging backbone driven by a host-agnostic skill, then a launch-blocking control surface that ships with the skill — with the VS Code webview as the one deferred accessory and <code>ADR 0001</code> recording the read/write asymmetry. Every sub-task traces to <strong>UNDERSTAND</strong> or <strong>SURFACE</strong>, and no surplus surface is built (YAGNI): <code>representative_vector</code> stays hidden, raw <code>/query/topic_*</code> tools are never created, scope is surfaced verbatim, and PKM-edit feedback is out of scope.</p>
 </div>
 
 <footer>
-  Concept 5 of 5 for <code>task-36.8</code> · Surface decision for topic clusters · branch <code>tdt</code> ·
-  canonical reference <code>backlog/tasks/task-36.8 — Decision Brief §6, §7</code> ·
+  Concept 5 of 5 for <code>task-36.8</code> · cluster surface for topic clusters · branch <code>tdt</code> ·
+  canonical decision <code>backlog/decisions/0001-tdt-cluster-surface.md</code> (Accepted, 2026-06-26) ·
   privacy core <code>docs/constitution.md</code> principles 4 / 6 / 7 / 8 / 12, §3 ·
-  forget cascade <code>vscode/src/right_to_forget.ts:13</code> · keystore <code>encryption_key.ts</code> ·
+  forget sweep <code>vscode/src/right_to_forget.ts</code> + <code>tdt/staging_writer.ts</code> · controls <code>tdt/cluster_control_store.ts</code> ·
   <a href="task-36.overview.html">← back to the overview</a>
 </footer>
 

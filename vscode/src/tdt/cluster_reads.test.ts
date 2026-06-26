@@ -308,6 +308,25 @@ describe("cluster_reads", () => {
       expect(out[0].display_label).toBe("My research thread");
     });
 
+    it("applies a rename matched only by signature (exemplar churned)", async () => {
+      const sig = compute_content_signature({
+        headline_title: "Alpha",
+        scope: "x.com",
+        keyphrases: ["alpha", "beta"],
+      });
+      await new ClusterControlStore(db).upsert(
+        {
+          kind: "rename",
+          target_page_session_id: "different-page",
+          content_signature: sig,
+          display_label_override: "Renamed by signature",
+        },
+        W_START,
+      );
+      const out = await list_clusters_in_range(db, { from: W_START, to: W_END });
+      expect(out[0].display_label).toBe("Renamed by signature");
+    });
+
     it("get_cluster returns null for a suppressed cluster", async () => {
       await new ClusterControlStore(db).upsert(
         { kind: "suppress", target_page_session_id: "p0", content_signature: "x" },
@@ -361,6 +380,40 @@ describe("cluster_reads", () => {
       const detail = await get_cluster(db, { id: "c0" });
       const ghost = detail!.members.find((m) => m.page_session_id === "ghost");
       expect(ghost).toMatchObject({ url: null, title: null });
+    });
+
+    it("caps members at MAX_QUERY_LIMIT yet keeps the exemplar present", async () => {
+      // Exemplar at the lowest probability so it falls beyond the member cap;
+      // get_cluster resolves it separately, so it must still be present.
+      await db.execute(
+        `UPDATE ${TOPIC_CLUSTER_MEMBER_TABLE} SET is_exemplar = FALSE
+         WHERE run_id = 'run-live' AND page_session_id = 'p0'`,
+      );
+      await insert_cluster(db, {
+        id: "c-big",
+        run_id: "run-live",
+        exemplar: "lonely-exemplar",
+        local_label: 7,
+      });
+      await seed_page(db, { id: "lonely-exemplar", url: "https://x.com/ex" });
+      await insert_member(db, {
+        run_id: "run-live",
+        page_session_id: "lonely-exemplar",
+        cluster_id: "c-big",
+        probability: 0.001,
+        is_exemplar: true,
+      });
+      for (let i = 0; i < MAX_QUERY_LIMIT + 5; i++) {
+        await insert_member(db, {
+          run_id: "run-live",
+          page_session_id: `big-${i}`,
+          cluster_id: "c-big",
+          probability: 0.9,
+        });
+      }
+      const detail = await get_cluster(db, { id: "c-big" });
+      expect(detail!.members).toHaveLength(MAX_QUERY_LIMIT);
+      expect(detail!.exemplar_page?.page_session_id).toBe("lonely-exemplar");
     });
 
     it("returns null for an unknown id", async () => {

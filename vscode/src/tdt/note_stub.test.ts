@@ -23,7 +23,9 @@ describe("note_stub renderer", () => {
     expect(markdown).toMatch(/^>.*cohered around Local graph clustering/m);
     expect(markdown).toContain("## Pages in this thread");
     expect(markdown).toContain(
-      "<!-- bergamot:cite page_session_id=ps_exemplar url=https://arxiv.org/abs/hdbscan -->",
+      `<!-- bergamot:cite page_session_id=ps_exemplar url=${encodeURIComponent(
+        "https://arxiv.org/abs/hdbscan",
+      )} -->`,
     );
   });
 
@@ -112,6 +114,23 @@ describe("note_stub renderer", () => {
 
     it("ignores non-citation comments", () => {
       expect(parse_citations("<!-- just a note -->\ntext")).toEqual([]);
+    });
+
+    it("round-trips URLs containing spaces or a literal -->", () => {
+      const cluster = make_cluster_detail();
+      cluster.members[0].url = "https://x.com/a b-->c?q=1";
+      const { markdown } = render_note_stub(cluster, CTX);
+      const cites = parse_citations(markdown);
+      expect(cites[0].url).toBe("https://x.com/a b-->c?q=1");
+    });
+
+    it("emits a citation (page id intact) even when a member has no URL", () => {
+      const cluster = make_cluster_detail();
+      cluster.members[1].url = null;
+      const { markdown } = render_note_stub(cluster, CTX);
+      const cites = parse_citations(markdown);
+      const c = cites.find((x) => x.page_session_id === "ps_leiden");
+      expect(c).toEqual({ page_session_id: "ps_leiden", url: "" });
     });
   });
 });

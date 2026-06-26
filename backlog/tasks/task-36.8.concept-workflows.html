@@ -91,7 +91,7 @@
 <nav class="crossdoc" aria-label="Task-36 family">
   <span class="home">task-36 family</span>
   <a href="task-36.overview.html">↑ Overview</a>
-  <span class="cur">36.8 surface decision — concept set</span>
+  <span class="cur"><span class="dot done"></span>36.8 cluster surface · concept set</span>
 </nav>
 
 <nav class="concepts" aria-label="Surface-decision concept pages">
@@ -113,9 +113,9 @@
 
 <main>
 <header class="page">
-  <div class="crumb">Bergamot · TDT micro tier · task 36.8 surface decision · branch tdt</div>
+  <div class="crumb">Bergamot · TDT micro tier · task 36.8 cluster surface · branch tdt</div>
   <h1>PKM workflows → surface mapping</h1>
-  <p class="lead">Six concrete PKM workflows turn topic clusters into something a user sees and acts on. Every one consumes the <strong>single</strong> read primitive, the primary surface on the launch path is always host-agnostic, and exactly two workflows are read-write — one writes only to <code>bergamot.staging/</code>, the other only to Bergamot's own control tables.</p>
+  <p class="lead">Six concrete PKM workflows turn topic clusters into something a user sees and acts on. Every one consumes the <strong>single</strong> read primitive, the primary surface on the launch path is always host-agnostic, and exactly two workflows are read-write — one writes only to <code>bergamot.staging/</code>, the other only to Bergamot's own control table.</p>
 </header>
 
 <!-- ============================================================ SHAPE -->
@@ -123,7 +123,7 @@
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1120 470" role="img" aria-label="One integration primitive feeds three host-agnostic surfaces — skill, note-stub write-back, control write route — plus an optional VS Code webview accessory; six workflows attach to those surfaces, four read-only and two read-write.">
+<svg viewBox="0 0 1120 470" role="img" aria-label="One integration primitive feeds three host-agnostic surfaces — skill, note-stub write-back, control write route — plus a deferred VS Code webview accessory; six workflows attach to those surfaces, four read-only and two read-write.">
   <defs>
     <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#6cb6ff"/></marker>
     <marker id="w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
@@ -138,19 +138,19 @@
 
   <!-- surfaces -->
   <rect x="300" y="40" width="320" height="58" rx="9" fill="#161b22" stroke="#6cb6ff"/>
-  <text x="312" y="62" fill="#6cb6ff" font-size="11" font-weight="bold">Skill / sub-agent over scripts</text>
+  <text x="312" y="62" fill="#6cb6ff" font-size="11" font-weight="bold">bergamot-clusters skill (built)</text>
   <text x="312" y="80" fill="#768390" font-size="8.5">host-agnostic · in-workflow · drives stubs &amp; control · cheapest</text>
 
   <rect x="300" y="118" width="320" height="58" rx="9" fill="#161b22" stroke="#7ee787"/>
-  <text x="312" y="140" fill="#7ee787" font-size="11" font-weight="bold">Note-stub write-back → bergamot.staging/</text>
+  <text x="312" y="140" fill="#7ee787" font-size="11" font-weight="bold">Note-stub write-back → bergamot.staging/ (built)</text>
   <text x="312" y="158" fill="#768390" font-size="8.5">PKM-native backbone · the hero-loop deliverable</text>
 
   <rect x="300" y="196" width="320" height="58" rx="9" fill="#161b22" stroke="#f0a35e"/>
-  <text x="312" y="218" fill="#f0a35e" font-size="11" font-weight="bold">Control write route</text>
-  <text x="312" y="236" fill="#768390" font-size="8.5">launch-blocking · suppress / rename / never-cluster-origin</text>
+  <text x="312" y="218" fill="#f0a35e" font-size="11" font-weight="bold">Control write route (built · launch-blocking)</text>
+  <text x="312" y="236" fill="#768390" font-size="8.5">suppress / rename / never-cluster-origin</text>
 
   <rect x="300" y="274" width="320" height="58" rx="9" fill="#0c0f14" stroke="#d2a8ff" stroke-dasharray="5 4"/>
-  <text x="312" y="296" fill="#d2a8ff" font-size="11" font-weight="bold">VS Code webview (optional accessory)</text>
+  <text x="312" y="296" fill="#d2a8ff" font-size="11" font-weight="bold">VS Code webview (deferred · 36.8.8)</text>
   <text x="312" y="314" fill="#768390" font-size="8.5">Wave 1 only · richer host · NOT on the launch critical path</text>
 
   <!-- primitive feeds surfaces -->
@@ -191,18 +191,18 @@
     <line x1="40" y1="392" x2="80" y2="392" stroke="#7ee787" stroke-width="1.5" marker-end="url(#w)"/>
     <text x="88" y="396" fill="#9aa6b2">write → bergamot.staging/ (append-only at the canonical boundary, agent-tagged)</text>
     <line x1="40" y1="414" x2="80" y2="414" stroke="#f0a35e" stroke-width="1.5" marker-end="url(#w)"/>
-    <text x="88" y="418" fill="#9aa6b2">write → Bergamot's own control tables (launch-blocking, NEVER the PKM)</text>
+    <text x="88" y="418" fill="#9aa6b2">write → Bergamot's own control table (launch-blocking, NEVER the PKM)</text>
     <rect x="40" y="430" width="40" height="14" rx="3" fill="#0c0f14" stroke="#d2a8ff" stroke-dasharray="4 3"/>
-    <text x="88" y="441" fill="#9aa6b2">webview is a Wave-1 accessory — never the sole route to a launch-blocking capability</text>
+    <text x="88" y="441" fill="#9aa6b2">webview is a deferred accessory — never the sole route to a launch-blocking capability</text>
   </g>
 </svg>
 </div>
-<figcaption>Four workflows are read-only; two are read-write — and the two writes go to <strong>different</strong> destinations that must never be conflated. Every primary surface on the launch path (skill, note-stub write-back, control write route) is host-agnostic; the webview attaches as a Wave-1 accessory only.</figcaption>
+<figcaption>Four workflows are read-only; two are read-write — and the two writes go to <strong>different</strong> destinations that must never be conflated. Every primary surface on the launch path (skill, note-stub write-back, control write route) is host-agnostic and shipped; the webview is the one deferred accessory.</figcaption>
 </figure>
 
 <div class="callout key">
   <span class="label">The one thing to read off this page</span>
-  <p>The read-only/read-write split <em>is</em> the AC#4 answer. Toward the PKM, surfaces are <strong>read-mostly</strong>: the only PKM write is the note-stub, and it flows <em>one way</em> into staging with no feedback read back from the user's edits. Toward Bergamot's own state, curation is <strong>read-write and in scope now</strong> — launch-blocking, not a deferred seam.</p>
+  <p>The read-only/read-write split <em>is</em> the read/write-asymmetry answer. Toward the PKM, surfaces are <strong>read-mostly</strong>: the only PKM write is the note-stub, and it flows <em>one way</em> into staging with no feedback read back from the user's edits. Toward Bergamot's own state, curation is <strong>read-write and launch-blocking</strong> — shipped now, not a deferred seam.</p>
 </div>
 
 <!-- ============================================================ MAP -->
@@ -217,7 +217,7 @@
       <td><strong>Weekly review</strong></td>
       <td>Monday: see the topics actually browsed last week as headlines/cards at a habit anchor, without asking.</td>
       <td>Skill digest + staged weekly stub <em>(host-agnostic push)</em></td>
-      <td>Webview cards/timeline (VS Code accessory)</td>
+      <td>Webview cards/timeline (deferred accessory)</td>
       <td><span class="rw read">read-only</span></td>
       <td><code>list_clusters_in_range(last 7d)</code></td>
     </tr>
@@ -225,13 +225,13 @@
       <td><strong>Note seeding / Maps-of-Content</strong></td>
       <td>Turn a cluster into a starting MoC note — theme + member-page links — then review and promote by hand.</td>
       <td>Note-stub write-back → <code>bergamot.staging/</code></td>
-      <td>Skill (drafts / triggers the stub)</td>
+      <td>Skill (drafts / triggers the stub via <code>stub</code>)</td>
       <td><span class="rw write">read-write → staging</span></td>
       <td><code>get_cluster(id)</code> → exemplar + ranked members + label bundle</td>
     </tr>
     <tr>
       <td><strong>In-context recall while writing</strong></td>
-      <td>Mid-draft: “what have I been reading related to this?” — matching clusters + member pages inline to cite/link.</td>
+      <td>Mid-draft: "what have I been reading related to this?" — matching clusters + member pages inline to cite/link.</td>
       <td>Skill (invoked in the PKM / Claude task)</td>
       <td>Webview (click a cluster)</td>
       <td><span class="rw read">read-only</span></td>
@@ -239,7 +239,7 @@
     </tr>
     <tr>
       <td><strong>Dormant-thread resurfacing</strong></td>
-      <td>A topic explored weeks ago then dropped, pushed back: “you spent time on X three weeks ago.”</td>
+      <td>A topic explored weeks ago then dropped, pushed back: "you spent time on X three weeks ago."</td>
       <td>Skill (scheduled push: weekly digest / notification)</td>
       <td>Webview (launch panel flags stale clusters); write-back (resurfacing entry in digest stub)</td>
       <td><span class="rw read">read-only</span></td>
@@ -247,17 +247,17 @@
     </tr>
     <tr>
       <td><strong>Cluster-boundary curation</strong></td>
-      <td>A cluster is wrong/unwanted → suppress, rename, or “never cluster this origin”; effect persists across recomputes.</td>
+      <td>A cluster is wrong/unwanted → suppress, rename, or "never cluster this origin"; effect persists across recomputes.</td>
       <td>Skill + control write route <em>(host-agnostic)</em></td>
-      <td>Webview (per-cluster one-click controls, VS Code accessory)</td>
+      <td>Webview (per-cluster one-click controls, deferred)</td>
       <td><span class="rw write">read-write → control</span></td>
-      <td>reads current clusters to act on; writes suppression / rename / never-cluster-origin</td>
+      <td>reads current clusters to act on; writes suppress / rename now; <code>never_cluster_origin</code> is recorded now, consumed by 36.9</td>
     </tr>
     <tr>
       <td><strong>Cluster drill-down / page provenance</strong></td>
-      <td>Click into a cluster to inspect exact member pages, domain scope, representative page — “what is in this topic and why.”</td>
-      <td>Skill (expand-cluster command)</td>
-      <td>Webview (card → member list, VS Code accessory)</td>
+      <td>Click into a cluster to inspect exact member pages, domain scope, exemplar page — "what is in this topic and why."</td>
+      <td>Skill (<code>cluster --id</code> command)</td>
+      <td>Webview (card → member list, deferred)</td>
       <td><span class="rw read">read-only</span></td>
       <td><code>get_cluster(id)</code></td>
     </tr>
@@ -266,15 +266,15 @@
 
 <div class="callout info">
   <span class="label">All six consume one primitive</span>
-  <p>No workflow touches DuckDB. Each calls <code>cluster_reads.ts</code> through the host-agnostic JSON contract — in-process for the stub generator and webview, over the <code>/query/cluster*</code> relay for the skill. Surfaces <strong>layer</strong>; they are not mutually exclusive. The same skill that answers in-context recall also drives stub generation (<code>summarise_cluster → draft_note_stub</code>) and POSTs curation actions to the control route.</p>
+  <p>No workflow touches DuckDB. Each calls <code>cluster_reads.ts</code> through the host-agnostic JSON contract — in-process for the stub writer, over the <code>/query/cluster*</code> relay for the skill. Surfaces <strong>layer</strong>; they are not mutually exclusive. The same skill that answers in-context recall also drives stub generation (<code>cluster</code> → <code>stub</code> → <code>POST /stage_cluster</code>) and POSTs curation actions to the control route.</p>
 </div>
 
 <!-- ============================================================ RW -->
-<h2 id="rw">The read-only vs read-write decision, made visible (AC#4)</h2>
+<h2 id="rw">The read-only vs read-write decision, made visible</h2>
 
 <figure>
 <div class="diagram">
-<svg viewBox="0 0 1120 320" role="img" aria-label="Toward the PKM surfaces are read-mostly with one one-way write to staging and no edit feedback; toward Bergamot's own control tables curation is read-write and launch-blocking now.">
+<svg viewBox="0 0 1120 320" role="img" aria-label="Toward the PKM surfaces are read-mostly with one one-way write to staging and no edit feedback; toward Bergamot's own control table curation is read-write and launch-blocking now.">
   <defs>
     <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
     <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#6cb6ff"/></marker>
@@ -311,11 +311,11 @@
 
   <!-- Bergamot control side (right) -->
   <rect x="800" y="100" width="280" height="120" rx="12" fill="rgba(240,163,94,.06)" stroke="#f0a35e" stroke-width="1.5"/>
-  <text x="940" y="130" fill="#f0a35e" font-size="12" text-anchor="middle" font-weight="bold">Bergamot control tables</text>
-  <text x="940" y="150" fill="#d7dde4" font-size="9" text-anchor="middle">new DuckDB table in the metadata store</text>
+  <text x="940" y="130" fill="#f0a35e" font-size="12" text-anchor="middle" font-weight="bold">topic_cluster_control</text>
+  <text x="940" y="150" fill="#d7dde4" font-size="9" text-anchor="middle">a DuckDB table in the metadata store</text>
   <text x="940" y="166" fill="#768390" font-size="9" text-anchor="middle">suppress · rename · never-cluster-origin</text>
   <text x="940" y="184" fill="#768390" font-size="9" text-anchor="middle">survives run_id recomputes · encrypted</text>
-  <text x="940" y="202" fill="#7ee787" font-size="9" text-anchor="middle" font-weight="bold">launch-blocking · IN SCOPE NOW</text>
+  <text x="940" y="202" fill="#7ee787" font-size="9" text-anchor="middle" font-weight="bold">launch-blocking · SHIPPED</text>
 
   <line x1="690" y1="155" x2="800" y2="155" stroke="#f0a35e" stroke-width="2.5" marker-end="url(#o)"/>
   <text x="745" y="145" fill="#f0a35e" font-size="9" text-anchor="middle">read-write</text>
@@ -325,17 +325,22 @@
   <text x="940" y="290" fill="#768390" font-size="9" text-anchor="middle" font-family="monospace">TOWARD BERGAMOT'S OWN STATE · read-write, now</text>
 </svg>
 </div>
-<figcaption>The two writes are not interchangeable. Note-stub write-back flows <strong>one way into staging</strong> with no signal read back from the user's edits (a rename is not an approval). Cluster-boundary curation writes to <strong>Bergamot's own control tables, never the PKM</strong> — so principle 8 does not gate it; the constitution mandates it as launch-blocking on day one.</figcaption>
+<figcaption>The two writes are not interchangeable. Note-stub write-back flows <strong>one way into staging</strong> with no signal read back from the user's edits (a rename is not an approval). Cluster-boundary curation writes to <strong>Bergamot's own control table, never the PKM</strong> — so principle 8 does not gate it; the constitution mandates it as launch-blocking on day one.</figcaption>
 </figure>
 
 <div class="callout good">
   <span class="label">In scope now — not a seam</span>
-  <p>Cluster-boundary curation (suppress / rename / never-cluster-this-origin) ships with the surface on day one. It persists in a control table keyed to survive <code>run_id</code> recomputes, is itself a right-to-forget cascade target, and ships host-agnostic via the skill + control route — never gated on the VS Code webview.</p>
+  <p>Cluster-boundary curation (suppress / rename / never-cluster-this-origin) ships with the surface on day one. It persists in <code>topic_cluster_control</code>, keyed on a stable identity (the cluster's exemplar page + a content signature of its label) so it survives <code>run_id</code> recomputes; suppress/rename are itself right-to-forget cascade targets; and it ships host-agnostic via the skill + control route — never gated on the VS Code webview.</p>
+</div>
+
+<div class="callout warn">
+  <span class="label">never_cluster_origin is recorded now, consumed by 36.9</span>
+  <p>The control surface ships now and the <code>never_cluster_origin</code> preference is recorded immediately (keyed on a registrable domain). The filter that actually excludes that origin from re-download and clustering input is wired by the orchestration adapter (TASK-36.9), which reads the recorded list. <code>never_cluster_origin</code> controls deliberately <strong>survive</strong> a right-to-forget — a block on a site is a preference, not page-derived state.</p>
 </div>
 
 <div class="callout warn">
   <span class="label">The seam that is deliberately NOT built</span>
-  <p>PKM-edit-derived feedback is explicitly out of scope. Reading a user's stub edits back as curation (treating a rename/move as “approve”) would skirt the principle-8 boundary and is brittle. Stubs flow <em>out</em> to staging; nothing flows <em>back</em> from PKM edits. Conflating this with control-table curation is the brittle trap the decision avoids.</p>
+  <p>PKM-edit-derived feedback is explicitly out of scope. Reading a user's stub edits back as curation (treating a rename/move as "approve") would skirt the principle-8 boundary and is brittle. Stubs flow <em>out</em> to staging; nothing flows <em>back</em> from PKM edits. Conflating this with control-table curation is the brittle trap the decision avoids.</p>
 </div>
 
 <!-- ============================================================ WINDOW -->
@@ -367,7 +372,7 @@
   <text x="560" y="196" fill="#768390" font-size="9" text-anchor="middle" font-family="monospace">run_id is per-window · superseded / running runs filtered out · always status='complete'</text>
 </svg>
 </div>
-<figcaption>Weekly review, drill-down, and curation operate on the latest live run. Dormant-thread resurfacing must read <strong>across multiple historical windows</strong> because <code>run_id</code> is per-window — so <code>list_clusters_in_range(from, to)</code> and <code>window_coverage(from, to)</code> take a range, not “latest run” only. Every operation filters to <code>status='complete'</code> so superseded runs never double-surface a page.</figcaption>
+<figcaption>Weekly review, drill-down, and curation operate on the latest live run. Dormant-thread resurfacing must read <strong>across multiple historical windows</strong> because <code>run_id</code> is per-window — so <code>list_clusters_in_range(from, to)</code> and <code>window_coverage(from, to)</code> take a range, not "latest run" only. Every operation filters to <code>status='complete'</code> so superseded runs never double-surface a page.</figcaption>
 </figure>
 
 <!-- ============================================================ CALLS -->
@@ -380,22 +385,22 @@
   <tbody>
     <tr>
       <td><code>list_clusters_in_range(from, to, limit)</code></td>
-      <td>Cluster summaries overlapping <code>[from, to)</code>, live run, newest-first: <code>id</code>, <code>display_label</code>, <code>headline_title</code>, pinned <code>scope</code>, <code>keyphrases</code>, <code>size</code>, <code>coherence</code>, <code>time_span</code>. (No <code>representative_vector</code>.)</td>
+      <td>Cluster summaries overlapping <code>[from, to)</code>, live run, newest-first: <code>id</code>, <code>display_label</code>, <code>headline_title</code>, <code>scope</code> (the labeler's display string, verbatim), <code>keyphrases</code>, <code>size</code>, <code>coherence</code>, <code>time_span</code>. Suppressed dropped + renames applied before the limit. (No <code>representative_vector</code>.)</td>
       <td>Weekly review · in-context recall · <strong>dormant-thread resurfacing</strong> (older/wider window)</td>
     </tr>
     <tr>
       <td><code>get_cluster(id)</code></td>
-      <td><code>{ cluster, exemplar_page, members[] }</code> — members ordered <code>probability DESC, page_session_id</code>, joined to <code>webpage_*</code> for <code>url</code> / <code>title</code> / <code>page_loaded_at</code>, capped at <code>MAX_QUERY_LIMIT</code>.</td>
+      <td><code>{ cluster, exemplar_page, members[] }</code> — members ordered <code>probability DESC, page_session_id</code>, joined to <code>webpage_*</code> for <code>url</code> / <code>title</code> / <code>page_loaded_at</code>, capped at <code>MAX_QUERY_LIMIT</code>; <code>null</code> when unknown, not live, or suppressed.</td>
       <td>Note seeding / MoC (the stub payload) · drill-down / page provenance</td>
     </tr>
     <tr>
       <td><code>list_clusters_for_page(page_session_id)</code></td>
-      <td><code>{ clusters[], page_status }</code> where <code>page_status ∈ {clustered, noise, unseen}</code> — distinguishing processed-noise (<code>is_noise = true, cluster_id = null</code>) from never-clustered.</td>
+      <td><code>{ clusters[], page_status }</code> where <code>page_status ∈ {clustered, noise, unseen}</code> — distinguishing processed-noise (<code>is_noise = true</code>) from never-clustered.</td>
       <td>In-context recall while writing · page provenance</td>
     </tr>
     <tr>
       <td><code>window_coverage(from, to)</code></td>
-      <td><code>{ window, input_count, cluster_count, noise_count, coverage }</code> per overlapping live run — <code>coverage = (input_count − noise_count) / input_count</code>.</td>
+      <td><code>{ window, input_count, cluster_count, noise_count, coverage }</code> per overlapping live run — <code>coverage = (input_count − noise_count) / input_count</code>; control-independent.</td>
       <td>Browsing-health context inside weekly review / drill-down</td>
     </tr>
   </tbody>
@@ -403,13 +408,13 @@
 
 <div class="callout info">
   <span class="label">Why the noise distinction matters here</span>
-  <p>The provenance and recall workflows depend on <code>page_status</code> separating “you read this but it was a one-off in its window” (<code>noise</code>) from “this page has not been clustered” (<code>unseen</code>). The data carries noise as an explicit row, so the contract never collapses processed-and-noise into never-seen — an honest answer the surfaces surface as-is.</p>
+  <p>The provenance and recall workflows depend on <code>page_status</code> separating "you read this but it was a one-off in its window" (<code>noise</code>) from "this page has not been clustered" (<code>unseen</code>). The data carries noise as an explicit row, so the contract never collapses processed-and-noise into never-seen — an honest answer the surfaces surface as-is.</p>
 </div>
 
 <footer>
-  Doc 4 of 5 · surface decision for <code>task-36.8</code> · Temporal Topic Detection, micro tier · branch <code>tdt</code> ·
-  canonical reference: task-36.8 decision brief §5 (workflow map), §6 (read/write asymmetry) ·
-  windowing &amp; the live-run filter <code>tdt/src/types.ts</code>, plan §9 ·
+  Doc 4 of 5 · cluster surface for <code>task-36.8</code> · Temporal Topic Detection, micro tier · branch <code>tdt</code> ·
+  read primitive <code>vscode/src/tdt/cluster_reads.ts</code> · controls <code>cluster_control_store.ts</code> ·
+  canonical decision <code>backlog/decisions/0001-tdt-cluster-surface.md</code> ·
   <a href="task-36.overview.html">← back to the task-36 overview</a>
 </footer>
 
