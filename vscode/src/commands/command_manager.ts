@@ -11,6 +11,7 @@ import {
   open_content_cache_if_exists,
 } from '../redownload/content_cache';
 import { ForgetSelector, forget, selector_matches } from '../right_to_forget';
+import { resolve_staging_root } from '../tdt/staging_root';
 
 /**
  * Configuration for command registration.
@@ -179,11 +180,18 @@ export class CommandManager {
       }
       const report = await forget(this.config.duck_db, content_cache, selector, {
         storage_base: this.config.storage_base,
+        staging_root: resolve_staging_root() ?? undefined,
       });
       const swept = [
         report.content_cache_swept ? 'content cache swept' : null,
         report.page_vectors_deleted > 0
           ? `${report.page_vectors_deleted} page vector(s) removed`
+          : null,
+        report.cluster_controls_deleted > 0
+          ? `${report.cluster_controls_deleted} cluster control(s) removed`
+          : null,
+        report.staged_stubs_removed > 0
+          ? `${report.staged_stubs_removed} staged stub(s) removed`
           : null,
         report.files_removed > 0
           ? `${report.files_removed} buffered file(s) removed`

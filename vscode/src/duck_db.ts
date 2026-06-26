@@ -68,6 +68,12 @@ export const TOPIC_PAGE_VECTOR_TABLE = "topic_page_vector";
 export const TOPIC_RUN_TABLE = "topic_run";
 export const TOPIC_CLUSTER_TABLE = "topic_cluster";
 export const TOPIC_CLUSTER_MEMBER_TABLE = "topic_cluster_member";
+// User curation over detected clusters (TASK-36.8): suppress / rename / never-
+// cluster-this-origin. Bergamot's own control state, NOT a PKM write — it lives
+// in the encrypted metadata store and survives run_id recomputes by keying on a
+// stable identity rather than the per-run cluster id. Exported for the right-to-
+// forget cascade, which sweeps the page-anchored controls.
+export const TOPIC_CLUSTER_CONTROL_TABLE = "topic_cluster_control";
 
 /**
  * Capture metadata columns selected (aliased `cap_*`) when a tree query joins
@@ -1347,6 +1353,25 @@ export async function create_metadata_schema(db: DuckDB): Promise<void> {
   ].join(", ");
   await db.create_table(TOPIC_CLUSTER_MEMBER_TABLE, topic_cluster_member_schema);
 
+  // User curation over clusters (TASK-36.8), launch-blocking per constitution §3.
+  // The per-run cluster id (hash(run_id | local_label)) dangles after every
+  // recompute, so a control row CANNOT key on it. Suppress/rename anchor on the
+  // cluster's exemplar page (a stable page_session_id) plus a content_signature
+  // (a secondary matcher for when the exemplar churns); never-cluster-origin keys
+  // on a registrable domain and is run-independent. `id` is a deterministic hash
+  // of (kind | target) so an upsert is idempotent.
+  const topic_cluster_control_schema = [
+    "id TEXT PRIMARY KEY", // sha256(kind | target) — see cluster_control_store.ts
+    "kind TEXT NOT NULL", // 'suppress' | 'rename' | 'never_cluster_origin'
+    "target_page_session_id TEXT", // stable anchor for suppress/rename; NULL for origin
+    "content_signature TEXT", // secondary matcher (label signature); NULL for origin
+    "target_origin TEXT", // registrable domain for never-cluster-origin; NULL otherwise
+    "display_label_override TEXT", // non-null iff kind='rename'
+    "created_at TEXT NOT NULL",
+    "updated_at TEXT NOT NULL",
+  ].join(", ");
+  await db.create_table(TOPIC_CLUSTER_CONTROL_TABLE, topic_cluster_control_schema);
+
   // Indexes for the common query patterns over the metadata tables.
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_activity_sessions_url
                  ON ${WEBPAGE_ACTIVITY_SESSIONS_TABLE}(url)`);
@@ -1377,4 +1402,14 @@ export async function create_metadata_schema(db: DuckDB): Promise<void> {
   // members by page_session_id.
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_topic_member_page
                  ON ${TOPIC_CLUSTER_MEMBER_TABLE}(page_session_id)`);
+
+  // Cluster controls (TASK-36.8): resolve_controls reads by kind; the forget
+  // cascade sweeps suppress/rename by target_page_session_id; the input filter
+  // reads never-cluster origins by target_origin.
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_cluster_control_kind
+                 ON ${TOPIC_CLUSTER_CONTROL_TABLE}(kind)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_cluster_control_page
+                 ON ${TOPIC_CLUSTER_CONTROL_TABLE}(target_page_session_id)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_cluster_control_origin
+                 ON ${TOPIC_CLUSTER_CONTROL_TABLE}(target_origin)`);
 }

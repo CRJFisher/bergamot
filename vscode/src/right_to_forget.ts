@@ -20,8 +20,14 @@
  * separate-file ordering concern.
  *
  * A forget removes a forgotten page's `topic_cluster_member` rows (which carry its
- * `page_session_id` and a denormalized `page_loaded_at` — visit metadata). It does
- * NOT delete the `topic_cluster` / `topic_run` rows. The per-page embedding — the
+ * `page_session_id` and a denormalized `page_loaded_at` — visit metadata), the
+ * page-anchored cluster CONTROLS (suppress/rename in `topic_cluster_control`,
+ * keyed on the forgotten page as their stable identity), and any plaintext staged
+ * note stub citing a forgotten URL/origin/time (the `bergamot.staging/` filesystem
+ * sweep, TASK-36.8). `never_cluster_origin` controls deliberately SURVIVE every
+ * forget — they are a user preference about a domain, not page-derived state, so
+ * forgetting your history of a site does not un-block it. It does NOT delete the
+ * `topic_cluster` / `topic_run` rows. The per-page embedding — the
  * reconstructable artifact — lives in `topic_page_vector` and IS deleted; what a
  * retained cluster keeps is its frozen `representative_vector` (the L2-normalized
  * mean of its members) and `exemplar_page_session_id`. The mean is an irreversible
@@ -60,6 +66,7 @@ import * as fs from "fs";
 import * as path from "path";
 import {
   DuckDB,
+  TOPIC_CLUSTER_CONTROL_TABLE,
   TOPIC_CLUSTER_MEMBER_TABLE,
   TOPIC_PAGE_VECTOR_TABLE,
   WEBPAGE_ACTIVITY_SESSIONS_TABLE,
@@ -68,6 +75,7 @@ import {
   WEBPAGE_TREES_TABLE,
 } from "./duck_db";
 import { ContentCache } from "./redownload/content_cache";
+import { sweep_staged_stubs } from "./tdt/staging_writer";
 import { purge_outcomes } from "./dev_log";
 
 /** What to forget. Time bounds are ISO-8601 strings, inclusive. */
@@ -97,10 +105,22 @@ export interface ForgetReport {
    * authoritative.
    */
   cluster_members_deleted: number;
+  /**
+   * Page-anchored cluster controls (suppress/rename in `topic_cluster_control`)
+   * deleted for the forgotten pages. Counted before the cascade transaction, so
+   * like the counts above it is best-effort; the DELETE is authoritative.
+   * `never_cluster_origin` controls are never counted here — they survive forgets.
+   */
+  cluster_controls_deleted: number;
   /** Whether the content-cache cascade ran (false when no cache exists). */
   content_cache_swept: boolean;
   /** Plaintext buffer files (visit inbox + dev replay ring) removed. */
   files_removed: number;
+  /**
+   * Plaintext staged note stubs (`bergamot.staging/`) deleted because they cited
+   * a forgotten URL/origin/time. 0 when no `staging_root` was supplied.
+   */
+  staged_stubs_removed: number;
 }
 
 /** The resolved blast radius of a selector: session ids and their URLs. */
@@ -278,12 +298,14 @@ function sweep_visit_files(
  * @param selector - What to forget
  * @param options.storage_base - When given, the plaintext visit buffers
  *   (visit inbox, dev replay ring) under it are swept too
+ * @param options.staging_root - When given, plaintext staged note stubs under it
+ *   that cite a forgotten URL/origin/time are swept too (TASK-36.8)
  */
 export async function forget(
   metadata_db: DuckDB,
   content_cache: ContentCache | null,
   selector: ForgetSelector,
-  options: { storage_base?: string } = {}
+  options: { storage_base?: string; staging_root?: string } = {}
 ): Promise<ForgetReport> {
   // Trees younger than the cascade's start are spared by the sweep so a
   // visit landing mid-forget cannot lose its just-created tree row.
@@ -292,6 +314,12 @@ export async function forget(
 
   const files_removed = options.storage_base
     ? sweep_visit_files(options.storage_base, selector)
+    : 0;
+
+  // Plaintext staged stubs live outside the encrypted stores, so they are swept
+  // on the filesystem (derived-first, like the visit buffers above).
+  const staged_stubs_removed = options.staging_root
+    ? sweep_staged_stubs(options.staging_root, selector)
     : 0;
 
   // Derived content before metadata (see module header).
@@ -318,6 +346,10 @@ export async function forget(
     metadata_db,
     targets.page_session_ids
   );
+  const cluster_controls_deleted = await count_cluster_controls(
+    metadata_db,
+    targets.page_session_ids
+  );
 
   if (targets.page_session_ids.length > 0 || targets.urls.length > 0) {
     await forget_metadata(metadata_db, selector, targets);
@@ -337,8 +369,10 @@ export async function forget(
     urls: targets.urls.length,
     page_vectors_deleted,
     cluster_members_deleted,
+    cluster_controls_deleted,
     content_cache_swept: content_cache !== null,
     files_removed,
+    staged_stubs_removed,
   };
 }
 
@@ -380,6 +414,29 @@ async function count_cluster_members(
   const row = await metadata_db.query_first<{ n: unknown }>(
     `SELECT count(*) AS n FROM ${TOPIC_CLUSTER_MEMBER_TABLE}
      WHERE page_session_id IN (${ids.placeholders})`,
+    ids.params
+  );
+  return Number(row?.n ?? 0);
+}
+
+/**
+ * Counts the page-anchored cluster controls the cascade will delete — the
+ * suppress/rename rows in `topic_cluster_control` anchored on a forgotten page.
+ * `never_cluster_origin` rows are excluded: they key on a domain, not a page, and
+ * survive every forget (a user's block on a site outlasts forgetting its history).
+ */
+async function count_cluster_controls(
+  metadata_db: DuckDB,
+  page_session_ids: string[]
+): Promise<number> {
+  if (page_session_ids.length === 0) {
+    return 0;
+  }
+  const ids = in_list(page_session_ids, "id");
+  const row = await metadata_db.query_first<{ n: unknown }>(
+    `SELECT count(*) AS n FROM ${TOPIC_CLUSTER_CONTROL_TABLE}
+     WHERE kind IN ('suppress', 'rename')
+       AND target_page_session_id IN (${ids.placeholders})`,
     ids.params
   );
   return Number(row?.n ?? 0);
@@ -444,6 +501,15 @@ async function forget_metadata(
       await run(
         `DELETE FROM ${TOPIC_CLUSTER_MEMBER_TABLE}
          WHERE page_session_id IN (${ids.placeholders})`,
+        ids.params
+      );
+      // Page-anchored cluster controls (suppress/rename) are swept with the page
+      // they target — same metadata file, same transaction. never_cluster_origin
+      // controls key on a domain, not a page, so they are deliberately left intact.
+      await run(
+        `DELETE FROM ${TOPIC_CLUSTER_CONTROL_TABLE}
+         WHERE kind IN ('suppress', 'rename')
+           AND target_page_session_id IN (${ids.placeholders})`,
         ids.params
       );
     }

@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ConfigManager } from './config/config_manager';
 import { get_storage_base } from './config/storage_path';
+import { resolve_staging_root } from './tdt/staging_root';
 import { init_dev_log } from './dev_log';
 import { DatabaseManager, METADATA_DB_FILENAME } from './database/database_manager';
 import { METADATA_DB_KEY_SECRET, get_or_create_store_key } from './database/encryption_key';
@@ -76,6 +77,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // Source of the content cache's encryption key; enables default-path
       // caching of re-downloaded public content under the "default" scope.
       secrets: context.secrets,
+      // Quarantined staging root for note-stub write-back (TASK-36.8), resolved
+      // from the workspace; undefined when no workspace is open.
+      staging_root: resolve_staging_root() ?? undefined,
       // One-time Chromium download on first content fetch (packaged installs
       // ship no browser). Surfaced as a progress notification; never blocks
       // activation — the fetch path serves 503 until the download completes.

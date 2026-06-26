@@ -20,6 +20,9 @@ import {
 import { CorpusContent } from "./redownload/corpus";
 import { PageVectorStore } from "./tdt/page_vector_store";
 import { ClusterStore } from "./tdt/cluster_store";
+import { ClusterControlStore } from "./tdt/cluster_control_store";
+import { stage_note_stub } from "./tdt/staging_writer";
+import type { ClusterDetail } from "./tdt/cluster_reads";
 import type { RunBundle } from "@bergamot/tdt";
 import { forget } from "./right_to_forget";
 
@@ -277,6 +280,99 @@ describe("right-to-forget cascade", () => {
     expect(await members_for("a")).toBe(0);
     // The other page's membership — and the cluster/run provenance — survive.
     expect(await members_for("b")).toBe(1);
+  });
+
+  describe("cluster controls + staged stubs (task-36.8)", () => {
+    function detail_for(page_id: string, url: string): ClusterDetail {
+      return {
+        cluster: {
+          id: "c0",
+          run_id: "run-1",
+          display_label: "T",
+          headline_title: "T",
+          scope: "example.com",
+          keyphrases: [],
+          size: 1,
+          coherence: null,
+          time_span: {
+            start: "2026-06-01T10:00:00.000Z",
+            end: "2026-06-01T11:00:00.000Z",
+          },
+          representation_version: "det-1",
+        },
+        exemplar_page: {
+          page_session_id: page_id,
+          url,
+          title: "T",
+          page_loaded_at: "2026-06-01T10:00:00.000Z",
+        },
+        members: [
+          {
+            page_session_id: page_id,
+            url,
+            title: "T",
+            page_loaded_at: "2026-06-01T10:00:00.000Z",
+            probability: 0.9,
+            is_exemplar: true,
+          },
+        ],
+      };
+    }
+
+    it("sweeps page-anchored controls but keeps never_cluster_origin", async () => {
+      await seed_visit("a", "https://example.com/a", "2026-06-01T10:00:00Z");
+      const controls = new ClusterControlStore(metadata_db);
+      await controls.upsert(
+        { kind: "suppress", target_page_session_id: "a", content_signature: "s" },
+        "2026-06-02T00:00:00.000Z",
+      );
+      await controls.upsert(
+        { kind: "never_cluster_origin", target_origin: "example.com" },
+        "2026-06-02T00:00:00.000Z",
+      );
+
+      const report = await forget(metadata_db, cache, {
+        kind: "url",
+        url: "https://example.com/a",
+      });
+
+      expect(report.cluster_controls_deleted).toBe(1);
+      expect(await controls.list("suppress")).toHaveLength(0);
+      // The origin block is a preference, not page-derived — it survives.
+      expect(await controls.list_never_cluster_origins()).toEqual(["example.com"]);
+    });
+
+    it("sweeps a staged stub citing a forgotten URL", async () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "forget-staging-"));
+      try {
+        await seed_visit("a", "https://example.com/a", "2026-06-01T10:00:00Z");
+        stage_note_stub(root, detail_for("a", "https://example.com/a"), {
+          run_id: "run-1",
+          generated_at: "2026-06-02T00:00:00.000Z",
+        });
+
+        const report = await forget(
+          metadata_db,
+          cache,
+          { kind: "url", url: "https://example.com/a" },
+          { staging_root: root },
+        );
+
+        expect(report.staged_stubs_removed).toBe(1);
+        expect(fs.readdirSync(root).filter((f) => f.endsWith(".md"))).toHaveLength(0);
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it("staged_stubs_removed is 0 when no staging_root is given", async () => {
+      await seed_visit("a", "https://example.com/a", "2026-06-01T10:00:00Z");
+      const report = await forget(metadata_db, cache, {
+        kind: "url",
+        url: "https://example.com/a",
+      });
+      expect(report.staged_stubs_removed).toBe(0);
+    });
   });
 
   it("forgets by origin: every page on the site, other origins untouched", async () => {

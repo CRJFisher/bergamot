@@ -51,6 +51,11 @@
           "type": "boolean",
           "default": false,
           "description": "Enable dev-phase observability: the Bergamot Dev output channel and a tail-able dev-log.jsonl. Always on during F5 debugging."
+        },
+        "bergamot.staging.path": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path for the quarantined bergamot.staging/ directory where agent-authored topic-cluster note stubs are written. Empty = a 'bergamot.staging' folder in the first workspace folder. Stubs are drafts you promote by hand; this directory is auto-gitignored and never committed."
         }
       }
     }
@@ -86,6 +91,7 @@
     "express": "^5.1.0",
     "linkedom": "^0.18.12",
     "patchright": "^1.60.2",
+    "tldts": "6.1.86",
     "turndown": "^7.2.4",
     "zod": "^3.23.8"
   },

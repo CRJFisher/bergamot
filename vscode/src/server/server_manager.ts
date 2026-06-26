@@ -12,6 +12,16 @@ import {
   get_page_sessions_with_tree_id,
   get_last_modified_trees_with_members,
 } from '../duck_db';
+import { getDomain } from 'tldts';
+import {
+  list_clusters_in_range,
+  get_cluster,
+  list_clusters_for_page,
+  window_coverage,
+  get_cluster_anchor,
+} from '../tdt/cluster_reads';
+import { ClusterControlStore } from '../tdt/cluster_control_store';
+import { stage_note_stub } from '../tdt/staging_writer';
 import { OrphanedVisitsManager } from '../orphaned_visits';
 import { VisitQueueProcessor, ExtendedPageVisit } from '../visit_queue_processor';
 import { ensure_inbox, persist_visit } from '../visit_inbox';
@@ -123,6 +133,14 @@ export interface ServerConfig {
    * notification. Until it completes the read path serves 503 "unavailable".
    */
   on_browser_provisioning?: (done: Promise<void>) => void;
+  /**
+   * Quarantined `bergamot.staging/` root for note-stub write-back (TASK-36.8),
+   * resolved from the VS Code workspace at activation (see {@link resolve_staging_root}).
+   * The `POST /stage_cluster` route writes promotable stubs here. Absent (the
+   * headless standalone, or no workspace open) the route reports staging
+   * unavailable rather than writing somewhere the user cannot see.
+   */
+  staging_root?: string;
 }
 
 /**
@@ -494,6 +512,188 @@ export class ServerManager {
         });
       }
     });
+
+    // TDT cluster surface (TASK-36.8). Four read routes over the cluster read
+    // primitive (the only layer that JOINs the cluster tables); controls are
+    // applied inside it. Deliberately NOT /query/topic_* and NO MCP tool cases —
+    // the raw-tool surface is retired (plan §9).
+    this.app.get('/query/clusters', async (req, res) => {
+      const from = String(req.query.from ?? '');
+      const to = String(req.query.to ?? '');
+      if (!from || !to) {
+        res.status(400).json({ error: 'Missing from/to query parameter' });
+        return;
+      }
+      const requested = Number(req.query.limit ?? MAX_QUERY_LIMIT);
+      const limit = Math.min(
+        Number.isFinite(requested) && requested > 0 ? requested : MAX_QUERY_LIMIT,
+        MAX_QUERY_LIMIT
+      );
+      res.json(
+        await list_clusters_in_range(this.config.duck_db, { from, to, limit })
+      );
+    });
+
+    this.app.get('/query/cluster', async (req, res) => {
+      const id = String(req.query.id ?? '');
+      if (!id) {
+        res.status(400).json({ error: 'Missing id query parameter' });
+        return;
+      }
+      res.json(await get_cluster(this.config.duck_db, { id }));
+    });
+
+    this.app.get('/query/clusters_for_page', async (req, res) => {
+      const page_session_id = String(req.query.page_session_id ?? '');
+      if (!page_session_id) {
+        res
+          .status(400)
+          .json({ error: 'Missing page_session_id query parameter' });
+        return;
+      }
+      res.json(
+        await list_clusters_for_page(this.config.duck_db, { page_session_id })
+      );
+    });
+
+    this.app.get('/query/cluster_coverage', async (req, res) => {
+      const from = String(req.query.from ?? '');
+      const to = String(req.query.to ?? '');
+      if (!from || !to) {
+        res.status(400).json({ error: 'Missing from/to query parameter' });
+        return;
+      }
+      res.json(await window_coverage(this.config.duck_db, { from, to }));
+    });
+
+    // Cluster curation (launch-blocking, constitution §3). Writes to Bergamot's
+    // OWN control tables — never the PKM — so principle 8 does not gate it. The
+    // route translates the on-screen (ephemeral) cluster id into the recompute-
+    // stable anchor the control store keys on.
+    this.app.post('/cluster_control', async (req, res) => {
+      await this.handle_cluster_control(req, res, false);
+    });
+    this.app.post('/cluster_control/delete', async (req, res) => {
+      await this.handle_cluster_control(req, res, true);
+    });
+
+    // Stage a cluster as a promotable note stub (the hero loop's write step).
+    // The skill's draft_note_stub POSTs here so idempotency / the forget sweep /
+    // the ledger all live in this one writer rather than in a script.
+    this.app.post('/stage_cluster', async (req, res) => {
+      const id = String(req.body?.cluster_id ?? '');
+      if (!id) {
+        res.status(400).json({ error: 'Missing cluster_id' });
+        return;
+      }
+      if (!this.config.staging_root) {
+        res.status(503).json({
+          error:
+            'Staging unavailable: open a workspace or set bergamot.staging.path',
+        });
+        return;
+      }
+      const detail = await get_cluster(this.config.duck_db, { id });
+      if (!detail) {
+        res
+          .status(409)
+          .json({ error: 'Cluster no longer exists (recompute) — refresh' });
+        return;
+      }
+      const outcome = stage_note_stub(this.config.staging_root, detail, {
+        run_id: detail.cluster.run_id,
+        generated_at: new Date().toISOString(),
+      });
+      res.json(outcome);
+    });
+  }
+
+  /**
+   * Apply or delete one cluster control. Suppress/rename resolve the live cluster
+   * id to its stable anchor (exemplar + label signature); never-cluster-origin
+   * normalizes the supplied string to a registrable domain.
+   */
+  private async handle_cluster_control(
+    req: express.Request,
+    res: express.Response,
+    is_delete: boolean
+  ): Promise<void> {
+    const kind = String(req.body?.kind ?? '');
+    const store = new ClusterControlStore(this.config.duck_db);
+    const now = new Date().toISOString();
+
+    if (kind === 'never_cluster_origin') {
+      const origin = getDomain(String(req.body?.origin ?? ''));
+      if (!origin) {
+        res.status(400).json({ error: 'origin must be a parseable domain' });
+        return;
+      }
+      if (is_delete) {
+        await store.delete('never_cluster_origin', { origin });
+      } else {
+        await store.upsert(
+          { kind: 'never_cluster_origin', target_origin: origin },
+          now
+        );
+      }
+      res.json({ status: is_delete ? 'deleted' : 'applied', kind, origin });
+      return;
+    }
+
+    if (kind !== 'suppress' && kind !== 'rename') {
+      res.status(400).json({
+        error: "kind must be 'suppress', 'rename', or 'never_cluster_origin'",
+      });
+      return;
+    }
+
+    const cluster_id = String(req.body?.cluster_id ?? '');
+    if (!cluster_id) {
+      res.status(400).json({ error: 'Missing cluster_id' });
+      return;
+    }
+    const anchor = await get_cluster_anchor(this.config.duck_db, cluster_id);
+    if (!anchor) {
+      res
+        .status(409)
+        .json({ error: 'Cluster no longer exists (recompute) — refresh' });
+      return;
+    }
+
+    if (is_delete) {
+      await store.delete(kind, {
+        page_session_id: anchor.exemplar_page_session_id,
+      });
+      res.json({ status: 'deleted', kind });
+      return;
+    }
+
+    if (kind === 'rename') {
+      const display_label = String(req.body?.display_label ?? '').trim();
+      if (!display_label) {
+        res.status(400).json({ error: 'rename requires a non-empty display_label' });
+        return;
+      }
+      await store.upsert(
+        {
+          kind: 'rename',
+          target_page_session_id: anchor.exemplar_page_session_id,
+          content_signature: anchor.content_signature,
+          display_label_override: display_label,
+        },
+        now
+      );
+    } else {
+      await store.upsert(
+        {
+          kind: 'suppress',
+          target_page_session_id: anchor.exemplar_page_session_id,
+          content_signature: anchor.content_signature,
+        },
+        now
+      );
+    }
+    res.json({ status: 'applied', kind });
   }
 
   /**

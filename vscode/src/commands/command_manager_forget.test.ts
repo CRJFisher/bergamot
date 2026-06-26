@@ -33,6 +33,12 @@ jest.mock("vscode", () => ({
     showInformationMessage: jest.fn(),
     showErrorMessage: jest.fn(),
   },
+  // resolve_staging_root (threaded into forget) reads workspace config; with no
+  // override and no folder it resolves to null.
+  workspace: {
+    getConfiguration: jest.fn(() => ({ get: (_k: string, d?: unknown) => d })),
+    workspaceFolders: undefined,
+  },
 }));
 
 function fake_cache(): ContentCache {

@@ -10,6 +10,7 @@ interface MockTextDocument {
 
 export const workspace = {
     textDocuments: [] as MockTextDocument[],
+    workspaceFolders: undefined as { uri: Uri }[] | undefined,
     applyEdit: jest.fn(),
     onDidChangeTextDocument: jest.fn(),
     onDidOpenTextDocument: jest.fn(),

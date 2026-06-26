@@ -826,49 +826,61 @@ answer the same question.
 
 ---
 
-## 9. MCP surface
+## 9. Surfacing — the integration primitive and its consumers
 
-Three read-only, deterministic tools mirroring the existing five verbatim (stdio →
-`relational_tool("/query/...")` → HTTP relay; result is
-`{ content: [{ type: "text", text: JSON.stringify(data, null, 2) }] }`). They are added to
-`vscode/src/mcp_server_standalone.ts` (`ListTools` + `CallTool` cases) and backed by three
-new read-only routes in `vscode/src/server/server_manager.ts`, clamped by the existing
-`MAX_QUERY_LIMIT`.
+The user-facing surface is decided in TASK-36.8 (ADR `backlog/decisions/0001-tdt-cluster-surface.md`).
+The shape is a **two-layer split**: one thin integration primitive over the cluster +
+36.5 label-bundle tables, and several surfaces that consume it. A bag of raw MCP read
+tools is explicitly rejected as the primary surface — it lets the DB schema dictate the UX.
 
-```jsonc
-{ "name": "list_topic_clusters",
-  "description": "List detected topic clusters (project/research threads) overlapping a time range, newest first.",
-  "inputSchema": { "type": "object", "properties": {
-    "from":  { "type": "string", "description": "ISO 8601 start (inclusive)" },
-    "to":    { "type": "string", "description": "ISO 8601 end (exclusive)" },
-    "limit": { "type": "number", "description": "Max clusters", "default": 20 } } } }
+### The integration primitive — `cluster_reads.ts`
 
-{ "name": "get_topic_cluster",
-  "description": "Return one topic cluster with its label, exemplar page, time span, and member pages (url, title, page_loaded_at, membership probability) ordered by probability descending.",
-  "inputSchema": { "type": "object", "properties": {
-    "id": { "type": "string", "description": "Topic cluster id" } },
-    "required": ["id"] } }
+`vscode/src/tdt/cluster_reads.ts` is the only surface-facing code that JOINs
+`topic_run` × `topic_cluster` × `topic_cluster_member` (+ `webpage_*` for page
+url/title/time). Four pure `(db, params) → JSON` functions, every one filtered to the
+live (`status='complete'`) run, clamped by `MAX_QUERY_LIMIT`:
 
-{ "name": "list_clusters_for_page",
-  "description": "List the topic clusters a given captured page belongs to, across windows.",
-  "inputSchema": { "type": "object", "properties": {
-    "page_session_id": { "type": "string", "description": "Captured page session id" } },
-    "required": ["page_session_id"] } }
-```
+- `list_clusters_in_range(from, to, limit)` → cluster summaries overlapping `[from,to)`, newest-first.
+- `get_cluster(id)` → one cluster + exemplar page + members ranked by probability.
+- `list_clusters_for_page(page_session_id)` → `{ clusters, page_status }` where
+  `page_status ∈ {clustered, noise, unseen}` — distinguishing a page processed-as-noise
+  (`is_noise=true`) from one never in a live run.
+- `window_coverage(from, to)` → per live run, `{ window, input_count, cluster_count, noise_count, coverage }`.
 
-Backing routes (single-DuckDB JOINs over `topic_*` × `webpage_*`):
+It returns plain JSON-serializable objects (no MCP/HTTP/VS Code types) and surfaces
+`scope` verbatim as the 36.5 labeler stored it; `representative_vector` is never selected.
+User curation (suppress/rename) is applied inside it against the page-keyed control store.
 
-- `GET /query/topic_clusters?from=&to=&limit=` → clusters overlapping `[from,to)`.
-- `GET /query/topic_cluster?id=` → cluster + ordered members.
-- `GET /query/clusters_for_page?page_session_id=` → clusters containing that page.
+Backed by four read routes mirroring the existing `/query/*` pattern (param validation →
+400, `MAX_QUERY_LIMIT` clamp, `res.json`) in `vscode/src/server/server_manager.ts`:
 
-A new bulk windowed-range relational read (`GET /query/visits_in_window?from=&to=`) is also
-added for TDT's own Stage-1 fetch via the HTTP broker (existing routes are singular-lookup
-shaped). Its row cap must accommodate a full window (`<= max_samples`).
+- `GET /query/clusters?from=&to=&limit=`
+- `GET /query/cluster?id=`
+- `GET /query/clusters_for_page?page_session_id=`
+- `GET /query/cluster_coverage?from=&to=`
 
-Noise is not surfaced as a cluster, but `list_clusters_for_page` returning empty for a page
-that _was_ in a clustered window means "this page is a one-off (noise)"; a coverage/noise
-count is available per window from `topic_run`.
+These are deliberately NOT `/query/topic_*`, and there are NO MCP `ListTools`/`CallTool`
+cases for clusters — the raw-tool surface is retired.
+
+### Consumers (TASK-36.8 decomposition)
+
+- **Note-stub write-back** (`note_stub.ts` + `staging_writer.ts`) — the PKM-native
+  backbone, writing promotable stubs into a quarantined `bergamot.staging/`. `POST /stage_cluster`.
+- **The `bergamot-clusters` skill** — host-agnostic actionability over the read routes;
+  drives stub generation and the curation actions; weekly digest cadence.
+- **Cluster control** (`topic_cluster_control` + `POST /cluster_control`) — launch-blocking
+  suppress / rename / never-cluster-origin.
+- **VS Code webview** — an optional Wave-1 accessory, NOT on the launch critical path.
+
+### Stage-1 bulk read — NOT a user surface, still required
+
+TDT's own clustering input is a bulk windowed-range read,
+`GET /query/visits_in_window?from=&to=`, over the HTTP broker (existing routes are
+singular-lookup shaped). Its row cap must accommodate a full window (`<= max_samples`).
+This route is part of the **clustering pipeline's input path**, not the cluster surface —
+it reads `webpage_*` visit rows and feeds clustering, not a human. It does not exist in
+`server_manager.ts` yet and belongs to the trigger/orchestration work (TASK-36.9); it
+survives the retirement of the raw-tool surface untouched.
 
 ---
 
