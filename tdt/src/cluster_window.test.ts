@@ -3,7 +3,6 @@ import {
   cluster_window,
   resolve_algo_version,
   require_hdbscan,
-  reframe_clustering_error,
 } from "./cluster_window";
 import { DEFAULT_HDBSCAN_CONFIG } from "./config";
 import type { PageVector } from "./types";
@@ -161,25 +160,8 @@ describe("resolve_algo_version", () => {
 // ---------------------------------------------------------------------------
 
 describe("dependency guards", () => {
-  it("require_hdbscan fails clearly when the HDBSCAN export is absent", () => {
+  it("require_hdbscan fails clearly when the HDBSCAN export is absent (AC#6)", () => {
     expect(() => require_hdbscan(undefined)).toThrow(/clustering-tfjs HDBSCAN is unavailable/);
     expect(require_hdbscan(HDBSCAN)).toBe(HDBSCAN);
-  });
-
-  it("reframe_clustering_error points a backend-absent failure at the host fix", () => {
-    // Loader-level absence (no @tensorflow/* resolves at all).
-    expect(
-      reframe_clustering_error(
-        new Error("No TensorFlow.js backend available. Install one of: ..."),
-      ).message,
-    ).toMatch(/@tensorflow\/tfjs-node/);
-
-    // The string tdt actually hits: tfjs-core resolves but no compute backend.
-    expect(
-      reframe_clustering_error(new Error("No backend found in registry.")).message,
-    ).toMatch(/@tensorflow\/tfjs-node/);
-
-    const passthrough = reframe_clustering_error(new Error("some other failure"));
-    expect(passthrough.message).toBe("some other failure");
   });
 });

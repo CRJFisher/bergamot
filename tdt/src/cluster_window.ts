@@ -6,12 +6,14 @@
 // clustering-tfjs 0.6.1 runs HDBSCAN's core-distance and mutual-reachability
 // steps on a TensorFlow.js backend (a fused tf.topk / tf.maximum tidy that meets
 // at one .data() readback; MST, condensed tree and label extraction stay plain
-// JS). A backend is therefore required at runtime — the production host (the
-// VS Code extension) supplies the native @tensorflow/tfjs-node backend. Results
-// are bitwise-deterministic for a given backend, which is why the backend is
-// folded into algo_version and pinned by installing exactly one (the library's
-// auto-probe order tfjs-node-gpu → tfjs-node → tfjs → tfjs-core is itself a pure
-// function of which backend package is present).
+// JS). A backend is therefore required at runtime, and one is always available:
+// tdt depends on the pure-JS @tensorflow/tfjs ('cpu') backend as an
+// environment-neutral floor, so clustering runs anywhere. The host (the VS Code
+// extension) additionally supplies the native @tensorflow/tfjs-node backend,
+// which the library's auto-probe (tfjs-node-gpu → tfjs-node → tfjs → tfjs-core)
+// prefers when present (~11× faster). Results are bitwise-deterministic for a
+// given backend, so the active backend ('cpu' vs 'tensorflow') is folded into
+// algo_version.
 
 import * as fs from "fs";
 import * as path from "path";
@@ -118,11 +120,7 @@ export async function cluster_window(
     store_exemplars: true,
   });
 
-  try {
-    await model.fit(D);
-  } catch (err) {
-    throw reframe_clustering_error(err);
-  }
+  await model.fit(D);
 
   if (model.labels_ === null || model.probabilities_ === null) {
     throw new Error("cluster_window: HDBSCAN.fit produced no labels.");
@@ -166,32 +164,6 @@ export function require_hdbscan(ctor: typeof HDBSCAN | undefined): typeof HDBSCA
     );
   }
   return ctor;
-}
-
-/**
- * AC#6: re-frame the library's backend-absent error so the fix (install the host
- * TensorFlow backend) is obvious; pass anything else through unchanged.
- *
- * Two distinct strings cover the same root cause: the library's loader throws
- * "No TensorFlow.js backend available" only when *no* @tensorflow/* package
- * resolves. Because tdt depends on @tensorflow/tfjs-core, the loader resolves a
- * backend-less core instead, and the failure surfaces later from a tf op as
- * "No backend found in registry" — the string the host actually hits when it
- * omits a compute backend like @tensorflow/tfjs-node. Both are matched.
- */
-export function reframe_clustering_error(err: unknown): Error {
-  const message = err instanceof Error ? err.message : String(err);
-  if (
-    message.includes("No TensorFlow.js backend") ||
-    message.includes("No backend found in registry")
-  ) {
-    return new Error(
-      "cluster_window: no TensorFlow.js compute backend available. The host must install " +
-        "@tensorflow/tfjs-node (or another @tensorflow/* compute backend). Original: " +
-        message,
-    );
-  }
-  return err instanceof Error ? err : new Error(message);
 }
 
 function read_clustering_tfjs_version(): string {
