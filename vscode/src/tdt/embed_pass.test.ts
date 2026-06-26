@@ -1,3 +1,4 @@
+import { getDomain } from "tldts";
 import { DuckDB, create_metadata_schema } from "../duck_db";
 import { DEFAULT_PAGE_VECTOR_CONFIG } from "@bergamot/tdt";
 import type { EmbedFn } from "@bergamot/tdt";
@@ -26,14 +27,22 @@ function corpus_content(id: string, content: string): CorpusContent {
   };
 }
 
-/** Yields a fixed list of public pages; get_content is unused by the pass. */
+/** Yields a fixed list of public pages, dropping never-cluster origins BEFORE
+ *  emitting (mirroring the production corpus, which drops them before fetch).
+ *  get_content is unused by the pass. */
 class FakeCorpus implements ContentCorpus {
   constructor(private readonly pages: CorpusContent[]) {}
   async get_content(_id: string): Promise<CorpusEntry | null> {
     throw new Error("not used by the embed pass");
   }
-  async *iter_public_pages(): AsyncIterable<CorpusContent> {
-    for (const page of this.pages) yield page;
+  async *iter_public_pages(
+    exclude_origins: ReadonlySet<string> = new Set(),
+  ): AsyncIterable<CorpusContent> {
+    for (const page of this.pages) {
+      const domain = getDomain(page.url);
+      if (domain !== null && exclude_origins.has(domain)) continue;
+      yield page;
+    }
   }
 }
 
@@ -97,7 +106,7 @@ describe("run_embed_pass", () => {
 
     const report = await run_embed_pass(corpus, store, embed, MODEL_A, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
-    expect(report).toEqual({ scanned: 3, embedded: 3, skipped: 0, excluded: 0, origin_excluded: 0, failed: 0 });
+    expect(report).toEqual({ scanned: 3, embedded: 3, skipped: 0, excluded: 0, failed: 0 });
     for (const id of ["p1", "p2", "p3"]) {
       const v = await store.get(id, MODEL_A);
       expect(v).not.toBeNull();
@@ -116,7 +125,7 @@ describe("run_embed_pass", () => {
     const { embed, calls } = counting_embed();
     const report = await run_embed_pass(corpus, store, embed, MODEL_A, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
-    expect(report).toEqual({ scanned: 2, embedded: 1, skipped: 1, excluded: 0, origin_excluded: 0, failed: 0 });
+    expect(report).toEqual({ scanned: 2, embedded: 1, skipped: 1, excluded: 0, failed: 0 });
     // p1's text is never embedded; only p2 is.
     expect(calls.some((t) => t.includes("alpha"))).toBe(false);
     expect(calls.some((t) => t.includes("beta"))).toBe(true);
@@ -129,7 +138,7 @@ describe("run_embed_pass", () => {
     const second = counting_embed();
     const report = await run_embed_pass(corpus, store, second.embed, MODEL_A, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
-    expect(report).toEqual({ scanned: 2, embedded: 0, skipped: 2, excluded: 0, origin_excluded: 0, failed: 0 });
+    expect(report).toEqual({ scanned: 2, embedded: 0, skipped: 2, excluded: 0, failed: 0 });
     expect(second.calls).toHaveLength(0);
   });
 
@@ -140,7 +149,7 @@ describe("run_embed_pass", () => {
     const second = counting_embed();
     const report = await run_embed_pass(corpus, store, second.embed, MODEL_B, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
-    expect(report).toEqual({ scanned: 1, embedded: 1, skipped: 0, excluded: 0, origin_excluded: 0, failed: 0 });
+    expect(report).toEqual({ scanned: 1, embedded: 1, skipped: 0, excluded: 0, failed: 0 });
     expect(second.calls.length).toBeGreaterThan(0); // it DID re-embed
     expect(await store.get("p1", MODEL_A)).not.toBeNull();
     expect(await store.get("p1", MODEL_B)).not.toBeNull();
@@ -206,7 +215,7 @@ describe("run_embed_pass", () => {
     expect(loop_index).toBeLessThan(second_embed_index);
   });
 
-  it("skips never-cluster origins before embedding — content never vectorised (AC #8)", async () => {
+  it("never scans a never-cluster origin — the corpus drops it before fetch (AC #8)", async () => {
     const bank: CorpusContent = {
       ...corpus_content("bank1", "sensitive balance"),
       url: "https://mybank.com/account",
@@ -228,9 +237,10 @@ describe("run_embed_pass", () => {
       new Set(["mybank.com"]),
     );
 
-    expect(report.origin_excluded).toBe(1);
+    // The blocked page is dropped upstream — never scanned, never embedded,
+    // never re-downloaded (the corpus filters before get_content).
+    expect(report.scanned).toBe(1);
     expect(report.embedded).toBe(1);
-    // The blocked origin's content is never embedded, and nothing is stored.
     expect(calls.some((t) => t.includes("balance"))).toBe(false);
     expect(await store.get("bank1", MODEL_A)).toBeNull();
     expect(await store.get("ok1", MODEL_A)).not.toBeNull();

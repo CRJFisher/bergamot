@@ -25,8 +25,13 @@ export const ENTRYPOINTS = [
  * `onnxruntime-node`'s native binding and resolves on-disk model/wasm assets, so
  * both stay external. `@tensorflow/tfjs-node` (the clustering-tfjs backend the
  * forked clustering worker loads) carries a native `.node` addon and is
- * auto-probed by a dynamic require, so it and `clustering-tfjs` stay external
- * too. All but `vscode` are staged into the VSIX with their transitive closure.
+ * auto-probed by a dynamic require; `@tensorflow/tfjs` + `@tensorflow/tfjs-core`
+ * (statically imported via `cluster_window.ts`) must stay external too, or
+ * esbuild inlines a second tfjs-core into the worker bundle — dragging in
+ * node-fetch's bare `require('encoding')` (failing the externals guard) and
+ * splitting TensorFlow's process-global backend registry at runtime. So the
+ * whole TensorFlow chain plus `clustering-tfjs` stays external. All but `vscode`
+ * are staged into the VSIX with their transitive closure.
  */
 export const EXTERNALS = [
   'vscode',
@@ -38,6 +43,8 @@ export const EXTERNALS = [
   '@huggingface/transformers',
   'onnxruntime-node',
   '@tensorflow/tfjs-node',
+  '@tensorflow/tfjs',
+  '@tensorflow/tfjs-core',
   'clustering-tfjs',
 ];
 
@@ -51,5 +58,7 @@ export const SHIPPED_EXTERNALS = [
   '@huggingface/transformers',
   'onnxruntime-node',
   '@tensorflow/tfjs-node',
+  '@tensorflow/tfjs',
+  '@tensorflow/tfjs-core',
   'clustering-tfjs',
 ];

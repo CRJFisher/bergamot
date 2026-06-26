@@ -38,10 +38,15 @@ import {
   type PageVector,
   type PersistResult,
 } from "@bergamot/tdt";
+// The tf-pulling compute pipeline is reached by its compiled path: the index
+// barrel deliberately omits it (it would pull clustering-tfjs/TensorFlow into
+// every consumer), and the repo's classic `moduleResolution: node` resolves a
+// deep `/out/` path without needing a package `exports` map.
 import type {
   ClusterComputeInput,
   ClusterComputeOutput,
 } from "@bergamot/tdt/out/cluster_pipeline";
+import type { StoredPageVector } from "./page_vector_store";
 
 /** The time range a run covers; windowing subdivides it into the actual runs. */
 export interface WindowSpec {
@@ -68,14 +73,7 @@ export function default_window_spec(now: Date): WindowSpec {
   };
 }
 
-/** One cached page vector plus its freshness token (the input-fingerprint key). */
-export interface StoredPageVector {
-  page_session_id: string;
-  vector: Float32Array;
-  /** `topic_page_vector.built_at`, rewritten on every re-embed — so a re-embed
-   *  flips the run's `input_fingerprint` and triggers an atomic replace (plan §8). */
-  built_at: string;
-}
+export type { StoredPageVector };
 
 export interface RebuildDeps {
   /** Stage-1 windowed visit read (in-process reader fns or the HTTP broker). */

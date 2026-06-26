@@ -27,10 +27,11 @@ import type {
   PageVectorConfig,
   VectorStore,
 } from "@bergamot/tdt";
-import { getDomain } from "tldts";
 import type { ContentCorpus, CorpusContent } from "../redownload/corpus";
 
-/** What one embed pass did, by per-page outcome. `scanned` is their sum. */
+/** What one embed pass did, by per-page outcome. `scanned` is their sum.
+ *  Never-cluster origins never appear here — the corpus drops them upstream,
+ *  before re-download, so they are not even scanned (constitution §3, AC #8). */
 export interface EmbedPassReport {
   /** Public pages the corpus yielded. */
   scanned: number;
@@ -40,8 +41,6 @@ export interface EmbedPassReport {
   skipped: number;
   /** Pages excluded — no extractable text / degenerate vector (nothing stored). */
   excluded: number;
-  /** Pages on a never-cluster origin, skipped before any embed (constitution §3). */
-  origin_excluded: number;
   /** Pages whose embed or store raised; isolated so the pass continues. */
   failed: number;
 }
@@ -70,8 +69,9 @@ function to_page_content(content: CorpusContent): PageContent {
  * @param repr the representation strategy whose version the id encodes
  * @param config page-vector construction knobs
  * @param exclude_origins registrable domains the user never wants clustered
- *        (TASK-36.8 never-cluster-origin); their pages are skipped before any
- *        embed, so a blocked origin's content is never even vectorised (AC #8).
+ *        (TASK-36.8 never-cluster-origin); the corpus drops their pages BEFORE
+ *        re-download, so a blocked origin is never re-fetched or vectorised
+ *        (constitution §3, AC #8).
  */
 export async function run_embed_pass(
   corpus: ContentCorpus,
@@ -87,20 +87,11 @@ export async function run_embed_pass(
     embedded: 0,
     skipped: 0,
     excluded: 0,
-    origin_excluded: 0,
     failed: 0,
   };
 
-  for await (const content of corpus.iter_public_pages()) {
+  for await (const content of corpus.iter_public_pages(exclude_origins)) {
     report.scanned++;
-    if (exclude_origins.size > 0) {
-      const domain = getDomain(content.url);
-      if (domain !== null && exclude_origins.has(domain)) {
-        report.origin_excluded++;
-        await yield_to_event_loop();
-        continue;
-      }
-    }
     try {
       // resolve_page_vector is the single source of the get-skip / build-on-miss
       // / exclude semantics; the extra cheap pre-read here only lets the report

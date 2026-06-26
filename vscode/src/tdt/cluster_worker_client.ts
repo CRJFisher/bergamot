@@ -96,7 +96,14 @@ export function run_cluster_compute(
       );
     });
 
+    // A broken IPC channel makes send() throw SYNCHRONOUSLY — outside the
+    // 'error' event — so guard it, or a failed send leaks the armed timer and an
+    // un-killed child. The async-delivery error still surfaces via 'error'.
     const request: ClusterWorkerRequest = { input };
-    child.send(request);
+    try {
+      child.send(request);
+    } catch (error) {
+      finish(() => reject(error));
+    }
   });
 }

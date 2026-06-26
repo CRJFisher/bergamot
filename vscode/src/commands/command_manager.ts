@@ -160,8 +160,8 @@ export class CommandManager {
       );
       vscode.window.showInformationMessage(
         `Bergamot: embedded ${report.embedded}, skipped ${report.skipped}, ` +
-          `excluded ${report.excluded}, blocked ${report.origin_excluded}, ` +
-          `failed ${report.failed} (of ${report.scanned} page(s)).`
+          `excluded ${report.excluded}, failed ${report.failed} ` +
+          `(of ${report.scanned} page(s)).`
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

@@ -22,6 +22,7 @@ import {
   insert_webpage_fetch,
   list_capture_targets,
 } from "../duck_db";
+import { getDomain } from "tldts";
 import { WebpageFetch } from "../page_capture_models";
 import { PageMetadata, parse_page } from "./main_content";
 import { FetchOutcome, FetchOutcomeKind } from "./fetch_outcome";
@@ -74,8 +75,15 @@ export interface ContentCorpus {
   /**
    * Yields only the successfully re-downloadable public pages — the subset TDT and
    * RAG consume. Excluded and unfetchable pages are simply not emitted.
+   *
+   * @param exclude_origins registrable domains (TASK-36.8 never-cluster-origin)
+   *   to drop from the pass BEFORE any read — so a blocked origin's page is never
+   *   even re-downloaded, satisfying constitution §3's "feeds the
+   *   skip-re-download list" (AC #8). Omit (or empty) to read the whole corpus.
    */
-  iter_public_pages(): AsyncIterable<CorpusContent>;
+  iter_public_pages(
+    exclude_origins?: ReadonlySet<string>,
+  ): AsyncIterable<CorpusContent>;
 }
 
 /** The reason string carried by a non-`ok` outcome. */
@@ -86,15 +94,24 @@ function reason_of(outcome: FetchOutcome): string {
 /**
  * One public-corpus pass: walks every stored fetch target through the given
  * content read and yields the `ok` pages. Shared by the live corpus and the
- * cached corpus so the pass policy (target list, per-page failure isolation)
- * cannot drift between them.
+ * cached corpus so the pass policy (target list, per-page failure isolation,
+ * never-cluster-origin exclusion) cannot drift between them.
+ *
+ * A target on an `exclude_origins` registrable domain is dropped BEFORE
+ * `get_content` — which for the cached corpus would otherwise re-download and
+ * cache it on a miss — so a blocked origin is never re-fetched (constitution §3).
  */
 export async function* iter_public_pages_via(
   db: DuckDB,
-  get_content: (page_session_id: string) => Promise<CorpusEntry | null>
+  get_content: (page_session_id: string) => Promise<CorpusEntry | null>,
+  exclude_origins: ReadonlySet<string> = new Set()
 ): AsyncIterable<CorpusContent> {
   const targets = await list_capture_targets(db);
   for (const target of targets) {
+    if (exclude_origins.size > 0) {
+      const domain = getDomain(target.url);
+      if (domain !== null && exclude_origins.has(domain)) continue;
+    }
     let entry: CorpusEntry | null = null;
     try {
       entry = await get_content(target.page_session_id);
@@ -166,8 +183,14 @@ export class ReDownloadCorpus implements ContentCorpus {
     };
   }
 
-  async *iter_public_pages(): AsyncIterable<CorpusContent> {
-    yield* iter_public_pages_via(this.db, (id) => this.get_content(id));
+  async *iter_public_pages(
+    exclude_origins?: ReadonlySet<string>
+  ): AsyncIterable<CorpusContent> {
+    yield* iter_public_pages_via(
+      this.db,
+      (id) => this.get_content(id),
+      exclude_origins
+    );
   }
 
   /**

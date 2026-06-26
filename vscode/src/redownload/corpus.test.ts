@@ -143,6 +143,21 @@ describe("ReDownloadCorpus", () => {
     }
     expect(titles).toEqual(["Public Title"]); // the auth page is excluded
   });
+
+  it("drops a never-cluster origin BEFORE re-download — never fetched (AC#8)", async () => {
+    // The fake fetcher throws on any URL it does not know. A blocked target that
+    // reached get_content would re-download and throw "no canned result"; the only
+    // way the pass completes is if the target is dropped before any fetch.
+    await seed_capture(db, "bank1", "https://mybank.com/account");
+
+    const titles: string[] = [];
+    for await (const page of corpus.iter_public_pages(new Set(["mybank.com"]))) {
+      titles.push(page.title);
+    }
+
+    // The blocked origin never reaches the fetcher; the public page still emits.
+    expect(titles).toEqual(["Public Title"]);
+  });
 });
 
 /** Seeds a webpage_capture metadata row whose `url` is the fetch target. */

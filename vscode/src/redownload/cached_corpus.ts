@@ -119,9 +119,13 @@ export class CachedCorpus implements ContentCorpus {
    * by an earlier pass are served from the cache; the rest are fetched live
    * and cached. Excluded and unfetchable pages are not emitted.
    */
-  async *iter_public_pages(): AsyncIterable<CorpusContent> {
-    yield* iter_public_pages_via(this.metadata_db, (id) =>
-      this.get_content(id)
+  async *iter_public_pages(
+    exclude_origins?: ReadonlySet<string>
+  ): AsyncIterable<CorpusContent> {
+    yield* iter_public_pages_via(
+      this.metadata_db,
+      (id) => this.get_content(id),
+      exclude_origins
     );
   }
 }
