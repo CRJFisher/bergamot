@@ -39,6 +39,10 @@ const ALGO_TAG = "hdbscan-1";
  *
  * Accumulation is in float64; the library re-tensors the result to float32
  * internally (`tf.tensor2d`), which is deterministic for a given backend.
+ *
+ * @param max_samples the WindowConfig.max_samples ceiling (windowing's hard
+ *   count guard); re-checked here so an oversized window is a hard error before
+ *   the O(n²) matrix is allocated.
  */
 export function build_cosine_distance_matrix(
   vectors: PageVector[],
@@ -50,6 +54,21 @@ export function build_cosine_distance_matrix(
       `build_cosine_distance_matrix: ${n} pages exceeds max_samples=${max_samples}; ` +
         `windowing must subdivide before clustering (plan §5).`,
     );
+  }
+
+  // Inputs are L2-normalized, finite page vectors (guaranteed by page_vectors.ts
+  // and pinned by the run's embedding_model_id). Uniform dimension is the one
+  // invariant a single page's construction cannot enforce; a ragged vector would
+  // silently read undefined (→ NaN) or truncate in the dot loop below, poisoning
+  // HDBSCAN with no clear error, so it fails loudly here instead.
+  const dim = n > 0 ? vectors[0].vector.length : 0;
+  for (let i = 0; i < n; i++) {
+    if (vectors[i].vector.length !== dim) {
+      throw new Error(
+        `build_cosine_distance_matrix: page ${vectors[i].page_session_id} has dimension ` +
+          `${vectors[i].vector.length}, expected ${dim}.`,
+      );
+    }
   }
 
   const D: number[][] = Array.from({ length: n }, () => new Array<number>(n).fill(0));
@@ -152,13 +171,23 @@ export function require_hdbscan(ctor: typeof HDBSCAN | undefined): typeof HDBSCA
 /**
  * AC#6: re-frame the library's backend-absent error so the fix (install the host
  * TensorFlow backend) is obvious; pass anything else through unchanged.
+ *
+ * Two distinct strings cover the same root cause: the library's loader throws
+ * "No TensorFlow.js backend available" only when *no* @tensorflow/* package
+ * resolves. Because tdt depends on @tensorflow/tfjs-core, the loader resolves a
+ * backend-less core instead, and the failure surfaces later from a tf op as
+ * "No backend found in registry" — the string the host actually hits when it
+ * omits a compute backend like @tensorflow/tfjs-node. Both are matched.
  */
 export function reframe_clustering_error(err: unknown): Error {
   const message = err instanceof Error ? err.message : String(err);
-  if (message.includes("No TensorFlow.js backend")) {
+  if (
+    message.includes("No TensorFlow.js backend") ||
+    message.includes("No backend found in registry")
+  ) {
     return new Error(
-      "cluster_window: no TensorFlow.js backend available. The host must install " +
-        "@tensorflow/tfjs-node (or another @tensorflow/* backend). Original: " +
+      "cluster_window: no TensorFlow.js compute backend available. The host must install " +
+        "@tensorflow/tfjs-node (or another @tensorflow/* compute backend). Original: " +
         message,
     );
   }
@@ -166,6 +195,9 @@ export function reframe_clustering_error(err: unknown): Error {
 }
 
 function read_clustering_tfjs_version(): string {
+  // The package's "exports" field blocks a direct require("clustering-tfjs/
+  // package.json"), so resolve the main entry (dist/index.js) and read the
+  // manifest one level up at the package root.
   const main = require.resolve("clustering-tfjs");
   const pkg_path = path.join(path.dirname(main), "..", "package.json");
   const parsed: { version?: string } = JSON.parse(fs.readFileSync(pkg_path, "utf8"));

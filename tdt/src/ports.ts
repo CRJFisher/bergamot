@@ -6,8 +6,8 @@
  * the contracts below (in-process when TDT runs inside an extension command,
  * over the HTTP /query broker when it runs as the batch CLI).
  *
- * The clustering-tfjs camelCase→snake_case translation
- * (labels_ / probabilities_ / exemplarIndices_ → HdbscanRaw) is NOT here.
+ * The clustering-tfjs fitted-state translation
+ * (labels_ / probabilities_ / exemplar_indices_ → HdbscanRaw) is NOT here.
  * It is quarantined at the single fit() call site in cluster_window.ts (plan §6,
  * Stage 5). HdbscanRaw lives in types.ts. This file is library-agnostic by design.
  */

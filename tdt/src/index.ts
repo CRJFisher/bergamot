@@ -28,11 +28,11 @@ export {
   dedupe_visits,
 } from "./page_vectors";
 
-export {
-  build_cosine_distance_matrix,
-  cluster_window,
-  resolve_algo_version,
-} from "./cluster_window";
+// cluster_window.ts is NOT re-exported here: its `clustering-tfjs` import pulls
+// the native TensorFlow backend chain, which any consumer of this barrel (e.g.
+// the extension's embed pass) would then have to bundle. The clustering stage is
+// imported directly by its orchestrator (TASK-36.9), which owns wiring it into
+// the extension runtime and externalising the native deps in the VSIX bundle.
 
 import type { RelationalReader, EmbedFn, VectorStore, ClusterSink } from "./ports";
 

@@ -8,6 +8,7 @@ import {
 import { DEFAULT_HDBSCAN_CONFIG } from "./config";
 import type { PageVector } from "./types";
 import { HDBSCAN } from "clustering-tfjs";
+import * as tf_core from "@tensorflow/tfjs-core";
 
 // ---------------------------------------------------------------------------
 // Fixtures & helpers
@@ -81,6 +82,13 @@ describe("build_cosine_distance_matrix", () => {
     const vectors = [page_vector("a", [1, 0]), page_vector("b", [0, 1]), page_vector("c", [1, 1])];
     expect(() => build_cosine_distance_matrix(vectors, 2)).toThrow(/exceeds max_samples=2/);
   });
+
+  it("rejects a ragged window with a dimension mismatch", () => {
+    const vectors = [page_vector("a", [1, 0]), page_vector("ragged", [1, 0, 0])];
+    expect(() => build_cosine_distance_matrix(vectors, MAX_SAMPLES)).toThrow(
+      /page ragged has dimension 3, expected 2/,
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -143,6 +151,8 @@ describe("resolve_algo_version", () => {
     await cluster_window(fixture_window(), DEFAULT_HDBSCAN_CONFIG, MAX_SAMPLES);
     const algo_version = resolve_algo_version();
     expect(algo_version).toMatch(/^hdbscan-1#clustering-tfjs@\d+\.\d+\.\d+#.+$/);
+    // The recorded backend is the one actually active, not a placeholder.
+    expect(algo_version.endsWith(`#${tf_core.getBackend()}`)).toBe(true);
   });
 });
 
@@ -157,10 +167,17 @@ describe("dependency guards", () => {
   });
 
   it("reframe_clustering_error points a backend-absent failure at the host fix", () => {
-    const reframed = reframe_clustering_error(
-      new Error("No TensorFlow.js backend available. Install one of: ..."),
-    );
-    expect(reframed.message).toMatch(/@tensorflow\/tfjs-node/);
+    // Loader-level absence (no @tensorflow/* resolves at all).
+    expect(
+      reframe_clustering_error(
+        new Error("No TensorFlow.js backend available. Install one of: ..."),
+      ).message,
+    ).toMatch(/@tensorflow\/tfjs-node/);
+
+    // The string tdt actually hits: tfjs-core resolves but no compute backend.
+    expect(
+      reframe_clustering_error(new Error("No backend found in registry.")).message,
+    ).toMatch(/@tensorflow\/tfjs-node/);
 
     const passthrough = reframe_clustering_error(new Error("some other failure"));
     expect(passthrough.message).toBe("some other failure");

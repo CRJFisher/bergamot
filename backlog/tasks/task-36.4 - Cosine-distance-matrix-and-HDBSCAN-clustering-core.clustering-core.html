@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>task-36.4 — Cosine distance matrix and HDBSCAN clustering core</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --bg-alt: #161b22;
+    --bg-code: #0c0f14;
+    --fg: #d7dde4;
+    --fg-dim: #9aa6b2;
+    --accent: #f0a35e;     /* bergamot orange */
+    --accent-2: #6cb6ff;
+    --green: #7ee787;
+    --red: #ff7b72;
+    --purple: #d2a8ff;
+    --border: #2a313a;
+    --kw: #ff7b72;
+    --str: #a5d6ff;
+    --com: #768390;
+    --typ: #d2a8ff;
+    --fn: #d2a8ff;
+    --num: #f0a35e;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--sans); }
+
+  nav.crossdoc {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg-alt); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    padding: .5rem 5%; font-family: var(--mono); font-size: .74rem;
+  }
+  nav.crossdoc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.crossdoc a, nav.crossdoc span.pending, nav.crossdoc span.cur {
+    padding: .22em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap;
+    border: 1px solid var(--border);
+  }
+  nav.crossdoc a { color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.crossdoc a:hover { background: rgba(108,182,255,.16); }
+  nav.crossdoc span.cur { color: #1a1208; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  nav.crossdoc span.pending { color: var(--com); }
+  nav.crossdoc .dot { display:inline-block; width:.5em; height:.5em; border-radius:50%; margin-right:.35em; vertical-align: middle; }
+  nav.crossdoc .dot.done { background: var(--green); }
+  nav.crossdoc .dot.now { background: var(--accent); }
+  nav.crossdoc .dot.todo { background: var(--com); }
+
+  nav.toc {
+    position: sticky; top: 38px; z-index: 9;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    padding: .45rem 5%; font-family: var(--mono); font-size: .72rem;
+  }
+  nav.toc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.toc a { padding: .2em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap; border: 1px solid var(--border); color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.toc a:hover { background: rgba(108,182,255,.16); }
+
+  main { width: 90%; max-width: 1500px; margin: 0 auto; padding: 1.6rem 0 6rem; }
+  header.page { border-bottom: 1px solid var(--border); padding-bottom: 1.2rem; margin-bottom: 1.4rem; }
+  .crumb { color: var(--fg-dim); font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; font-family: var(--mono); }
+  h1 { font-family: var(--serif); font-size: 2rem; margin: .5rem 0 .4rem; line-height: 1.15; font-weight: 600; }
+  h2 { font-size: 1.3rem; margin: 2.6rem 0 .5rem; padding-top: .7rem; border-top: 1px solid var(--border); color: var(--accent); scroll-margin-top: 100px; }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 .5rem; color: var(--accent-2); }
+  .lead { font-size: 1.05rem; max-width: 80ch; color: var(--fg); }
+  figcaption { font-size: .84rem; color: var(--fg-dim); margin: .5rem 0 0; font-style: italic; max-width: 96ch; }
+  figure { margin: 1rem 0 1.4rem; }
+  .prose { max-width: 74ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .7rem; font-family: var(--mono); font-size: .72rem; }
+  .meta .chip { padding: .2em .6em; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-alt); color: var(--fg-dim); }
+  .meta .chip strong { color: var(--accent); font-weight: 600; }
+  .meta .chip.todo { border-color: var(--accent); color: var(--accent); }
+  .meta .chip.done { border-color: var(--green); color: var(--green); }
+  .meta .chip.block { border-color: var(--red); color: var(--red); }
+
+  a { color: var(--accent-2); }
+  code { font-family: var(--mono); font-size: .88em; }
+  p code, li code, td code, figcaption code { background: var(--bg-code); padding: .1em .38em; border-radius: 4px; border: 1px solid var(--border); color: var(--accent); }
+
+  .callout { border-radius: 6px; padding: .8rem 1.1rem; margin: 1.1rem 0; max-width: 100ch; }
+  .callout.key { background: var(--bg-alt); border-left: 4px solid var(--accent); }
+  .callout.info { background: rgba(108,182,255,.07); border-left: 4px solid var(--accent-2); }
+  .callout.warn { background: rgba(255,123,114,.08); border-left: 4px solid var(--red); }
+  .callout.good { background: rgba(126,231,135,.07); border-left: 4px solid var(--green); }
+  .callout .label { font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .09em; font-weight: 700; display: block; margin-bottom: .3rem; }
+  .callout.key .label { color: var(--accent); }
+  .callout.info .label { color: var(--accent-2); }
+  .callout.warn .label { color: var(--red); }
+  .callout.good .label { color: var(--green); }
+  .callout p { margin: .3rem 0; }
+  .callout.decision { background: var(--bg-alt); border: 1px solid var(--accent); border-left: 4px solid var(--accent); }
+  .callout .pick { color: var(--green); font-weight: 700; }
+  .callout .q { color: var(--accent); font-weight: 700; }
+
+  .prompt-box { border: 1px solid var(--border); border-left: 3px solid var(--fg-dim); border-radius: 6px; background: var(--bg-alt); padding: .8rem 1.1rem; margin: 1rem 0; }
+  .prompt-box .label { font-family: var(--mono); font-size: .66rem; text-transform: uppercase; letter-spacing: .09em; color: var(--fg-dim); display: block; margin-bottom: .35rem; }
+  .prompt-box ul { margin: .2rem 0; padding-left: 1.2rem; }
+  .prompt-box li { margin: .15rem 0; }
+  .prompt-box code { color: var(--accent-2); }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .88rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--bg-alt); color: var(--accent); font-weight: 600; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  td code, th code { font-family: var(--mono); }
+  td.c { text-align: center; font-family: var(--mono); }
+
+  .glyph { display: inline-block; width: 15px; height: 15px; border-radius: 50%; vertical-align: middle; }
+  .glyph.full { background: var(--green); }
+  .glyph.half { background: linear-gradient(90deg, var(--accent) 50%, transparent 50%); border: 1.5px solid var(--accent); }
+  .glyph.none { background: transparent; border: 1.5px solid var(--red); }
+  td.c .gv { font-size: .72rem; color: var(--fg-dim); margin-left: .35em; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; font-family: var(--mono); font-size: .76rem; color: var(--fg-dim); margin: .6rem 0; }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; }
+  .legend .box { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+  .legend .box.add { border-color: var(--green); background: rgba(126,231,135,.18); }
+  .legend .box.rm { border-color: var(--red); background: rgba(255,123,114,.18); }
+  .legend .box.mod { border-color: var(--accent); background: rgba(240,163,94,.18); }
+  .legend .box.same { border-color: var(--border); background: var(--bg-alt); }
+
+  .diagram { width: 100%; }
+  svg { display: block; max-width: 100%; height: auto; }
+  text { font-family: var(--mono); }
+
+  .ba-pair { display: grid; grid-template-columns: 1fr auto 1fr; gap: .5rem; align-items: stretch; }
+  .ba-pair .panel { border: 1px solid var(--border); border-radius: 8px; background: var(--bg-alt); padding: .6rem; }
+  .ba-pair .panel .tag { font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .09em; display: block; margin-bottom: .3rem; }
+  .ba-pair .panel.cur .tag { color: var(--fg-dim); }
+  .ba-pair .panel.plan .tag { color: var(--green); }
+  .ba-pair .arrow { display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 1.4rem; font-family: var(--mono); }
+  @media (max-width: 920px) { .ba-pair { grid-template-columns: 1fr; } .ba-pair .arrow { transform: rotate(90deg); padding: .3rem 0; } }
+
+  .perf { display: flex; flex-wrap: wrap; gap: 1rem; align-items: stretch; margin: 1rem 0; }
+  .perf .bars { flex: 1 1 360px; }
+  .bar-row { display: grid; grid-template-columns: 150px 1fr; gap: .6rem; align-items: center; margin: .5rem 0; font-family: var(--mono); font-size: .78rem; }
+  .bar-row .blab { color: var(--fg-dim); text-align: right; }
+  .bar-track { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 4px; height: 26px; position: relative; overflow: hidden; }
+  .bar-fill { height: 100%; display: flex; align-items: center; padding-left: .5em; color: #0f1419; font-weight: 700; font-size: .74rem; border-radius: 3px 0 0 3px; }
+  .bar-fill.native { background: var(--green); }
+  .bar-fill.purejs { background: var(--accent); }
+
+  .code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px; margin: 1rem 0; overflow: hidden; }
+  .code .file-label { font-family: var(--mono); font-size: .72rem; color: var(--fg-dim); padding: .45rem .9rem; border-bottom: 1px solid var(--border); background: var(--bg-alt); }
+  .code .file-label .new { color: var(--green); }
+  .code .file-label .edit { color: var(--accent); }
+  .code pre { margin: 0; padding: .9rem 1rem; overflow-x: auto; font-family: var(--mono); font-size: .8rem; line-height: 1.55; color: var(--fg); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .cm { color: var(--com); font-style: italic; }
+  .fn { color: var(--fn); } .typ { color: var(--typ); } .num { color: var(--num); }
+  .hl { background: rgba(240,163,94,.13); display: inline-block; width: 100%; }
+  .add { background: rgba(126,231,135,.13); display: inline-block; width: 100%; }
+  .del { background: rgba(255,123,114,.10); display: inline-block; width: 100%; }
+
+  /* tabbed code views */
+  .tabs { margin: 1rem 0; }
+  .tabbar { display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: -1px; }
+  .tabbar button { font-family: var(--mono); font-size: .72rem; padding: .4em .9em; border: 1px solid var(--border); border-bottom: none; background: var(--bg-alt); color: var(--fg-dim); cursor: pointer; border-radius: 6px 6px 0 0; }
+  .tabbar button.on { color: var(--accent); background: var(--bg-code); border-color: var(--accent); }
+  .tabs .code { margin-top: 0; border-top-left-radius: 0; }
+  .tabs .pane { display: none; }
+  .tabs .pane.on { display: block; }
+
+  .steps { margin: 1rem 0; }
+  .step { display: grid; grid-template-columns: 44px 1fr; gap: .9rem; margin-bottom: .9rem; align-items: start; }
+  .step .badge { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 700; font-size: .9rem; border: 1.5px solid; }
+  .step .badge.ok { border-color: var(--green); color: var(--green); background: rgba(126,231,135,.1); }
+  .step .badge.guard { border-color: var(--accent); color: var(--accent); background: rgba(240,163,94,.1); }
+  .step .badge.lib { border-color: var(--purple); color: var(--purple); background: rgba(210,168,255,.1); }
+  .step .body h3 { margin: .1rem 0 .25rem; color: var(--fg); }
+  .step .body p { margin: 0; font-size: .9rem; color: var(--fg-dim); max-width: 96ch; }
+  .step .body .loc { font-family: var(--mono); font-size: .72rem; color: var(--accent-2); }
+
+  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .82rem; font-family: var(--mono); max-width: 100ch; }
+  @media (max-width: 820px) { h2 { scroll-margin-top: 60px; } }
+</style>
+</head>
+<body>
+
+<nav class="crossdoc" aria-label="Task family">
+  <span class="home">task-36 micro tier</span>
+  <a href="task-36.overview.html"><span class="dot now"></span>36 Overview</a>
+  <a href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html"><span class="dot done"></span>36.1 Scaffold</a>
+  <a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html"><span class="dot done"></span>36.2 Windowing</a>
+  <a href="task-36.3 - Page-vectorisation-TDT-owned-embedding-of-captured-pages.overview.html"><span class="dot done"></span>36.3 Page vectors</a>
+  <a href="task-36.3.1 - Page-vector-store-and-ingestion-time-embedding.ingestion-embedding.html"><span class="dot done"></span>36.3.1 Store + embed pass</a>
+  <span class="cur">36.4 Distance matrix + HDBSCAN core</span>
+  <span class="pending"><span class="dot todo"></span>36.5 Representations + labeler · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.6 Persistence · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.9 Trigger · not yet generated</span>
+</nav>
+
+<nav class="toc" aria-label="On this page">
+  <span class="home">on this page</span>
+  <a href="#diverge">What the verified library changes</a>
+  <a href="#flow">The one-stage data flow</a>
+  <a href="#math">The cosine-distance math</a>
+  <a href="#determinism">Determinism — per backend</a>
+  <a href="#fit">The HDBSCAN fit + snake_case quarantine</a>
+  <a href="#guards">The guards + bundle boundary</a>
+  <a href="#decisions">Design decisions</a>
+  <a href="#ac">Acceptance criteria</a>
+</nav>
+
+<main>
+<header class="page">
+  <div class="crumb">Bergamot · TDT micro tier · task-36.4 · build-order step 4 · branch tdt</div>
+  <h1>The clustering core: a precomputed cosine matrix and one TensorFlow-backed HDBSCAN fit</h1>
+  <p class="lead">The only stage that touches <code>clustering-tfjs</code>: build a dense precomputed cosine-distance matrix, run one HDBSCAN <code>fit</code> through a TensorFlow.js backend, return raw <code>{ labels, probabilities, exemplar_indices }</code>. Representations, the labeler, and persistence are later subtasks — this stops at <code>HdbscanRaw</code>.</p>
+  <div class="meta">
+    <span class="chip todo"><strong>status</strong> to do</span>
+    <span class="chip done"><strong>dependency</strong> clustering-tfjs@0.6.1 (shipped)</span>
+    <span class="chip"><strong>parent</strong> task-36</span>
+    <span class="chip"><strong>code</strong> tdt/src/cluster_window.ts (new · not in barrel)</span>
+    <span class="chip"><strong>depends</strong> 36.1 scaffold · 36.3 page vectors</span>
+    <span class="chip"><strong>tf backend</strong> native tfjs-node in vscode host · ~11× over pure-JS</span>
+  </div>
+</header>
+
+<div class="prompt-box">
+  <span class="label">Source of truth read to build this page</span>
+  <ul>
+    <li><code>task-36.4 ….md</code> — the spec: description + 6 acceptance criteria</li>
+    <li><code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> — §6 Stage 4 (distance matrix) · Stage 5 (the fit) · the determinism contract · §10 dependency table</li>
+    <li><code>tdt/src/types.ts</code> — <code>PageVector</code>, <code>DistanceMatrix</code>, <code>HdbscanRaw</code> (already defined)</li>
+    <li><code>tdt/src/config.ts</code> — <code>HdbscanConfig</code>, <code>DEFAULT_HDBSCAN_CONFIG</code>, <code>WindowConfig.max_samples</code></li>
+    <li><code>tdt/src/ports.ts</code> — note: the camelCase↔snake_case translation is quarantined OUT of ports, at the one fit call site</li>
+    <li><code>tdt/src/index.ts</code> — the barrel deliberately does NOT re-export <code>cluster_window</code>; <code>scripts/bundle.mjs</code> — the esbuild bundle the embed pass's barrel import must stay native-free</li>
+    <li>Empirical verification of <code>clustering-tfjs@0.6.1</code> installed clean — <code>fit</code> runs through a TensorFlow.js backend, is bitwise-deterministic per backend, and native <code>tfjs-node</code> is ~11× faster than pure-JS cpu</li>
+  </ul>
+</div>
+
+<div class="callout key">
+  <span class="label">The one sentence</span>
+  <p>Because the page vectors arrive L2-normalized, the cosine-distance matrix is one line — <code>D[i][j] = clamp(1 − dot, 0, 2)</code>, zeroed diagonal — built in plain float64 JS, then truncated to float32 inside the library.</p>
+  <p>HDBSCAN's <code>fit</code> runs through a TensorFlow.js backend, so a backend is REQUIRED at runtime; results are bitwise-deterministic <em>per backend</em>, and the algo_version records exactly which backend ran.</p>
+</div>
+
+<!-- ===================================================== DIVERGENCE (before/after) -->
+<h2 id="diverge">What clustering-tfjs@0.6.1 settles — from "pure-JS, no TensorFlow" to a tf-backed fit</h2>
+
+<figure>
+<div class="ba-pair">
+  <div class="panel cur">
+    <span class="tag">Earlier reading — clustering-tfjs@0.6.0</span>
+    <svg viewBox="0 0 520 320" role="img" aria-label="The earlier reading of the precomputed path on clustering-tfjs 0.6.0: build D ourselves, then HDBSCAN.fit was believed to be pure JavaScript end to end with no TensorFlow touched. Determinism was framed as a structural property, so the recommendation was to install zero @tensorflow packages, and algo_version had no real backend to record.">
+      <defs>
+        <marker id="ca" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+      </defs>
+      <rect x="20" y="20" width="220" height="48" rx="8" fill="#161b22" stroke="#2a313a"/>
+      <text x="130" y="40" fill="#d7dde4" font-size="10" text-anchor="middle">build D ourselves</text>
+      <text x="130" y="56" fill="#768390" font-size="8" text-anchor="middle">plain float64 JS</text>
+      <line x1="130" y1="68" x2="130" y2="92" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ca)"/>
+      <rect x="20" y="92" width="220" height="48" rx="8" fill="rgba(240,163,94,.08)" stroke="#f0a35e"/>
+      <text x="130" y="112" fill="#f0a35e" font-size="10" text-anchor="middle">HDBSCAN.fit = pure JS?</text>
+      <text x="130" y="128" fill="#768390" font-size="8" text-anchor="middle">believed no tf touched</text>
+      <line x1="130" y1="140" x2="130" y2="164" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ca)"/>
+      <rect x="20" y="164" width="220" height="48" rx="8" fill="#161b22" stroke="#2a313a"/>
+      <text x="130" y="184" fill="#d7dde4" font-size="10" text-anchor="middle">determinism = structural</text>
+      <text x="130" y="200" fill="#768390" font-size="8" text-anchor="middle">no RNG · no seed claim</text>
+      <line x1="130" y1="212" x2="130" y2="236" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ca)"/>
+      <rect x="20" y="236" width="220" height="60" rx="8" fill="rgba(240,163,94,.08)" stroke="#f0a35e"/>
+      <text x="130" y="256" fill="#f0a35e" font-size="9.5" text-anchor="middle">recommendation: NO tf</text>
+      <text x="130" y="271" fill="#768390" font-size="8" text-anchor="middle">install zero @tensorflow/*</text>
+      <text x="130" y="283" fill="#768390" font-size="8" text-anchor="middle">one package · x64-safe</text>
+      <rect x="280" y="236" width="220" height="60" rx="8" fill="#0c0f14" stroke="#f0a35e"/>
+      <text x="390" y="258" fill="#f0a35e" font-size="9.5" text-anchor="middle">algo_version</text>
+      <text x="390" y="273" fill="#768390" font-size="8" text-anchor="middle">hdbscan-1#clustering-tfjs@0.6.0</text>
+      <text x="390" y="285" fill="#768390" font-size="8" text-anchor="middle">#precomputed-js — no backend slot</text>
+      <rect x="280" y="92" width="220" height="48" rx="8" fill="#0f1419" stroke="#2a313a" stroke-dasharray="4 3"/>
+      <text x="390" y="112" fill="#768390" font-size="9" text-anchor="middle">no backend needed at runtime</text>
+      <text x="390" y="128" fill="#768390" font-size="8" text-anchor="middle">(the obsolete premise)</text>
+    </svg>
+  </div>
+  <div class="arrow">→</div>
+  <div class="panel plan">
+    <span class="tag">Verified reality — clustering-tfjs@0.6.1</span>
+    <svg viewBox="0 0 520 320" role="img" aria-label="The verified reality on clustering-tfjs 0.6.1: we still build D ourselves in plain float64, but the library re-tensors it to float32 via tf.tensor2d. Inside fit, core-distance is a tf.topk order-statistic and mutual-reachability is a broadcast tf.maximum, both in one fused tf.tidy that meets at a single .data readback, after which MST, condensed tree, excess-of-mass and label extraction stay plain JS. A tf backend is REQUIRED at runtime: with no @tensorflow installed, fit throws no TensorFlow.js backend available. Results are bitwise-deterministic per backend, so we pin the backend by installing exactly one and the bitwise test guards within-backend stability. We install native @tensorflow/tfjs-node in the vscode host for an eleven times speedup, and algo_version records the real backend as hdbscan-1#clustering-tfjs@0.6.1#tensorflow.">
+      <defs>
+        <marker id="pa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+        <marker id="pg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+      </defs>
+      <rect x="20" y="20" width="220" height="48" rx="8" fill="rgba(126,231,135,.07)" stroke="#7ee787"/>
+      <text x="130" y="40" fill="#7ee787" font-size="10" text-anchor="middle">build D ourselves</text>
+      <text x="130" y="56" fill="#768390" font-size="8" text-anchor="middle">float64 → lib re-tensors to float32</text>
+      <line x1="130" y1="68" x2="130" y2="92" stroke="#7ee787" stroke-width="1.4" marker-end="url(#pg)"/>
+      <rect x="20" y="92" width="220" height="48" rx="8" fill="rgba(210,168,255,.08)" stroke="#d2a8ff"/>
+      <text x="130" y="110" fill="#d2a8ff" font-size="10" text-anchor="middle">fit runs through TensorFlow.js</text>
+      <text x="130" y="125" fill="#768390" font-size="8" text-anchor="middle">tf.topk + tf.maximum in one tf.tidy</text>
+      <text x="130" y="136" fill="#768390" font-size="7.5" text-anchor="middle">→ single .data() · then MST/tree plain JS</text>
+      <line x1="130" y1="140" x2="130" y2="164" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#pa)"/>
+      <rect x="20" y="164" width="220" height="48" rx="8" fill="rgba(255,123,114,.06)" stroke="#ff7b72"/>
+      <text x="130" y="184" fill="#ff7b72" font-size="10" text-anchor="middle">backend REQUIRED at runtime</text>
+      <text x="130" y="200" fill="#768390" font-size="8" text-anchor="middle">no @tensorflow → fit throws</text>
+      <line x1="130" y1="212" x2="130" y2="236" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#pa)"/>
+      <rect x="20" y="236" width="220" height="60" rx="8" fill="rgba(126,231,135,.07)" stroke="#7ee787"/>
+      <text x="130" y="256" fill="#7ee787" font-size="9.5" text-anchor="middle">install ONE backend: tfjs-node</text>
+      <text x="130" y="271" fill="#768390" font-size="8" text-anchor="middle">native, in vscode host · ~11× faster</text>
+      <text x="130" y="283" fill="#768390" font-size="8" text-anchor="middle">deterministic per backend</text>
+      <rect x="280" y="236" width="220" height="60" rx="8" fill="#0c0f14" stroke="#7ee787"/>
+      <text x="390" y="254" fill="#7ee787" font-size="9.5" text-anchor="middle">algo_version</text>
+      <text x="390" y="269" fill="#768390" font-size="8" text-anchor="middle">hdbscan-1#clustering-tfjs@0.6.1</text>
+      <text x="390" y="281" fill="#768390" font-size="8" text-anchor="middle">#tensorflow — real backend recorded</text>
+      <rect x="280" y="92" width="220" height="48" rx="8" fill="rgba(126,231,135,.05)" stroke="#7ee787"/>
+      <text x="390" y="112" fill="#7ee787" font-size="9" text-anchor="middle">tdt lib: clustering-tfjs + tfjs-core</text>
+      <text x="390" y="128" fill="#768390" font-size="8" text-anchor="middle">tfjs-core reads backend name only · no ops</text>
+    </svg>
+  </div>
+</div>
+<figcaption>Three things <code>clustering-tfjs@0.6.1</code> settles: HDBSCAN's <code>fit</code> runs through a tf backend (<code>tf.topk</code> + broadcast <code>tf.maximum</code> in one <code>tf.tidy</code>), so a backend is required at runtime; determinism is bitwise <em>per backend</em>, not structural; and native <code>tfjs-node</code> is ~11× faster.</figcaption>
+</figure>
+
+<div class="legend">
+  <span><span class="box mod"></span> earlier reading (clustering-tfjs@0.6.0 · obsolete)</span>
+  <span><span class="box add"></span> verified reality (clustering-tfjs@0.6.1 · tf-backed)</span>
+</div>
+
+<div class="callout good">
+  <span class="label">The native backend is the reason for the bump — measured n=1500, d=384</span>
+  <div class="perf">
+    <div class="bars">
+      <div class="bar-row"><span class="blab">tfjs-node (native)</span><div class="bar-track"><div class="bar-fill native" style="width:9%">≈ 122 ms</div></div></div>
+      <div class="bar-row"><span class="blab">tfjs (pure-JS cpu)</span><div class="bar-track"><div class="bar-fill purejs" style="width:100%">≈ 1379 ms</div></div></div>
+    </div>
+  </div>
+  <p>Same workload, same matrix: native <code>@tensorflow/tfjs-node</code> ≈ 122 ms versus pure-JS cpu ≈ 1379 ms — a ~11× speedup, the motivation for installing native tf in the production host.</p>
+</div>
+
+<!-- ===================================================== DATA FLOW -->
+<h2 id="flow">The one-stage data flow — all clustering-tfjs isolated here</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 300" role="img" aria-label="The clustering-core data flow for one window. Input is the ordered PageVector array from Stage 2, n equals the page count. First the page-count guard asserts n is at most max_samples (default 4000); an oversized window is a hard error here, raised BEFORE any O of n squared allocation, because windowing in 36.2 is meant to prevent ever reaching it. A second one-time O of n guard then asserts every vector has the same dimension, so a ragged window cannot read past an array end and poison HDBSCAN with NaN. Then build_cosine_distance_matrix produces the dense n by n DistanceMatrix in float64: each entry is clamp of 1 minus dot, the diagonal is forced to exactly zero, and the matrix is symmetrized. Then cluster_window performs the single library call — new HDBSCAN with metric precomputed and store_exemplars true, await model.fit(D) — which runs through the installed TensorFlow.js backend; this is the only place clustering-tfjs is touched, and the only place the camelCase to snake_case translation lives. The output is HdbscanRaw: labels with minus one for noise, probabilities in zero to one, and exemplar_indices mapping cluster id to a row index. Downstream — representations 36.5, persistence 36.6, orchestration 36.9 — are out of scope for this task.">
+  <defs>
+    <marker id="fa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+    <marker id="fr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#ff7b72"/></marker>
+    <marker id="fp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d2a8ff"/></marker>
+  </defs>
+
+  <rect x="14" y="118" width="160" height="64" rx="8" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="94" y="140" fill="#6cb6ff" font-size="9.5" text-anchor="middle">PageVector[ ]</text>
+  <text x="94" y="154" fill="#768390" font-size="8" text-anchor="middle">from Stage 2 · ordered</text>
+  <text x="94" y="166" fill="#768390" font-size="8" text-anchor="middle">n = page count</text>
+  <line x1="174" y1="150" x2="210" y2="150" stroke="#9aa6b2" stroke-width="1.6" marker-end="url(#fa)"/>
+
+  <rect x="210" y="112" width="170" height="76" rx="8" fill="rgba(240,163,94,.08)" stroke="#f0a35e"/>
+  <text x="295" y="130" fill="#f0a35e" font-size="9.5" text-anchor="middle">TWO GUARDS</text>
+  <text x="295" y="144" fill="#768390" font-size="8" text-anchor="middle">1 · n ≤ max_samples (4000)</text>
+  <text x="295" y="156" fill="#768390" font-size="8" text-anchor="middle">2 · uniform dim (O(n) sweep)</text>
+  <text x="295" y="170" fill="#768390" font-size="8" text-anchor="middle">BEFORE the dot loop</text>
+  <line x1="295" y1="112" x2="295" y2="70" stroke="#ff7b72" stroke-width="1.5" marker-end="url(#fr)"/>
+  <rect x="208" y="32" width="174" height="38" rx="6" fill="rgba(255,123,114,.07)" stroke="#ff7b72"/>
+  <text x="295" y="49" fill="#ff7b72" font-size="9" text-anchor="middle">hard error (oversized)</text>
+  <text x="295" y="62" fill="#768390" font-size="7.5" text-anchor="middle">36.2 windowing prevents reaching it</text>
+  <line x1="380" y1="150" x2="416" y2="150" stroke="#9aa6b2" stroke-width="1.6" marker-end="url(#fa)"/>
+
+  <rect x="416" y="108" width="210" height="84" rx="8" fill="#161b22" stroke="#7ee787"/>
+  <text x="521" y="128" fill="#7ee787" font-size="9.5" text-anchor="middle">build_cosine_distance_matrix</text>
+  <text x="521" y="143" fill="#768390" font-size="8" text-anchor="middle">dense (n,n) · float64</text>
+  <text x="521" y="156" fill="#768390" font-size="8" text-anchor="middle">D[i][j] = clamp(1 − dot, 0, 2)</text>
+  <text x="521" y="169" fill="#768390" font-size="8" text-anchor="middle">diag = 0 · symmetric</text>
+  <text x="521" y="183" fill="#768390" font-size="8" text-anchor="middle">the O(n²) ceiling stage</text>
+  <line x1="626" y1="150" x2="662" y2="150" stroke="#9aa6b2" stroke-width="1.6" marker-end="url(#fa)"/>
+
+  <rect x="662" y="100" width="232" height="100" rx="10" fill="rgba(210,168,255,.06)" stroke="#d2a8ff" stroke-width="1.5"/>
+  <text x="778" y="120" fill="#d2a8ff" font-size="10" text-anchor="middle" font-weight="bold">cluster_window  —  THE ONLY</text>
+  <text x="778" y="133" fill="#d2a8ff" font-size="10" text-anchor="middle" font-weight="bold">clustering-tfjs call site</text>
+  <text x="778" y="150" fill="#768390" font-size="8" text-anchor="middle">new HDBSCAN({ metric:'precomputed', … })</text>
+  <text x="778" y="162" fill="#768390" font-size="8" text-anchor="middle">await model.fit(D) → via tf backend</text>
+  <text x="778" y="175" fill="#768390" font-size="8" text-anchor="middle">tf.topk + tf.maximum in one tf.tidy</text>
+  <text x="778" y="190" fill="#768390" font-size="8" text-anchor="middle">camelCase↔snake_case quarantined here</text>
+  <line x1="894" y1="150" x2="930" y2="150" stroke="#d2a8ff" stroke-width="1.6" marker-end="url(#fp)"/>
+
+  <rect x="930" y="106" width="170" height="88" rx="8" fill="#0c0f14" stroke="#7ee787"/>
+  <text x="1015" y="126" fill="#7ee787" font-size="9.5" text-anchor="middle">HdbscanRaw</text>
+  <text x="1015" y="141" fill="#768390" font-size="8" text-anchor="middle">labels (−1 = noise)</text>
+  <text x="1015" y="154" fill="#768390" font-size="8" text-anchor="middle">probabilities [0,1]</text>
+  <text x="1015" y="167" fill="#768390" font-size="8" text-anchor="middle">exemplar_indices</text>
+  <text x="1015" y="183" fill="#768390" font-size="8" text-anchor="middle">Map&lt;clusterId, rowIdx&gt;</text>
+
+  <rect x="662" y="232" width="438" height="48" rx="8" fill="#0f1419" stroke="#2a313a" stroke-dasharray="5 4"/>
+  <text x="881" y="252" fill="#768390" font-size="9" text-anchor="middle">OUT OF SCOPE for 36.4 — representations (36.5) · persistence (36.6) · orchestration (36.9)</text>
+  <text x="881" y="268" fill="#768390" font-size="8" text-anchor="middle">this task stops at the HdbscanRaw object; it persists nothing</text>
+  <line x1="1015" y1="194" x2="1015" y2="232" stroke="#9aa6b2" stroke-width="1.3" stroke-dasharray="3 3" marker-end="url(#fa)"/>
+</svg>
+</div>
+<figcaption>One window in, one <code>HdbscanRaw</code> out. The guard rejects an oversized window before any <code>O(n²)</code> allocation; <code>build_cosine_distance_matrix</code> is plain float64; and <code>cluster_window</code> is the single point where <code>clustering-tfjs</code> is imported, where the <code>fit</code> runs through the tf backend, and where the library's camelCase API is translated to TDT's snake_case <code>HdbscanRaw</code>.</figcaption>
+</figure>
+
+<div class="callout info">
+  <span class="label">Why one stage owns every library touch</span>
+  <p>Isolating all <code>clustering-tfjs</code> contact in <code>cluster_window.ts</code> keeps the rest of <code>@bergamot/tdt</code> library-agnostic, so a future library swap or API-changing version bump is a single-file edit — and the camelCase ↔ snake_case translation lives here and nowhere else.</p>
+</div>
+
+<div class="callout warn">
+  <span class="label">Bundle boundary — the clustering stage is NOT in the <code>@bergamot/tdt</code> barrel</span>
+  <p>The <code>index.ts</code> barrel is bundled into the VS Code extension by esbuild (the embed pass does a value import from <code>@bergamot/tdt</code>), and <code>cluster_window</code>'s <code>clustering-tfjs</code> import pulls the native TensorFlow / node-pre-gyp chain — re-exporting it breaks the production bundle (<code>scripts/bundle.mjs</code>).</p>
+  <p>So the barrel stays bundle-safe and the clustering stage is imported directly by its orchestrator (36.9), which owns externalising the native deps into the VSIX — the native chain enters only at the 36.9 wiring.</p>
+</div>
+
+<!-- ===================================================== THE MATH -->
+<h2 id="math">The cosine-distance math — one line, because vectors arrive normalized</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 330" role="img" aria-label="A worked cosine-distance construction over three example page vectors. Because each page vector is already L2-normalized at build time, its length is one, so cosine similarity reduces to the plain dot product and no per-pair magnitude division is needed. Cosine distance is one minus that dot product. Three steps follow. Step one: compute the dot products. v1 dot v2 is 0.92, v1 dot v3 is 0.10, v2 dot v3 is 0.15. Step two: D entry equals clamp of 1 minus dot into the range 0 to 2, because floating-point error can push a dot slightly outside minus one to one and HDBSCAN's mutual reachability assumes non-negative distances. So D of 1,2 is 0.08, D of 1,3 is 0.90, D of 2,3 is 0.85. Step three: force the diagonal to exactly zero and mirror the upper triangle into the lower, giving a symmetric three by three matrix with a zero diagonal and all entries within 0 to 2. The resulting matrix shows a tight pair, pages 1 and 2 at distance 0.08, and page 3 far from both.">
+  <text x="20" y="28" fill="#7ee787" font-size="12" font-weight="bold">vectors arrive L2-normalized  →  ‖v‖ = 1  →  cosine_sim = dot(vi, vj)  →  cosine_dist = 1 − dot</text>
+
+  <!-- step 1: dots -->
+  <rect x="20" y="50" width="300" height="240" rx="10" fill="#161b22" stroke="#2a313a"/>
+  <text x="40" y="74" fill="#6cb6ff" font-size="10" font-weight="bold">1 · dot products (= cosine sim)</text>
+  <text x="40" y="100" fill="#d7dde4" font-size="10">v1 · v2  =  <tspan fill="#7ee787" font-weight="bold">0.92</tspan>   (near-identical)</text>
+  <text x="40" y="124" fill="#d7dde4" font-size="10">v1 · v3  =  <tspan fill="#ff7b72" font-weight="bold">0.10</tspan>   (unrelated)</text>
+  <text x="40" y="148" fill="#d7dde4" font-size="10">v2 · v3  =  <tspan fill="#ff7b72" font-weight="bold">0.15</tspan>   (unrelated)</text>
+  <text x="40" y="186" fill="#768390" font-size="8.5">no magnitude division — ‖v‖ = 1,</text>
+  <text x="40" y="200" fill="#768390" font-size="8.5">so similarity IS the dot product.</text>
+  <text x="40" y="226" fill="#768390" font-size="8.5">we accumulate in float64; the library</text>
+  <text x="40" y="240" fill="#768390" font-size="8.5">then re-tensors D to float32 internally.</text>
+  <text x="40" y="266" fill="#f0a35e" font-size="8.5">diagonal v_i · v_i ≈ 1 (skipped,</text>
+  <text x="40" y="280" fill="#f0a35e" font-size="8.5">forced to 0 in step 3).</text>
+  <line x1="320" y1="170" x2="356" y2="170" stroke="#9aa6b2" stroke-width="1.6" marker-end="url(#fa)"/>
+
+  <!-- step 2: clamp -->
+  <rect x="356" y="50" width="320" height="240" rx="10" fill="#161b22" stroke="#2a313a"/>
+  <text x="376" y="74" fill="#6cb6ff" font-size="10" font-weight="bold">2 · D = clamp(1 − dot, 0, 2)</text>
+  <text x="376" y="100" fill="#d7dde4" font-size="10">D[1][2] = 1 − 0.92 = <tspan fill="#7ee787" font-weight="bold">0.08</tspan></text>
+  <text x="376" y="124" fill="#d7dde4" font-size="10">D[1][3] = 1 − 0.10 = <tspan fill="#ff7b72" font-weight="bold">0.90</tspan></text>
+  <text x="376" y="148" fill="#d7dde4" font-size="10">D[2][3] = 1 − 0.15 = <tspan fill="#ff7b72" font-weight="bold">0.85</tspan></text>
+  <text x="376" y="184" fill="#768390" font-size="8.5">clamp to [0,2] because float error can</text>
+  <text x="376" y="198" fill="#768390" font-size="8.5">push dot just outside [−1,1], and</text>
+  <text x="376" y="212" fill="#768390" font-size="8.5">HDBSCAN mutual-reachability assumes</text>
+  <text x="376" y="226" fill="#768390" font-size="8.5">non-negative distances.</text>
+  <text x="376" y="254" fill="#f0a35e" font-size="8.5">opposite vectors (dot = −1) → dist 2;</text>
+  <text x="376" y="268" fill="#f0a35e" font-size="8.5">identical (dot = 1) → dist 0.</text>
+  <line x1="676" y1="170" x2="712" y2="170" stroke="#9aa6b2" stroke-width="1.6" marker-end="url(#fa)"/>
+
+  <!-- step 3: matrix -->
+  <rect x="712" y="50" width="448" height="240" rx="10" fill="#0c0f14" stroke="#7ee787"/>
+  <text x="732" y="74" fill="#7ee787" font-size="10" font-weight="bold">3 · diag = 0 · symmetrize → DistanceMatrix</text>
+
+  <!-- matrix grid -->
+  <g font-size="11">
+    <text x="800" y="104" fill="#768390" text-anchor="middle">p1</text>
+    <text x="868" y="104" fill="#768390" text-anchor="middle">p2</text>
+    <text x="936" y="104" fill="#768390" text-anchor="middle">p3</text>
+    <text x="760" y="138" fill="#768390" text-anchor="end">p1</text>
+    <text x="760" y="178" fill="#768390" text-anchor="end">p2</text>
+    <text x="760" y="218" fill="#768390" text-anchor="end">p3</text>
+
+    <!-- row 1 -->
+    <rect x="772" y="122" width="56" height="32" rx="4" fill="rgba(240,163,94,.16)" stroke="#f0a35e"/><text x="800" y="143" fill="#f0a35e" text-anchor="middle" font-weight="bold">0.00</text>
+    <rect x="840" y="122" width="56" height="32" rx="4" fill="rgba(126,231,135,.16)" stroke="#7ee787"/><text x="868" y="143" fill="#7ee787" text-anchor="middle">0.08</text>
+    <rect x="908" y="122" width="56" height="32" rx="4" fill="rgba(255,123,114,.12)" stroke="#ff7b72"/><text x="936" y="143" fill="#ff7b72" text-anchor="middle">0.90</text>
+    <!-- row 2 -->
+    <rect x="772" y="162" width="56" height="32" rx="4" fill="rgba(126,231,135,.16)" stroke="#7ee787"/><text x="800" y="183" fill="#7ee787" text-anchor="middle">0.08</text>
+    <rect x="840" y="162" width="56" height="32" rx="4" fill="rgba(240,163,94,.16)" stroke="#f0a35e"/><text x="868" y="183" fill="#f0a35e" text-anchor="middle" font-weight="bold">0.00</text>
+    <rect x="908" y="162" width="56" height="32" rx="4" fill="rgba(255,123,114,.12)" stroke="#ff7b72"/><text x="936" y="183" fill="#ff7b72" text-anchor="middle">0.85</text>
+    <!-- row 3 -->
+    <rect x="772" y="202" width="56" height="32" rx="4" fill="rgba(255,123,114,.12)" stroke="#ff7b72"/><text x="800" y="223" fill="#ff7b72" text-anchor="middle">0.90</text>
+    <rect x="840" y="202" width="56" height="32" rx="4" fill="rgba(255,123,114,.12)" stroke="#ff7b72"/><text x="868" y="223" fill="#ff7b72" text-anchor="middle">0.85</text>
+    <rect x="908" y="202" width="56" height="32" rx="4" fill="rgba(240,163,94,.16)" stroke="#f0a35e"/><text x="936" y="223" fill="#f0a35e" text-anchor="middle" font-weight="bold">0.00</text>
+  </g>
+  <text x="990" y="138" fill="#f0a35e" font-size="8.5">orange = forced</text>
+  <text x="990" y="150" fill="#f0a35e" font-size="8.5">diagonal (= 0)</text>
+  <text x="990" y="184" fill="#7ee787" font-size="8.5">green = tight pair</text>
+  <text x="990" y="196" fill="#7ee787" font-size="8.5">(p1,p2 cluster)</text>
+  <text x="990" y="230" fill="#ff7b72" font-size="8.5">red = p3 far from</text>
+  <text x="990" y="242" fill="#ff7b72" font-size="8.5">both → likely noise</text>
+  <text x="732" y="270" fill="#768390" font-size="8.5">symmetric · zero diagonal · every entry in [0,2] — the contract AC #1 checks.</text>
+</svg>
+</div>
+<figcaption>The whole matrix is one expression because every vector is already L2-normalized: similarity collapses to the dot product, and the only corrections are the clamp into <code>[0,2]</code>, the forced-zero diagonal, and symmetrization. The library re-tensors our float64 <code>D</code> to float32 via <code>tf.tensor2d</code> — still deterministic.</figcaption>
+</figure>
+
+<!-- ===================================================== DETERMINISM -->
+<h2 id="determinism">Determinism — per backend, pinned by installing exactly one</h2>
+
+<figure>
+<div class="ba-pair">
+  <div class="panel cur">
+    <span class="tag">Earlier reading — "structural / pure-JS, no backend"</span>
+    <svg viewBox="0 0 520 250" role="img" aria-label="The earlier reading treated the precomputed path as pure JavaScript with no TensorFlow, so determinism was framed as a structural property: the same matrix would yield byte-identical labels by construction, and the bitwise test merely documented that. This premise is obsolete: fit actually runs through a tf backend.">
+      <defs>
+        <marker id="da" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+      </defs>
+      <rect x="20" y="24" width="220" height="46" rx="7" fill="#161b22" stroke="#f0a35e"/>
+      <text x="130" y="44" fill="#f0a35e" font-size="9.5" text-anchor="middle">precomputed = pure JS (assumed)</text>
+      <text x="130" y="59" fill="#768390" font-size="8" text-anchor="middle">believed no TensorFlow touched</text>
+      <line x1="130" y1="70" x2="130" y2="94" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#da)"/>
+      <rect x="20" y="94" width="220" height="46" rx="7" fill="rgba(240,163,94,.08)" stroke="#f0a35e"/>
+      <text x="130" y="114" fill="#f0a35e" font-size="9.5" text-anchor="middle">determinism = STRUCTURAL</text>
+      <text x="130" y="129" fill="#768390" font-size="8" text-anchor="middle">byte-identical by construction · no backend</text>
+      <line x1="130" y1="140" x2="130" y2="164" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#da)"/>
+      <rect x="20" y="164" width="220" height="60" rx="7" fill="#161b22" stroke="#f0a35e"/>
+      <text x="130" y="184" fill="#f0a35e" font-size="9.5" text-anchor="middle">bitwise test = DOCUMENTS</text>
+      <text x="130" y="199" fill="#768390" font-size="8" text-anchor="middle">not guarding any backend —</text>
+      <text x="130" y="211" fill="#768390" font-size="8" text-anchor="middle">an obsolete framing</text>
+      <text x="280" y="124" fill="#768390" font-size="9">"no tf, no RNG, so the</text>
+      <text x="280" y="140" fill="#768390" font-size="9">same matrix reproduces by</text>
+      <text x="280" y="156" fill="#768390" font-size="9">construction." — superseded</text>
+      <text x="280" y="172" fill="#768390" font-size="9">by the 0.6.1 verification</text>
+    </svg>
+  </div>
+  <div class="arrow">→</div>
+  <div class="panel plan">
+    <span class="tag">Verified — bitwise-deterministic per backend</span>
+    <svg viewBox="0 0 520 250" role="img" aria-label="The verified reality on 0.6.1: fit runs through a TensorFlow.js backend, so determinism is per backend. We pin the backend by installing exactly one; clustering-tfjs auto-probes deterministically in the order tfjs-node-gpu, tfjs-node, tfjs, tfjs-core, so a single installed backend is deterministically selected. Verified bitwise-identical labels and probabilities across two runs on the SAME backend, on both native tfjs-node and pure-JS cpu. So the plan's determinism anchor number 3 is back in force and AC number 4's bitwise test genuinely guards within-backend stability.">
+      <defs>
+        <marker id="dg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+      </defs>
+      <rect x="20" y="24" width="220" height="46" rx="7" fill="rgba(210,168,255,.08)" stroke="#d2a8ff"/>
+      <text x="130" y="42" fill="#d2a8ff" font-size="9.5" text-anchor="middle">fit runs through a tf backend</text>
+      <text x="130" y="57" fill="#768390" font-size="8" text-anchor="middle">→ determinism is PER backend</text>
+      <line x1="130" y1="70" x2="130" y2="94" stroke="#7ee787" stroke-width="1.4" marker-end="url(#dg)"/>
+      <rect x="20" y="94" width="220" height="46" rx="7" fill="rgba(126,231,135,.07)" stroke="#7ee787"/>
+      <text x="130" y="112" fill="#7ee787" font-size="9.5" text-anchor="middle">PIN = install exactly one backend</text>
+      <text x="130" y="127" fill="#768390" font-size="8" text-anchor="middle">auto-probe: gpu → node → tfjs → core</text>
+      <line x1="130" y1="140" x2="130" y2="164" stroke="#7ee787" stroke-width="1.4" marker-end="url(#dg)"/>
+      <rect x="20" y="164" width="220" height="60" rx="7" fill="#0c0f14" stroke="#7ee787"/>
+      <text x="130" y="184" fill="#7ee787" font-size="9.5" text-anchor="middle">bitwise test = GUARDS</text>
+      <text x="130" y="199" fill="#768390" font-size="8" text-anchor="middle">within-backend stability (AC #4)</text>
+      <text x="130" y="211" fill="#768390" font-size="8" text-anchor="middle">anchor #3 back in force</text>
+      <text x="280" y="124" fill="#768390" font-size="9">verified bitwise-identical</text>
+      <text x="280" y="140" fill="#768390" font-size="9">labels &amp; probs across two</text>
+      <text x="280" y="156" fill="#7ee787" font-size="9">runs on the SAME backend —</text>
+      <text x="280" y="172" fill="#7ee787" font-size="9">both tfjs-node and cpu.</text>
+    </svg>
+  </div>
+</div>
+<figcaption>Because <code>fit</code> runs through a tf backend, determinism is bitwise <em>per backend</em>: pin it by installing exactly one (<code>clustering-tfjs</code> auto-probes <code>tfjs-node-gpu → tfjs-node → tfjs → tfjs-core</code>), so AC #4's bitwise test now genuinely guards within-backend stability.</figcaption>
+</figure>
+
+<div class="callout good">
+  <span class="label">What stays true about determinism</span>
+  <p>The bitwise test earns its place: it regression-locks within-backend stability, verified byte-identical across two runs on both native <code>tfjs-node</code> and pure-JS cpu.</p>
+  <p>The upstream anchors stay load-bearing — a stable <code>ORDER BY page_loaded_at, page_session_id</code> (36.3) fixes MST tie-breaking, and fixed-order float64 segment pooling (36.3) fixes the vectors that feed <code>D</code>.</p>
+</div>
+
+<!-- ===================================================== THE FIT -->
+<h2 id="fit">The HDBSCAN fit and the snake_case quarantine</h2>
+
+<p class="prose">The verified API is snake_case, so the one call site translates the library's snake_case outputs into TDT's <code>HdbscanRaw</code> shape — the only place this translation lives.</p>
+
+<div class="tabs" id="fittabs">
+  <div class="tabbar">
+    <button data-t="0" class="on">the fit call</button>
+    <button data-t="1">build_cosine_distance_matrix</button>
+    <button data-t="2">AC #6 — both backend strings</button>
+  </div>
+
+  <div class="pane on" data-p="0">
+  <div class="code">
+    <div class="file-label"><span class="new">new</span> tdt/src/cluster_window.ts &nbsp;·&nbsp; the ONLY clustering-tfjs call; runs through the tf backend; camelCase↔snake_case quarantined here</div>
+<pre><span class="cm">// The single library touch-point. Imports clustering-tfjs; nothing else in</span>
+<span class="cm">// @bergamot/tdt does. fit() runs through whichever tf backend is installed.</span>
+<span class="kw">import</span> { <span class="typ">HDBSCAN</span> } <span class="kw">from</span> <span class="str">"clustering-tfjs"</span>;
+<span class="kw">import type</span> { <span class="typ">DistanceMatrix</span>, <span class="typ">HdbscanRaw</span> } <span class="kw">from</span> <span class="str">"./types"</span>;
+<span class="kw">import type</span> { <span class="typ">HdbscanConfig</span> } <span class="kw">from</span> <span class="str">"./config"</span>;
+
+<span class="cm">// AC #6: a descriptive failure when the dependency is absent/unloadable,</span>
+<span class="cm">// not a cryptic "undefined is not a constructor". A tf BACKEND is required too;</span>
+<span class="cm">// reframe_clustering_error matches BOTH backend-absent strings (see below):</span>
+<span class="cm">//   "No TensorFlow.js backend available"  — only if NO @tensorflow/* resolves</span>
+<span class="cm">//   "No backend found in registry"        — the string tdt ACTUALLY hits, since</span>
+<span class="cm">//      tfjs-core resolves but no compute backend (tfjs-node) is installed.</span>
+<span class="hl"><span class="kw">if</span> (<span class="kw">typeof</span> <span class="typ">HDBSCAN</span> !== <span class="str">"function"</span>) {</span>
+  <span class="kw">throw new</span> <span class="typ">Error</span>(
+    <span class="str">"clustering-tfjs HDBSCAN export is missing or unloadable — "</span> +
+    <span class="str">"install clustering-tfjs and one @tensorflow/* backend (tfjs-node)."</span>,
+  );
+}
+
+<span class="kw">export async function</span> <span class="fn">cluster_window</span>(
+  D: <span class="typ">DistanceMatrix</span>,
+  config: <span class="typ">HdbscanConfig</span>,
+): <span class="typ">Promise</span>&lt;<span class="typ">HdbscanRaw</span>&gt; {
+  <span class="kw">const</span> model = <span class="kw">new</span> <span class="typ">HDBSCAN</span>({
+    <span class="hl">metric: <span class="str">"precomputed"</span>,        <span class="cm">// cosine is not native; D is the only path</span></span>
+    min_cluster_size: config.min_cluster_size,  <span class="cm">// default 3 (pages)</span>
+    min_samples: config.min_samples,            <span class="cm">// default 5, DECOUPLED</span>
+    cluster_selection_method: config.method,    <span class="cm">// 'eom' — defines exemplars</span>
+    cluster_selection_epsilon: config.epsilon,  <span class="cm">// default 0.0</span>
+    <span class="hl">store_exemplars: <span class="kw">true</span>,         <span class="cm">// required for exemplar_indices_</span></span>
+  });
+
+  <span class="hl"><span class="kw">await</span> model.<span class="fn">fit</span>(D);</span>          <span class="cm">// fit-only · tf.topk + tf.maximum in one tf.tidy</span>
+
+  <span class="cm">// snake_case (library) → snake_case (HdbscanRaw). Quarantined HERE.</span>
+  <span class="kw">return</span> {
+    labels: model.labels_,
+    probabilities: model.probabilities_,
+    exemplar_indices: model.exemplar_indices_,  <span class="cm">// Map&lt;clusterId, rowIdx&gt;</span>
+  };
+}</pre>
+  </div>
+  </div>
+
+  <div class="pane" data-p="1">
+  <div class="code">
+    <div class="file-label"><span class="new">new</span> tdt/src/cluster_window.ts &nbsp;·&nbsp; built ourselves in float64 — both guards run here, before the dot loop</div>
+<pre><span class="cm">// AC #1: dense (n,n), zero diagonal, symmetric, clamped to [0,2].</span>
+<span class="cm">// Vectors are L2-normalized (Stage 2), so cosine_sim = dot, dist = 1 - dot.</span>
+<span class="cm">// We accumulate in float64; the library re-tensors D to float32 (tf.tensor2d).</span>
+<span class="kw">import type</span> { <span class="typ">PageVector</span>, <span class="typ">DistanceMatrix</span> } <span class="kw">from</span> <span class="str">"./types"</span>;
+
+<span class="kw">export function</span> <span class="fn">build_cosine_distance_matrix</span>(
+  vectors: <span class="typ">PageVector</span>[],
+  max_samples: <span class="typ">number</span>,
+): <span class="typ">DistanceMatrix</span> {
+  <span class="kw">const</span> n = vectors.length;
+
+  <span class="cm">// GUARD 1 — page-count ceiling (AC #3): reject BEFORE the O(n²) allocation.</span>
+  <span class="hl"><span class="kw">if</span> (n &gt; max_samples) <span class="kw">throw new</span> <span class="typ">Error</span>(</span>
+    <span class="str">`${n} pages exceeds max_samples=${max_samples}; windowing must subdivide`</span>);
+
+  <span class="cm">// GUARD 2 — dimension uniformity: one-time O(n) sweep. A ragged window would</span>
+  <span class="cm">// let the dot loop read past an array end (→ NaN) and silently poison HDBSCAN,</span>
+  <span class="cm">// so a mismatched-length vector fails loudly here instead.</span>
+  <span class="kw">const</span> dim = n &gt; <span class="num">0</span> ? vectors[<span class="num">0</span>].vector.length : <span class="num">0</span>;
+  <span class="add"><span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; n; i++) <span class="kw">if</span> (vectors[i].vector.length !== dim)</span>
+    <span class="add"><span class="kw">throw new</span> <span class="typ">Error</span>(<span class="str">`page ${vectors[i].page_session_id} has dim `</span> +</span>
+      <span class="add"><span class="str">`${vectors[i].vector.length}, expected ${dim}.`</span>);</span>
+
+  <span class="kw">const</span> D: <span class="typ">number</span>[][] = <span class="typ">Array</span>.<span class="fn">from</span>({ length: n }, () => <span class="kw">new</span> <span class="typ">Array</span>(n).<span class="fn">fill</span>(<span class="num">0</span>));
+  <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; n; i++) {
+    <span class="kw">const</span> vi = vectors[i].vector;
+    <span class="kw">for</span> (<span class="kw">let</span> j = i + <span class="num">1</span>; j &lt; n; j++) {
+      <span class="kw">const</span> vj = vectors[j].vector;
+      <span class="kw">let</span> dot = <span class="num">0</span>;                      <span class="cm">// float64 accumulator (number)</span>
+      <span class="kw">for</span> (<span class="kw">let</span> k = <span class="num">0</span>; k &lt; vi.length; k++) dot += vi[k] * vj[k];
+      <span class="kw">const</span> d = <span class="typ">Math</span>.<span class="fn">min</span>(<span class="num">2</span>, <span class="typ">Math</span>.<span class="fn">max</span>(<span class="num">0</span>, <span class="num">1</span> - dot));
+      <span class="hl">D[i][j] = d; D[j][i] = d;</span>     <span class="cm">// write both → symmetric</span>
+    }
+    <span class="hl">D[i][i] = <span class="num">0</span>;</span>                  <span class="cm">// forced-zero diagonal (never the ≈0 dot)</span>
+  }
+  <span class="kw">return</span> D;
+}</pre>
+  </div>
+  </div>
+
+  <div class="pane" data-p="2">
+  <div class="code">
+    <div class="file-label"><span class="edit">guards</span> tdt/src/cluster_window.ts &nbsp;·&nbsp; AC #6 error reframing — matches BOTH backend-absent strings</div>
+<pre><span class="cm">// AC #6: re-frame the library's backend-absent error so the fix (install a host</span>
+<span class="cm">// TensorFlow backend) is obvious; pass anything else through unchanged.</span>
+<span class="cm">// TWO distinct strings cover the same root cause:</span>
+<span class="kw">export function</span> <span class="fn">reframe_clustering_error</span>(err: <span class="typ">unknown</span>): <span class="typ">Error</span> {
+  <span class="kw">const</span> message = err <span class="kw">instanceof</span> <span class="typ">Error</span> ? err.message : <span class="typ">String</span>(err);
+  <span class="hl"><span class="kw">if</span> (</span>
+    <span class="cm">// fires ONLY when no @tensorflow/* resolves at all:</span>
+    <span class="hl">message.includes(<span class="str">"No TensorFlow.js backend"</span>) ||</span>
+    <span class="cm">// the string tdt ACTUALLY hits: tfjs-core resolves, but no compute</span>
+    <span class="cm">// backend (tfjs-node) is installed, so a tf op fails later with:</span>
+    <span class="hl">message.includes(<span class="str">"No backend found in registry"</span>)</span>
+  ) {
+    <span class="kw">return new</span> <span class="typ">Error</span>(
+      <span class="str">"cluster_window: no TensorFlow.js compute backend available. The host must "</span> +
+      <span class="str">"install @tensorflow/tfjs-node. Original: "</span> + message,
+    );
+  }
+  <span class="kw">return</span> err <span class="kw">instanceof</span> <span class="typ">Error</span> ? err : <span class="kw">new</span> <span class="typ">Error</span>(message);
+}</pre>
+  </div>
+  </div>
+</div>
+
+<div class="callout info">
+  <span class="label">Parameters are decoupled config, not magic constants (plan §6)</span>
+  <p><code>min_cluster_size = 3</code> (a real personal-scale project), <code>min_samples = 5</code> <strong>decoupled</strong> from it (a low value under-smooths the MST and flips labels), <code>method = 'eom'</code> (stable, the only method with defined exemplars), <code>epsilon = 0.0</code> — starting points the 36.7 sweep tunes, already in <code>DEFAULT_HDBSCAN_CONFIG</code>.</p>
+</div>
+
+<!-- ===================================================== GUARDS / SCOPE -->
+<h2 id="guards">What this task builds — and where it stops</h2>
+
+<div class="steps">
+  <div class="step">
+    <div class="badge ok">A</div>
+    <div class="body">
+      <h3><code>build_cosine_distance_matrix</code> — the float64 matrix + both guards (AC #1)</h3>
+      <p>Dense <code>(n,n)</code> in plain float64: <code>clamp(1 − dot, 0, 2)</code>, forced-zero diagonal, symmetric. Both guards run here before the dot loop; the library re-tensors <code>D</code> to float32.</p>
+      <span class="loc">tdt/src/cluster_window.ts (new) · tdt/src/types.ts DistanceMatrix (defined)</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge guard">B</div>
+    <div class="body">
+      <h3>Two guards before the dot loop — page-count + dimension uniformity (AC #3)</h3>
+      <p>Inside <code>build_cosine_distance_matrix</code>: assert <code>n ≤ max_samples</code> (default 4000) before the <code>O(n²)</code> allocation, then a one-time <code>O(n)</code> sweep rejecting a ragged window so a mismatched-length vector can't read past an array end and poison HDBSCAN with NaN.</p>
+      <span class="loc">tdt/src/cluster_window.ts (new) · WindowConfig.max_samples (defined)</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge lib">C</div>
+    <div class="body">
+      <h3>The single isolated HDBSCAN fit, through the tf backend (AC #2)</h3>
+      <p>One <code>new HDBSCAN({ metric:'precomputed', store_exemplars:true, … })</code> then <code>await model.fit(D)</code>, which runs <code>tf.topk</code> + <code>tf.maximum</code> through the installed backend, emitting <code>labels_</code> (−1 = noise), <code>probabilities_</code>, <code>exemplar_indices_</code>, translated into <code>HdbscanRaw</code>. The only clustering-tfjs import in the package.</p>
+      <span class="loc">tdt/src/cluster_window.ts (new) · returns types.ts HdbscanRaw (defined)</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge guard">D</div>
+    <div class="body">
+      <h3>Determinism test + backend-absent reframing on both strings (AC #4, #6)</h3>
+      <p>A bitwise reproducibility test (same window twice → identical <code>labels</code> and <code>probabilities</code>) guarding within-backend stability; <code>reframe_clustering_error</code> points both <code>"No TensorFlow.js backend available"</code> and the actually-fired <code>"No backend found in registry"</code> at the host fix; fixture-window integration tests on the native backend.</p>
+      <span class="loc">tdt/src/cluster_window.test.ts (new) · distance.test.ts (new) · __fixtures__/</span>
+    </div>
+  </div>
+</div>
+
+<div class="callout warn">
+  <span class="label">Scope boundary — this task stops at HdbscanRaw</span>
+  <p>Step 4 produces only the distance matrix and the single isolated <code>fit</code> — <strong>not</strong> representations or the frozen representative vector, medoids, the labeler (36.5), persistence (36.6), or orchestration and run keying (36.9).</p>
+  <p>The output is the in-memory <code>HdbscanRaw</code> object, not persisted cluster rows; <code>algo_version</code> is recorded here but consumed later.</p>
+</div>
+
+<!-- ===================================================== DECISIONS -->
+<h2 id="decisions">Design decisions</h2>
+
+<div class="callout decision">
+  <span class="label">Decision #0 — keep <code>cluster_window</code> OUT of the package barrel</span>
+  <p><span class="pick">Direct import from the orchestrator, never the barrel.</span> esbuild bundles <code>index.ts</code> into the extension; if it re-exported <code>cluster_window</code>, the embed pass's value import would drag the native TensorFlow / node-pre-gyp chain into <code>scripts/bundle.mjs</code> and break it. The barrel exports types and pure-JS helpers only; 36.9 imports the clustering stage directly and externalises the native deps in the VSIX.</p>
+</div>
+
+<div class="callout decision">
+  <span class="label">Decision #1 — build D ourselves vs reuse a library distance call</span>
+  <p><span class="pick">Build it ourselves in float64.</span> Cosine is <strong>not</strong> a native HDBSCAN metric, so precomputed is the only cosine path (AC #1): <code>D[i][j] = clamp(1 − dot, 0, 2)</code>, zero diagonal, symmetric. The library then does <code>tf.tensor2d(rows)</code>, truncating our float64 <code>D</code> to float32 internally — still deterministic.</p>
+</div>
+
+<div class="callout decision">
+  <span class="label">Decision #2 — install TensorFlow?</span>
+  <p><span class="pick">Yes — native <code>@tensorflow/tfjs-node</code> in the vscode host.</span> The production host that runs clustering in its off-event-loop worker installs native tfjs-node for the ~11× boost; the tdt library depends on <code>clustering-tfjs@^0.6.1</code> + <code>@tensorflow/tfjs-core</code> (read backend name only, no ops), with tfjs-node as a test-time devDependency. darwin-x64 prebuilt installs fine.</p>
+</div>
+
+<div class="callout decision">
+  <span class="label">Decision #3 — the algo_version backend slot</span>
+  <p><span class="pick">Record the real backend.</span> Final value <code>algo_version = hdbscan-1#clustering-tfjs@&lt;version&gt;#&lt;backend&gt;</code>, e.g. <code>hdbscan-1#clustering-tfjs@0.6.1#tensorflow</code>. The version is read by resolving clustering-tfjs's install dir + <code>fs.readFileSync</code> of its package.json (a plain <code>require('clustering-tfjs/package.json')</code> is blocked by its <code>exports</code> field); the backend via <code>require('@tensorflow/tfjs-core').getBackend()</code> after the first fit → <code>'tensorflow'</code> for native.</p>
+</div>
+
+<!-- ===================================================== AC TABLE -->
+<h2 id="ac">Acceptance criteria — and how each is met</h2>
+
+<figure>
+<table>
+  <thead><tr><th>#</th><th>Acceptance criterion (verbatim intent)</th><th>How it is met</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="c">#1</td>
+      <td><code>build_cosine_distance_matrix</code> produces a dense <code>(n,n)</code> matrix with zero diagonal, symmetric, clamped to <code>[0,2]</code></td>
+      <td>Float64 <code>clamp(1 − dot, 0, 2)</code> with forced-zero diagonal and mirrored writes; built ourselves because cosine is not a native metric (the library re-tensors to float32)</td>
+    </tr>
+    <tr>
+      <td class="c">#2</td>
+      <td>HDBSCAN runs with <code>metric='precomputed'</code>, decoupled minClusterSize/minSamples, eom + stored exemplars, emitting <code>labels*</code> (−1 noise), <code>probabilities*</code>, <code>exemplarIndices_</code></td>
+      <td>The single <code>cluster_window</code> fit through the tf backend: snake_case config (<code>min_cluster_size</code>/<code>min_samples</code> decoupled, <code>cluster_selection_method:'eom'</code>, <code>store_exemplars:true</code>) → <code>HdbscanRaw</code></td>
+    </tr>
+    <tr>
+      <td class="c">#3</td>
+      <td>The page-count guard rejects an oversized window BEFORE the dense matrix is allocated</td>
+      <td><code>assert_within_guard(n, max_samples)</code> raises a hard error ahead of <code>build_cosine_distance_matrix</code> — the <code>O(n²)</code> allocation never happens for an oversized window</td>
+    </tr>
+    <tr>
+      <td class="c">#4</td>
+      <td>With a pinned tfjs backend, a bitwise reproducibility test shows the same window clustered twice yields identical <code>labels*</code> and <code>probabilities*</code></td>
+      <td>Back in force: <code>fit</code> runs through tf, so determinism is per backend; pin it by installing exactly one (auto-probe <code>tfjs-node-gpu → tfjs-node → tfjs → tfjs-core</code>), and the bitwise test guards within-backend stability — verified byte-identical on both native and cpu</td>
+    </tr>
+    <tr>
+      <td class="c">#5</td>
+      <td>The clustering-tfjs version and backend are recorded for the run's <code>algo_version</code></td>
+      <td>Version via <code>fs.readFileSync</code> of clustering-tfjs's package.json; backend via <code>getBackend()</code> after first fit → <code>hdbscan-1#clustering-tfjs@0.6.1#tensorflow</code> for native</td>
+    </tr>
+    <tr>
+      <td class="c">#6</td>
+      <td>Integration tests over fixture windows pass, and fail clearly when the HDBSCAN dependency is absent</td>
+      <td>Fixture-window integration tests; a <code>typeof HDBSCAN === 'function'</code> guard, plus <code>reframe_clustering_error</code> matching BOTH <code>"No TensorFlow.js backend available"</code> (no <code>@tensorflow/*</code> at all) and <code>"No backend found in registry"</code> — the string tdt actually hits, since <code>tfjs-core</code> resolves but no compute backend is installed</td>
+    </tr>
+  </tbody>
+</table>
+</figure>
+
+<div class="callout good">
+  <span class="label">Net effect on the dependency story</span>
+  <p><code>clustering-tfjs@0.6.1</code> has shipped with HDBSCAN's <code>fit</code> running through a TensorFlow.js backend; the tdt library depends on <code>clustering-tfjs@^0.6.1</code> + <code>@tensorflow/tfjs-core</code>, and the vscode host installs native <code>@tensorflow/tfjs-node</code> for the ~11× boost — unblocking 36.4 the moment those land in the package manifests.</p>
+</div>
+
+<footer>
+  Companion for <code>task-36.4</code> (status: To Do · build-order step 4) — cosine distance matrix + isolated HDBSCAN clustering core · branch <code>tdt</code> ·
+  spec <code>task-36.4 ….md</code> (6 ACs) ·
+  design <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> §6 (Stages 4–5, determinism contract) · §10 (dependency table) ·
+  types <code>tdt/src/types.ts</code> (PageVector · DistanceMatrix · HdbscanRaw) · config <code>tdt/src/config.ts</code> (HdbscanConfig) ·
+  code <code>tdt/src/cluster_window.ts</code> (matrix + both guards + the isolated fit; NOT re-exported from the barrel) · dependency <code>clustering-tfjs@0.6.1</code> (fit runs through a tf backend; native tfjs-node ~11× over pure-JS cpu).
+</footer>
+
+<script>
+(function () {
+  var box = document.getElementById("fittabs");
+  if (!box) return;
+  var btns = box.querySelectorAll(".tabbar button");
+  var panes = box.querySelectorAll(".pane");
+  btns.forEach(function (b) {
+    b.addEventListener("click", function () {
+      var t = b.getAttribute("data-t");
+      btns.forEach(function (x) { x.classList.toggle("on", x === b); });
+      panes.forEach(function (p) { p.classList.toggle("on", p.getAttribute("data-p") === t); });
+    });
+  });
+})();
+</script>
+
+</main>
+</body>
+</html>

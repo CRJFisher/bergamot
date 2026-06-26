@@ -63,7 +63,7 @@ export interface RunRecord {
   params_hash: string;
   params_json: string;
   embedding_model_id: string; // model + dim + page-representation rule, e.g. 'bge-small-en@384#repr-v1'
-  algo_version: string; // 'hdbscan-1#<tf-backend>'
+  algo_version: string; // 'hdbscan-1#clustering-tfjs@<ver>#<tf-backend>'
   input_count: number;
   input_fingerprint: string; // hash of sorted (page_session_id, embedding_vector_version)
   cluster_count: number | null; // null while status='running'
