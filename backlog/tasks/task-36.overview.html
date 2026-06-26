@@ -141,8 +141,8 @@
   <a href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html"><span class="dot done"></span>36.1 Scaffold</a>
   <a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html"><span class="dot done"></span>36.2 Windowing</a>
   <a href="task-36.3 - Page-vectorisation-TDT-owned-embedding-of-captured-pages.page-vectors.html"><span class="dot todo"></span>36.3 Vectorise</a>
-  <span class="pending"><span class="dot todo"></span>36.4 Distance + HDBSCAN · not yet generated</span>
-  <span class="pending"><span class="dot todo"></span>36.5 Representations + labeler · not yet generated</span>
+  <a href="task-36.4 - Cosine-distance-matrix-and-HDBSCAN-clustering-core.clustering-core.html"><span class="dot done"></span>36.4 Distance + HDBSCAN</a>
+  <a href="task-36.5 - Cluster-representations-and-deterministic-labeler.representations-labeler.html"><span class="dot now"></span>36.5 Representations + labeler</a>
   <span class="pending"><span class="dot todo"></span>36.6 Persistence · not yet generated</span>
   <span class="pending"><span class="dot todo"></span>36.7 Validation · not yet generated</span>
   <a href="task-36.8.concept-decision.html"><span class="dot todo"></span>36.8 Surface decision · concept set</a>
@@ -399,12 +399,12 @@
     <text x="306" y="100" fill="#f0a35e" font-size="9.5">to do · companion</text>
     <text x="306" y="124" fill="#d7dde4">Vectorise</text><text x="306" y="138" fill="#768390" font-size="8.5">read content+embed</text>
     <!-- 36.4 gated -->
-    <circle cx="429" cy="70" r="13" fill="rgba(255,123,114,.12)" stroke="#ff7b72"/><text x="429" y="74" fill="#ff7b72" font-size="11">4</text>
-    <text x="429" y="100" fill="#ff7b72" font-size="9.5">GATED</text>
+    <circle cx="429" cy="70" r="13" fill="rgba(126,231,135,.18)" stroke="#7ee787"/><text x="429" y="74" fill="#7ee787" font-size="11">4</text>
+    <text x="429" y="100" fill="#7ee787" font-size="9.5">DONE · companion</text>
     <text x="429" y="124" fill="#d7dde4">Distance + HDBSCAN</text><text x="429" y="138" fill="#768390" font-size="8.5">only tfjs call</text>
     <!-- 36.5 -->
-    <circle cx="552" cy="70" r="13" fill="#161b22" stroke="#768390"/><text x="552" y="74" fill="#768390" font-size="11">5</text>
-    <text x="552" y="100" fill="#768390" font-size="9.5">to do</text>
+    <circle cx="552" cy="70" r="13" fill="rgba(240,163,94,.14)" stroke="#f0a35e"/><text x="552" y="74" fill="#f0a35e" font-size="11">5</text>
+    <text x="552" y="100" fill="#f0a35e" font-size="9.5">to do · companion</text>
     <text x="552" y="124" fill="#d7dde4">Representations</text><text x="552" y="138" fill="#768390" font-size="8.5">+ labeler</text>
     <!-- 36.6 -->
     <circle cx="675" cy="70" r="13" fill="#161b22" stroke="#768390"/><text x="675" y="74" fill="#768390" font-size="11">6</text>
@@ -432,7 +432,7 @@
   <line x1="429" y1="178" x2="429" y2="86" stroke="#ff7b72" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#bo)"/>
 </svg>
 </div>
-<figcaption>36.1 and 36.2 are complete on the <code>tdt</code> branch; 36.3–36.9 are to do, and 36.3 now has a companion. 36.4 is gated on the external clustering-tfjs HDBSCAN upgrade. 36.8 is a <span style="color:var(--purple)">surface-decision spike</span> — it outputs a decision record and spun-off implementation sub-tasks, not a shipped UI, and has its own five-page concept set.</figcaption>
+<figcaption>36.1 and 36.2 are complete on the <code>tdt</code> branch; 36.3–36.9 are to do, and 36.3 now has a companion. 36.4 is complete and 36.5 (representations + labeler) is the active sub-task. 36.8 is a <span style="color:var(--purple)">surface-decision spike</span> — it outputs a decision record and spun-off implementation sub-tasks, not a shipped UI, and has its own five-page concept set.</figcaption>
 </figure>
 
 <table>
@@ -441,8 +441,8 @@
     <tr><td class="ac">36.1</td><td>Scaffold the package + ports</td><td>Create the <code>tdt/</code> workspace, the four port contracts, config + types, fakes for every port.</td><td><span class="pill done">done</span></td><td><a href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html">companion →</a></td></tr>
     <tr><td class="ac">36.2</td><td>Windowing &amp; data-scale</td><td>Slice the visit stream into bounded frames under the sample ceiling; deterministic subdivision; skip sparse frames.</td><td><span class="pill done">done</span></td><td><a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html">companion →</a></td></tr>
     <tr><td class="ac">36.3</td><td>Page vectorisation</td><td>Read each re-downloadable page's already-extracted content from the task-39.2 corpus, build deterministic page text, embed with TDT's own model, L2-normalize, and cache. The re-download and HTML parse happen upstream; TDT consumes <code>CorpusContent</code> and never fetches. Ships the dispersion / degenerate / no-text guards and the dedup-before-clustering step.</td><td><span class="pill todo">to do</span></td><td><a href="task-36.3 - Page-vectorisation-TDT-owned-embedding-of-captured-pages.page-vectors.html">companion →</a></td></tr>
-    <tr><td class="ac">36.4</td><td>Distance + HDBSCAN core</td><td>Build the cosine distance matrix and run <code>HDBSCAN.fit</code> — the only <code>clustering-tfjs</code> call.</td><td><span class="pill dep">gated</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
-    <tr><td class="ac">36.5</td><td>Representations + labeler</td><td>Pick the representative page, freeze the representative vector, compose a deterministic label bundle — <code>headline_title</code>, <code>scope</code>, <code>keyphrases</code>, <code>display_label</code>, <code>representation_version</code> (no LLM).</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
+    <tr><td class="ac">36.4</td><td>Distance + HDBSCAN core</td><td>Build the cosine distance matrix and run <code>HDBSCAN.fit</code> — the only <code>clustering-tfjs</code> call.</td><td><span class="pill done">done</span></td><td><a href="task-36.4 - Cosine-distance-matrix-and-HDBSCAN-clustering-core.clustering-core.html">companion &rarr;</a></td></tr>
+    <tr><td class="ac">36.5</td><td>Representations + labeler</td><td>Pick the representative page, freeze the representative vector, compose a deterministic label bundle — <code>headline_title</code>, <code>scope</code>, <code>keyphrases</code>, <code>display_label</code>, <code>representation_version</code> (no LLM).</td><td><span class="pill now">to do</span></td><td><a href="task-36.5 - Cluster-representations-and-deterministic-labeler.representations-labeler.html">companion &rarr;</a></td></tr>
     <tr><td class="ac">36.6</td><td>Persistence</td><td>Write <code>topic_run</code> / <code>topic_cluster</code> / <code>topic_cluster_member</code>; run keying; idempotency.</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
     <tr><td class="ac">36.7</td><td>Validation + sweep</td><td>Sweep parameters on real windows; score by native validity + noise rate; persist the chosen operating point.</td><td><span class="pill todo">to do</span></td><td><span style="color:var(--com)">not yet generated</span></td></tr>
     <tr><td class="ac">36.8</td><td>Decide the user-facing surface</td><td>A UI investigation, not an implementation. Split the thin host-agnostic read API (the integration primitive over the cluster + label-bundle tables) from the user-facing surface(s) — a Claude skill over scripts, note-stub write-back into <code>bergamot.staging/</code>, a VS Code webview — and decide how they layer. Output is a decision record (ADR) plus spun-off implementation sub-tasks.</td><td><span class="pill spike">spike</span></td><td><a href="task-36.8.concept-decision.html">concept set →</a></td></tr>

@@ -1,4 +1,10 @@
+import * as tdt from "./index";
 import { run_tdt, type TdtDeps, type TdtArgs } from "./index";
+import {
+  DEFAULT_HDBSCAN_CONFIG,
+  DEFAULT_PAGE_VECTOR_CONFIG,
+  DEFAULT_WINDOW_CONFIG,
+} from "./config";
 import {
   FakeRelationalReader,
   FakeVectorStore,
@@ -47,4 +53,26 @@ describe("run_tdt (scaffold)", () => {
     expect(await store.get("page-1", "test-model@1")).toEqual(vec);
     expect(await store.get("page-1", "other-model@2")).toBeNull();
   });
+});
+
+// The LLM cluster namer is a SEAM ONLY in this slice (plan §7, AC#4): a
+// documented interface boundary, with no implementation and — deliberately — no
+// default-off config flag. These guards fail loud if a dead flag or a runtime
+// namer export creeps in before the LLM slice lands.
+describe("LLM-naming seam is not shipped (AC#4)", () => {
+  it("ships no LLM-naming flag on any swept config", () => {
+    const keys = [
+      ...Object.keys(DEFAULT_HDBSCAN_CONFIG),
+      ...Object.keys(DEFAULT_PAGE_VECTOR_CONFIG),
+      ...Object.keys(DEFAULT_WINDOW_CONFIG),
+    ];
+    expect(keys.filter((k) => /llm|naming|namer/i.test(k))).toEqual([]);
+  });
+
+  it("exposes no LLM-namer runtime export from the barrel", () => {
+    const exports = Object.keys(tdt).filter((k) => /llm|namer/i.test(k));
+    expect(exports).toEqual([]);
+  });
+
+  it.todo("documents the ClusterNamer seam + stable-core fingerprint (AC#4 — structural review check)");
 });

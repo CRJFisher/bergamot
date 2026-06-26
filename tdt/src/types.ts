@@ -54,6 +54,23 @@ export interface RepresentedCluster {
   time_span: { start: string; end: string };
 }
 
+// The deterministic labeler's output for one cluster (plan §7). Stored as
+// SEPARATE fields — never one baked string — so the UI can recompose the display
+// string and a later LLM can consume the bundle. Every field is CONCRETE
+// (non-null): the labeler always produces a value (headline_title is "" only
+// when the exemplar page itself has no title). The persistence shape
+// (ClusterRecord, below) keeps the mirrored columns nullable to match the §8
+// DDL; the persist step (TASK-36.6) maps RepresentedCluster + ClusterLabel ->
+// ClusterRecord, widening non-null to nullable. Computed at page granularity
+// (the member set is already pages).
+export interface ClusterLabel {
+  headline_title: string; // exemplar page's VisitRow.title; "" if it has none
+  scope: string; // registrable-domain distribution, e.g. "nextjs.org +3 sites"; "" if no URL parses
+  keyphrases: string[]; // cheap deterministic terms mined from member titles; never null
+  display_label: string; // composed template over the parts (see compose_display_label)
+  representation_version: string; // labeler-logic version; bump when label output changes
+}
+
 // Persistence record types (written via ClusterSink, mirroring the §8 DDL).
 
 export interface RunRecord {

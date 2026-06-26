@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>task-36.5 — Cluster representations and the deterministic labeler</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --bg-alt: #161b22;
+    --bg-code: #0c0f14;
+    --fg: #d7dde4;
+    --fg-dim: #9aa6b2;
+    --accent: #f0a35e;     /* bergamot orange */
+    --accent-2: #6cb6ff;
+    --green: #7ee787;
+    --red: #ff7b72;
+    --purple: #d2a8ff;
+    --border: #2a313a;
+    --kw: #ff7b72;
+    --str: #a5d6ff;
+    --com: #768390;
+    --typ: #d2a8ff;
+    --fn: #d2a8ff;
+    --num: #f0a35e;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--sans); }
+
+  nav.crossdoc {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg-alt); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    padding: .5rem 5%; font-family: var(--mono); font-size: .74rem;
+  }
+  nav.crossdoc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.crossdoc a, nav.crossdoc span.pending, nav.crossdoc span.cur {
+    padding: .22em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap;
+    border: 1px solid var(--border);
+  }
+  nav.crossdoc a { color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.crossdoc a:hover { background: rgba(108,182,255,.16); }
+  nav.crossdoc span.cur { color: #1a1208; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  nav.crossdoc span.pending { color: var(--com); }
+  nav.crossdoc .dot { display:inline-block; width:.5em; height:.5em; border-radius:50%; margin-right:.35em; vertical-align: middle; }
+  nav.crossdoc .dot.done { background: var(--green); }
+  nav.crossdoc .dot.now { background: var(--accent); }
+  nav.crossdoc .dot.todo { background: var(--com); }
+
+  nav.toc {
+    position: sticky; top: 38px; z-index: 9;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    padding: .45rem 5%; font-family: var(--mono); font-size: .72rem;
+  }
+  nav.toc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.toc a { padding: .2em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap; border: 1px solid var(--border); color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.toc a:hover { background: rgba(108,182,255,.16); }
+
+  main { width: 90%; max-width: 1500px; margin: 0 auto; padding: 1.6rem 0 6rem; }
+  header.page { border-bottom: 1px solid var(--border); padding-bottom: 1.2rem; margin-bottom: 1.4rem; }
+  .crumb { color: var(--fg-dim); font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; font-family: var(--mono); }
+  h1 { font-family: var(--serif); font-size: 2rem; margin: .5rem 0 .4rem; line-height: 1.15; font-weight: 600; }
+  h2 { font-size: 1.3rem; margin: 2.6rem 0 .5rem; padding-top: .7rem; border-top: 1px solid var(--border); color: var(--accent); scroll-margin-top: 100px; }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 .5rem; color: var(--accent-2); }
+  .lead { font-size: 1.05rem; max-width: 82ch; color: var(--fg); }
+  figcaption { font-size: .84rem; color: var(--fg-dim); margin: .5rem 0 0; font-style: italic; max-width: 96ch; }
+  figure { margin: 1rem 0 1.4rem; }
+  .prose { max-width: 74ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .7rem; font-family: var(--mono); font-size: .72rem; }
+  .meta .chip { padding: .2em .6em; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-alt); color: var(--fg-dim); }
+  .meta .chip strong { color: var(--accent); font-weight: 600; }
+  .meta .chip.todo { border-color: var(--accent); color: var(--accent); }
+  .meta .chip.done { border-color: var(--green); color: var(--green); }
+  .meta .chip.dep { border-color: var(--red); color: var(--red); }
+
+  a { color: var(--accent-2); }
+  code { font-family: var(--mono); font-size: .88em; }
+  p code, li code, td code, figcaption code { background: var(--bg-code); padding: .1em .38em; border-radius: 4px; border: 1px solid var(--border); color: var(--accent); }
+
+  .callout { border-radius: 6px; padding: .8rem 1.1rem; margin: 1.1rem 0; max-width: 100ch; }
+  .callout.key { background: var(--bg-alt); border-left: 4px solid var(--accent); }
+  .callout.info { background: rgba(108,182,255,.07); border-left: 4px solid var(--accent-2); }
+  .callout.warn { background: rgba(255,123,114,.08); border-left: 4px solid var(--red); }
+  .callout.good { background: rgba(126,231,135,.07); border-left: 4px solid var(--green); }
+  .callout .label { font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .09em; font-weight: 700; display: block; margin-bottom: .3rem; }
+  .callout.key .label { color: var(--accent); }
+  .callout.info .label { color: var(--accent-2); }
+  .callout.warn .label { color: var(--red); }
+  .callout.good .label { color: var(--green); }
+  .callout p { margin: .3rem 0; }
+  .callout.decision { background: var(--bg-alt); border: 1px solid var(--accent); border-left: 4px solid var(--accent); }
+  .callout.confirm { background: rgba(240,163,94,.06); border: 1px dashed var(--accent); border-left: 4px solid var(--accent); }
+  .callout .pick { color: var(--green); font-weight: 700; }
+  .callout .q { color: var(--accent); font-weight: 700; }
+  .callout .confirm-tag { display:inline-block; font-family: var(--mono); font-size: .62rem; text-transform: uppercase; letter-spacing:.08em; color:#1a1208; background:var(--accent); border-radius: 999px; padding:.1em .55em; margin-left:.5em; font-weight:700; }
+
+  .prompt-box { border: 1px solid var(--border); border-left: 3px solid var(--fg-dim); border-radius: 6px; background: var(--bg-alt); padding: .8rem 1.1rem; margin: 1rem 0; }
+  .prompt-box .label { font-family: var(--mono); font-size: .66rem; text-transform: uppercase; letter-spacing: .09em; color: var(--fg-dim); display: block; margin-bottom: .35rem; }
+  .prompt-box ul { margin: .2rem 0; padding-left: 1.2rem; }
+  .prompt-box li { margin: .15rem 0; }
+  .prompt-box code { color: var(--accent-2); }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .86rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--bg-alt); color: var(--accent); font-weight: 600; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  td code, th code { font-family: var(--mono); }
+  td.c { text-align: center; font-family: var(--mono); }
+  td.idx { text-align: center; font-family: var(--mono); color: var(--accent-2); font-weight: 700; }
+  tr.noise td { color: var(--fg-dim); background: rgba(118,131,144,.06); }
+  tr.exem td { background: rgba(126,231,135,.06); }
+  .dom { font-family: var(--mono); font-size: .82rem; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; font-family: var(--mono); font-size: .76rem; color: var(--fg-dim); margin: .6rem 0; }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; }
+  .legend .box { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+  .legend .box.add { border-color: var(--green); background: rgba(126,231,135,.18); }
+  .legend .box.rm { border-color: var(--red); background: rgba(255,123,114,.18); }
+  .legend .box.mod { border-color: var(--accent); background: rgba(240,163,94,.18); }
+  .legend .box.lib { border-color: var(--purple); background: rgba(210,168,255,.18); }
+  .legend .box.same { border-color: var(--border); background: var(--bg-alt); }
+
+  .diagram { width: 100%; }
+  svg { display: block; max-width: 100%; height: auto; }
+  text { font-family: var(--mono); }
+
+  .code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px; margin: 1rem 0; overflow: hidden; }
+  .code .file-label { font-family: var(--mono); font-size: .72rem; color: var(--fg-dim); padding: .45rem .9rem; border-bottom: 1px solid var(--border); background: var(--bg-alt); }
+  .code .file-label .new { color: var(--green); }
+  .code .file-label .edit { color: var(--accent); }
+  .code pre { margin: 0; padding: .9rem 1rem; overflow-x: auto; font-family: var(--mono); font-size: .8rem; line-height: 1.55; color: var(--fg); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .cm { color: var(--com); font-style: italic; }
+  .fn { color: var(--fn); } .typ { color: var(--typ); } .num { color: var(--num); }
+  .hl { background: rgba(240,163,94,.13); display: inline-block; width: 100%; }
+
+  .bundle-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: .7rem; margin: 1rem 0; }
+  .bcard { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 8px; padding: .7rem .85rem; }
+  .bcard.exem { border-color: var(--green); }
+  .bcard.scope { border-color: var(--accent-2); }
+  .bcard.kp { border-color: var(--purple); }
+  .bcard.disp { border-color: var(--accent); }
+  .bcard .fld { font-family: var(--mono); font-size: .68rem; color: var(--accent); letter-spacing: .04em; }
+  .bcard .val { font-size: .9rem; margin-top: .25rem; color: var(--fg); word-break: break-word; }
+  .bcard .note { font-size: .74rem; color: var(--fg-dim); margin-top: .3rem; }
+
+  .steps { margin: 1rem 0; }
+  .step { display: grid; grid-template-columns: 44px 1fr; gap: .9rem; margin-bottom: .9rem; align-items: start; }
+  .step .badge { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 700; font-size: .9rem; border: 1.5px solid; }
+  .step .badge.ok { border-color: var(--green); color: var(--green); background: rgba(126,231,135,.1); }
+  .step .badge.guard { border-color: var(--accent); color: var(--accent); background: rgba(240,163,94,.1); }
+  .step .badge.lib { border-color: var(--purple); color: var(--purple); background: rgba(210,168,255,.1); }
+  .step .body h3 { margin: .1rem 0 .25rem; color: var(--fg); }
+  .step .body p { margin: 0; font-size: .9rem; color: var(--fg-dim); max-width: 96ch; }
+  .step .body .loc { font-family: var(--mono); font-size: .72rem; color: var(--accent-2); }
+
+  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .82rem; font-family: var(--mono); max-width: 100ch; }
+  @media (max-width: 820px) { h2 { scroll-margin-top: 60px; } }
+</style>
+</head>
+<body>
+
+<nav class="crossdoc" aria-label="Task family">
+  <span class="home">task-36 micro tier</span>
+  <a href="task-36.overview.html"><span class="dot now"></span>36 Overview</a>
+  <a href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html"><span class="dot done"></span>36.1 Scaffold</a>
+  <a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html"><span class="dot done"></span>36.2 Windowing</a>
+  <a href="task-36.3 - Page-vectorisation-TDT-owned-embedding-of-captured-pages.overview.html"><span class="dot done"></span>36.3 Page vectors</a>
+  <a href="task-36.3.1 - Page-vector-store-and-ingestion-time-embedding.ingestion-embedding.html"><span class="dot done"></span>36.3.1 Store + embed pass</a>
+  <a href="task-36.4 - Cosine-distance-matrix-and-HDBSCAN-clustering-core.clustering-core.html"><span class="dot done"></span>36.4 Distance + HDBSCAN core</a>
+  <span class="cur">36.5 Representations + labeler</span>
+  <span class="pending"><span class="dot todo"></span>36.6 Persistence · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.9 Trigger · not yet generated</span>
+</nav>
+
+<nav class="toc" aria-label="On this page">
+  <span class="home">on this page</span>
+  <a href="#position">Where 36.5 sits</a>
+  <a href="#align">The index-alignment contract</a>
+  <a href="#represent">The representative + frozen vector</a>
+  <a href="#example">A worked window</a>
+  <a href="#bundle">The label bundle &amp; recompose</a>
+  <a href="#seam">The LLM-naming seam</a>
+  <a href="#confirm">Decisions to confirm</a>
+  <a href="#ac">Acceptance criteria</a>
+</nav>
+
+<main>
+<header class="page">
+  <div class="crumb">Bergamot · TDT micro tier · task-36.5 · build-order step 5 · branch tdt</div>
+  <h1>Cluster representations and the deterministic labeler</h1>
+  <p class="lead">Step 5 turns one <code>HdbscanRaw { labels[], probabilities[], exemplar_indices }</code> into per-cluster <code>RepresentedCluster[]</code> + <code>ClusterLabel[]</code>: each cluster gets a representative page, a frozen representative vector, and a five-field label bundle that recomposes into a display string — with no LLM and no window-relative c-TF-IDF. Noise (<code>-1</code>) gets no representative. Persistence (36.6) and orchestration (36.9) come next; this stage produces in-memory objects only.</p>
+  <div class="meta">
+    <span class="chip todo"><strong>status</strong> to do</span>
+    <span class="chip"><strong>depends</strong> 36.4 HdbscanRaw</span>
+    <span class="chip"><strong>feeds</strong> 36.6 persistence</span>
+    <span class="chip done"><strong>types ready</strong> RepresentedCluster · ClusterRecord (label fields)</span>
+    <span class="chip"><strong>new dep</strong> tldts@6.1.86 (registrable domain)</span>
+    <span class="chip"><strong>parent</strong> task-36</span>
+  </div>
+</header>
+
+<div class="prompt-box">
+  <span class="label">Source of truth read to build this page</span>
+  <ul>
+    <li><code>task-36.5 ….md</code> — the spec: description + 4 acceptance criteria</li>
+    <li><code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> — §7 (representation &amp; labeling) · §6 stage types (<code>HdbscanRaw</code>, <code>RepresentedCluster</code>) · §8 (<code>ClusterRecord</code> label columns) · §10 (<code>select_medoids</code> Phase 3)</li>
+    <li><code>tdt/src/types.ts</code> — <code>RepresentedCluster</code> + <code>ClusterRecord</code>'s label fields already defined</li>
+    <li><code>tdt/src/page_vectors.ts</code> — the fixed-order float64 accumulation discipline this stage mirrors for the frozen vector</li>
+    <li><code>tdt/src/cluster_window.ts</code> + <code>index.ts</code> — the upstream producer and the "NOT re-exported from the barrel" convention <code>representations.ts</code> follows</li>
+    <li><code>node_modules/tldts/package.json</code> — verified <code>tldts@6.1.86</code> hoisted and available (offline Public Suffix List)</li>
+  </ul>
+</div>
+
+<div class="callout key">
+  <span class="label">The one sentence</span>
+  <p>Three aligned arrays — <code>labels[i]</code> ↔ <code>vectors[i]</code> ↔ <code>visits[i]</code> — are read by row index to build, per cluster, a representative page (the eom exemplar, else a <code>select_medoids</code> fallback), a <strong>frozen</strong> L2-normalized mean vector, and five label fields stored <em>separately</em> so a pure <code>compose_display_label()</code> recomposes the display string and a later LLM can consume the bundle.</p>
+</div>
+
+<!-- ===================================================== POSITION -->
+<h2 id="position">Where 36.5 sits — between the fit and persistence</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 330" role="img" aria-label="The position of task 36.5 in the pipeline. Upstream, task 36.4 produces one HdbscanRaw object holding labels (minus one is noise), probabilities, and exemplar_indices, a map from cluster id to a row index. Task 36.5 takes that plus the aligned page-vector array and the aligned visit-row array. First, represent_clusters groups members by label, and for each cluster with label zero or greater picks a representative index — the eom exemplar from exemplar_indices, else a select_medoids library fallback — and computes the frozen representative vector as the L2-normalized fixed-order float64 mean of member vectors, producing a RepresentedCluster array. Noise, label minus one, branches off and produces no cluster and no representative. Second, label_cluster runs the deterministic labeler over each represented cluster's members to produce a ClusterLabel bundle: headline_title, scope, keyphrases, display_label, representation_version, with no LLM. The two outputs, RepresentedCluster array and ClusterLabel array, flow downstream to task 36.6 persistence, which writes topic_cluster and topic_cluster_member rows including a member row for each noise page. Task 36.5 itself persists nothing.">
+  <defs>
+    <marker id="fa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+    <marker id="fg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+    <marker id="fgr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#768390"/></marker>
+  </defs>
+
+  <!-- upstream: 36.4 -->
+  <rect x="14" y="118" width="176" height="94" rx="9" fill="#0c0f14" stroke="#d2a8ff"/>
+  <text x="102" y="140" fill="#d2a8ff" font-size="10" text-anchor="middle" font-weight="bold">HdbscanRaw · 36.4</text>
+  <text x="102" y="158" fill="#768390" font-size="8.5" text-anchor="middle">labels[ ] (−1 = noise)</text>
+  <text x="102" y="171" fill="#768390" font-size="8.5" text-anchor="middle">probabilities[ ]</text>
+  <text x="102" y="184" fill="#768390" font-size="8.5" text-anchor="middle">exemplar_indices</text>
+  <text x="102" y="200" fill="#768390" font-size="8" text-anchor="middle">Map&lt;clusterId, rowIdx&gt;</text>
+  <line x1="190" y1="165" x2="226" y2="165" stroke="#9aa6b2" stroke-width="1.6" marker-end="url(#fa)"/>
+
+  <!-- aligned inputs note -->
+  <rect x="14" y="232" width="176" height="60" rx="8" fill="#161b22" stroke="#6cb6ff" stroke-dasharray="4 3"/>
+  <text x="102" y="252" fill="#6cb6ff" font-size="9" text-anchor="middle">+ aligned by row index</text>
+  <text x="102" y="267" fill="#768390" font-size="8.5" text-anchor="middle">vectors[ ] : PageVector</text>
+  <text x="102" y="280" fill="#768390" font-size="8.5" text-anchor="middle">visits[ ] : VisitRow</text>
+  <line x1="102" y1="232" x2="102" y2="212" stroke="#6cb6ff" stroke-width="1.4" marker-end="url(#fa)"/>
+
+  <!-- represent_clusters -->
+  <rect x="226" y="96" width="238" height="138" rx="10" fill="#161b22" stroke="#7ee787" stroke-width="1.5"/>
+  <text x="345" y="118" fill="#7ee787" font-size="10.5" text-anchor="middle" font-weight="bold">represent_clusters</text>
+  <text x="345" y="136" fill="#768390" font-size="8.5" text-anchor="middle">group member_indices by label</text>
+  <text x="345" y="150" fill="#768390" font-size="8.5" text-anchor="middle">representative = exemplar (eom)</text>
+  <text x="345" y="162" fill="#768390" font-size="8.5" text-anchor="middle">else select_medoids fallback</text>
+  <text x="345" y="180" fill="#7ee787" font-size="8.5" text-anchor="middle">frozen representative_vector =</text>
+  <text x="345" y="192" fill="#768390" font-size="8.5" text-anchor="middle">L2-norm(float64 fixed-order mean)</text>
+  <text x="345" y="210" fill="#768390" font-size="8" text-anchor="middle">→ RepresentedCluster[ ]</text>
+  <text x="345" y="224" fill="#768390" font-size="8" text-anchor="middle">tdt/src/representations.ts (new)</text>
+  <line x1="464" y1="165" x2="500" y2="165" stroke="#7ee787" stroke-width="1.6" marker-end="url(#fg)"/>
+
+  <!-- noise branch -->
+  <line x1="345" y1="234" x2="345" y2="276" stroke="#768390" stroke-width="1.4" stroke-dasharray="3 3" marker-end="url(#fgr)"/>
+  <rect x="244" y="276" width="202" height="42" rx="7" fill="#161b22" stroke="#768390" stroke-dasharray="3 2"/>
+  <text x="345" y="294" fill="#768390" font-size="9" text-anchor="middle">label −1 → NO cluster</text>
+  <text x="345" y="307" fill="#768390" font-size="8" text-anchor="middle">no representative · no label bundle</text>
+
+  <!-- label_cluster -->
+  <rect x="500" y="100" width="246" height="130" rx="10" fill="#161b22" stroke="#f0a35e" stroke-width="1.5"/>
+  <text x="623" y="122" fill="#f0a35e" font-size="10.5" text-anchor="middle" font-weight="bold">label_cluster (no LLM)</text>
+  <text x="623" y="140" fill="#768390" font-size="8.5" text-anchor="middle">headline_title (exemplar title)</text>
+  <text x="623" y="152" fill="#768390" font-size="8.5" text-anchor="middle">scope (registrable-domain dist.)</text>
+  <text x="623" y="164" fill="#768390" font-size="8.5" text-anchor="middle">keyphrases (title terms)</text>
+  <text x="623" y="176" fill="#768390" font-size="8.5" text-anchor="middle">display_label = compose(…)</text>
+  <text x="623" y="188" fill="#768390" font-size="8.5" text-anchor="middle">representation_version</text>
+  <text x="623" y="206" fill="#768390" font-size="8" text-anchor="middle">→ ClusterLabel[ ]</text>
+  <text x="623" y="220" fill="#768390" font-size="8" text-anchor="middle">tdt/src/labeling/deterministic_labeler.ts</text>
+  <line x1="746" y1="165" x2="782" y2="165" stroke="#f0a35e" stroke-width="1.6" marker-end="url(#fa)"/>
+
+  <!-- output object -->
+  <rect x="782" y="118" width="170" height="94" rx="9" fill="#0c0f14" stroke="#7ee787"/>
+  <text x="867" y="140" fill="#7ee787" font-size="9.5" text-anchor="middle">in-memory output</text>
+  <text x="867" y="158" fill="#768390" font-size="8.5" text-anchor="middle">RepresentedCluster[ ]</text>
+  <text x="867" y="171" fill="#768390" font-size="8.5" text-anchor="middle">+ ClusterLabel[ ]</text>
+  <text x="867" y="189" fill="#768390" font-size="8" text-anchor="middle">36.5 persists</text>
+  <text x="867" y="201" fill="#768390" font-size="8" text-anchor="middle">NOTHING</text>
+  <line x1="952" y1="165" x2="988" y2="165" stroke="#9aa6b2" stroke-width="1.6" marker-end="url(#fa)"/>
+
+  <!-- downstream 36.6 -->
+  <rect x="988" y="118" width="178" height="94" rx="9" fill="#0f1419" stroke="#2a313a" stroke-dasharray="5 4"/>
+  <text x="1077" y="140" fill="#768390" font-size="9.5" text-anchor="middle">persistence · 36.6</text>
+  <text x="1077" y="158" fill="#768390" font-size="8.5" text-anchor="middle">topic_cluster rows</text>
+  <text x="1077" y="171" fill="#768390" font-size="8.5" text-anchor="middle">topic_cluster_member rows</text>
+  <text x="1077" y="189" fill="#768390" font-size="8" text-anchor="middle">noise → member row</text>
+  <text x="1077" y="201" fill="#768390" font-size="8" text-anchor="middle">with is_noise = TRUE</text>
+</svg>
+</div>
+<figcaption><code>represent_clusters</code> picks a representative + frozen vector; <code>label_cluster</code> composes the five-field bundle. Noise produces no cluster, yet 36.6 still writes a member row for it (<code>is_noise = TRUE</code>) so per-window coverage stays derivable. Like <code>cluster_window</code>, this stage stays out of the package barrel and 36.9 imports it directly.</figcaption>
+</figure>
+
+<div class="callout warn">
+  <span class="label">Barrel hygiene — <code>representations.ts</code> is NOT re-exported from <code>index.ts</code></span>
+  <p><code>select_medoids</code> comes from <code>clustering-tfjs</code>, the same native TensorFlow chain that keeps <code>cluster_window</code> out of the barrel. So <code>representations.ts</code> follows the same rule; only the new <strong>types</strong> (<code>ClusterLabel</code>) are exported from <code>index.ts</code>. The deterministic labeler imports nothing native and could be exported, but it is colocated under <code>labeling/</code> and reached through the same direct import for one clean boundary.</p>
+</div>
+
+<!-- ===================================================== ALIGNMENT -->
+<h2 id="align">The correctness crux — one row index, three parallel arrays</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 360" role="img" aria-label="The index-alignment contract. A single array of rows, fed in stable order by page_loaded_at then page_session_id, is the one ordering everything indexes into. Each row i carries three things at the same position: visits[i], a VisitRow with url, title and tree; vectors[i], the L2-normalized PageVector; and labels[i], the HDBSCAN label with probabilities[i]. The example shows six rows. Rows 0, 1, 2, 4 and 5 have label 0 — one cluster — and row 3 has label minus one, noise. exemplar_indices maps cluster 0 to row index 1, so the representative page is visits[1]. A select_medoids fallback, used only when a cluster lacks an exemplar, also returns a row index into this same array. The contract: represent_clusters and label_cluster rely on and assert that labels[i], vectors[i] and visits[i] all describe the same page; an exemplar or medoid index is therefore directly resolvable to visits[index].page_session_id and to vectors[index]. Misalignment would silently label the wrong page, so the alignment is asserted, not assumed.">
+  <defs>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#f0a35e"/></marker>
+  </defs>
+
+  <text x="20" y="26" fill="#6cb6ff" font-size="11" font-weight="bold">stable fetch order — ORDER BY page_loaded_at, page_session_id (36.3) — fixes the one array everything indexes into</text>
+
+  <!-- column headers -->
+  <text x="60"  y="64" fill="#768390" font-size="10" text-anchor="middle">row i</text>
+  <text x="250" y="64" fill="#6cb6ff" font-size="10" text-anchor="middle">visits[i] : VisitRow</text>
+  <text x="520" y="64" fill="#7ee787" font-size="10" text-anchor="middle">vectors[i] : PageVector</text>
+  <text x="760" y="64" fill="#d2a8ff" font-size="10" text-anchor="middle">labels[i] · probabilities[i]</text>
+  <text x="980" y="64" fill="#f0a35e" font-size="10" text-anchor="middle">role</text>
+
+  <!-- helper rows: 6 -->
+  <!-- row 0 -->
+  <g font-size="9.5">
+    <rect x="32" y="76" width="56" height="34" rx="5" fill="#161b22" stroke="#2a313a"/><text x="60" y="97" fill="#6cb6ff" text-anchor="middle">0</text>
+    <rect x="120" y="76" width="260" height="34" rx="5" fill="#161b22" stroke="#2a313a"/><text x="250" y="97" fill="#d7dde4" text-anchor="middle">react.dev/learn — “Quick Start”</text>
+    <rect x="412" y="76" width="216" height="34" rx="5" fill="#161b22" stroke="#2a313a"/><text x="520" y="97" fill="#768390" text-anchor="middle">[0.04, −0.11, …] ‖v‖=1</text>
+    <rect x="660" y="76" width="200" height="34" rx="5" fill="rgba(126,231,135,.06)" stroke="#7ee787"/><text x="760" y="97" fill="#7ee787" text-anchor="middle">label 0 · p=0.71</text>
+    <text x="980" y="97" fill="#768390" text-anchor="middle">member</text>
+  </g>
+  <!-- row 1 exemplar -->
+  <g font-size="9.5">
+    <rect x="32" y="114" width="56" height="34" rx="5" fill="rgba(126,231,135,.12)" stroke="#7ee787"/><text x="60" y="135" fill="#7ee787" text-anchor="middle" font-weight="bold">1</text>
+    <rect x="120" y="114" width="260" height="34" rx="5" fill="rgba(126,231,135,.08)" stroke="#7ee787"/><text x="250" y="135" fill="#d7dde4" text-anchor="middle">react.dev/reference — “Hooks”</text>
+    <rect x="412" y="114" width="216" height="34" rx="5" fill="rgba(126,231,135,.08)" stroke="#7ee787"/><text x="520" y="135" fill="#7ee787" text-anchor="middle">[0.05, −0.10, …] densest core</text>
+    <rect x="660" y="114" width="200" height="34" rx="5" fill="rgba(126,231,135,.1)" stroke="#7ee787"/><text x="760" y="135" fill="#7ee787" text-anchor="middle">label 0 · p=0.95</text>
+    <text x="980" y="135" fill="#7ee787" text-anchor="middle" font-weight="bold">EXEMPLAR</text>
+  </g>
+  <!-- row 2 -->
+  <g font-size="9.5">
+    <rect x="32" y="152" width="56" height="34" rx="5" fill="#161b22" stroke="#2a313a"/><text x="60" y="173" fill="#6cb6ff" text-anchor="middle">2</text>
+    <rect x="120" y="152" width="260" height="34" rx="5" fill="#161b22" stroke="#2a313a"/><text x="250" y="173" fill="#d7dde4" text-anchor="middle">nextjs.org/docs — “Server Components”</text>
+    <rect x="412" y="152" width="216" height="34" rx="5" fill="#161b22" stroke="#2a313a"/><text x="520" y="173" fill="#768390" text-anchor="middle">[0.02, −0.09, …]</text>
+    <rect x="660" y="152" width="200" height="34" rx="5" fill="rgba(126,231,135,.06)" stroke="#7ee787"/><text x="760" y="173" fill="#7ee787" text-anchor="middle">label 0 · p=0.62</text>
+    <text x="980" y="173" fill="#768390" text-anchor="middle">member</text>
+  </g>
+  <!-- row 3 noise -->
+  <g font-size="9.5">
+    <rect x="32" y="190" width="56" height="34" rx="5" fill="rgba(118,131,144,.12)" stroke="#768390"/><text x="60" y="211" fill="#768390" text-anchor="middle">3</text>
+    <rect x="120" y="190" width="260" height="34" rx="5" fill="rgba(118,131,144,.08)" stroke="#768390"/><text x="250" y="211" fill="#9aa6b2" text-anchor="middle">news.ycombinator.com — front page</text>
+    <rect x="412" y="190" width="216" height="34" rx="5" fill="rgba(118,131,144,.08)" stroke="#768390"/><text x="520" y="211" fill="#768390" text-anchor="middle">[−0.20, 0.31, …] far off</text>
+    <rect x="660" y="190" width="200" height="34" rx="5" fill="rgba(255,123,114,.08)" stroke="#ff7b72"/><text x="760" y="211" fill="#ff7b72" text-anchor="middle">label −1 · p=0.0</text>
+    <text x="980" y="211" fill="#ff7b72" text-anchor="middle">NOISE</text>
+  </g>
+  <!-- row 4 -->
+  <g font-size="9.5">
+    <rect x="32" y="228" width="56" height="34" rx="5" fill="#161b22" stroke="#2a313a"/><text x="60" y="249" fill="#6cb6ff" text-anchor="middle">4</text>
+    <rect x="120" y="228" width="260" height="34" rx="5" fill="#161b22" stroke="#2a313a"/><text x="250" y="249" fill="#d7dde4" text-anchor="middle">react.dev/learn — “Effects”</text>
+    <rect x="412" y="228" width="216" height="34" rx="5" fill="#161b22" stroke="#2a313a"/><text x="520" y="249" fill="#768390" text-anchor="middle">[0.06, −0.12, …]</text>
+    <rect x="660" y="228" width="200" height="34" rx="5" fill="rgba(126,231,135,.06)" stroke="#7ee787"/><text x="760" y="249" fill="#7ee787" text-anchor="middle">label 0 · p=0.68</text>
+    <text x="980" y="249" fill="#768390" text-anchor="middle">member</text>
+  </g>
+  <!-- row 5 -->
+  <g font-size="9.5">
+    <rect x="32" y="266" width="56" height="34" rx="5" fill="#161b22" stroke="#2a313a"/><text x="60" y="287" fill="#6cb6ff" text-anchor="middle">5</text>
+    <rect x="120" y="266" width="260" height="34" rx="5" fill="#161b22" stroke="#2a313a"/><text x="250" y="287" fill="#d7dde4" text-anchor="middle">developer.mozilla.org — “useState”</text>
+    <rect x="412" y="266" width="216" height="34" rx="5" fill="#161b22" stroke="#2a313a"/><text x="520" y="287" fill="#768390" text-anchor="middle">[0.03, −0.08, …]</text>
+    <rect x="660" y="266" width="200" height="34" rx="5" fill="rgba(126,231,135,.06)" stroke="#7ee787"/><text x="760" y="287" fill="#7ee787" text-anchor="middle">label 0 · p=0.55</text>
+    <text x="980" y="287" fill="#768390" text-anchor="middle">member (fringe)</text>
+  </g>
+
+  <!-- exemplar_indices map -->
+  <rect x="1040" y="114" width="124" height="120" rx="8" fill="#0c0f14" stroke="#7ee787"/>
+  <text x="1102" y="134" fill="#7ee787" font-size="9" text-anchor="middle">exemplar_indices</text>
+  <text x="1102" y="156" fill="#768390" font-size="9" text-anchor="middle">{ 0 → 1 }</text>
+  <text x="1102" y="178" fill="#768390" font-size="8" text-anchor="middle">cluster 0's rep</text>
+  <text x="1102" y="190" fill="#768390" font-size="8" text-anchor="middle">is row index 1</text>
+  <text x="1102" y="210" fill="#768390" font-size="8" text-anchor="middle">→ visits[1] &amp;</text>
+  <text x="1102" y="222" fill="#768390" font-size="8" text-anchor="middle">vectors[1]</text>
+  <path d="M1040 174 C 980 174, 920 135, 868 131" fill="none" stroke="#f0a35e" stroke-width="1.4" stroke-dasharray="3 3" marker-end="url(#aa)"/>
+
+  <text x="20" y="330" fill="#f0a35e" font-size="10" font-weight="bold">CONTRACT — labels[i] ↔ vectors[i] ↔ visits[i] are the SAME page; the exemplar/medoid index resolves directly to visits[i].page_session_id + vectors[i].</text>
+  <text x="20" y="348" fill="#768390" font-size="9.5">represent_clusters and label_cluster ASSERT this (length-equal + same source array), because a misalignment would silently label the wrong page.</text>
+</svg>
+</div>
+<figcaption>The stage rests on one invariant: <code>labels</code>, <code>vectors</code>, and <code>visits</code> are parallel arrays from the <em>one</em> stable-ordered fetch (36.3), so exemplar index <code>1</code> means <code>visits[1]</code> is the representative page and <code>vectors[1]</code> its vector — no chunk→page hop, the unit is already the page. <code>select_medoids</code> returns an index into this same array. The functions assert the alignment, never trust it.</figcaption>
+</figure>
+
+<!-- ===================================================== REPRESENT -->
+<h2 id="represent">The representative page and the frozen vector</h2>
+
+<div class="steps">
+  <div class="step">
+    <div class="badge ok">A</div>
+    <div class="body">
+      <h3>Representative page — eom exemplar, else a lazy <code>select_medoids</code> fallback</h3>
+      <p>The representative is <code>exemplar_indices.get(label)</code> — the densest-core page eom defines. <code>select_medoids(X, labels, metric:'cosine')</code> (the member closest to the cluster mean) is called <strong>lazily</strong>, only when a cluster lacks an exemplar. Under v1 defaults every cluster has one, so the medoid path is defensive — but AC #1 and §10 require the named function for the <code>leaf</code> case.</p>
+      <span class="loc">tdt/src/representations.ts (new) · select_medoids from clustering-tfjs (Phase 3)</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge ok">B</div>
+    <div class="body">
+      <h3>Frozen representative vector — float64 fixed-order mean, then L2-normalize, then freeze</h3>
+      <p>The representative <em>vector</em> is the L2-normalized mean of member vectors, accumulated in <strong>float64 in ascending index order</strong> with one float32 truncation — the discipline already in <code>page_vectors.ts</code>'s <code>mean_pool</code>. It is then FROZEN: read now for ranking, and banked as the input the Phase-4 tracker's Hungarian match needs.</p>
+      <span class="loc">tdt/src/representations.ts (new) · mirrors page_vectors.ts mean_pool fixed-order accumulation</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge guard">C</div>
+    <div class="body">
+      <h3>Noise (<code>-1</code>) has no representative</h3>
+      <p>A label of <code>-1</code> is "a page in no project" — it produces no <code>RepresentedCluster</code>, no representative page, no vector, no label bundle. Its persistence (a member row with <code>is_noise = TRUE</code>) is 36.6's job, not this stage's.</p>
+      <span class="loc">AC #1 · plan §6/§8 noise resolution</span>
+    </div>
+  </div>
+</div>
+
+<div class="code">
+  <div class="file-label"><span class="new">new</span> tdt/src/representations.ts &nbsp;·&nbsp; representative index + frozen vector (shape sketch — mirrors the page_vectors.ts discipline)</div>
+<pre><span class="cm">// exemplar (eom, densest-core) is the representative; select_medoids is the</span>
+<span class="cm">// lazy fallback for the leaf / no-exemplar case (AC #1, plan §10).</span>
+<span class="kw">function</span> <span class="fn">representative_index</span>(
+  label: <span class="typ">number</span>,
+  exemplar_indices: <span class="typ">Map</span>&lt;<span class="typ">number</span>, <span class="typ">number</span>&gt;,
+  medoid_of: (<span class="typ">label</span>: <span class="typ">number</span>) =&gt; <span class="typ">number</span>,   <span class="cm">// closes over a lazily-computed select_medoids result</span>
+): <span class="typ">number</span> {
+  <span class="kw">const</span> exemplar = exemplar_indices.<span class="fn">get</span>(label);
+  <span class="kw">return</span> exemplar !== <span class="kw">undefined</span> ? exemplar : <span class="fn">medoid_of</span>(label);
+}
+
+<span class="cm">// FROZEN representative vector: float64 mean over members in ASCENDING index</span>
+<span class="cm">// order (IEEE-754 add is non-associative — order is the determinism contract),</span>
+<span class="cm">// then L2-normalize, then one float32 truncation. The Phase-4 tracker's input.</span>
+<span class="kw">function</span> <span class="fn">representative_vector</span>(member_indices: <span class="typ">number</span>[], vectors: <span class="typ">PageVector</span>[]): <span class="typ">Float32Array</span> {
+  <span class="kw">const</span> dim = vectors[member_indices[<span class="num">0</span>]].vector.length;
+  <span class="kw">const</span> acc = <span class="kw">new</span> <span class="typ">Float64Array</span>(dim);
+  <span class="kw">for</span> (<span class="kw">const</span> i <span class="kw">of</span> [...member_indices].<span class="fn">sort</span>((a, b) =&gt; a - b)) <span class="hl">  <span class="cm">// fixed order</span></span>
+    <span class="kw">for</span> (<span class="kw">let</span> d = <span class="num">0</span>; d &lt; dim; d++) acc[d] += vectors[i].vector[d];
+  <span class="cm">// divide by member count, L2-normalize acc, truncate once → Float32Array (frozen)</span>
+}</pre>
+</div>
+
+<!-- ===================================================== WORKED EXAMPLE -->
+<h2 id="example">A worked window — six pages, one cluster, one noise page</h2>
+
+<p class="prose">The same six rows from the alignment diagram, fed to <code>represent_clusters</code> + <code>label_cluster</code>. Five rows form one React-ecosystem cluster across three registrable domains; the Hacker News front page is noise.</p>
+
+<figure>
+<table>
+  <thead>
+    <tr><th>i</th><th>title (from <code>webpage_capture</code>)</th><th>url → registrable domain (<code>tldts.getDomain</code>)</th><th>label · p</th><th>role</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="idx">0</td><td>React — Quick Start</td><td><span class="dom">react.dev/learn → <strong>react.dev</strong></span></td><td class="c">0 · 0.71</td><td class="c">member</td></tr>
+    <tr class="exem"><td class="idx">1</td><td>React — Hooks reference</td><td><span class="dom">react.dev/reference → <strong>react.dev</strong></span></td><td class="c">0 · <strong>0.95</strong></td><td class="c">EXEMPLAR</td></tr>
+    <tr><td class="idx">2</td><td>Next.js — Server Components</td><td><span class="dom">nextjs.org/docs → <strong>nextjs.org</strong></span></td><td class="c">0 · 0.62</td><td class="c">member</td></tr>
+    <tr class="noise"><td class="idx">3</td><td>Hacker News — front page</td><td><span class="dom">news.ycombinator.com → ycombinator.com</span></td><td class="c">−1 · 0.0</td><td class="c">NOISE</td></tr>
+    <tr><td class="idx">4</td><td>React — Synchronizing with Effects</td><td><span class="dom">react.dev/learn → <strong>react.dev</strong></span></td><td class="c">0 · 0.68</td><td class="c">member</td></tr>
+    <tr><td class="idx">5</td><td>useState — MDN</td><td><span class="dom">developer.mozilla.org → <strong>mozilla.org</strong></span></td><td class="c">0 · 0.55</td><td class="c">member (fringe)</td></tr>
+  </tbody>
+</table>
+<figcaption>Cluster 0 = rows {0,1,2,4,5}; exemplar = row 1. Domain distribution over the 5 members: <code>react.dev</code> ×3, <code>nextjs.org</code> ×1, <code>mozilla.org</code> ×1 — three distinct registrable domains sorted by (count desc, domain asc). <code>tldts</code> resolves <code>developer.mozilla.org</code> to <code>mozilla.org</code> (eTLD+1) so subdomains group as one; a "last two labels" heuristic would mangle <code>foo.co.uk</code>.</figcaption>
+</figure>
+
+<h3>The resulting bundle for cluster 0</h3>
+
+<div class="bundle-cards">
+  <div class="bcard exem">
+    <div class="fld">representative · page_session_id</div>
+    <div class="val">= visits[<strong>1</strong>].page_session_id</div>
+    <div class="note">the eom exemplar (row 1, p=0.95)</div>
+  </div>
+  <div class="bcard exem">
+    <div class="fld">representative_vector (FROZEN)</div>
+    <div class="val">L2-norm(mean of vectors[0,1,2,4,5])</div>
+    <div class="note">float64 ascending order · Phase-4 tracker input</div>
+  </div>
+  <div class="bcard">
+    <div class="fld">headline_title</div>
+    <div class="val">“React — Hooks reference”</div>
+    <div class="note">the exemplar page's title (row 1)</div>
+  </div>
+  <div class="bcard scope">
+    <div class="fld">scope</div>
+    <div class="val">“react.dev +2 sites”</div>
+    <div class="note">primary domain · N = distinct − 1 = 2</div>
+  </div>
+  <div class="bcard kp">
+    <div class="fld">keyphrases</div>
+    <div class="val">["react", "hooks", "components", "server", "effects"]</div>
+    <div class="note">top-k title terms · stopwords + len&lt;3 dropped</div>
+  </div>
+  <div class="bcard disp">
+    <div class="fld">display_label = compose(…)</div>
+    <div class="val">“React — Hooks reference — react.dev +2 sites”</div>
+    <div class="note">pure recomposition of the fields above</div>
+  </div>
+</div>
+
+<div class="callout info">
+  <span class="label">Why <code>scope</code> reads "react.dev +2 sites"</span>
+  <p>The 5 members span three distinct registrable domains. With more than one, the format is <code>"&lt;primary&gt; +&lt;N&gt; sites"</code>, N = distinct − 1 (here 2); a single-domain cluster reads just <code>"react.dev"</code>.</p>
+  <p><code>site_name</code> is never used — it is often-NULL <code>&lt;head&gt;</code> metadata; the URL's registrable domain is the always-present signal.</p>
+</div>
+
+<!-- ===================================================== BUNDLE / RECOMPOSE -->
+<h2 id="bundle">The label bundle — separate fields, one pure <code>compose()</code></h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 300" role="img" aria-label="The label bundle and its recomposition. Five separate stored fields — headline_title, scope, keyphrases, display_label, representation_version — are produced by label_cluster. A pure function compose_display_label takes headline_title, scope and keyphrases and returns the display_label string, for example React Hooks reference dash react.dev plus 2 sites. display_label is therefore DERIVED from the parts, not separately baked. Two consumers read the same bundle: the UI recomposes a display string from the stored fields and can restyle the parts independently, and a later LLM rewrite step consumes the whole evidence bundle. A unit test asserts determinism — the same members produce a byte-identical bundle — and recomposition — recomposing compose_display_label over the stored headline_title, scope and keyphrases reproduces the stored display_label exactly.">
+  <defs>
+    <marker id="ba" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+    <marker id="bg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+  </defs>
+
+  <text x="20" y="28" fill="#6cb6ff" font-size="11" font-weight="bold">stored SEPARATELY — never one baked string</text>
+
+  <!-- three input fields -->
+  <rect x="20" y="44" width="250" height="40" rx="6" fill="#161b22" stroke="#2a313a"/>
+  <text x="34" y="62" fill="#f0a35e" font-size="9">headline_title</text>
+  <text x="34" y="76" fill="#d7dde4" font-size="9">"React — Hooks reference"</text>
+  <rect x="20" y="92" width="250" height="40" rx="6" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="34" y="110" fill="#6cb6ff" font-size="9">scope</text>
+  <text x="34" y="124" fill="#d7dde4" font-size="9">"react.dev +2 sites"</text>
+  <rect x="20" y="140" width="250" height="40" rx="6" fill="#161b22" stroke="#d2a8ff"/>
+  <text x="34" y="158" fill="#d2a8ff" font-size="9">keyphrases</text>
+  <text x="34" y="172" fill="#d7dde4" font-size="9">["react","hooks","components",…]</text>
+
+  <!-- two banked fields -->
+  <rect x="20" y="200" width="250" height="34" rx="6" fill="#0c0f14" stroke="#2a313a"/>
+  <text x="34" y="221" fill="#768390" font-size="9">representation_version  "repr-label-v1"</text>
+
+  <!-- arrows into compose -->
+  <line x1="270" y1="64"  x2="360" y2="120" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ba)"/>
+  <line x1="270" y1="112" x2="360" y2="125" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ba)"/>
+  <line x1="270" y1="160" x2="360" y2="130" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ba)"/>
+
+  <!-- compose function -->
+  <rect x="360" y="92" width="250" height="80" rx="10" fill="rgba(126,231,135,.06)" stroke="#7ee787" stroke-width="1.5"/>
+  <text x="485" y="118" fill="#7ee787" font-size="11" text-anchor="middle" font-weight="bold">compose_display_label()</text>
+  <text x="485" y="138" fill="#768390" font-size="9" text-anchor="middle">PURE — (headline, scope, keyphrases)</text>
+  <text x="485" y="152" fill="#768390" font-size="9" text-anchor="middle">→ string · no I/O, no state</text>
+  <text x="485" y="166" fill="#768390" font-size="8.5" text-anchor="middle">"&lt;headline | keyphrases&gt; — &lt;scope&gt;"</text>
+  <line x1="610" y1="132" x2="700" y2="132" stroke="#7ee787" stroke-width="1.6" marker-end="url(#bg)"/>
+
+  <!-- display_label output -->
+  <rect x="700" y="108" width="270" height="48" rx="8" fill="#0c0f14" stroke="#7ee787"/>
+  <text x="835" y="128" fill="#7ee787" font-size="9.5" text-anchor="middle">display_label  (DERIVED)</text>
+  <text x="835" y="146" fill="#d7dde4" font-size="8.5" text-anchor="middle">"React — Hooks reference — react.dev +2 sites"</text>
+
+  <!-- two consumers -->
+  <line x1="835" y1="156" x2="835" y2="196" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ba)"/>
+  <rect x="660" y="196" width="166" height="64" rx="8" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="743" y="216" fill="#6cb6ff" font-size="9.5" text-anchor="middle">UI recomposes</text>
+  <text x="743" y="231" fill="#768390" font-size="8.5" text-anchor="middle">restyle the parts</text>
+  <text x="743" y="244" fill="#768390" font-size="8.5" text-anchor="middle">independently</text>
+  <rect x="844" y="196" width="166" height="64" rx="8" fill="#161b22" stroke="#d2a8ff" stroke-dasharray="4 3"/>
+  <text x="927" y="216" fill="#d2a8ff" font-size="9.5" text-anchor="middle">later LLM rewrite</text>
+  <text x="927" y="231" fill="#768390" font-size="8.5" text-anchor="middle">consumes the whole</text>
+  <text x="927" y="244" fill="#768390" font-size="8.5" text-anchor="middle">evidence bundle (seam)</text>
+
+  <!-- recompose test -->
+  <rect x="1030" y="92" width="130" height="100" rx="8" fill="rgba(240,163,94,.06)" stroke="#f0a35e"/>
+  <text x="1095" y="114" fill="#f0a35e" font-size="9" text-anchor="middle">unit tests</text>
+  <text x="1095" y="134" fill="#768390" font-size="8" text-anchor="middle">determinism:</text>
+  <text x="1095" y="146" fill="#768390" font-size="8" text-anchor="middle">same members →</text>
+  <text x="1095" y="158" fill="#768390" font-size="8" text-anchor="middle">identical bundle</text>
+  <text x="1095" y="174" fill="#768390" font-size="8" text-anchor="middle">recompose: compose</text>
+  <text x="1095" y="186" fill="#768390" font-size="8" text-anchor="middle">(stored) == display_label</text>
+</svg>
+</div>
+<figcaption><code>display_label</code> is <em>produced by</em> the pure <code>compose_display_label(headline_title, scope, keyphrases)</code> — derived from the parts, not baked. AC #3's recomposition test asserts that recomposing from the stored fields reproduces <code>display_label</code> exactly. Separate fields let the UI restyle each part and a future LLM consume the whole bundle.</figcaption>
+</figure>
+
+<div class="callout key">
+  <span class="label">keyphrases — deliberately corpus-INDEPENDENT, not c-TF-IDF</span>
+  <p>Keyphrases come from the cluster's own member titles only: lowercase + NFC, tokenize on non-alphanumeric (<code>\p{L}\p{N}</code>), drop stopwords and tokens shorter than 3, count term frequency, take top-k by (count desc, token asc).</p>
+  <p>Because they depend on <em>this cluster's titles alone</em>, not the surrounding window, the same enduring project keeps the same keyphrases as its neighbors change — window-relative c-TF-IDF would drift, hostile to the cross-window stability tracking needs.</p>
+  <p><code>keyphrases</code> + <code>representation_version</code> are the seam for a later fixed-corpus pass if measurement shows it is needed.</p>
+</div>
+
+<!-- ===================================================== LLM SEAM -->
+<h2 id="seam">The LLM-naming seam — documented, deliberately not built</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 270" role="img" aria-label="The LLM-naming seam, documented but not built. On the left, what ships in task 36.5: the deterministic label bundle and a Labeler interface boundary — an interface a future LLM rewrite step would implement. On the right, greyed and dashed because none of it is built: a future LLM rewrite takes the evidence bundle and returns one clean phrase, gated by a config flag introduced WITH that code, and cached. The cache key is geometric and stable-core, not an exemplar-id hash: re-fire the LLM only when the cluster's representative vector moves beyond a cosine threshold, OR the stable core — members with probability above a cutoff, excluding noise and fringe — changes by Jaccard overlap below about 0.8. This reuses the same representative-vector and cosine machinery Phase-4 tracking uses, so there is no parallel mechanism. Three things are explicitly NOT in 36.5: the LLM rewrite code, any config flag for it (no dead default-off flag), and the cache table, which needs a stable cluster identity that does not yet exist because HDBSCAN is fit-only and labels are run-local.">
+  <defs>
+    <marker id="sa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#768390"/></marker>
+  </defs>
+
+  <!-- SHIPS NOW -->
+  <rect x="20" y="40" width="300" height="180" rx="10" fill="rgba(126,231,135,.05)" stroke="#7ee787" stroke-width="1.5"/>
+  <text x="170" y="64" fill="#7ee787" font-size="11" text-anchor="middle" font-weight="bold">SHIPS in 36.5</text>
+  <rect x="44" y="82" width="252" height="50" rx="7" fill="#161b22" stroke="#2a313a"/>
+  <text x="170" y="102" fill="#d7dde4" font-size="9.5" text-anchor="middle">the deterministic label bundle</text>
+  <text x="170" y="118" fill="#768390" font-size="8.5" text-anchor="middle">headline · scope · keyphrases · display · version</text>
+  <rect x="44" y="144" width="252" height="56" rx="7" fill="#161b22" stroke="#d2a8ff"/>
+  <text x="170" y="166" fill="#d2a8ff" font-size="9.5" text-anchor="middle">Labeler interface boundary</text>
+  <text x="170" y="182" fill="#768390" font-size="8.5" text-anchor="middle">the interface a future LLM rewrite</text>
+  <text x="170" y="194" fill="#768390" font-size="8.5" text-anchor="middle">step would implement — documented</text>
+
+  <line x1="320" y1="130" x2="380" y2="130" stroke="#768390" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#sa)"/>
+  <text x="350" y="120" fill="#768390" font-size="8" text-anchor="middle">later</text>
+
+  <!-- NOT BUILT (greyed/dashed) -->
+  <rect x="380" y="30" width="780" height="210" rx="10" fill="#0f1419" stroke="#768390" stroke-dasharray="6 4"/>
+  <text x="770" y="52" fill="#768390" font-size="11" text-anchor="middle" font-weight="bold">NOT BUILT — design only (no code, no flag, no table)</text>
+
+  <rect x="404" y="70" width="230" height="64" rx="7" fill="#161b22" stroke="#768390" stroke-dasharray="3 2"/>
+  <text x="519" y="92" fill="#9aa6b2" font-size="9.5" text-anchor="middle">future LLM rewrite</text>
+  <text x="519" y="108" fill="#768390" font-size="8.5" text-anchor="middle">evidence bundle → one clean phrase</text>
+  <text x="519" y="122" fill="#768390" font-size="8.5" text-anchor="middle">gated by a flag shipped WITH the code</text>
+
+  <rect x="404" y="150" width="230" height="68" rx="7" fill="#161b22" stroke="#768390" stroke-dasharray="3 2"/>
+  <text x="519" y="170" fill="#9aa6b2" font-size="9.5" text-anchor="middle">cache key = geometric + stable-core</text>
+  <text x="519" y="186" fill="#768390" font-size="8.5" text-anchor="middle">re-fire if rep-vector moves &gt; cosine θ</text>
+  <text x="519" y="199" fill="#768390" font-size="8.5" text-anchor="middle">OR stable core Jaccard &lt; ~0.8</text>
+  <text x="519" y="212" fill="#768390" font-size="8" text-anchor="middle">NOT an exemplar-id hash (over/under-fires)</text>
+
+  <rect x="664" y="70" width="220" height="148" rx="7" fill="#0c0f14" stroke="#768390" stroke-dasharray="3 2"/>
+  <text x="774" y="92" fill="#9aa6b2" font-size="9.5" text-anchor="middle">reuses tracking's machinery</text>
+  <text x="774" y="112" fill="#768390" font-size="8.5" text-anchor="middle">same frozen representative</text>
+  <text x="774" y="125" fill="#768390" font-size="8.5" text-anchor="middle">vector + cosine that Phase-4</text>
+  <text x="774" y="138" fill="#768390" font-size="8.5" text-anchor="middle">tracking uses — no parallel</text>
+  <text x="774" y="151" fill="#768390" font-size="8.5" text-anchor="middle">mechanism</text>
+  <text x="774" y="174" fill="#9aa6b2" font-size="8.5" text-anchor="middle">cache TABLE waits on a stable</text>
+  <text x="774" y="187" fill="#768390" font-size="8.5" text-anchor="middle">cluster identity (tracking) that</text>
+  <text x="774" y="200" fill="#768390" font-size="8.5" text-anchor="middle">does not exist — labels run-local</text>
+
+  <rect x="914" y="70" width="222" height="148" rx="7" fill="rgba(255,123,114,.05)" stroke="#ff7b72" stroke-dasharray="3 2"/>
+  <text x="1025" y="92" fill="#ff7b72" font-size="9.5" text-anchor="middle">explicitly OUT of 36.5</text>
+  <text x="1025" y="116" fill="#9aa6b2" font-size="8.5" text-anchor="middle">✗ no LLM rewrite code</text>
+  <text x="1025" y="134" fill="#9aa6b2" font-size="8.5" text-anchor="middle">✗ NO config flag</text>
+  <text x="1025" y="148" fill="#768390" font-size="8" text-anchor="middle">(no dead default-off flag)</text>
+  <text x="1025" y="168" fill="#9aa6b2" font-size="8.5" text-anchor="middle">✗ no cache table</text>
+  <text x="1025" y="192" fill="#768390" font-size="8" text-anchor="middle">built when BOTH the LLM path</text>
+  <text x="1025" y="204" fill="#768390" font-size="8" text-anchor="middle">and the tracking model land</text>
+</svg>
+</div>
+<figcaption>36.5 ships the deterministic bundle, the <code>Labeler</code> interface boundary, and the documented cache-key idea — re-fire when the frozen representative vector moves past a cosine threshold OR the stable core's Jaccard overlap drops below ~0.8, reusing the machinery Phase-4 tracking uses. No LLM code, no config flag, no cache table ship.</figcaption>
+</figure>
+
+<!-- ===================================================== DECISIONS TO CONFIRM -->
+<h2 id="confirm">Decisions to confirm before implementation</h2>
+
+<div class="callout confirm">
+  <span class="label">Decision #1 — registrable domain: the <code>tldts</code> library, not a heuristic <span class="confirm-tag">confirm</span></span>
+  <p><span class="pick">Add <code>tldts@6.1.86</code> as an explicit <code>tdt</code> dependency.</span> Offline, deterministic, already hoisted. <code>getDomain('https://docs.google.com/x')</code> → <code>google.com</code>; <code>foo.co.uk</code> correct; <code>localhost</code> → null.</p>
+  <p>A true eTLD+1 (every subdomain groups as one) needs the Public Suffix List; a "last two labels" heuristic is wrong for <code>co.uk</code>. This is the one new dependency.</p>
+  <p class="q">Confirm: the new dependency vs a hand-rolled heuristic.</p>
+</div>
+
+<div class="callout confirm">
+  <span class="label">Decision #5 — the <code>scope</code> string shape and the <code>display_label</code> template <span class="confirm-tag">confirm</span></span>
+  <p><span class="pick"><code>scope</code> = primary domain alone when one distinct domain, else <code>"&lt;primary&gt; +&lt;N&gt; sites"</code></span> (N = distinct − 1), with the domain distribution sorted by (count desc, domain asc). <code>site_name</code> is not used — it is often NULL/junk; the registrable domain is the always-present signal. The <code>display_label</code> template is <code>"&lt;headline or keyphrases&gt; — &lt;scope&gt;"</code>, e.g. <code>"React — Hooks reference — react.dev +2 sites"</code>.</p>
+  <p class="q">Confirm: the scope string shape and the display_label template.</p>
+</div>
+
+<h3>Settled decisions (built as described, no confirmation needed)</h3>
+
+<div class="callout decision">
+  <span class="label">Decision #2 — the index-alignment contract</span>
+  <p><span class="pick">Assert, don't assume.</span> <code>raw.labels[i]</code> ↔ <code>vectors[i]</code> ↔ <code>visits[i]</code> are aligned by row index — the same array fed to the distance matrix. exemplar/medoid indices index into it; <code>represent_clusters</code> and <code>label_cluster</code> assert length-equality and resolve indices directly to <code>page_session_id</code> + vector.</p>
+</div>
+<div class="callout decision">
+  <span class="label">Decision #3 — <code>select_medoids</code> is lazy</span>
+  <p><span class="pick">Call it only when a cluster lacks an exemplar.</span> Under v1 defaults (eom + store_exemplars) every cluster has an exemplar, so the medoid path is defensive — but AC #1 and §10 require the named cosine-medoid library function (member closest to cluster mean, <code>metric:'cosine'</code>) for the leaf / no-exemplar case.</p>
+</div>
+<div class="callout decision">
+  <span class="label">Decision #4 — the frozen vector is pure JS</span>
+  <p><span class="pick">float64 fixed-order mean → L2-normalize → one float32 truncation,</span> mirroring <code>page_vectors.ts</code>. It is FROZEN: the Phase-4 cross-window tracker's Hungarian-match input, banked now.</p>
+</div>
+<div class="callout decision">
+  <span class="label">Decision #7 — module placement &amp; barrel hygiene</span>
+  <p><span class="pick">New files <code>representations.ts</code>, <code>labeling/deterministic_labeler.ts</code>, <code>labeling/llm_naming_seam.ts</code> (+ colocated <code>.test.ts</code>); <code>ClusterLabel</code> in <code>types.ts</code>.</span> <code>representations.ts</code> is NOT re-exported from the barrel (its <code>select_medoids</code> import pulls the native tf chain); only the new TYPES are exported, and 36.9 imports the stage directly.</p>
+</div>
+
+<!-- ===================================================== AC TABLE -->
+<h2 id="ac">Acceptance criteria — and how each is met</h2>
+
+<figure>
+<table>
+  <thead><tr><th>#</th><th>Acceptance criterion (verbatim intent)</th><th>How it is met</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="c">#1</td>
+      <td>Each cluster exposes a representative <code>page_session_id</code> (eom exemplar, else <code>select_medoids</code> fallback) and a frozen L2-normalized representative vector; noise has no representative</td>
+      <td><code>representative_index</code> returns the eom exemplar, lazily falling back to <code>select_medoids</code>; <code>representative_vector</code> is the float64 fixed-order mean, L2-normalized and frozen; label <code>−1</code> produces no <code>RepresentedCluster</code></td>
+    </tr>
+    <tr>
+      <td class="c">#2</td>
+      <td>A deterministic labeler produces <code>headline_title</code>, <code>scope</code>, <code>keyphrases</code>, <code>display_label</code>, <code>representation_version</code> as separate fields — no LLM, no per-window c-TF-IDF</td>
+      <td><code>label_cluster</code> populates five separate fields: exemplar title, <code>tldts</code> registrable-domain distribution, corpus-independent title keyphrases, the composed label, and a logic version — no LLM call, no window-relative term weighting</td>
+    </tr>
+    <tr>
+      <td class="c">#3</td>
+      <td>Label fields recompose into a display string; unit tests assert determinism and recomposition</td>
+      <td><code>display_label</code> is produced by the pure <code>compose_display_label(headline_title, scope, keyphrases)</code>; tests assert same-members→identical-bundle and that recomposing from stored fields reproduces <code>display_label</code></td>
+    </tr>
+    <tr>
+      <td class="c">#4</td>
+      <td>The LLM-naming seam (interface boundary + stable-core fingerprint) is documented but not implemented, and no default-off config flag for it is shipped</td>
+      <td><code>labeling/llm_naming_seam.ts</code> documents the <code>Labeler</code> interface + the representative-vector-cosine / stable-core-Jaccard cache key; no rewrite code, no config flag, no cache table ship</td>
+    </tr>
+  </tbody>
+</table>
+</figure>
+
+<div class="callout good">
+  <span class="label">Net effect</span>
+  <p>After 36.5, every cluster carries a recognizable representative page, a frozen vector that de-risks tracking, and a recomposable label bundle — deterministic, offline, zero-LLM.</p>
+  <p>The only open choices are the <code>tldts</code> dependency (#1) and the scope/label string shape (#5).</p>
+</div>
+
+<footer>
+  Companion for <code>task-36.5</code> (status: To Do · build-order step 5) — cluster representations + deterministic labeler · branch <code>tdt</code> ·
+  spec <code>task-36.5 ….md</code> (4 ACs) ·
+  design <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> §7 (representation &amp; labeling) · §6 (stage types) · §8 (ClusterRecord columns) · §10 (select_medoids) ·
+  types <code>tdt/src/types.ts</code> (RepresentedCluster · ClusterRecord label fields) ·
+  new code <code>tdt/src/representations.ts</code> · <code>tdt/src/labeling/deterministic_labeler.ts</code> · <code>tdt/src/labeling/llm_naming_seam.ts</code> (NOT re-exported from the barrel) ·
+  new dependency <code>tldts@6.1.86</code> (offline registrable-domain / Public Suffix List).
+</footer>
+
+</main>
+</body>
+</html>

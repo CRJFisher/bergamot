@@ -16,7 +16,8 @@
   "dependencies": {
     "@tensorflow/tfjs": "^4.20.0",
     "@tensorflow/tfjs-core": "^4.20.0",
-    "clustering-tfjs": "^0.6.1"
+    "clustering-tfjs": "^0.6.1",
+    "tldts": "6.1.86"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
