@@ -62,16 +62,35 @@ type TxRun = (
   params?: Record<string, DuckDBValue>,
 ) => Promise<void>;
 
+/**
+ * The "other live run for this window" predicate, shared verbatim by the
+ * pre-transaction SELECT (which builds the report) and the in-transaction
+ * supersede UPDATE, so the rows reported and the rows flipped can never diverge.
+ * Binds $ws / $we / $id.
+ */
+const OTHER_LIVE_RUN_FOR_WINDOW = `window_start = $ws AND window_end = $we
+   AND status = 'complete' AND id != $id`;
+
 export class ClusterStore implements ClusterSink {
   constructor(private readonly db: DuckDB) {}
 
   /**
-   * Persist one run+clusters+members idempotently. Reads the existing run for the
-   * bundle's id on the shared connection BEFORE the write transaction — safe under
-   * the single-writer model (the extension is the only writer; the §11 trigger's
-   * single-flight guard prevents two TDT runs overlapping), so there is no TOCTOU
-   * race. Mirrors `right_to_forget.ts`, which likewise resolves its targets before
-   * its `isolated_transaction`.
+   * Persist one run+clusters+members idempotently. The bundle MUST be an
+   * `assemble_run_bundle` output — persist does not re-validate internal
+   * consistency (members' cluster_ids ⊆ clusters, counts, etc.); the pure
+   * assembler is the single producer that guarantees it.
+   *
+   * Reads the existing run for the bundle's id on the shared connection BEFORE the
+   * write transaction — safe under the single-writer model (the extension is the
+   * only writer; the §11 trigger's single-flight guard prevents two TDT runs
+   * overlapping), so there is no TOCTOU race. Mirrors `right_to_forget.ts`, which
+   * likewise resolves its targets before its `isolated_transaction`.
+   *
+   * The "exactly one complete run per window" invariant is upheld per branch:
+   * noop leaves the table untouched; replace keeps the same id and re-completes
+   * it; create inserts a new id. Replace and create both run the supersede UPDATE,
+   * retiring every OTHER complete run for the window. No DB constraint enforces the
+   * invariant (DuckDB has no partial unique index) — it lives in this control flow.
    */
   async persist(bundle: RunBundle): Promise<PersistResult> {
     const { run, clusters, members } = bundle;
@@ -95,13 +114,10 @@ export class ClusterStore implements ClusterSink {
     const is_replace = existing !== null;
 
     // Every OTHER live run for this window is superseded — in BOTH the replace and
-    // create paths — so that after any persist exactly one `complete` run survives
-    // for the window. Read the ids now for the report; the transaction re-applies
-    // the same predicate atomically.
+    // create paths. Read the ids now for the report; the transaction re-applies the
+    // identical predicate atomically.
     const prior_live = await this.db.query<{ id: string }>(
-      `SELECT id FROM ${TOPIC_RUN_TABLE}
-       WHERE window_start = $ws AND window_end = $we
-         AND status = 'complete' AND id != $id`,
+      `SELECT id FROM ${TOPIC_RUN_TABLE} WHERE ${OTHER_LIVE_RUN_FOR_WINDOW}`,
       { ws: run.window_start, we: run.window_end, id: run.id },
     );
     const superseded_run_ids = prior_live.map((r) => String(r.id));
@@ -120,8 +136,7 @@ export class ClusterStore implements ClusterSink {
       if (superseded_run_ids.length > 0) {
         await tx_run(
           `UPDATE ${TOPIC_RUN_TABLE} SET status = 'superseded'
-           WHERE window_start = $ws AND window_end = $we
-             AND status = 'complete' AND id != $id`,
+           WHERE ${OTHER_LIVE_RUN_FOR_WINDOW}`,
           { ws: run.window_start, we: run.window_end, id: run.id },
         );
       }

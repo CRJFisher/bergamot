@@ -7,11 +7,17 @@ import {
 } from "../duck_db";
 import { DuckDBListValue } from "@duckdb/node-api";
 import { ClusterStore } from "./cluster_store";
-import type {
-  RunBundle,
-  RunRecord,
-  ClusterRecord,
-  MemberRecord,
+import {
+  assemble_run_bundle,
+  DEFAULT_HDBSCAN_CONFIG,
+  DEFAULT_WINDOW_CONFIG,
+  DEFAULT_PAGE_VECTOR_CONFIG,
+  type AssembleArgs,
+  type ResolvedParams,
+  type RunBundle,
+  type RunRecord,
+  type ClusterRecord,
+  type MemberRecord,
 } from "@bergamot/tdt";
 
 /** Byte-level equality of two Float32Arrays (catches ±0, which toEqual misses). */
@@ -307,6 +313,86 @@ describe("ClusterStore", () => {
       expect(
         await count(TOPIC_RUN_TABLE, `WHERE status = 'complete'`),
       ).toBe(2);
+    });
+  });
+
+  describe("natural-key UNIQUE guard (AC#1)", () => {
+    it("rejects a second run row with a new id but the same natural key", async () => {
+      await store.persist(make_bundle());
+      // A hash-input bug that produced a colliding-key, different-id row would trip
+      // this constraint instead of silently shadowing the first run.
+      await expect(
+        db.execute(
+          `INSERT INTO ${TOPIC_RUN_TABLE}
+             (id, window_start, window_end, params_hash, params_json,
+              embedding_model_id, algo_version, input_count, input_fingerprint,
+              cluster_count, noise_count, status, created_at, completed_at)
+           SELECT 'different-id', window_start, window_end, params_hash, params_json,
+              embedding_model_id, algo_version, input_count, input_fingerprint,
+              cluster_count, noise_count, status, created_at, completed_at
+           FROM ${TOPIC_RUN_TABLE} WHERE id = $id`,
+          { id: "run:2024-01-01T00:00:00.000Z:2024-02-01T00:00:00.000Z:model-a@384" },
+        ),
+      ).rejects.toThrow();
+    });
+  });
+
+  // Drive the real assemble→persist seam (not the hand-built make_bundle), so the
+  // params_hash → run_id wiring that produces supersede is exercised end-to-end.
+  describe("assemble_run_bundle → persist supersede (AC#3)", () => {
+    function assemble_args(params: ResolvedParams): AssembleArgs {
+      const visits = [
+        { page_session_id: "p0", url: "https://x.com/0", title: "0", site_name: null, page_loaded_at: "2024-01-01T00:00:00.000Z", tree_id: "t" },
+        { page_session_id: "p1", url: "https://x.com/1", title: "1", site_name: null, page_loaded_at: "2024-01-02T00:00:00.000Z", tree_id: "t" },
+        { page_session_id: "p2", url: "https://x.com/2", title: "2", site_name: null, page_loaded_at: "2024-01-03T00:00:00.000Z", tree_id: "t" },
+      ];
+      return {
+        window_start: "2024-01-01T00:00:00Z",
+        window_end: "2024-02-01T00:00:00Z",
+        embedding_model_id: "model-a@384",
+        algo_version: "hdbscan-1#wasm",
+        params,
+        created_at: "2024-02-02T00:00:00.000Z",
+        visits,
+        vector_versions: ["v0", "v1", "v2"],
+        raw: { labels: [0, 0, 0], probabilities: [0.9, 0.8, 0.7], exemplar_indices: new Map([[0, 1]]) },
+        represented: [
+          {
+            local_label: 0,
+            member_indices: [0, 1, 2],
+            representative_index: 1,
+            representative_vector: Float32Array.from([1, 0, 0]),
+            size: 3,
+            time_span: { start: "2024-01-01T00:00:00.000Z", end: "2024-01-03T00:00:00.000Z" },
+          },
+        ],
+        labels: [
+          { headline_title: "T", scope: "x.com", keyphrases: ["a"], display_label: "T", representation_version: "det-1" },
+        ],
+      };
+    }
+    const base_params: ResolvedParams = {
+      hdbscan: DEFAULT_HDBSCAN_CONFIG,
+      window: DEFAULT_WINDOW_CONFIG,
+      page_vector: DEFAULT_PAGE_VECTOR_CONFIG,
+      matryoshka_dim: null,
+    };
+
+    it("a changed param yields a new run_id that supersedes the prior live run", async () => {
+      const a = assemble_run_bundle(assemble_args(base_params));
+      const b = assemble_run_bundle(
+        assemble_args({ ...base_params, matryoshka_dim: 50 }),
+      );
+      expect(b.run.id).not.toBe(a.run.id); // params changed → new identity
+
+      const ra = await store.persist(a);
+      const rb = await store.persist(b);
+      expect(ra.outcome).toBe("created");
+      expect(rb.outcome).toBe("created");
+      expect(rb.superseded_run_ids).toEqual([a.run.id]);
+      expect(
+        await count(TOPIC_RUN_TABLE, `WHERE status = 'complete'`),
+      ).toBe(1);
     });
   });
 

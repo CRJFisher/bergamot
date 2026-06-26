@@ -135,22 +135,23 @@ export class FakeClusterSink implements ClusterSink {
       return result;
     }
 
-    let outcome: PersistResult["outcome"];
+    const outcome: PersistResult["outcome"] = existing ? "replaced" : "created";
+
+    // Supersede every OTHER live run for this window — on BOTH the replace and
+    // create paths, exactly as the production ClusterStore does — so that after
+    // any persist exactly one `complete` run survives for the window. (Replace
+    // normally finds none, but re-running a previously-superseded key must retire
+    // whatever is currently live for the window.)
     const superseded_run_ids: string[] = [];
-    if (existing) {
-      outcome = "replaced"; // same id, changed fingerprint
-    } else {
-      outcome = "created";
-      for (const other of this.runs.values()) {
-        if (
-          other.status === "complete" &&
-          other.id !== run.id &&
-          other.window_start === run.window_start &&
-          other.window_end === run.window_end
-        ) {
-          other.status = "superseded";
-          superseded_run_ids.push(other.id);
-        }
+    for (const other of this.runs.values()) {
+      if (
+        other.status === "complete" &&
+        other.id !== run.id &&
+        other.window_start === run.window_start &&
+        other.window_end === run.window_end
+      ) {
+        other.status = "superseded";
+        superseded_run_ids.push(other.id);
       }
     }
 

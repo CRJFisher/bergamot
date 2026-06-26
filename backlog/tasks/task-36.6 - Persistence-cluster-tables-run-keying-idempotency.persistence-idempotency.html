@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>task-36.6 — Persistence: cluster tables, run keying, idempotency</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --bg-alt: #161b22;
+    --bg-code: #0c0f14;
+    --fg: #d7dde4;
+    --fg-dim: #9aa6b2;
+    --accent: #f0a35e;     /* bergamot orange */
+    --accent-2: #6cb6ff;
+    --green: #7ee787;
+    --red: #ff7b72;
+    --purple: #d2a8ff;
+    --border: #2a313a;
+    --kw: #ff7b72;
+    --str: #a5d6ff;
+    --com: #768390;
+    --typ: #d2a8ff;
+    --fn: #d2a8ff;
+    --num: #f0a35e;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--sans); }
+
+  nav.crossdoc {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg-alt); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    padding: .5rem 5%; font-family: var(--mono); font-size: .74rem;
+  }
+  nav.crossdoc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.crossdoc a, nav.crossdoc span.pending, nav.crossdoc span.cur {
+    padding: .22em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap;
+    border: 1px solid var(--border);
+  }
+  nav.crossdoc a { color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.crossdoc a:hover { background: rgba(108,182,255,.16); }
+  nav.crossdoc span.cur { color: #1a1208; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  nav.crossdoc span.pending { color: var(--com); }
+  nav.crossdoc .dot { display:inline-block; width:.5em; height:.5em; border-radius:50%; margin-right:.35em; vertical-align: middle; }
+  nav.crossdoc .dot.done { background: var(--green); }
+  nav.crossdoc .dot.now { background: var(--accent); }
+  nav.crossdoc .dot.todo { background: var(--com); }
+
+  nav.toc {
+    position: sticky; top: 38px; z-index: 9;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    padding: .45rem 5%; font-family: var(--mono); font-size: .72rem;
+  }
+  nav.toc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.toc a { padding: .2em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap; border: 1px solid var(--border); color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.toc a:hover { background: rgba(108,182,255,.16); }
+
+  main { width: 90%; max-width: 1500px; margin: 0 auto; padding: 1.6rem 0 6rem; }
+  header.page { border-bottom: 1px solid var(--border); padding-bottom: 1.2rem; margin-bottom: 1.4rem; }
+  .crumb { color: var(--fg-dim); font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; font-family: var(--mono); }
+  h1 { font-family: var(--serif); font-size: 2rem; margin: .5rem 0 .4rem; line-height: 1.15; font-weight: 600; }
+  h2 { font-size: 1.3rem; margin: 2.6rem 0 .5rem; padding-top: .7rem; border-top: 1px solid var(--border); color: var(--accent); scroll-margin-top: 100px; }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 .5rem; color: var(--accent-2); }
+  .lead { font-size: 1.05rem; max-width: 84ch; color: var(--fg); }
+  figcaption { font-size: .84rem; color: var(--fg-dim); margin: .5rem 0 0; font-style: italic; max-width: 96ch; }
+  figure { margin: 1rem 0 1.4rem; }
+  .prose { max-width: 74ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .7rem; font-family: var(--mono); font-size: .72rem; }
+  .meta .chip { padding: .2em .6em; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-alt); color: var(--fg-dim); }
+  .meta .chip strong { color: var(--accent); font-weight: 600; }
+  .meta .chip.todo { border-color: var(--accent); color: var(--accent); }
+  .meta .chip.done { border-color: var(--green); color: var(--green); }
+  .meta .chip.dep { border-color: var(--red); color: var(--red); }
+
+  a { color: var(--accent-2); }
+  code { font-family: var(--mono); font-size: .88em; }
+  p code, li code, td code, figcaption code { background: var(--bg-code); padding: .1em .38em; border-radius: 4px; border: 1px solid var(--border); color: var(--accent); }
+
+  .callout { border-radius: 6px; padding: .8rem 1.1rem; margin: 1.1rem 0; max-width: 100ch; }
+  .callout.key { background: var(--bg-alt); border-left: 4px solid var(--accent); }
+  .callout.info { background: rgba(108,182,255,.07); border-left: 4px solid var(--accent-2); }
+  .callout.warn { background: rgba(255,123,114,.08); border-left: 4px solid var(--red); }
+  .callout.good { background: rgba(126,231,135,.07); border-left: 4px solid var(--green); }
+  .callout .label { font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .09em; font-weight: 700; display: block; margin-bottom: .3rem; }
+  .callout.key .label { color: var(--accent); }
+  .callout.info .label { color: var(--accent-2); }
+  .callout.warn .label { color: var(--red); }
+  .callout.good .label { color: var(--green); }
+  .callout p { margin: .3rem 0; }
+
+  .prompt-box { border: 1px solid var(--border); border-left: 3px solid var(--fg-dim); border-radius: 6px; background: var(--bg-alt); padding: .8rem 1.1rem; margin: 1rem 0; }
+  .prompt-box .label { font-family: var(--mono); font-size: .66rem; text-transform: uppercase; letter-spacing: .09em; color: var(--fg-dim); display: block; margin-bottom: .35rem; }
+  .prompt-box ul { margin: .2rem 0; padding-left: 1.2rem; }
+  .prompt-box li { margin: .15rem 0; }
+  .prompt-box code { color: var(--accent-2); }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .86rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--bg-alt); color: var(--accent); font-weight: 600; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  td code, th code { font-family: var(--mono); }
+  td.c { text-align: center; font-family: var(--mono); }
+  td.idx { text-align: center; font-family: var(--mono); color: var(--accent-2); font-weight: 700; }
+  tr.noise td { color: var(--fg-dim); background: rgba(118,131,144,.06); }
+  tr.exem td { background: rgba(126,231,135,.06); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; font-family: var(--mono); font-size: .76rem; color: var(--fg-dim); margin: .6rem 0; }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; }
+  .legend .box { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+  .legend .box.add { border-color: var(--green); background: rgba(126,231,135,.18); }
+  .legend .box.rm { border-color: var(--red); background: rgba(255,123,114,.18); }
+  .legend .box.mod { border-color: var(--accent); background: rgba(240,163,94,.18); }
+  .legend .box.same { border-color: var(--border); background: var(--bg-alt); }
+
+  .diagram { width: 100%; }
+  svg { display: block; max-width: 100%; height: auto; }
+  text { font-family: var(--mono); }
+
+  .ba { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0; align-items: stretch; }
+  .ba .panel { min-width: 0; }
+  .ba .arrow { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 .8rem; }
+  .ba .arrow .glyph { font-size: 1.8rem; color: var(--accent); line-height: 1; }
+  .ba .arrow .lbl { font-family: var(--mono); font-size: .62rem; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .08em; margin-top: .4rem; writing-mode: vertical-rl; }
+  .ba .ptitle { font-family: var(--mono); font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; text-align: center; margin-bottom: .3rem; }
+  .ba .ptitle.cur { color: var(--fg-dim); }
+  .ba .ptitle.plan { color: var(--green); }
+  @media (max-width: 820px) { .ba { grid-template-columns: 1fr; } .ba .arrow { padding: .6rem 0; } .ba .arrow .lbl { writing-mode: horizontal-tb; } }
+
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 1rem; margin: 1rem 0; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+  .keycard { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; }
+  .keycard.rid { border-color: var(--accent-2); }
+  .keycard.fp { border-color: var(--accent); }
+  .keycard .tag { font-family: var(--mono); font-size: .68rem; letter-spacing: .04em; display: inline-block; padding: .15em .55em; border-radius: 999px; border: 1px solid; }
+  .keycard.rid .tag { color: var(--accent-2); border-color: var(--accent-2); }
+  .keycard.fp .tag { color: var(--accent); border-color: var(--accent); }
+  .keycard h3 { margin: .5rem 0 .3rem; color: var(--fg); font-size: 1rem; }
+  .keycard .formula { font-family: var(--mono); font-size: .78rem; color: var(--fg-dim); background: var(--bg-code); border: 1px solid var(--border); border-radius: 5px; padding: .5rem .6rem; margin: .5rem 0; word-break: break-word; }
+  .keycard ul { margin: .4rem 0 0; padding-left: 1.1rem; font-size: .86rem; }
+  .keycard li { margin: .2rem 0; }
+  .keycard .chg { color: var(--accent); }
+
+  .code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px; margin: 1rem 0; overflow: hidden; }
+  .code .file-label { font-family: var(--mono); font-size: .72rem; color: var(--fg-dim); padding: .45rem .9rem; border-bottom: 1px solid var(--border); background: var(--bg-alt); }
+  .code .file-label .new { color: var(--green); }
+  .code .file-label .edit { color: var(--accent); }
+  .code pre { margin: 0; padding: .9rem 1rem; overflow-x: auto; font-family: var(--mono); font-size: .8rem; line-height: 1.55; color: var(--fg); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .cm { color: var(--com); font-style: italic; }
+  .fn { color: var(--fn); } .typ { color: var(--typ); } .num { color: var(--num); }
+  .hl { background: rgba(240,163,94,.13); display: inline-block; width: 100%; }
+  .add { background: rgba(126,231,135,.12); display: inline-block; width: 100%; }
+  .del { background: rgba(255,123,114,.12); display: inline-block; width: 100%; text-decoration: line-through; opacity: .75; }
+
+  .steps { margin: 1rem 0; }
+  .step { display: grid; grid-template-columns: 44px 1fr; gap: .9rem; margin-bottom: .9rem; align-items: start; }
+  .step .badge { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 700; font-size: .9rem; border: 1.5px solid; }
+  .step .badge.noop { border-color: var(--accent-2); color: var(--accent-2); background: rgba(108,182,255,.1); }
+  .step .badge.repl { border-color: var(--accent); color: var(--accent); background: rgba(240,163,94,.1); }
+  .step .badge.sup { border-color: var(--purple); color: var(--purple); background: rgba(210,168,255,.1); }
+  .step .badge.cre { border-color: var(--green); color: var(--green); background: rgba(126,231,135,.1); }
+  .step .body h3 { margin: .1rem 0 .25rem; color: var(--fg); }
+  .step .body p { margin: 0; font-size: .9rem; color: var(--fg-dim); max-width: 96ch; }
+  .step .body .loc { font-family: var(--mono); font-size: .72rem; color: var(--accent-2); }
+
+  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .82rem; font-family: var(--mono); max-width: 100ch; }
+  @media (max-width: 820px) { h2 { scroll-margin-top: 60px; } }
+</style>
+</head>
+<body>
+
+<nav class="crossdoc" aria-label="Task family">
+  <span class="home">task-36 micro tier</span>
+  <a href="task-36.overview.html"><span class="dot now"></span>36 Overview</a>
+  <a href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html"><span class="dot done"></span>36.1 Scaffold</a>
+  <a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html"><span class="dot done"></span>36.2 Windowing</a>
+  <a href="task-36.3 - Page-vectorisation-TDT-owned-embedding-of-captured-pages.overview.html"><span class="dot done"></span>36.3 Page vectors</a>
+  <a href="task-36.3.1 - Page-vector-store-and-ingestion-time-embedding.ingestion-embedding.html"><span class="dot done"></span>36.3.1 Store + embed pass</a>
+  <a href="task-36.4 - Cosine-distance-matrix-and-HDBSCAN-clustering-core.clustering-core.html"><span class="dot done"></span>36.4 Distance + HDBSCAN core</a>
+  <a href="task-36.5 - Cluster-representations-and-deterministic-labeler.representations-labeler.html"><span class="dot done"></span>36.5 Representations + labeler</a>
+  <span class="cur">36.6 Persistence + idempotency</span>
+  <span class="pending"><span class="dot todo"></span>36.7 Validation · not yet generated</span>
+  <span class="pending"><span class="dot todo"></span>36.9 Trigger · not yet generated</span>
+</nav>
+
+<nav class="toc" aria-label="On this page">
+  <span class="home">on this page</span>
+  <a href="#port">The port reshape</a>
+  <a href="#seam">The pure / transactional seam</a>
+  <a href="#machine">The idempotency state machine</a>
+  <a href="#keys">run_id vs input_fingerprint</a>
+  <a href="#schema">The four tables</a>
+  <a href="#assemble">assemble → persist → noise rows</a>
+  <a href="#coverage">The coverage query</a>
+  <a href="#forget">Right-to-forget cascade</a>
+  <a href="#ac">Acceptance criteria</a>
+</nav>
+
+<main>
+<header class="page">
+  <div class="crumb">Bergamot · TDT micro tier · task-36.6 · build-order step 6 · branch tdt</div>
+  <h1>Persistence: cluster tables, run keying, idempotency</h1>
+  <p class="lead">Step 6 writes clustering output to four DuckDB tables, written ONLY by the extension's single writer. A run is identified by a <code>run_id</code> hash; re-running it decides <strong>no-op</strong> / <strong>atomic replace</strong> / <strong>create + supersede</strong> inside one transaction.</p>
+  <p class="lead">The work splits across a seam — <code>@bergamot/tdt</code> hashes and assembles records (pure, no DB); <code>vscode/</code> reads-decides-writes them (transactional). Noise persists as explicit member rows so coverage is derivable from the cluster tables alone.</p>
+  <div class="meta">
+    <span class="chip done"><strong>status</strong> done · 179 tdt + 334 vscode tests green</span>
+    <span class="chip"><strong>depends</strong> 36.4 HdbscanRaw · 36.5 RepresentedCluster + ClusterLabel</span>
+    <span class="chip"><strong>ships</strong> run_keying.ts · persist.ts (tdt) · cluster_store.ts (vscode)</span>
+    <span class="chip"><strong>3 new tables</strong> topic_run · topic_cluster · topic_cluster_member</span>
+    <span class="chip dep"><strong>reshapes</strong> ClusterSink port · 3 writes → 1 persist</span>
+    <span class="chip"><strong>parent</strong> task-36</span>
+  </div>
+</header>
+
+<div class="prompt-box">
+  <span class="label">Source of truth read to build this page — the spec, the types, and the code the seam touches</span>
+  <ul>
+    <li><code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> §8 — DDL, run keying, idempotency, invalidation, noise resolution, coverage</li>
+    <li><code>tdt/src/run_keying.ts</code> — <code>compute_run_id</code> / <code>compute_params_hash</code> / <code>compute_input_fingerprint</code>, canonical JSON + timestamp</li>
+    <li><code>tdt/src/persist.ts</code> — <code>assemble_run_bundle</code> (pure; one member row per page, noise included)</li>
+    <li><code>tdt/src/ports.ts</code> — <code>ClusterSink</code> = a single <code>persist(bundle) → PersistResult</code></li>
+    <li><code>vscode/src/tdt/cluster_store.ts</code> — production <code>ClusterStore.persist</code>: the read-decide-write state machine</li>
+    <li><code>vscode/src/duck_db.ts</code> — <code>create_metadata_schema</code> (the 3 soft-ref tables) · <code>isolated_transaction</code> (dedicated-connection BEGIN/COMMIT/ROLLBACK)</li>
+    <li><code>vscode/src/right_to_forget.ts</code> — the cascade the member table joins · task doc <code>## Decisions</code></li>
+  </ul>
+</div>
+
+<div class="callout key">
+  <span class="label">The one sentence</span>
+  <p><code>@bergamot/tdt</code> stays pure: <code>run_keying.ts</code> derives <code>run_id</code> + <code>input_fingerprint</code>, and <code>assemble_run_bundle()</code> turns clustering output into <code>{ run, clusters, members }</code> rows (one member row per page, noise included).</p>
+  <p>The extension's <code>ClusterStore.persist</code> takes that bundle and, in <strong>one transaction</strong>, reads the existing run by id and decides no-op / atomic-replace / create — superseding any other live run for the window on both the replace and create paths, so exactly one <code>complete</code> run survives.</p>
+</div>
+
+<!-- ===================================================== PORT RESHAPE -->
+<h2 id="port">The port reshape — three granular writes become one transactional <code>persist</code></h2>
+
+<figure>
+<div class="ba">
+  <div class="panel">
+    <div class="ptitle cur">Before · ClusterSink (36.1 scaffold)</div>
+    <div class="diagram">
+    <svg viewBox="0 0 470 300" role="img" aria-label="The original ClusterSink port, as first scaffolded in task 36.1, exposed three granular write methods: write_run, write_clusters, and write_members. A caller would invoke them in sequence, three separate calls. Between the calls there is no transaction boundary in the contract and no idempotency decision — the port simply appends rows. The decision about whether a run already exists, and whether to no-op, replace, or supersede, has no home: a caller reading the run then writing it has a time-of-check-to-time-of-use race window between the three calls, marked here in red.">
+      <rect x="14" y="14" width="170" height="50" rx="8" fill="#161b22" stroke="#2a313a"/>
+      <text x="99" y="35" fill="#d7dde4" font-size="10" text-anchor="middle">caller (run_tdt stub)</text>
+      <text x="99" y="50" fill="#768390" font-size="8.5" text-anchor="middle">+ FakeClusterSink</text>
+
+      <line x1="99" y1="64" x2="99" y2="86" stroke="#9aa6b2" stroke-width="1.4"/>
+      <rect x="14" y="86" width="170" height="36" rx="7" fill="#0c0f14" stroke="#6cb6ff"/>
+      <text x="99" y="108" fill="#6cb6ff" font-size="9.5" text-anchor="middle">write_run(run)</text>
+      <line x1="99" y1="122" x2="99" y2="142" stroke="#9aa6b2" stroke-width="1.4"/>
+      <rect x="14" y="142" width="170" height="36" rx="7" fill="#0c0f14" stroke="#6cb6ff"/>
+      <text x="99" y="164" fill="#6cb6ff" font-size="9.5" text-anchor="middle">write_clusters(clusters)</text>
+      <line x1="99" y1="178" x2="99" y2="198" stroke="#9aa6b2" stroke-width="1.4"/>
+      <rect x="14" y="198" width="170" height="36" rx="7" fill="#0c0f14" stroke="#6cb6ff"/>
+      <text x="99" y="220" fill="#6cb6ff" font-size="9.5" text-anchor="middle">write_members(members)</text>
+
+      <!-- race window callout -->
+      <rect x="230" y="86" width="226" height="148" rx="9" fill="rgba(255,123,114,.06)" stroke="#ff7b72" stroke-dasharray="4 3"/>
+      <text x="343" y="108" fill="#ff7b72" font-size="10" text-anchor="middle" font-weight="bold">no decision home</text>
+      <text x="343" y="130" fill="#9aa6b2" font-size="8.5" text-anchor="middle">3 calls = 3 boundaries</text>
+      <text x="343" y="146" fill="#9aa6b2" font-size="8.5" text-anchor="middle">no no-op / replace / supersede</text>
+      <text x="343" y="162" fill="#9aa6b2" font-size="8.5" text-anchor="middle">in the contract</text>
+      <text x="343" y="186" fill="#ff7b72" font-size="8.5" text-anchor="middle">read-then-write across calls</text>
+      <text x="343" y="202" fill="#ff7b72" font-size="8.5" text-anchor="middle">= TOCTOU race window</text>
+      <line x1="184" y1="160" x2="230" y2="160" stroke="#ff7b72" stroke-width="1.3" stroke-dasharray="3 3"/>
+    </svg>
+    </div>
+  </div>
+  <div class="arrow"><div class="glyph">&rarr;</div><div class="lbl">reshaped</div></div>
+  <div class="panel">
+    <div class="ptitle plan">Built · ClusterSink.persist(bundle)</div>
+    <div class="diagram">
+    <svg viewBox="0 0 470 300" role="img" aria-label="The ClusterSink port as built exposes one transactional method, persist, taking the whole bundle of run plus clusters plus members and returning a PersistResult. The single caller hands over the bundle in one call. Inside the production ClusterStore the read-decide-write happens around one isolated_transaction: it reads the existing run by id on the shared connection, decides between no-op, atomic-replace, and create, and writes accordingly under one transaction. There is no race window because the extension is the single writer and the trigger's single-flight guard prevents two TDT runs overlapping. The constitution's no-back-compat rule means the only two callers — the run_tdt stub and FakeClusterSink — were updated to the new shape, with no adapter bridging old and new.">
+      <rect x="14" y="14" width="200" height="50" rx="8" fill="#161b22" stroke="#2a313a"/>
+      <text x="114" y="35" fill="#d7dde4" font-size="10" text-anchor="middle">caller (run_tdt stub)</text>
+      <text x="114" y="50" fill="#768390" font-size="8.5" text-anchor="middle">+ FakeClusterSink · both updated</text>
+
+      <line x1="114" y1="64" x2="114" y2="92" stroke="#7ee787" stroke-width="1.6"/>
+      <text x="170" y="82" fill="#7ee787" font-size="8" text-anchor="middle">one call</text>
+      <rect x="14" y="92" width="200" height="50" rx="8" fill="rgba(126,231,135,.08)" stroke="#7ee787" stroke-width="1.5"/>
+      <text x="114" y="113" fill="#7ee787" font-size="10.5" text-anchor="middle" font-weight="bold">persist(bundle)</text>
+      <text x="114" y="130" fill="#9aa6b2" font-size="8.5" text-anchor="middle">→ Promise&lt;PersistResult&gt;</text>
+
+      <!-- one transaction box -->
+      <rect x="252" y="80" width="204" height="154" rx="9" fill="rgba(108,182,255,.05)" stroke="#6cb6ff" stroke-width="1.4"/>
+      <text x="354" y="102" fill="#6cb6ff" font-size="10" text-anchor="middle" font-weight="bold">read, then ONE transaction</text>
+      <text x="354" y="124" fill="#9aa6b2" font-size="8.5" text-anchor="middle">read existing run by id</text>
+      <text x="354" y="142" fill="#9aa6b2" font-size="8.5" text-anchor="middle">decide:</text>
+      <text x="354" y="158" fill="#7ee787" font-size="8.5" text-anchor="middle">no-op · replace · create (+ supersede)</text>
+      <text x="354" y="178" fill="#9aa6b2" font-size="8.5" text-anchor="middle">write accordingly</text>
+      <text x="354" y="206" fill="#6cb6ff" font-size="8.5" text-anchor="middle">single writer + single-flight guard</text>
+      <text x="354" y="222" fill="#6cb6ff" font-size="8.5" text-anchor="middle">= no TOCTOU race</text>
+      <line x1="214" y1="120" x2="252" y2="130" stroke="#6cb6ff" stroke-width="1.4"/>
+    </svg>
+    </div>
+  </div>
+</div>
+<figcaption>The contract has a single, atomic home for the idempotency decision. Under the no-back-compat rule the port was reshaped in place: the only two callers — the stub <code>run_tdt</code> and <code>FakeClusterSink</code> — moved to <code>persist(bundle)</code>, with no adapter bridging the three old writes. The three granular <code>write_*</code> methods could not express the read-decide-write unit.</figcaption>
+</figure>
+
+<!-- ===================================================== SEAM -->
+<h2 id="seam">The seam — what is pure (<code>tdt</code>) vs what is transactional (<code>vscode</code>)</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 360" role="img" aria-label="The cross-package seam. On the left, inside the pure @bergamot/tdt library with no database access: run_keying.ts computes three hashes — run_id from the canonicalized natural key, params_hash plus canonical params_json, input_fingerprint from the sorted page inputs — and a cluster_id as hash of run_id and local_label. persist.ts's assemble_run_bundle takes the HdbscanRaw labels and probabilities, the RepresentedCluster array, the ClusterLabel array, and the window's VisitRow array, and produces a bundle of one RunRecord, a ClusterRecord array, and a MemberRecord array — resolving each cluster's representative index to an exemplar_page_session_id and emitting one member row per page including noise. None of this touches the database; created_at is injected, so it is a deterministic function of its inputs, unit-testable with fakes. The bundle crosses the package boundary. On the right, inside the vscode extension, the single DuckDB writer: cluster_store.ts is the production ClusterSink, exposing persist(bundle). It reads the existing run by run.id on the shared connection, then runs the write in one isolated_transaction: explicit ordered deletes of members then clusters on the replace path, a supersede UPDATE retiring other live runs for the window, then repopulation; it returns a PersistResult. The decision lives here, not in tdt, because only here can the read of the existing run and the write be one atomic unit under the single-writer model.">
+  <defs>
+    <marker id="sa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+    <marker id="sg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+  </defs>
+
+  <!-- PURE side -->
+  <rect x="14" y="40" width="540" height="290" rx="12" fill="rgba(240,163,94,.04)" stroke="#f0a35e" stroke-width="1.5"/>
+  <text x="284" y="64" fill="#f0a35e" font-size="12" text-anchor="middle" font-weight="bold">PURE — @bergamot/tdt · no DB, deterministic, fake-tested</text>
+
+  <rect x="36" y="82" width="240" height="120" rx="9" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="156" y="103" fill="#6cb6ff" font-size="10.5" text-anchor="middle" font-weight="bold">run_keying.ts</text>
+  <text x="156" y="124" fill="#768390" font-size="8.5" text-anchor="middle">run_id = sha256(canonical natural key)</text>
+  <text x="156" y="139" fill="#768390" font-size="8.5" text-anchor="middle">params_hash + canonical params_json</text>
+  <text x="156" y="154" fill="#768390" font-size="8.5" text-anchor="middle">input_fingerprint = sha256(sorted inputs)</text>
+  <text x="156" y="169" fill="#768390" font-size="8.5" text-anchor="middle">cluster_id = hash(run_id | local_label)</text>
+  <text x="156" y="190" fill="#f0a35e" font-size="8" text-anchor="middle">identical logical run → identical hashes</text>
+
+  <rect x="296" y="82" width="240" height="120" rx="9" fill="#161b22" stroke="#7ee787"/>
+  <text x="416" y="103" fill="#7ee787" font-size="10.5" text-anchor="middle" font-weight="bold">persist.ts</text>
+  <text x="416" y="124" fill="#768390" font-size="8.5" text-anchor="middle">assemble_run_bundle(...)</text>
+  <text x="416" y="139" fill="#768390" font-size="8.5" text-anchor="middle">HdbscanRaw + RepresentedCluster[]</text>
+  <text x="416" y="154" fill="#768390" font-size="8.5" text-anchor="middle">+ ClusterLabel[] + VisitRow[]</text>
+  <text x="416" y="172" fill="#7ee787" font-size="8.5" text-anchor="middle">→ { run, clusters[], members[] }</text>
+  <text x="416" y="190" fill="#768390" font-size="8" text-anchor="middle">one member row / page (noise too)</text>
+
+  <rect x="36" y="222" width="500" height="44" rx="8" fill="#0c0f14" stroke="#2a313a"/>
+  <text x="286" y="241" fill="#9aa6b2" font-size="9" text-anchor="middle">resolves representative_index → exemplar_page_session_id · no DB call · pure index → id lookup over VisitRow[]</text>
+  <text x="286" y="256" fill="#768390" font-size="8.5" text-anchor="middle">created_at INJECTED · RunRecord / ClusterRecord / MemberRecord typed in tdt/src/types.ts</text>
+
+  <!-- bundle hand-off -->
+  <rect x="118" y="286" width="336" height="34" rx="8" fill="rgba(126,231,135,.08)" stroke="#7ee787"/>
+  <text x="286" y="307" fill="#7ee787" font-size="9.5" text-anchor="middle">RunBundle { run, clusters[], members[] } — crosses the boundary</text>
+
+  <!-- boundary arrow -->
+  <line x1="554" y1="180" x2="624" y2="180" stroke="#7ee787" stroke-width="2" marker-end="url(#sg)"/>
+  <text x="589" y="170" fill="#7ee787" font-size="8.5" text-anchor="middle">bundle</text>
+  <text x="589" y="196" fill="#768390" font-size="7.5" text-anchor="middle">package edge</text>
+
+  <!-- TRANSACTIONAL side -->
+  <rect x="626" y="40" width="540" height="290" rx="12" fill="rgba(108,182,255,.04)" stroke="#6cb6ff" stroke-width="1.5"/>
+  <text x="896" y="64" fill="#6cb6ff" font-size="12" text-anchor="middle" font-weight="bold">TRANSACTIONAL — vscode/ · the single DuckDB writer</text>
+
+  <rect x="648" y="82" width="496" height="50" rx="9" fill="#161b22" stroke="#6cb6ff"/>
+  <text x="896" y="103" fill="#6cb6ff" font-size="10.5" text-anchor="middle" font-weight="bold">cluster_store.ts — the production ClusterSink</text>
+  <text x="896" y="120" fill="#768390" font-size="8.5" text-anchor="middle">persist(bundle) → PersistResult · the ONE transactional method</text>
+
+  <rect x="648" y="148" width="496" height="120" rx="9" fill="rgba(108,182,255,.06)" stroke="#6cb6ff" stroke-width="1.4"/>
+  <text x="896" y="169" fill="#6cb6ff" font-size="10" text-anchor="middle" font-weight="bold">read existing run, then ONE isolated_transaction</text>
+  <text x="896" y="190" fill="#9aa6b2" font-size="8.5" text-anchor="middle">1 · read existing run WHERE id = run.id</text>
+  <text x="896" y="206" fill="#9aa6b2" font-size="8.5" text-anchor="middle">2 · decide no-op / atomic-replace / create</text>
+  <text x="896" y="222" fill="#9aa6b2" font-size="8.5" text-anchor="middle">3 · ordered delete (members→clusters) + supersede + repopulate</text>
+  <text x="896" y="244" fill="#7ee787" font-size="8.5" text-anchor="middle">single writer + single-flight guard — race-free, no TOCTOU</text>
+  <text x="896" y="259" fill="#768390" font-size="8" text-anchor="middle">dedicated connection · BEGIN / COMMIT / ROLLBACK (duck_db.ts)</text>
+
+  <rect x="648" y="286" width="496" height="34" rx="8" fill="#0c0f14" stroke="#2a313a"/>
+  <text x="896" y="307" fill="#9aa6b2" font-size="9" text-anchor="middle">WHY the decision lives HERE: only the writer can read the prior run and write it atomically</text>
+</svg>
+</div>
+<figcaption>The library only computes identities and assembles records — deterministic, fake-tested, no DB. The extension owns the one transactional decision: reading the prior run, then writing under one <code>isolated_transaction</code> on the single writer, is the only race-free place to decide, so <code>persist</code> (not the caller) makes it.</figcaption>
+</figure>
+
+<!-- ===================================================== STATE MACHINE -->
+<h2 id="machine">The idempotency state machine — the crux</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 470" role="img" aria-label="The idempotency decision in ClusterStore.persist. Entry: a bundle arrives carrying run.id (the run_id hash) and the run's input_fingerprint. The existing run is read first, then the write happens in one transaction. First decision diamond: does a row already exist in topic_run with this id? If NO, branch right to CREATE: insert the run with status complete, its clusters and its members. If a row DOES exist, second decision diamond: is the existing run complete AND does its stored input_fingerprint equal the bundle's fingerprint? If YES, NO-OP: return the existing run unchanged, write nothing — the cheap path that makes the scheduled trigger free on quiet days. If NO — the fingerprint differs — ATOMIC-REPLACE: in one transaction, explicit ordered DELETE of the run's members then its clusters, repopulate from the new bundle, and flip status back to complete, preserving created_at. The run_id is unchanged because the key is unchanged; only the data inside it is replaced. Crucially, BOTH the create and the atomic-replace paths run the same supersede UPDATE: any OTHER complete run for the same window_start and window_end is marked superseded, so exactly one complete run survives per window. No DB constraint enforces this; it lives in the persist control flow. History is retained — superseded runs' rows stay, only their status flips. A coloured legend ties each terminal to its colour: no-op blue, atomic-replace orange, supersede purple, create green.">
+  <defs>
+    <marker id="ma" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+  </defs>
+
+  <!-- entry -->
+  <rect x="468" y="18" width="244" height="56" rx="10" fill="#161b22" stroke="#2a313a"/>
+  <text x="590" y="40" fill="#d7dde4" font-size="10.5" text-anchor="middle" font-weight="bold">persist(bundle) — read, then one tx</text>
+  <text x="590" y="58" fill="#768390" font-size="8.5" text-anchor="middle">bundle carries run.id (run_id) + input_fingerprint</text>
+  <line x1="590" y1="74" x2="590" y2="100" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#ma)"/>
+
+  <!-- diamond 1: row exists? -->
+  <path d="M590 100 L720 162 L590 224 L460 162 Z" fill="#0c0f14" stroke="#6cb6ff" stroke-width="1.5"/>
+  <text x="590" y="156" fill="#6cb6ff" font-size="10" text-anchor="middle" font-weight="bold">row exists in</text>
+  <text x="590" y="170" fill="#6cb6ff" font-size="10" text-anchor="middle" font-weight="bold">topic_run WHERE id = run.id ?</text>
+
+  <!-- NO -> create (right) -->
+  <line x1="720" y1="162" x2="900" y2="162" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#ma)"/>
+  <text x="800" y="152" fill="#7ee787" font-size="9.5" text-anchor="middle" font-weight="bold">NO (new key)</text>
+
+  <rect x="900" y="116" width="262" height="92" rx="10" fill="rgba(126,231,135,.08)" stroke="#7ee787" stroke-width="1.5"/>
+  <text x="1031" y="138" fill="#7ee787" font-size="11" text-anchor="middle" font-weight="bold">CREATE</text>
+  <text x="1031" y="158" fill="#9aa6b2" font-size="8.5" text-anchor="middle">INSERT run + clusters + members</text>
+  <text x="1031" y="174" fill="#9aa6b2" font-size="8.5" text-anchor="middle">status = complete (written directly)</text>
+  <text x="1031" y="194" fill="#768390" font-size="8" text-anchor="middle">then ↓ the supersede UPDATE</text>
+
+  <line x1="1031" y1="208" x2="1031" y2="244" stroke="#d2a8ff" stroke-width="1.5" marker-end="url(#ma)"/>
+  <rect x="884" y="244" width="294" height="96" rx="10" fill="rgba(210,168,255,.08)" stroke="#d2a8ff" stroke-width="1.5"/>
+  <text x="1031" y="266" fill="#d2a8ff" font-size="11" text-anchor="middle" font-weight="bold">SUPERSEDE — BOTH paths</text>
+  <text x="1031" y="287" fill="#9aa6b2" font-size="8.5" text-anchor="middle">UPDATE any OTHER complete run for the</text>
+  <text x="1031" y="301" fill="#9aa6b2" font-size="8.5" text-anchor="middle">same (window_start, window_end)</text>
+  <text x="1031" y="315" fill="#9aa6b2" font-size="8.5" text-anchor="middle">SET status = superseded</text>
+  <text x="1031" y="333" fill="#768390" font-size="8" text-anchor="middle">one live run / window · no DB constraint · history kept</text>
+
+  <!-- YES -> diamond 2 (down) -->
+  <line x1="590" y1="224" x2="590" y2="256" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#ma)"/>
+  <text x="640" y="244" fill="#9aa6b2" font-size="9.5" text-anchor="middle">YES</text>
+
+  <path d="M590 256 L760 322 L590 388 L420 322 Z" fill="#0c0f14" stroke="#6cb6ff" stroke-width="1.5"/>
+  <text x="590" y="316" fill="#6cb6ff" font-size="9.5" text-anchor="middle" font-weight="bold">existing.status = complete</text>
+  <text x="590" y="330" fill="#6cb6ff" font-size="9.5" text-anchor="middle" font-weight="bold">AND fingerprint matches ?</text>
+
+  <!-- YES -> no-op (left) -->
+  <line x1="420" y1="322" x2="266" y2="322" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#ma)"/>
+  <text x="343" y="312" fill="#6cb6ff" font-size="9.5" text-anchor="middle" font-weight="bold">YES</text>
+  <rect x="18" y="288" width="248" height="68" rx="10" fill="rgba(108,182,255,.08)" stroke="#6cb6ff" stroke-width="1.5"/>
+  <text x="142" y="312" fill="#6cb6ff" font-size="11" text-anchor="middle" font-weight="bold">NO-OP</text>
+  <text x="142" y="330" fill="#9aa6b2" font-size="8.5" text-anchor="middle">return existing run · write nothing</text>
+  <text x="142" y="346" fill="#768390" font-size="8" text-anchor="middle">the cheap path — quiet-day trigger ≈ free</text>
+
+  <!-- NO -> atomic replace (down) -->
+  <line x1="590" y1="388" x2="590" y2="414" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#ma)"/>
+  <text x="660" y="404" fill="#f0a35e" font-size="9.5" text-anchor="middle" font-weight="bold">NO — fingerprint differs</text>
+  <rect x="356" y="414" width="468" height="50" rx="10" fill="rgba(240,163,94,.08)" stroke="#f0a35e" stroke-width="1.5"/>
+  <text x="590" y="434" fill="#f0a35e" font-size="11" text-anchor="middle" font-weight="bold">ATOMIC-REPLACE</text>
+  <text x="590" y="452" fill="#9aa6b2" font-size="8.5" text-anchor="middle">ordered DELETE members → clusters · UPDATE run · repopulate · status → complete · created_at kept · SAME run_id</text>
+
+  <!-- legend -->
+  <g font-size="9">
+    <rect x="18" y="40" width="12" height="12" rx="3" fill="rgba(108,182,255,.3)" stroke="#6cb6ff"/><text x="36" y="50" fill="#9aa6b2">no-op</text>
+    <rect x="100" y="40" width="12" height="12" rx="3" fill="rgba(240,163,94,.3)" stroke="#f0a35e"/><text x="118" y="50" fill="#9aa6b2">atomic-replace</text>
+    <rect x="230" y="40" width="12" height="12" rx="3" fill="rgba(210,168,255,.3)" stroke="#d2a8ff"/><text x="248" y="50" fill="#9aa6b2">supersede (both paths)</text>
+    <rect x="390" y="40" width="12" height="12" rx="3" fill="rgba(126,231,135,.3)" stroke="#7ee787"/><text x="408" y="50" fill="#9aa6b2">create</text>
+  </g>
+</svg>
+</div>
+<figcaption>Two questions in one transaction. <strong>Does the run_id row exist?</strong> No → create. Yes → <strong>does input_fingerprint match?</strong> Match → no-op; differ → atomic-replace (ordered delete + repopulate, same <code>run_id</code>). The supersede UPDATE runs on <strong>both</strong> create and replace paths — no DB constraint enforces "one live run per window"; this control flow does. No-op makes the 36.9 rebuild ~free on quiet days.</figcaption>
+</figure>
+
+<!-- ===================================================== KEYS -->
+<h2 id="keys">The two keys — <code>run_id</code> identifies the run, <code>input_fingerprint</code> detects data drift</h2>
+
+<p class="prose">Two distinct hashes answer two distinct questions. <code>run_id</code> answers "is this the same logical run?" — it is the row's identity. <code>input_fingerprint</code> answers "did the data inside the same logical run change?" — it is read only when a row with that <code>run_id</code> already exists.</p>
+
+<div class="grid2">
+  <div class="keycard rid">
+    <span class="tag">run_id — the run's IDENTITY (PK)</span>
+    <h3>sha256 of the canonicalized natural key</h3>
+    <div class="formula">run_id = sha256( canonical( window_start · window_end · params_hash · embedding_model_id · algo_version ) )</div>
+    <p style="font-size:.86rem;color:var(--fg-dim);margin:.4rem 0 0">Canonicalized so two logically-identical runs hash identically: window bounds normalized to one ISO form (<code>canonical_timestamp</code>), sorted-key <code>params_json</code>, shortest round-trip floats. <strong>A change here yields a NEW key</strong> — a different row that creates and supersedes the prior window run:</p>
+    <ul>
+      <li><span class="chg">window bounds</span> — the ACTUAL bounds used, including subdivision; stored in the same canonical form they are hashed in</li>
+      <li><span class="chg">params_hash</span> — HDBSCAN config + pooling + windowing policy + matryoshka dim (none visible in other columns)</li>
+      <li><span class="chg">embedding_model_id</span> — model + dim + page-representation rule version</li>
+      <li><span class="chg">algo_version</span> — bumps on clustering-tfjs BACKEND change, not just code</li>
+    </ul>
+  </div>
+  <div class="keycard fp">
+    <span class="tag">input_fingerprint — the DATA inside the run</span>
+    <h3>sha256 of the sorted actual inputs</h3>
+    <div class="formula">input_fingerprint = sha256( sorted (page_session_id, embedding_vector_version) )</div>
+    <p style="font-size:.86rem;color:var(--fg-dim);margin:.4rem 0 0">Same <code>run_id</code>, different fingerprint means the inputs shifted under a fixed key. <strong>A change here triggers an atomic-replace</strong>, not a new run. It catches the two ways a closed window's data can move:</p>
+    <ul>
+      <li><span class="chg">re-embedding</span> — a page's <code>embedding_vector_version</code> changed (sourced from <code>topic_page_vector.built_at</code>, rewritten on every re-embed), so the vector fed to HDBSCAN is different</li>
+      <li><span class="chg">a late-arriving visit</span> — capture is async and referrer chains backfill, so a visit whose <code>page_loaded_at</code> lands in an already-closed window adds a <code>page_session_id</code></li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout info">
+  <span class="label">Why canonicalize the window bounds, and why two keys not one</span>
+  <p>Bounds are normalized to one ISO form both where <code>run_id</code> is hashed and where the row is stored, so the supersede equality predicate can't miss the prior run on format drift. Keeping inputs OUT of <code>run_id</code> lets a late visit refresh the window in place rather than spawn a brand-new run.</p>
+</div>
+
+<!-- ===================================================== SCHEMA -->
+<h2 id="schema">The four tables — soft references, not foreign keys</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 470" role="img" aria-label="The four DuckDB tables and their relationships. topic_run is the parent: primary key id (the run_id hash), with window_start, window_end, params_hash, params_json, embedding_model_id, algo_version, input_count, input_fingerprint, cluster_count, noise_count, status, created_at, completed_at, and a UNIQUE constraint over the natural key. topic_cluster has primary key id (hash of run_id and local_label), a run_id soft reference to topic_run with NO foreign key, local_label, size, exemplar_page_session_id, the frozen representative_vector as a FLOAT array, coherence, the time span, the five labeler fields, and a NULL lifeline_id reserved for tracking. topic_cluster_member has a composite primary key of (run_id, page_session_id) — one cluster per page per run — with a run_id soft reference, a NULLABLE cluster_id soft reference set only when not noise, an is_noise boolean (true means HDBSCAN minus one), probability, the denormalized page_loaded_at, and is_exemplar. Critically, none of these cross-table links is a SQL FOREIGN KEY and there is no ON DELETE CASCADE: DuckDB rejects ON DELETE CASCADE outright and cannot delete a foreign-key parent and child in one transaction, both verified empirically, which would make the atomic-replace path impossible. They are plain TEXT soft references, drawn in grey with dashed edges. Referential integrity is upheld by ClusterStore.persist, which always writes and deletes a run's three tables together in one transaction via explicit ordered deletes. Separately, topic_page_vector — already built in task 36.3.1 — has primary key (page_session_id, embedding_model_id), the L2-normalized vector, repr, and built_at; it is the read-only page-vector cache, joined to runs only by sharing embedding_model_id, drawn detached with a dashed border.">
+  <defs>
+    <marker id="soft" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+  </defs>
+
+  <!-- topic_run -->
+  <rect x="30" y="40" width="300" height="250" rx="10" fill="#161b22" stroke="#6cb6ff" stroke-width="1.5"/>
+  <rect x="30" y="40" width="300" height="30" rx="10" fill="rgba(108,182,255,.12)" stroke="#6cb6ff"/>
+  <text x="46" y="60" fill="#6cb6ff" font-size="11" font-weight="bold">topic_run</text>
+  <text x="318" y="60" fill="#7ee787" font-size="8" text-anchor="end">NEW · the reproducibility unit</text>
+  <g font-size="8.8">
+    <text x="46" y="86" fill="#f0a35e" font-weight="bold">PK  id</text><text x="318" y="86" fill="#768390" text-anchor="end">sha256(natural key) = run_id</text>
+    <text x="46" y="100" fill="#d7dde4">window_start · window_end</text>
+    <text x="46" y="114" fill="#d7dde4">params_hash · params_json</text>
+    <text x="46" y="128" fill="#d7dde4">embedding_model_id</text>
+    <text x="46" y="142" fill="#d7dde4">algo_version</text>
+    <text x="46" y="156" fill="#d7dde4">input_count · input_fingerprint</text>
+    <text x="46" y="170" fill="#d7dde4">cluster_count · noise_count</text>
+    <text x="46" y="184" fill="#d2a8ff">status</text><text x="318" y="184" fill="#768390" text-anchor="end">complete (running|failed unused)</text>
+    <text x="46" y="198" fill="#d7dde4">created_at · completed_at</text>
+    <line x1="46" y1="210" x2="314" y2="210" stroke="#2a313a"/>
+    <text x="46" y="226" fill="#6cb6ff">UNIQUE (window_start, window_end,</text>
+    <text x="58" y="240" fill="#6cb6ff">params_hash, embedding_model_id, algo_version)</text>
+    <text x="46" y="262" fill="#768390">idx: (window_start, window_end)</text>
+    <text x="46" y="276" fill="#768390">idx: status</text>
+  </g>
+
+  <!-- topic_cluster -->
+  <rect x="440" y="40" width="320" height="250" rx="10" fill="#161b22" stroke="#7ee787" stroke-width="1.5"/>
+  <rect x="440" y="40" width="320" height="30" rx="10" fill="rgba(126,231,135,.12)" stroke="#7ee787"/>
+  <text x="456" y="60" fill="#7ee787" font-size="11" font-weight="bold">topic_cluster</text>
+  <text x="748" y="60" fill="#7ee787" font-size="8" text-anchor="end">NEW · one row / HDBSCAN label ≥ 0</text>
+  <g font-size="8.8">
+    <text x="456" y="86" fill="#f0a35e" font-weight="bold">PK  id</text><text x="748" y="86" fill="#768390" text-anchor="end">hash(run_id | local_label)</text>
+    <text x="456" y="100" fill="#9aa6b2">run_id → topic_run.id</text><text x="748" y="100" fill="#9aa6b2" text-anchor="end">SOFT ref (TEXT, no FK)</text>
+    <text x="456" y="114" fill="#d7dde4">local_label · size</text>
+    <text x="456" y="128" fill="#d7dde4">exemplar_page_session_id</text>
+    <text x="456" y="142" fill="#d7dde4">representative_vector  FLOAT[]</text><text x="748" y="142" fill="#768390" text-anchor="end">FROZEN · tracking input</text>
+    <text x="456" y="156" fill="#d7dde4">coherence · time_span_start/_end</text>
+    <text x="456" y="170" fill="#d2a8ff">headline_title · scope</text><text x="748" y="170" fill="#768390" text-anchor="end">36.5 labeler</text>
+    <text x="456" y="184" fill="#d2a8ff">keyphrases[] · display_label</text><text x="748" y="184" fill="#768390" text-anchor="end">NULL when empty list</text>
+    <text x="456" y="198" fill="#d2a8ff">representation_version</text>
+    <text x="456" y="212" fill="#768390">lifeline_id  (NULL — Phase-4 seam)</text>
+    <line x1="456" y1="224" x2="744" y2="224" stroke="#2a313a"/>
+    <text x="456" y="240" fill="#7ee787">UNIQUE (run_id, local_label)</text>
+    <text x="456" y="262" fill="#768390">idx: run_id</text>
+  </g>
+
+  <!-- topic_cluster_member -->
+  <rect x="440" y="320" width="320" height="138" rx="10" fill="#161b22" stroke="#f0a35e" stroke-width="1.5"/>
+  <rect x="440" y="320" width="320" height="30" rx="10" fill="rgba(240,163,94,.12)" stroke="#f0a35e"/>
+  <text x="456" y="340" fill="#f0a35e" font-size="11" font-weight="bold">topic_cluster_member</text>
+  <text x="748" y="340" fill="#7ee787" font-size="8" text-anchor="end">NEW · one row / (run, page)</text>
+  <g font-size="8.8">
+    <text x="456" y="366" fill="#f0a35e" font-weight="bold">PK  (run_id, page_session_id)</text><text x="748" y="366" fill="#768390" text-anchor="end">one cluster / page / run</text>
+    <text x="456" y="380" fill="#9aa6b2">run_id → topic_run.id</text><text x="748" y="380" fill="#9aa6b2" text-anchor="end">SOFT ref (no FK)</text>
+    <text x="456" y="394" fill="#9aa6b2">cluster_id → topic_cluster.id</text><text x="748" y="394" fill="#9aa6b2" text-anchor="end">NULLABLE SOFT ref</text>
+    <text x="456" y="408" fill="#d7dde4">is_noise BOOLEAN</text><text x="748" y="408" fill="#768390" text-anchor="end">TRUE ⇒ HDBSCAN −1, cluster_id NULL</text>
+    <text x="456" y="422" fill="#d7dde4">probability · page_loaded_at · is_exemplar</text>
+    <line x1="456" y1="432" x2="744" y2="432" stroke="#2a313a"/>
+    <text x="456" y="448" fill="#768390">idx: cluster_id · idx: page_session_id</text>
+  </g>
+
+  <!-- soft-ref edges -->
+  <line x1="330" y1="100" x2="440" y2="100" stroke="#9aa6b2" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#soft)"/>
+  <text x="385" y="92" fill="#9aa6b2" font-size="8" text-anchor="middle">soft ref</text>
+  <path d="M330 130 C 380 130, 380 380, 440 380" fill="none" stroke="#9aa6b2" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#soft)"/>
+  <text x="372" y="270" fill="#9aa6b2" font-size="8" text-anchor="middle">soft ref</text>
+  <line x1="600" y1="290" x2="600" y2="320" stroke="#9aa6b2" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#soft)"/>
+  <text x="644" y="310" fill="#9aa6b2" font-size="8" text-anchor="middle">soft ref</text>
+
+  <!-- why-no-FK callout -->
+  <rect x="800" y="116" width="350" height="158" rx="9" fill="rgba(255,123,114,.05)" stroke="#ff7b72" stroke-width="1.3"/>
+  <text x="975" y="138" fill="#ff7b72" font-size="10" text-anchor="middle" font-weight="bold">WHY no FOREIGN KEY / no CASCADE</text>
+  <text x="975" y="160" fill="#9aa6b2" font-size="8.5" text-anchor="middle">DuckDB rejects ON DELETE CASCADE (parser error)</text>
+  <text x="975" y="176" fill="#9aa6b2" font-size="8.5" text-anchor="middle">AND cannot delete an FK parent + child in</text>
+  <text x="975" y="190" fill="#9aa6b2" font-size="8.5" text-anchor="middle">one transaction — both verified empirically</text>
+  <text x="975" y="210" fill="#9aa6b2" font-size="8.5" text-anchor="middle">either would make atomic-replace impossible</text>
+  <text x="975" y="232" fill="#7ee787" font-size="8.5" text-anchor="middle">integrity = ClusterStore.persist writing +</text>
+  <text x="975" y="246" fill="#7ee787" font-size="8.5" text-anchor="middle">deleting a run's 3 tables together, one tx,</text>
+  <text x="975" y="260" fill="#7ee787" font-size="8.5" text-anchor="middle">explicit ordered deletes members → clusters</text>
+
+  <!-- topic_page_vector (detached) -->
+  <rect x="800" y="320" width="350" height="138" rx="10" fill="#0c0f14" stroke="#768390" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <rect x="800" y="320" width="350" height="30" rx="10" fill="rgba(118,131,144,.1)" stroke="#768390" stroke-dasharray="5 4"/>
+  <text x="816" y="340" fill="#9aa6b2" font-size="11" font-weight="bold">topic_page_vector</text>
+  <text x="1138" y="340" fill="#768390" font-size="8" text-anchor="end">EXISTS · built in 36.3.1</text>
+  <g font-size="8.8">
+    <text x="816" y="366" fill="#f0a35e" font-weight="bold">PK  (page_session_id, embedding_model_id)</text>
+    <text x="816" y="382" fill="#d7dde4">vector FLOAT[]</text><text x="1138" y="382" fill="#768390" text-anchor="end">L2-normalized</text>
+    <text x="816" y="396" fill="#d7dde4">repr · built_at</text><text x="1138" y="396" fill="#768390" text-anchor="end">built_at = vector_version</text>
+    <line x1="816" y1="408" x2="1134" y2="408" stroke="#2a313a"/>
+    <text x="816" y="424" fill="#768390">read-only page-vector cache</text>
+    <text x="816" y="438" fill="#768390">no ref to runs — shares embedding_model_id only</text>
+    <text x="816" y="452" fill="#768390">a model change → new run key, stale vector never read</text>
+  </g>
+</svg>
+</div>
+<div class="legend">
+  <span><span class="box add"></span> created by this task (36.6)</span>
+  <span><span class="box same"></span> already exists (36.3.1)</span>
+  <span><span style="color:var(--fg-dim);font-weight:700">⤍</span> soft ref (plain TEXT, no FK / no CASCADE)</span>
+</div>
+<figcaption>Three new tables join the existing <code>topic_page_vector</code> cache, created by the extension's writer in <code>create_metadata_schema</code>. Cross-table links are plain <code>TEXT</code> soft references — <strong>no <code>FOREIGN KEY</code>, no <code>ON DELETE CASCADE</code></strong>, both rejected by DuckDB. Integrity comes from <code>ClusterStore.persist</code> writing and deleting a run's three tables together in one transaction. Noise is a member row, never a cluster row.</figcaption>
+</figure>
+
+<div class="callout warn">
+  <span class="label">Noise = a member row, never a cluster row, never a NULL-sentinel</span>
+  <p>A <code>−1</code> page gets a <code>topic_cluster_member</code> row with <code>is_noise = TRUE</code> and <code>cluster_id = NULL</code> — but the coverage query reads the <code>is_noise</code> flag, not the NULL <code>cluster_id</code>. Persisting noise (not omitting it) makes coverage derivable from the cluster tables alone, with no re-join and no "noise" vs "not yet processed" confusion.</p>
+</div>
+
+<!-- ===================================================== ASSEMBLE -->
+<h2 id="assemble">assemble → persist — how clustering output becomes rows</h2>
+
+<p class="prose">The same six-page window from 36.5 (one React cluster, one Hacker News noise page) assembled into rows: one <code>topic_cluster</code> row for label 0, and <strong>six</strong> <code>topic_cluster_member</code> rows — one per page, the noise page included.</p>
+
+<figure>
+<table>
+  <thead>
+    <tr><th>page_session_id</th><th>label · p</th><th class="c">cluster_id</th><th class="c">is_noise</th><th class="c">is_exemplar</th><th class="c">→ member row written?</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>page#0 (react.dev/learn)</td><td class="c">0 · 0.71</td><td class="c">cl#0</td><td class="c">false</td><td class="c">false</td><td class="c">yes</td></tr>
+    <tr class="exem"><td>page#1 (react.dev/reference)</td><td class="c">0 · <strong>0.95</strong></td><td class="c">cl#0</td><td class="c">false</td><td class="c"><strong>true</strong></td><td class="c">yes</td></tr>
+    <tr><td>page#2 (nextjs.org/docs)</td><td class="c">0 · 0.62</td><td class="c">cl#0</td><td class="c">false</td><td class="c">false</td><td class="c">yes</td></tr>
+    <tr class="noise"><td>page#3 (news.ycombinator.com)</td><td class="c">−1 · 0.0</td><td class="c">NULL</td><td class="c"><strong>true</strong></td><td class="c">false</td><td class="c">yes (noise)</td></tr>
+    <tr><td>page#4 (react.dev/learn)</td><td class="c">0 · 0.68</td><td class="c">cl#0</td><td class="c">false</td><td class="c">false</td><td class="c">yes</td></tr>
+    <tr><td>page#5 (developer.mozilla.org)</td><td class="c">0 · 0.55</td><td class="c">cl#0</td><td class="c">false</td><td class="c">false</td><td class="c">yes</td></tr>
+  </tbody>
+</table>
+<figcaption>One <code>topic_cluster</code> row (<code>cl#0 = hash(run_id | 0)</code>, <code>exemplar_page_session_id = page#1</code> from step 5's representative_index, frozen representative vector, the 36.5 label bundle). Six member rows — coverage over this window is <code>5 / 6</code> directly, because the noise page is present as a row, not absent. The run row records <code>input_count = 6</code>, <code>cluster_count = 1</code>, <code>noise_count = 1</code>.</figcaption>
+</figure>
+
+<div class="code">
+  <div class="file-label"><span class="new">tdt/src/persist.ts</span> &nbsp;·&nbsp; pure assembly — no DB, deterministic (created_at injected), returns the bundle the sink persists</div>
+<pre><span class="cm">// Pure: clustering output → records. No DuckDB, no transaction, no clock — that</span>
+<span class="cm">// is the extension's job. One member row PER PAGE, noise included, so coverage</span>
+<span class="cm">// is derivable from the member rows alone (plan §8).</span>
+<span class="kw">export function</span> <span class="fn">assemble_run_bundle</span>(args: <span class="typ">AssembleArgs</span>): <span class="typ">RunBundle</span> {
+  <span class="cm">// run_id keys off canonicalized window bounds, and the row stores THAT form,</span>
+  <span class="cm">// so the supersede equality predicate can't miss on ISO-format drift.</span>
+  <span class="kw">const</span> window_start = <span class="fn">canonical_timestamp</span>(args.window_start);
+  <span class="kw">const</span> window_end = <span class="fn">canonical_timestamp</span>(args.window_end);
+  <span class="kw">const</span> run_id = <span class="fn">compute_run_id</span>({ window_start, window_end, params_hash, embedding_model_id, algo_version });
+  <span class="kw">const</span> input_fingerprint = <span class="fn">compute_input_fingerprint</span>(...);   <span class="cm">// sorted (page_session_id, vector_version)</span>
+
+  <span class="kw">const</span> members: <span class="typ">MemberRecord</span>[] = args.visits.<span class="fn">map</span>((v, i) =&gt; {
+    <span class="kw">const</span> is_noise = args.raw.labels[i] &lt; <span class="num">0</span>;                  <span class="cm">// HDBSCAN −1</span>
+    <span class="kw">return</span> {
+      run_id, page_session_id: v.page_session_id,
+      cluster_id: is_noise ? <span class="kw">null</span> : cluster_id_by_label.<span class="fn">get</span>(args.raw.labels[i]), <span class="hl">  <span class="cm">// set iff !is_noise</span></span>
+      is_noise, probability: is_noise ? <span class="num">0</span> : args.raw.probabilities[i],
+      page_loaded_at: v.page_loaded_at,                       <span class="cm">// denormalized for time filters</span>
+      is_exemplar: exemplar_rows.<span class="fn">has</span>(i),                    <span class="cm">// step-5 representative_index</span>
+    };
+  });
+  <span class="cm">// run.status = 'complete' written directly; 'running'/'failed' are a 36.9 seam.</span>
+  <span class="kw">return</span> { run, clusters, members };
+}</pre>
+</div>
+
+<!-- ===================================================== COVERAGE -->
+<h2 id="coverage">The coverage query — clustered / total, from the cluster tables alone</h2>
+
+<div class="code">
+  <div class="file-label"><span class="edit">cluster_store.ts · coverage()</span> &nbsp;·&nbsp; clustered / total over one run's member rows · no re-join to capture tables</div>
+<pre><span class="cm">-- AC #4: per-window coverage from topic_cluster_member alone.</span>
+<span class="cm">-- is_noise (not a NULL cluster_id) is the signal, so the math is NULL-free.</span>
+<span class="kw">SELECT</span>
+  count(*)                                  <span class="kw">AS</span> total,
+  count(*) <span class="kw">FILTER</span> (<span class="kw">WHERE NOT</span> is_noise) <span class="kw">AS</span> clustered,
+  count(*) <span class="kw">FILTER</span> (<span class="kw">WHERE</span> is_noise)     <span class="kw">AS</span> noise
+<span class="kw">FROM</span> topic_cluster_member
+<span class="kw">WHERE</span> run_id = $run_id;   <span class="cm">-- coverage = clustered / total in JS; null when total = 0</span>
+<span class="cm">-- for the six-page window above: 5 / 6 = 0.833</span></pre>
+</div>
+
+<div class="callout good">
+  <span class="label">Why noise must be persisted for this to work</span>
+  <p>If noise pages were omitted, <code>total</code> would only count clustered pages and coverage would always read <code>1.0</code> — meaningless. Persisting one member row per page, noise flagged, makes the denominator the true window size. The run row also caches <code>cluster_count</code> and <code>noise_count</code> for a row-free read, but the member-row query is the authoritative, re-derivable source.</p>
+</div>
+
+<!-- ===================================================== FORGET -->
+<h2 id="forget">The cluster tables join the right-to-forget cascade</h2>
+
+<div class="steps">
+  <div class="step">
+    <div class="badge cre">1</div>
+    <div class="body">
+      <h3>The cascade is a single home — every derived store joins it as it lands</h3>
+      <p><code>vscode/src/right_to_forget.ts</code> deletes the metadata tables, the <code>topic_page_vector</code> cache (36.3.1), the TDT cluster memberships (this task), and the encrypted content cache. This slice deletes a forgotten page's cluster membership inside the same dedicated-connection metadata transaction.</p>
+      <span class="loc">vscode/src/right_to_forget.ts · forget_metadata · parent AC #7</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge repl">2</div>
+    <div class="body">
+      <h3>It deletes <code>topic_cluster_member</code> rows only — never the <code>topic_cluster</code> / <code>topic_run</code> rows</h3>
+      <p>A forget resolves a selector to a set of <code>page_session_id</code>s and deletes their <code>topic_cluster_member</code> rows in the same transaction as the metadata they derive from. Clusters and runs are left for the next run to re-key and atomically replace — a bounded, non-reconstructable residual.</p>
+      <span class="loc">DELETE FROM topic_cluster_member WHERE page_session_id IN (...) · same isolated_transaction</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge sup">3</div>
+    <div class="body">
+      <h3>Why members, not clusters — the per-page vector is reconstructable, the aggregate is not</h3>
+      <p>The per-page embedding (<code>topic_page_vector</code>) is the reconstructable artifact and is deleted. A cluster's frozen <code>representative_vector</code> is an irreversible aggregate and a run is window-level provenance, so they stay until the next clustering pass re-keys the window (its <code>input_fingerprint</code> changes) and replaces them — the same <code>isolated_transaction</code> primitive <code>persist</code> uses.</p>
+      <span class="loc">vscode/src/duck_db.ts · isolated_transaction · dedicated connection BEGIN/COMMIT/ROLLBACK</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===================================================== AC -->
+<h2 id="ac">Acceptance criteria — and how each was met</h2>
+
+<figure>
+<table>
+  <thead><tr><th>#</th><th>Acceptance criterion</th><th>How it was met</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="c">#1</td>
+      <td><code>topic_run</code>, <code>topic_cluster</code>, <code>topic_cluster_member</code>, <code>topic_page_vector</code> created by the extension's writer; reads/writes honor the single-writer model</td>
+      <td>The 3 new tables join <code>create_metadata_schema</code> beside the existing <code>topic_page_vector</code>; all writes go through the extension's single writer; the batch CLI reads only</td>
+    </tr>
+    <tr>
+      <td class="c">#2</td>
+      <td><code>run_id</code> = hash of (window bounds, params_hash, embedding_model_id, algo_version); same key + unchanged fingerprint is a no-op</td>
+      <td><code>run_keying.ts</code> hashes the canonicalized natural key; <code>persist</code> returns the existing complete run unchanged when the stored <code>input_fingerprint</code> matches</td>
+    </tr>
+    <tr>
+      <td class="c">#3</td>
+      <td>Changed fingerprint → atomic replace; changed model/params/algo → supersede; fingerprint detects re-embedding + late visits</td>
+      <td>Differing fingerprint runs explicit ordered deletes and repopulates under the same <code>run_id</code>; a new key creates and the supersede UPDATE (run on both paths) marks the prior live window run <code>superseded</code>; the fingerprint hashes <code>(page_session_id, embedding_vector_version)</code></td>
+    </tr>
+    <tr>
+      <td class="c">#4</td>
+      <td>Noise persisted via a non-null <code>is_noise</code> flag; per-window coverage queryable from the cluster tables alone</td>
+      <td>Each page gets a member row; noise is <code>is_noise = TRUE</code> with NULL <code>cluster_id</code>; <code>coverage = COUNT(*) FILTER (WHERE NOT is_noise) / COUNT(*)</code> needs no capture-table re-join</td>
+    </tr>
+    <tr>
+      <td class="c">#5</td>
+      <td>Tests cover no-op, atomic-replace, supersede, and the coverage query</td>
+      <td><code>cluster_store.test.ts</code> exercises <code>persist</code> against a real DuckDB: re-run same key+fingerprint (no-op), changed fingerprint incl. late-visit + created_at preservation (replace), changed key (supersede, history retained, one live run/window), the natural-key UNIQUE guard, the assemble→persist seam, and the coverage SQL</td>
+    </tr>
+  </tbody>
+</table>
+</figure>
+
+<div class="callout key">
+  <span class="label">Net effect</span>
+  <p>A clustering run is now durable, reproducible, and idempotent: an unchanged window costs nothing, a re-embed or late visit refreshes it atomically, and a model/params/algo change creates a new run while superseding the prior one — history retained, exactly one live run per window.</p>
+  <p>The pure library owns identity and assembly; the extension owns the one race-free read-decide-write. Next, 36.7 adds the validation score, and 36.9 wires the trigger that calls <code>persist</code> off the event loop (and where <code>'running'</code>/<code>'failed'</code> become live).</p>
+</div>
+
+<footer>
+  Companion for <code>task-36.6</code> (status: done · build-order step 6) — persistence, run keying, idempotency · branch <code>tdt</code> ·
+  spec <code>task-36.6 ….md</code> (5 ACs + Implementation Notes / Decisions) ·
+  design <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> §8 ·
+  types <code>tdt/src/types.ts</code> (RunRecord · ClusterRecord · MemberRecord) ·
+  port <code>tdt/src/ports.ts</code> (ClusterSink = single persist(bundle)) ·
+  pure <code>tdt/src/run_keying.ts</code> · <code>tdt/src/persist.ts</code> · transactional <code>vscode/src/tdt/cluster_store.ts</code> ·
+  schema <code>vscode/src/duck_db.ts</code> create_metadata_schema (soft refs, no FK) · transaction primitive isolated_transaction ·
+  cascade <code>vscode/src/right_to_forget.ts</code> (member rows only).
+</footer>
+
+</main>
+</body>
+</html>

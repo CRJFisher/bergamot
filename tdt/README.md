@@ -44,8 +44,9 @@ The dependency direction is one-way: `vscode/` depends on `@bergamot/tdt`;
 
 All four are defined in `src/ports.ts`. The library calls them; the caller
 supplies the concrete implementations. The data shapes they pass (`VisitRow`,
-`RunRecord`, `ClusterRecord`, `MemberRecord`, etc.) are defined in `src/types.ts`,
-a dependency-free leaf module that `ports.ts` imports.
+`RunRecord`, `ClusterRecord`, `MemberRecord`, `RunBundle`, `PersistResult`, etc.)
+are defined in `src/types.ts`, a dependency-free leaf module that `ports.ts`
+imports.
 
 - **`RelationalReader`** — reads captured visit rows from DuckDB for a time
   window (`list_visits_in_window(start, end)`), ordered deterministically by
@@ -64,10 +65,14 @@ a dependency-free leaf module that `ports.ts` imports.
   write a freshly built one. Supplied by the extension's DuckDB writer so
   re-runs reuse cached vectors and a model change is a clean cache invalidation.
 
-- **`ClusterSink`** — the write path for clustering results: `write_run`,
-  `write_clusters`, `write_members`. Supplied by the extension's single DuckDB
-  writer, which persists the handed-back results in one short transaction. The
-  batch CLI does read+compute only and supplies no sink.
+- **`ClusterSink`** — the idempotent write path for one window's result:
+  `persist(bundle: RunBundle) => Promise<PersistResult>`. A single method, not
+  three granular writes, because no-op / atomic-replace / supersede is one atomic
+  read-decide-write over current DB state (the pure library hands over a fully-keyed
+  `RunBundle` from `assemble_run_bundle`; the sink decides). Supplied by the
+  extension's single DuckDB writer (`vscode/src/tdt/cluster_store.ts`), which
+  persists run + clusters + members in one short transaction. The batch CLI does
+  read+compute only and supplies no sink.
 
 ## Wiring it up
 

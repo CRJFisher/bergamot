@@ -48,9 +48,11 @@ export interface RunNaturalKey {
 /** One page's contribution to the input fingerprint. */
 export interface FingerprintEntry {
   page_session_id: string;
-  // A token that changes iff the page's stored vector changed — the
-  // topic_page_vector freshness marker (its built_at, bumped on every re-embed).
-  // Sourced by the caller; this module only needs it to be a stable per-vector id.
+  // An OPAQUE per-vector token, compared byte-for-byte (NOT parsed — unlike the
+  // window bounds, it is never canonicalized here, so the caller must pass a
+  // stable form). It must change iff the page's stored vector changed. The TASK-36.9
+  // orchestrator sources it from topic_page_vector.built_at (rewritten on every
+  // re-embed), which is why a re-embed flips the fingerprint and triggers a replace.
   embedding_vector_version: string;
 }
 
@@ -83,8 +85,23 @@ export function canonical_json(value: unknown): string {
     return `[${value.map(canonical_json).join(",")}]`;
   }
   if (typeof value === "object") {
+    // Only plain objects are hashable. A Date, Map, Set, or class instance has no
+    // own enumerable keys (or non-JSON state), so it would silently serialize to
+    // "{}" — distinct values collapsing to one preimage, the exact opposite of a
+    // determinism guarantee. Reject it loudly instead.
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) {
+      throw new Error(
+        "canonical_json: only plain objects, arrays, and primitives are hashable " +
+          "(got a non-plain object — e.g. Date/Map/Set/class instance)",
+      );
+    }
     const obj = value as Record<string, unknown>;
-    const keys = Object.keys(obj).sort();
+    // Drop undefined-valued keys, matching JSON.stringify's omission, so an
+    // omitted optional field and one explicitly set to undefined hash identically.
+    const keys = Object.keys(obj)
+      .filter((k) => obj[k] !== undefined)
+      .sort();
     return `{${keys
       .map((k) => `${JSON.stringify(k)}:${canonical_json(obj[k])}`)
       .join(",")}}`;

@@ -225,7 +225,7 @@ describe("right-to-forget cascade", () => {
         params_hash: "ph",
         params_json: "{}",
         embedding_model_id: VECTOR_MODEL_ID,
-        algo_version: "hdbscan-1#wasm",
+        algo_version: "hdbscan-1#clustering-tfjs@0.6.1#wasm",
         input_count: 2,
         input_fingerprint: "fp",
         cluster_count: 1,

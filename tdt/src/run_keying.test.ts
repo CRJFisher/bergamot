@@ -56,6 +56,52 @@ describe("canonical_json", () => {
     expect(() => canonical_json(Infinity)).toThrow(/non-finite/);
     expect(() => canonical_json(-Infinity)).toThrow(/non-finite/);
   });
+
+  it("throws on a non-plain object (Date/Map/Set) instead of collapsing it to {}", () => {
+    expect(() => canonical_json(new Date(0))).toThrow(/plain object/);
+    expect(() => canonical_json(new Map([["a", 1]]))).toThrow(/plain object/);
+    expect(() => canonical_json(new Set([1, 2]))).toThrow(/plain object/);
+  });
+
+  it("omits undefined-valued keys, so an omitted optional and an explicit-undefined hash identically", () => {
+    expect(canonical_json({ a: 1, b: undefined })).toBe(canonical_json({ a: 1 }));
+    expect(canonical_json({ a: 1, b: undefined })).toBe('{"a":1}');
+  });
+
+  it("serializes a null-prototype object (Object.create(null)) like a plain object", () => {
+    const o = Object.create(null) as Record<string, unknown>;
+    o.a = 1;
+    expect(canonical_json(o)).toBe('{"a":1}');
+  });
+});
+
+// Bitwise-stable golden digests. These pin the canonical hash preimage across
+// builds: run_id is a PERSISTED cache key, so a silent change to canonical_json
+// (key order, number formatting) would invalidate every stored run with no other
+// test failing. If one of these breaks, the hashing changed — bump algo_version
+// deliberately rather than "fixing" the expected value.
+describe("hash stability (golden vectors)", () => {
+  it("compute_params_hash over the default params is a fixed digest", () => {
+    expect(compute_params_hash(PARAMS)).toBe(
+      "b54f5fe328be74e486dce2c86d0415901d3b5b8c8283b717f3c820165f5e65c4",
+    );
+  });
+
+  it("compute_run_id over the fixed key is a fixed digest", () => {
+    expect(compute_run_id(KEY)).toBe(
+      "f66a506f28e27f3c0d9832fad4f044f539d2385a2bb826727c278666c9bed62c",
+    );
+  });
+
+  it("compute_input_fingerprint over a fixed pair list is a fixed digest", () => {
+    const entries = [
+      { page_session_id: "p1", embedding_vector_version: "v1" },
+      { page_session_id: "p2", embedding_vector_version: "v2" },
+    ];
+    expect(compute_input_fingerprint(entries)).toBe(
+      "bb5a0cfb42ba9e7ff3156528b060f0a9499162aca855108a4752108f14fff4cf",
+    );
+  });
 });
 
 describe("canonical_timestamp", () => {

@@ -696,7 +696,7 @@ CREATE INDEX IF NOT EXISTS idx_topic_run_status ON topic_run(status);
 -- One row per CLUSTER (HDBSCAN label >= 0). Noise (-1) is NOT a cluster row.
 CREATE TABLE IF NOT EXISTS topic_cluster (
   id                       TEXT PRIMARY KEY,   -- hash(run_id | local_label)
-  run_id                   TEXT NOT NULL REFERENCES topic_run(id) ON DELETE CASCADE,
+  run_id                   TEXT NOT NULL,      -- soft ref -> topic_run.id (no FK; see note below)
   local_label              INTEGER NOT NULL,   -- HDBSCAN labels_ value (>= 0), run-local
   size                     INTEGER NOT NULL,
   exemplar_page_session_id TEXT NOT NULL,      -- representative page (soft ref -> activity_sessions.id)
@@ -717,9 +717,9 @@ CREATE INDEX IF NOT EXISTS idx_topic_cluster_run ON topic_cluster(run_id);
 -- One row per (run, page). PK enforces one cluster per page per run.
 -- Noise is recorded explicitly via is_noise (NOT NULL cluster_id when clustered; no NULL-aware SQL).
 CREATE TABLE IF NOT EXISTS topic_cluster_member (
-  run_id           TEXT NOT NULL REFERENCES topic_run(id) ON DELETE CASCADE,
+  run_id           TEXT NOT NULL,                       -- soft ref -> topic_run.id (no FK; see note below)
   page_session_id  TEXT NOT NULL,                       -- soft ref -> activity_sessions.id
-  cluster_id       TEXT REFERENCES topic_cluster(id) ON DELETE CASCADE,  -- set iff NOT is_noise
+  cluster_id       TEXT,                                -- soft ref -> topic_cluster.id; set iff NOT is_noise
   is_noise         BOOLEAN NOT NULL DEFAULT FALSE,      -- TRUE => HDBSCAN -1
   probability      DOUBLE NOT NULL,                     -- probabilities_ [0,1]; 0 for noise
   page_loaded_at   TEXT NOT NULL,                       -- denormalized for time filtering
@@ -740,6 +740,15 @@ CREATE TABLE IF NOT EXISTS topic_page_vector (
   PRIMARY KEY (page_session_id, embedding_model_id)
 );
 ```
+
+**Cross-table references are SOFT refs (plain TEXT, no `FOREIGN KEY`), as built (TASK-36.6).**
+DuckDB rejects `REFERENCES ... ON DELETE CASCADE` outright (a parser error) and cannot delete a
+foreign-key parent and child in the same transaction — both verified empirically against
+`@duckdb/node-api`. Either limitation alone makes the atomic-replace path (delete
+members→clusters→run, repopulate, all in one transaction) impossible, so the FK clauses shown in
+the original DDL were dropped. Referential integrity is upheld in application code: the extension's
+writer always inserts and deletes a run's three tables together in one transaction, deleting
+children before parents (members → clusters → run).
 
 TDT's micro tier needs only get/put on this cache — clustering runs over a precomputed dense
 cosine matrix, not nearest-neighbor search. Downstream similarity search arrives with RAG
@@ -780,10 +789,13 @@ logically-identical runs hash identically.
   in a closed window is likewise caught (capture is async; referrer chains backfill).
 
 Re-running with the same key and same fingerprint is a **no-op** (return the existing
-`complete` run). Same key + changed fingerprint, or a forced recompute, does an **atomic
-replace** (CASCADE-delete the run's clusters/members, repopulate, flip to `complete`).
-Changing model/algo/params yields a **new** key; the prior run for that window is marked
-`superseded` (one live run per window; history retained).
+`complete` run). Same key + changed fingerprint does an **atomic replace** (explicitly delete the
+run's members then clusters — soft refs, so the order is the writer's responsibility — repopulate,
+flip to `complete`). Changing model/algo/params yields a **new** key; the prior run for that window
+is marked `superseded` (one live run per window; history retained). As built (TASK-36.6) the
+supersede UPDATE runs on both the replace and create paths, so exactly one `complete` run survives
+per window. A forced-recompute flag is not built — `input_fingerprint` already drives every required
+replace (YAGNI).
 
 ### Per-run cost model
 

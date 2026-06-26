@@ -21,13 +21,17 @@
  *
  * A forget removes a forgotten page's `topic_cluster_member` rows (which carry its
  * `page_session_id` and a denormalized `page_loaded_at` — visit metadata). It does
- * NOT delete the `topic_cluster` / `topic_run` rows: a cluster's frozen
- * `representative_vector` is an irreversible aggregate (the L2-normalized mean of
- * many member vectors), not reconstructable page content, and a run is a
- * window-level reproducibility record, not page-owned. The per-page embedding —
- * the reconstructable artifact — lives in `topic_page_vector` and IS deleted. The
- * next clustering run over that window re-keys without the forgotten page (its
- * `input_fingerprint` changes) and atomically replaces the stale aggregates.
+ * NOT delete the `topic_cluster` / `topic_run` rows. The per-page embedding — the
+ * reconstructable artifact — lives in `topic_page_vector` and IS deleted; what a
+ * retained cluster keeps is its frozen `representative_vector` (the L2-normalized
+ * mean of its members) and `exemplar_page_session_id`. The mean is an irreversible
+ * aggregate, but honestly: for a small cluster (min size 3) it still carries a
+ * bounded contribution from a forgotten member, and the retained cluster may now
+ * reference a forgotten exemplar page or overstate its `size`. This residual is
+ * accepted because it is non-reconstructable and short-lived — the next clustering
+ * run over that window re-keys without the forgotten page (its `input_fingerprint`
+ * changes) and atomically replaces the stale cluster/run. Consumers must therefore
+ * tolerate a dangling `exemplar_page_session_id` (it is a soft ref) until then.
  *
  * Ordering and atomicity, honestly: the metadata-side deletes run in one
  * transaction on a dedicated connection (the empty-tree sweep necessarily
