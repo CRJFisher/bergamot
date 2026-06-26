@@ -40,6 +40,10 @@ export interface HdbscanConfig {
   epsilon: number; // clusterSelectionEpsilon, cosine-distance units
 }
 
+// These are the GRID's starting points (the search space). The validation sweep
+// selects an operating point from the grid into operating_point.json (see
+// validation/operating_point.ts); at runtime that file, parameterized by window
+// size, is the operative value — re-tuning is a data change, not a code change.
 export const DEFAULT_HDBSCAN_CONFIG = {
   min_cluster_size: 3,
   min_samples: 5,

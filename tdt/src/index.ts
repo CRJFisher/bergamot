@@ -51,11 +51,14 @@ export {
   dedupe_visits,
 } from "./page_vectors";
 
-// Validation harness (task-36.7). The tf-free pieces — scoring, the operating
-// point, and all DTOs — are re-exported; validation/sweep.ts is NOT (it imports
-// clustering-tfjs PCA and reuses cluster_window, pulling the native TensorFlow
-// chain), exactly like cluster_window.ts / representations.ts above. The
-// orchestrator (TASK-36.9) imports sweep.ts directly.
+// Validation harness (task-36.7). The tf-free pieces — scoring, the cadence/
+// report helpers, the operating point, and all DTOs — are re-exported;
+// validation/sweep.ts is NOT (it imports clustering-tfjs PCA and reuses
+// cluster_window, pulling the native TensorFlow chain), exactly like
+// cluster_window.ts / representations.ts above. The orchestrator (TASK-36.9)
+// imports its entry points — run_sweep, evaluate_guardrail — from
+// ./validation/sweep directly, then feeds the results to the tf-free
+// summarize_validation / select_operating_point re-exported here.
 export type {
   Reduction,
   WindowInput,
@@ -68,6 +71,7 @@ export type {
   GuardrailVerdict,
   PromotionVerdict,
   VisitsPerMonth,
+  ValidationReport,
   KnownProject,
 } from "./validation/types";
 export {
@@ -76,6 +80,8 @@ export {
   cross_window_variance,
   visits_per_month,
   aggregate_sweep,
+  summarize_validation,
+  redownload_volume,
 } from "./validation/scoring";
 export type {
   OperatingPoint,

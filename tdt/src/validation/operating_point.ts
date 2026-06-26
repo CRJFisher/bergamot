@@ -15,9 +15,12 @@ import type { Reduction, SweepResult } from "./types";
 // A cell with a healthy noise fraction is neither over-merging (near-zero noise:
 // every one-off forced into a project) nor over-noising (above the ceiling: the
 // curse-of-dimensionality failure plan §6 guards against). The band is the
-// selection gate; re-tune as a data question against a labeled window.
+// SELECTION gate (reject a cell as the operating point). It shares the 0.65 edge
+// with sweep.ts's NOISE_TRIP_CEILING (the guardrail's ESCALATE-to-PCA threshold)
+// but is a separate knob — the two answer different questions and may be tuned
+// apart. Re-tune as a data question against a labeled window.
 const HEALTHY_NOISE_FLOOR = 0.05;
-const HEALTHY_NOISE_CEIL = 0.65;
+const HEALTHY_NOISE_CEILING = 0.65;
 
 export interface OperatingPointEntry {
   min_cluster_size: number;
@@ -54,7 +57,7 @@ export function select_operating_point(
     (r) =>
       r.mean_membership_probability !== null &&
       r.mean_noise_fraction >= HEALTHY_NOISE_FLOOR &&
-      r.mean_noise_fraction <= HEALTHY_NOISE_CEIL &&
+      r.mean_noise_fraction <= HEALTHY_NOISE_CEILING &&
       r.known_project_recovered,
   );
   if (healthy.length === 0) {
@@ -151,6 +154,25 @@ function parse_entry(unit: string, entry: unknown): OperatingPointEntry {
     typeof e.epsilon !== "number"
   ) {
     throw new Error(`parse_operating_point: entry "${unit}" has non-numeric params`);
+  }
+  // Domain, not just type: this file is a clustering cache key, so an
+  // out-of-range value (a stale or hand-edited negative / fractional count, or a
+  // NaN/Infinity epsilon) must fail loud here, never flow into HdbscanConfig and
+  // silently mis-cluster. The bounds mirror the sweep grid's own domain.
+  if (!Number.isInteger(e.min_cluster_size) || e.min_cluster_size < 2) {
+    throw new Error(
+      `parse_operating_point: entry "${unit}" min_cluster_size must be an integer >= 2`,
+    );
+  }
+  if (!Number.isInteger(e.min_samples) || e.min_samples < 1) {
+    throw new Error(
+      `parse_operating_point: entry "${unit}" min_samples must be an integer >= 1`,
+    );
+  }
+  if (!Number.isFinite(e.epsilon) || e.epsilon < 0) {
+    throw new Error(
+      `parse_operating_point: entry "${unit}" epsilon must be a finite number >= 0`,
+    );
   }
   if (e.method !== "eom") {
     throw new Error(`parse_operating_point: entry "${unit}" method must be "eom"`);

@@ -122,6 +122,43 @@ describe("operating-point persistence", () => {
     });
     expect(() => parse_operating_point(bad)).toThrow(/reduction invalid/);
   });
+
+  function with_entry(entry: Record<string, unknown>): string {
+    return JSON.stringify({
+      version: 1,
+      selected_at: "x",
+      provenance: "x",
+      by_window_unit: { month: entry },
+    });
+  }
+  const base = { min_cluster_size: 3, min_samples: 5, method: "eom", epsilon: 0, reduction: "raw" };
+
+  it("rejects an out-of-domain min_cluster_size (a stale cache-key value)", () => {
+    expect(() => parse_operating_point(with_entry({ ...base, min_cluster_size: -3 }))).toThrow(
+      /min_cluster_size must be an integer >= 2/,
+    );
+    expect(() => parse_operating_point(with_entry({ ...base, min_cluster_size: 2.5 }))).toThrow(
+      /min_cluster_size must be an integer >= 2/,
+    );
+  });
+
+  it("rejects a negative epsilon", () => {
+    expect(() => parse_operating_point(with_entry({ ...base, epsilon: -0.1 }))).toThrow(
+      /epsilon must be a finite number >= 0/,
+    );
+  });
+
+  it("rejects a non-eom method", () => {
+    expect(() => parse_operating_point(with_entry({ ...base, method: "leaf" }))).toThrow(
+      /method must be "eom"/,
+    );
+  });
+
+  it("rejects a missing by_window_unit", () => {
+    expect(() => parse_operating_point('{"version":1,"selected_at":"x","provenance":"x"}')).toThrow(
+      /missing by_window_unit/,
+    );
+  });
 });
 
 describe("seeded operating_point.json", () => {

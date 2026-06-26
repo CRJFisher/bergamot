@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>task-36.7 — Validation harness and parameter sweep</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --bg-alt: #161b22;
+    --bg-code: #0c0f14;
+    --fg: #d7dde4;
+    --fg-dim: #9aa6b2;
+    --accent: #f0a35e;     /* bergamot orange */
+    --accent-2: #6cb6ff;
+    --green: #7ee787;
+    --red: #ff7b72;
+    --purple: #d2a8ff;
+    --border: #2a313a;
+    --kw: #ff7b72;
+    --str: #a5d6ff;
+    --com: #768390;
+    --typ: #d2a8ff;
+    --fn: #d2a8ff;
+    --num: #f0a35e;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--sans); }
+
+  nav.crossdoc {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--bg-alt); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    padding: .5rem 5%; font-family: var(--mono); font-size: .74rem;
+  }
+  nav.crossdoc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.crossdoc a, nav.crossdoc span.pending, nav.crossdoc span.cur {
+    padding: .22em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap;
+    border: 1px solid var(--border);
+  }
+  nav.crossdoc a { color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.crossdoc a:hover { background: rgba(108,182,255,.16); }
+  nav.crossdoc span.cur { color: #1a1208; background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  nav.crossdoc span.pending { color: var(--com); }
+  nav.crossdoc .dot { display:inline-block; width:.5em; height:.5em; border-radius:50%; margin-right:.35em; vertical-align: middle; }
+  nav.crossdoc .dot.done { background: var(--green); }
+  nav.crossdoc .dot.now { background: var(--accent); }
+  nav.crossdoc .dot.todo { background: var(--com); }
+
+  nav.toc {
+    position: sticky; top: 38px; z-index: 9;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    padding: .45rem 5%; font-family: var(--mono); font-size: .72rem;
+  }
+  nav.toc .home { color: var(--fg-dim); text-transform: uppercase; letter-spacing: .06em; margin-right: .4rem; }
+  nav.toc a { padding: .2em .6em; border-radius: 999px; text-decoration: none; white-space: nowrap; border: 1px solid var(--border); color: var(--accent-2); background: rgba(108,182,255,.06); }
+  nav.toc a:hover { background: rgba(108,182,255,.16); }
+
+  main { width: 90%; max-width: 1500px; margin: 0 auto; padding: 1.6rem 0 6rem; }
+  header.page { border-bottom: 1px solid var(--border); padding-bottom: 1.2rem; margin-bottom: 1.4rem; }
+  .crumb { color: var(--fg-dim); font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; font-family: var(--mono); }
+  h1 { font-family: var(--serif); font-size: 2rem; margin: .5rem 0 .4rem; line-height: 1.15; font-weight: 600; }
+  h2 { font-size: 1.3rem; margin: 2.6rem 0 .5rem; padding-top: .7rem; border-top: 1px solid var(--border); color: var(--accent); scroll-margin-top: 100px; }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 .5rem; color: var(--accent-2); }
+  .lead { font-size: 1.05rem; max-width: 84ch; color: var(--fg); }
+  figcaption { font-size: .84rem; color: var(--fg-dim); margin: .5rem 0 0; font-style: italic; max-width: 96ch; }
+  figure { margin: 1rem 0 1.4rem; }
+  .prose { max-width: 74ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .7rem; font-family: var(--mono); font-size: .72rem; }
+  .meta .chip { padding: .2em .6em; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-alt); color: var(--fg-dim); }
+  .meta .chip strong { color: var(--accent); font-weight: 600; }
+  .meta .chip.todo { border-color: var(--accent); color: var(--accent); }
+  .meta .chip.done { border-color: var(--green); color: var(--green); }
+  .meta .chip.dep { border-color: var(--red); color: var(--red); }
+
+  a { color: var(--accent-2); }
+  code { font-family: var(--mono); font-size: .88em; }
+  p code, li code, td code, figcaption code { background: var(--bg-code); padding: .1em .38em; border-radius: 4px; border: 1px solid var(--border); color: var(--accent); }
+
+  .callout { border-radius: 6px; padding: .8rem 1.1rem; margin: 1.1rem 0; max-width: 100ch; }
+  .callout.key { background: var(--bg-alt); border-left: 4px solid var(--accent); }
+  .callout.info { background: rgba(108,182,255,.07); border-left: 4px solid var(--accent-2); }
+  .callout.warn { background: rgba(255,123,114,.08); border-left: 4px solid var(--red); }
+  .callout.good { background: rgba(126,231,135,.07); border-left: 4px solid var(--green); }
+  .callout .label { font-family: var(--mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .09em; font-weight: 700; display: block; margin-bottom: .3rem; }
+  .callout.key .label { color: var(--accent); }
+  .callout.info .label { color: var(--accent-2); }
+  .callout.warn .label { color: var(--red); }
+  .callout.good .label { color: var(--green); }
+  .callout p { margin: .3rem 0; }
+
+  .prompt-box { border: 1px solid var(--border); border-left: 3px solid var(--fg-dim); border-radius: 6px; background: var(--bg-alt); padding: .8rem 1.1rem; margin: 1rem 0; }
+  .prompt-box .label { font-family: var(--mono); font-size: .66rem; text-transform: uppercase; letter-spacing: .09em; color: var(--fg-dim); display: block; margin-bottom: .35rem; }
+  .prompt-box ul { margin: .2rem 0; padding-left: 1.2rem; }
+  .prompt-box li { margin: .15rem 0; }
+  .prompt-box code { color: var(--accent-2); }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .86rem; }
+  th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--bg-alt); color: var(--accent); font-weight: 600; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  td code, th code { font-family: var(--mono); }
+  td.c { text-align: center; font-family: var(--mono); }
+  td.idx { text-align: center; font-family: var(--mono); color: var(--accent-2); font-weight: 700; }
+  tr.noise td { color: var(--fg-dim); background: rgba(118,131,144,.06); }
+  tr.exem td { background: rgba(126,231,135,.06); }
+  .yes { color: var(--green); font-weight: 700; }
+  .no { color: var(--red); font-weight: 700; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; font-family: var(--mono); font-size: .76rem; color: var(--fg-dim); margin: .6rem 0; }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; }
+  .legend .box { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; }
+  .legend .box.add { border-color: var(--green); background: rgba(126,231,135,.18); }
+  .legend .box.rm { border-color: var(--red); background: rgba(255,123,114,.18); }
+  .legend .box.mod { border-color: var(--accent); background: rgba(240,163,94,.18); }
+  .legend .box.same { border-color: var(--border); background: var(--bg-alt); }
+
+  .diagram { width: 100%; }
+  svg { display: block; max-width: 100%; height: auto; }
+  text { font-family: var(--mono); }
+
+  .ba { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0; align-items: stretch; }
+  .ba .panel { min-width: 0; }
+  .ba .arrow { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 .8rem; }
+  .ba .arrow .glyph { font-size: 1.8rem; color: var(--accent); line-height: 1; }
+  .ba .arrow .lbl { font-family: var(--mono); font-size: .62rem; color: var(--fg-dim); text-transform: uppercase; letter-spacing: .08em; margin-top: .4rem; writing-mode: vertical-rl; }
+  .ba .ptitle { font-family: var(--mono); font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; text-align: center; margin-bottom: .3rem; }
+  .ba .ptitle.cur { color: var(--red); }
+  .ba .ptitle.plan { color: var(--green); }
+  @media (max-width: 820px) { .ba { grid-template-columns: 1fr; } .ba .arrow { padding: .6rem 0; } .ba .arrow .lbl { writing-mode: horizontal-tb; } }
+
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 1rem; margin: 1rem 0; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+  .keycard { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; }
+  .keycard.shipped { border-color: var(--red); }
+  .keycard.gate { border-color: var(--green); }
+  .keycard .tag { font-family: var(--mono); font-size: .68rem; letter-spacing: .04em; display: inline-block; padding: .15em .55em; border-radius: 999px; border: 1px solid; }
+  .keycard.shipped .tag { color: var(--red); border-color: var(--red); }
+  .keycard.gate .tag { color: var(--green); border-color: var(--green); }
+  .keycard h3 { margin: .5rem 0 .3rem; color: var(--fg); font-size: 1rem; }
+  .keycard .formula { font-family: var(--mono); font-size: .78rem; color: var(--fg-dim); background: var(--bg-code); border: 1px solid var(--border); border-radius: 5px; padding: .5rem .6rem; margin: .5rem 0; word-break: break-word; }
+  .keycard ul { margin: .4rem 0 0; padding-left: 1.1rem; font-size: .86rem; }
+  .keycard li { margin: .2rem 0; }
+  .keycard .chg { color: var(--accent); }
+
+  .code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px; margin: 1rem 0; overflow: hidden; }
+  .code .file-label { font-family: var(--mono); font-size: .72rem; color: var(--fg-dim); padding: .45rem .9rem; border-bottom: 1px solid var(--border); background: var(--bg-alt); }
+  .code .file-label .new { color: var(--green); }
+  .code .file-label .edit { color: var(--accent); }
+  .code pre { margin: 0; padding: .9rem 1rem; overflow-x: auto; font-family: var(--mono); font-size: .8rem; line-height: 1.55; color: var(--fg); }
+  .kw { color: var(--kw); } .str { color: var(--str); } .cm { color: var(--com); font-style: italic; }
+  .fn { color: var(--fn); } .typ { color: var(--typ); } .num { color: var(--num); }
+  .hl { background: rgba(240,163,94,.13); display: inline-block; width: 100%; }
+  .add { background: rgba(126,231,135,.12); display: inline-block; width: 100%; }
+  .del { background: rgba(255,123,114,.12); display: inline-block; width: 100%; text-decoration: line-through; opacity: .75; }
+
+  .steps { margin: 1rem 0; }
+  .step { display: grid; grid-template-columns: 44px 1fr; gap: .9rem; margin-bottom: .9rem; align-items: start; }
+  .step .badge { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 700; font-size: .9rem; border: 1.5px solid; }
+  .step .badge.one { border-color: var(--accent); color: var(--accent); background: rgba(240,163,94,.1); }
+  .step .badge.two { border-color: var(--purple); color: var(--purple); background: rgba(210,168,255,.1); }
+  .step .body h3 { margin: .1rem 0 .25rem; color: var(--fg); }
+  .step .body p { margin: 0; font-size: .9rem; color: var(--fg-dim); max-width: 96ch; }
+  .step .body .loc { font-family: var(--mono); font-size: .72rem; color: var(--accent-2); }
+
+  footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: .82rem; font-family: var(--mono); max-width: 100ch; }
+  @media (max-width: 820px) { h2 { scroll-margin-top: 60px; } }
+</style>
+</head>
+<body>
+
+<nav class="crossdoc" aria-label="Task family">
+  <span class="home">task-36 micro tier</span>
+  <a href="task-36.overview.html"><span class="dot now"></span>36 Overview</a>
+  <a href="task-36.1 - Scaffold-bergamot-tdt-package-ports-config-types-fakes.scaffold.html"><span class="dot done"></span>36.1 Scaffold</a>
+  <a href="task-36.2 - Windowing-and-data-scale-resolution.scaffold.html"><span class="dot done"></span>36.2 Windowing</a>
+  <a href="task-36.4 - Cosine-distance-matrix-and-HDBSCAN-clustering-core.clustering-core.html"><span class="dot done"></span>36.4 Distance + HDBSCAN core</a>
+  <a href="task-36.5 - Cluster-representations-and-deterministic-labeler.representations-labeler.html"><span class="dot done"></span>36.5 Representations + labeler</a>
+  <a href="task-36.6 - Persistence-cluster-tables-run-keying-idempotency.persistence-idempotency.html"><span class="dot done"></span>36.6 Persistence</a>
+  <span class="cur">36.7 Validation + sweep</span>
+  <span class="pending"><span class="dot todo"></span>36.9 Trigger · not yet generated</span>
+</nav>
+
+<nav class="toc" aria-label="On this page">
+  <span class="home">on this page</span>
+  <a href="#flow">The harness data flow</a>
+  <a href="#metric">The honest validity metric</a>
+  <a href="#grid">The parameter grid</a>
+  <a href="#pca">PCA-50 A/B + the guardrail</a>
+  <a href="#levers">The lever order</a>
+  <a href="#config">Operating point as config-data</a>
+  <a href="#cadence">Cadence evidence for 36.9</a>
+  <a href="#ac">Acceptance criteria</a>
+</nav>
+
+<main>
+<header class="page">
+  <div class="crumb">Bergamot · TDT micro tier · task-36.7 · DONE · branch tdt</div>
+  <h1>Validation harness and parameter sweep</h1>
+  <p class="lead">Parameter choice is the load-bearing quality risk. A deterministic harness in <code>tdt/src/validation/</code> sweeps a grid over real windows, scoring each cell by <strong>HDBSCAN-native validity</strong> (mean membership probability) plus noise fraction — always excluding label <code>−1</code>.</p>
+  <p class="lead">It runs the raw-dim vs PCA-50 A/B, confirms a known project recovers as a cluster, defines a noise/hubness guardrail whose PCA-promotion path is exercised, and persists the chosen operating point <strong>as config-data, not code</strong>.</p>
+  <p class="lead">The harness is a pure compute over <strong>already-resolved page vectors</strong>. <code>sweep.ts</code> composes the built <code>cluster_window</code> + <code>represent_clusters</code> stages (and PCA), <code>scoring.ts</code> holds the tf-free validity math and the AC#5 rollup, and <code>operating_point.ts</code> selects and persists the chosen cell — staying consistent with the package's pure, dependency-injected architecture.</p>
+  <div class="meta">
+    <span class="chip done"><strong>status</strong> Done · 226 tests pass · build-order step 7</span>
+    <span class="chip"><strong>depends</strong> 36.4 cluster_window · 36.5 representations</span>
+    <span class="chip"><strong>ships</strong> tdt/src/validation/{types,scoring,sweep,operating_point}.ts · operating_point.json</span>
+    <span class="chip"><strong>consumed by</strong> 36.9 trigger cadence</span>
+    <span class="chip dep"><strong>caveat</strong> no live capture DuckDB here · seeds the design default</span>
+    <span class="chip"><strong>parent</strong> task-36</span>
+  </div>
+</header>
+
+<div class="prompt-box">
+  <span class="label">Source of truth read to align this page to the shipped code — the harness modules, the seeded config, the barrel, and the spec</span>
+  <ul>
+    <li><code>tdt/src/validation/types.ts</code> — the DTOs: <code>WindowInput</code>, <code>GridCell</code>, <code>CellScore</code>, <code>WindowScore</code>, <code>SweepResult</code>, <code>CrossWindowVariance</code>, <code>GuardrailVerdict</code>, <code>PromotionVerdict</code>, <code>VisitsPerMonth</code>, <code>ValidationReport</code>, <code>KnownProject</code></li>
+    <li><code>tdt/src/validation/scoring.ts</code> — tf-free, on the barrel: <code>score_cell</code>, <code>boundary_fragmentation_count</code>, <code>cross_window_variance</code>, <code>visits_per_month</code>, <code>aggregate_sweep</code>, <code>summarize_validation</code>, <code>redownload_volume</code></li>
+    <li><code>tdt/src/validation/sweep.ts</code> — tf, NOT on the barrel: <code>build_grid</code>, <code>reduce_pca50</code>, <code>run_window_cell</code>, <code>run_sweep</code>, <code>check_known_project_recovery</code>, <code>evaluate_guardrail</code>, <code>run_pca_promotion</code></li>
+    <li><code>tdt/src/validation/operating_point.ts</code> — tf-free: <code>select_operating_point</code>, <code>serialize_operating_point</code>, <code>parse_operating_point</code>, <code>load_operating_point</code>, <code>operating_point_path</code></li>
+    <li><code>tdt/operating_point.json</code> (seeded design default) · <code>tdt/src/index.ts</code> (the barrel) · <code>tdt/src/config.ts</code> (<code>DEFAULT_HDBSCAN_CONFIG</code>) · <code>tdt/README.md</code> "Validation harness"</li>
+    <li><code>task-36.7 ….md</code> (the 5 ACs, all checked) · <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> §6 · §10 · §11 step 7 · §12</li>
+  </ul>
+</div>
+
+<div class="callout key">
+  <span class="label">The one sentence</span>
+  <p>The harness takes <code>WindowInput[]</code> = <code>{ window_start, window_end, visits, vectors }</code> (parallel arrays of already-resolved page vectors) and, <strong>per grid cell</strong>, optionally reduces via deterministic PCA-50, builds the cosine distance matrix, fits HDBSCAN, and scores on the one signal the library actually exposes fit-only — <strong>mean membership probability over non-noise points</strong>, plus noise fraction and median size.</p>
+  <p>It does <strong>not</strong> claim silhouette or DBCV: the shipped <code>silhouette</code> is Euclidean-only and noise-naive, and clustering-tfjs 0.6.1 exposes no <code>cluster_persistence</code> attribute — so <code>score_cell</code> returns <code>null</code> (never <code>0</code>) when a window has no cluster. Per-window scores feed <code>aggregate_sweep</code>, <code>evaluate_guardrail</code>, the pure <code>select_operating_point()</code> that picks the cell written to <code>operating_point.json</code>, and <code>summarize_validation</code>, which rolls the four AC#5 signals into one <code>ValidationReport</code>.</p>
+</div>
+
+<!-- ===================================================== FLOW -->
+<h2 id="flow">The harness data flow — vectors in, an operating point out</h2>
+
+<figure>
+<div class="diagram">
+<svg viewBox="0 0 1180 520" role="img" aria-label="The validation harness data flow. It starts from WindowInput array: a list of windows, each carrying window_start, window_end, the window's VisitRow array and its already-resolved PageVector array, as parallel arrays. The batch CLI resolves the vectors through the real ports first; the harness is then a pure deterministic compute over those vectors, so it is testable on fixtures. For each window, the inner grid is crossed: minClusterSize times minSamples times epsilon times reduction. For each grid cell, the pipeline runs: an optional deterministic PCA-50 reduction with L2 renormalization, then build the cosine distance matrix D, then fit HDBSCAN on the precomputed D, then score. Scoring computes mean membership probability over non-noise points, noise fraction, median cluster size, and cluster count, always excluding label minus one. These per-cell scores aggregate to per-window scores. Across windows, two cross-window summaries are computed: the variance of per-window N, cluster count and noise fraction, which is the evidence gate for the windowing seam, and the boundary-fragmentation count of clusters whose time span touches a window edge. A noise-and-hubness guardrail watches the noise fraction and median size across windows; if it trips, the PCA-promotion path re-runs the sweep with PCA-50 and returns a comparative verdict. Finally a pure select_operating_point function picks the best grid cell, parameterized by window size, and persists it as operating_point.json. A known-project recovery check confirms a labeled project lands in one cluster rather than dissolving into noise.">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9aa6b2"/></marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7ee787"/></marker>
+    <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#f0a35e"/></marker>
+  </defs>
+
+  <!-- input -->
+  <rect x="24" y="40" width="250" height="92" rx="10" fill="#161b22" stroke="#6cb6ff" stroke-width="1.5"/>
+  <text x="149" y="62" fill="#6cb6ff" font-size="10.5" text-anchor="middle" font-weight="bold">WindowInput[]</text>
+  <text x="149" y="80" fill="#768390" font-size="8.5" text-anchor="middle">{ window_start, window_end,</text>
+  <text x="149" y="94" fill="#768390" font-size="8.5" text-anchor="middle">visits: VisitRow[],</text>
+  <text x="149" y="108" fill="#768390" font-size="8.5" text-anchor="middle">vectors: PageVector[] }</text>
+  <text x="149" y="125" fill="#f0a35e" font-size="8" text-anchor="middle">parallel arrays · already resolved</text>
+
+  <text x="149" y="155" fill="#9aa6b2" font-size="8.5" text-anchor="middle">CLI resolves vectors via real ports first;</text>
+  <text x="149" y="168" fill="#9aa6b2" font-size="8.5" text-anchor="middle">harness = pure compute over them</text>
+
+  <line x1="274" y1="86" x2="320" y2="86" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#ar)"/>
+
+  <!-- per-window / per-cell grid box -->
+  <rect x="320" y="22" width="540" height="226" rx="12" fill="rgba(240,163,94,.04)" stroke="#f0a35e" stroke-width="1.5"/>
+  <text x="590" y="42" fill="#f0a35e" font-size="11" text-anchor="middle" font-weight="bold">PER WINDOW × PER GRID CELL — pure, deterministic</text>
+  <text x="590" y="58" fill="#768390" font-size="8" text-anchor="middle">cell = minClusterSize × minSamples × epsilon × reduction</text>
+
+  <rect x="340" y="74" width="118" height="56" rx="8" fill="#0c0f14" stroke="#d2a8ff"/>
+  <text x="399" y="96" fill="#d2a8ff" font-size="9.5" text-anchor="middle" font-weight="bold">PCA-50?</text>
+  <text x="399" y="110" fill="#768390" font-size="8" text-anchor="middle">deterministic,</text>
+  <text x="399" y="122" fill="#768390" font-size="8" text-anchor="middle">L2-renorm · or raw</text>
+
+  <line x1="458" y1="102" x2="486" y2="102" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ar)"/>
+  <rect x="486" y="74" width="110" height="56" rx="8" fill="#0c0f14" stroke="#6cb6ff"/>
+  <text x="541" y="96" fill="#6cb6ff" font-size="9.5" text-anchor="middle" font-weight="bold">cosine D</text>
+  <text x="541" y="112" fill="#768390" font-size="8" text-anchor="middle">(n,n) precomputed</text>
+
+  <line x1="596" y1="102" x2="624" y2="102" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ar)"/>
+  <rect x="624" y="74" width="110" height="56" rx="8" fill="#0c0f14" stroke="#7ee787"/>
+  <text x="679" y="96" fill="#7ee787" font-size="9.5" text-anchor="middle" font-weight="bold">HDBSCAN fit</text>
+  <text x="679" y="112" fill="#768390" font-size="8" text-anchor="middle">labels + probs</text>
+
+  <line x1="734" y1="102" x2="762" y2="102" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ar)"/>
+  <rect x="762" y="74" width="84" height="56" rx="8" fill="rgba(240,163,94,.1)" stroke="#f0a35e"/>
+  <text x="804" y="96" fill="#f0a35e" font-size="9.5" text-anchor="middle" font-weight="bold">score</text>
+  <text x="804" y="112" fill="#768390" font-size="8" text-anchor="middle">excl. −1</text>
+
+  <rect x="340" y="150" width="506" height="80" rx="8" fill="#0c0f14" stroke="#2a313a"/>
+  <text x="593" y="170" fill="#9aa6b2" font-size="9" text-anchor="middle">SCORE per cell — the only fit-only signals the library exposes:</text>
+  <text x="593" y="188" fill="#7ee787" font-size="9" text-anchor="middle" font-weight="bold">mean membership probability (non-noise)</text>
+  <text x="593" y="204" fill="#9aa6b2" font-size="8.5" text-anchor="middle">+ noise fraction · median cluster size · cluster count</text>
+  <text x="593" y="220" fill="#f0a35e" font-size="8.5" text-anchor="middle">label −1 EXCLUDED from every score</text>
+
+  <line x1="590" y1="248" x2="590" y2="280" stroke="#9aa6b2" stroke-width="1.5" marker-end="url(#ar)"/>
+  <text x="660" y="268" fill="#768390" font-size="8.5" text-anchor="middle">per-window scores</text>
+
+  <!-- cross-window summaries -->
+  <rect x="24" y="290" width="380" height="120" rx="10" fill="#161b22" stroke="#6cb6ff" stroke-width="1.4"/>
+  <text x="214" y="312" fill="#6cb6ff" font-size="10.5" text-anchor="middle" font-weight="bold">CROSS-WINDOW VARIANCE</text>
+  <text x="214" y="332" fill="#9aa6b2" font-size="8.5" text-anchor="middle">variance of per-window (N, cluster count, noise fraction)</text>
+  <text x="214" y="350" fill="#f0a35e" font-size="8.5" text-anchor="middle">= evidence gate for the target-N windowing seam</text>
+  <text x="214" y="372" fill="#6cb6ff" font-size="10" text-anchor="middle" font-weight="bold">BOUNDARY FRAGMENTATION</text>
+  <text x="214" y="392" fill="#9aa6b2" font-size="8.5" text-anchor="middle">count of clusters whose time_span touches a window edge</text>
+  <text x="214" y="406" fill="#f0a35e" font-size="8" text-anchor="middle">both + cadence → summarize_validation() → one ValidationReport</text>
+
+  <rect x="424" y="290" width="380" height="120" rx="10" fill="rgba(255,123,114,.05)" stroke="#ff7b72" stroke-width="1.4"/>
+  <text x="614" y="312" fill="#ff7b72" font-size="10.5" text-anchor="middle" font-weight="bold">NOISE / HUBNESS GUARDRAIL</text>
+  <text x="614" y="332" fill="#9aa6b2" font-size="8.5" text-anchor="middle">on the DEFAULT-params raw cell: mean noise &gt; 0.65</text>
+  <text x="614" y="348" fill="#9aa6b2" font-size="8.5" text-anchor="middle">OR typical median size ≤ minClusterSize + 1 (collapse)</text>
+  <text x="614" y="372" fill="#d2a8ff" font-size="9" text-anchor="middle" font-weight="bold">on trip → PCA-promotion path</text>
+  <text x="614" y="390" fill="#768390" font-size="8.5" text-anchor="middle">compare default raw vs default PCA-50 cell → verdict (exercised + asserted)</text>
+
+  <rect x="824" y="290" width="330" height="120" rx="10" fill="rgba(126,231,135,.06)" stroke="#7ee787" stroke-width="1.4"/>
+  <text x="989" y="312" fill="#7ee787" font-size="10.5" text-anchor="middle" font-weight="bold">KNOWN-PROJECT RECOVERY</text>
+  <text x="989" y="332" fill="#9aa6b2" font-size="8.5" text-anchor="middle">labeled page_session_ids expected to be one project</text>
+  <text x="989" y="350" fill="#9aa6b2" font-size="8.5" text-anchor="middle">confirm the plurality land in ONE cluster</text>
+  <text x="989" y="368" fill="#7ee787" font-size="8.5" text-anchor="middle">above threshold — NOT dissolved into −1</text>
+  <text x="989" y="390" fill="#768390" font-size="8" text-anchor="middle">a hard gate on adopting raw over PCA</text>
+
+  <line x1="404" y1="350" x2="424" y2="350" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ar)"/>
+  <line x1="804" y1="350" x2="824" y2="350" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ar)"/>
+
+  <!-- to operating point -->
+  <line x1="589" y1="410" x2="589" y2="446" stroke="#f0a35e" stroke-width="1.8" marker-end="url(#ac)"/>
+  <rect x="334" y="446" width="510" height="58" rx="10" fill="rgba(240,163,94,.08)" stroke="#f0a35e" stroke-width="1.6"/>
+  <text x="589" y="470" fill="#f0a35e" font-size="11" text-anchor="middle" font-weight="bold">select_operating_point(results) → OperatingPointEntry — pure</text>
+  <text x="589" y="490" fill="#9aa6b2" font-size="8.5" text-anchor="middle">max mean membership probability · healthy noise band · known-project recovery → operating_point.json (per window size)</text>
+</svg>
+</div>
+<figcaption>Vectors are resolved upstream by the batch CLI through the real ports; the harness itself is a pure, deterministic function of <code>WindowInput[]</code>, so it is unit-testable on fixtures. The inner grid (HDBSCAN params × reduction) runs <strong>per window</strong>; window length is the upstream axis the caller varies by handing in a different <code>WindowInput[]</code>. Every score excludes <code>−1</code>; the per-window scores feed <code>aggregate_sweep</code>, the guardrail, the known-project gate, and the pure operating-point selection, and <code>summarize_validation</code> rolls the four AC#5 signals — cross-window variance, total boundary fragmentation, visits-per-month, and re-download volume — into a single <code>ValidationReport</code>.</figcaption>
+</figure>
+
+<!-- ===================================================== METRIC -->
+<h2 id="metric">The honest validity metric — why mean membership probability, not silhouette</h2>
+
+<p class="prose">This is the subtlest point in the task. The clustering library ships a <code>silhouette</code>, but it is the wrong tool here for two verified reasons — so the harness scores on the one fit-only signal the library actually exposes.</p>
+
+<figure>
+<div class="grid2">
+  <div class="keycard shipped">
+    <span class="tag">NOT the coherence gate — shipped but unusable</span>
+    <h3>clustering-tfjs <code>silhouette</code> · no <code>cluster_persistence</code></h3>
+    <div class="formula">silhouette_samples(X, labels) → hardcoded EUCLIDEAN · no metric / precomputed param</div>
+    <ul>
+      <li><span class="chg">Euclidean-only.</span> It takes a data matrix and hardcodes Euclidean. The cosine <code>D</code> fed to HDBSCAN <strong>cannot be reused</strong> — passing <code>D</code> as <code>X</code> computes Euclidean distances <em>between rows of the distance matrix</em> (nonsensical).</li>
+      <li><span class="chg">Noise-naive.</span> It would score <code>−1</code> as if it were a real cluster, inflating the result with the very pages the design rejects.</li>
+      <li><span class="chg">No persistence.</span> clustering-tfjs 0.6.1 exposes no <code>cluster_persistence</code> attribute, so the HDBSCAN-native validity the AC names by that word is not available; <code>score_cell</code> returns <code>null</code> (never <code>0</code>) for an all-noise window so it can never out-rank a real-but-weak cell.</li>
+    </ul>
+  </div>
+  <div class="keycard gate">
+    <span class="tag">THE coherence gate — fit-only, already produced</span>
+    <h3>mean per-cluster membership probability</h3>
+    <div class="formula">score = mean( probabilities[i] for i where labels[i] ≥ 0 )</div>
+    <ul>
+      <li><span class="chg">Fit-only and free.</span> <code>HDBSCAN.fit</code> already emits per-point membership <code>probabilities</code> (carried on <code>HdbscanRaw</code>). <code>score_cell</code> averages them over non-noise points — a coherence signal that needs no second distance pass.</li>
+      <li><span class="chg">−1 excluded everywhere.</span> Noise is dropped before averaging, so the score measures the clusters, not the rejection rate (that is the separate noise-fraction metric).</li>
+      <li><span class="chg">Paired with two more.</span> Noise fraction and median cluster size sit beside it — together they catch the over-noising that a single number would hide.</li>
+      <li><span class="chg">No false claim.</span> The harness does <strong>not</strong> assert metric-identical silhouette or DBCV. A precomputed-aware silhouette is a real future library feature, out of scope here.</li>
+    </ul>
+  </div>
+</div>
+<figcaption>The harness gates on what HDBSCAN produces fit-only, not on a borrowed Euclidean silhouette. Mean membership probability (over non-noise points), noise fraction, and median cluster size are the three scored signals — with <code>−1</code> excluded from every one of them.</figcaption>
+</figure>
+
+<div class="callout warn">
+  <span class="label">The caveat stated plainly, so no one mistakes the metric for DBCV</span>
+  <p>"HDBSCAN-native validity" in this slice means <strong>mean membership probability</strong>, not a density-based DBCV score and not a cosine silhouette. The choice is forced by the library, recorded honestly, and is sufficient as a relative ranker across grid cells — the harness only needs to choose the <em>best</em> cell, not to publish an absolute coherence number.</p>
+</div>
+
+<!-- ===================================================== GRID -->
+<h2 id="grid">The parameter grid — one upstream axis, four inner axes</h2>
+
+<figure>
+<table>
+  <thead>
+    <tr><th>Axis</th><th>Swept values</th><th class="c">Cardinality</th><th>Where it lives</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>window length</code></td>
+      <td><code>14d</code> · <code>month</code></td>
+      <td class="c">2</td>
+      <td><strong>Upstream.</strong> A different <code>WindowConfig</code> → a different <code>WindowInput[]</code> the caller hands in. Not an inner-loop param.</td>
+    </tr>
+    <tr>
+      <td><code>reduction</code></td>
+      <td><code>raw</code> · <code>PCA-50</code></td>
+      <td class="c">2</td>
+      <td><strong>Inner.</strong> The A/B axis — raw embedding dim vs deterministic PCA to ~50d, same precomputed-cosine path.</td>
+    </tr>
+    <tr>
+      <td><code>minClusterSize</code></td>
+      <td><code>3, 4, 5, 6, 7, 8</code></td>
+      <td class="c">6</td>
+      <td><strong>Inner.</strong> Pages per cluster; default <code>3</code> (a 3-page thread is a real personal-scale project).</td>
+    </tr>
+    <tr>
+      <td><code>minSamples</code></td>
+      <td><code>3, 5, 8</code></td>
+      <td class="c">3</td>
+      <td><strong>Inner.</strong> Decoupled from minClusterSize; default <code>5</code>; preserves honest <code>−1</code> noise rejection.</td>
+    </tr>
+    <tr>
+      <td><code>clusterSelectionEpsilon</code></td>
+      <td><code>0.0, 0.10, 0.20</code></td>
+      <td class="c">3</td>
+      <td><strong>Inner.</strong> Cosine-distance units; merges projects split by trivial gaps; default <code>0.0</code>.</td>
+    </tr>
+    <tr class="exem">
+      <td><code>method</code></td>
+      <td><code>eom</code> (fixed)</td>
+      <td class="c">1</td>
+      <td>Held at <code>eom</code> — stable clusters AND the selection method under which exemplars are defined (needed for representatives). <code>leaf</code> has no defined exemplars.</td>
+    </tr>
+  </tbody>
+</table>
+<figcaption>The inner grid is <code>reduction × minClusterSize × minSamples × epsilon</code> = <code>2 × 6 × 3 × 3 = 108</code> cells, run per window. Window length is the upstream axis (2 sets of <code>WindowInput[]</code>). <code>method</code> is fixed at <code>eom</code> because EOM is the only selection method with defined exemplars. Starting defaults (highlighted in the cells) come from <code>DEFAULT_HDBSCAN_CONFIG</code>.</figcaption>
+</figure>
+
+<!-- ===================================================== PCA -->
+<h2 id="pca">PCA-50 A/B and the guardrail — raw by default, PCA as the escape valve</h2>
+
+<figure>
+<div class="ba">
+  <div class="panel">
+    <div class="ptitle cur">Path A · raw embedding dim (v1 default)</div>
+    <div class="diagram">
+    <svg viewBox="0 0 470 250" role="img" aria-label="Path A, the raw embedding dimension, the v1 default. The full-dimension L2-normalized page vectors go straight into the cosine distance matrix and then HDBSCAN. This is adopted because cosine removes the magnitude axis that the high-dimension orthodoxy reacts to, modern sentence-embedding models are trained for cosine separability, personal scale is small n, and aggressive noise rejection is the desired behavior. But it is committed with a gate, not on faith: it is only adopted if it wins or ties the A/B against PCA-50, and only if a known project recovers as a cluster.">
+      <rect x="14" y="16" width="200" height="44" rx="8" fill="#161b22" stroke="#2a313a"/>
+      <text x="114" y="34" fill="#d7dde4" font-size="9.5" text-anchor="middle">PageVector[] · full dim</text>
+      <text x="114" y="50" fill="#768390" font-size="8" text-anchor="middle">L2-normalized, no reducer</text>
+      <line x1="114" y1="60" x2="114" y2="82" stroke="#9aa6b2" stroke-width="1.4"/>
+      <rect x="14" y="82" width="200" height="40" rx="7" fill="#0c0f14" stroke="#6cb6ff"/>
+      <text x="114" y="106" fill="#6cb6ff" font-size="9.5" text-anchor="middle">cosine D → HDBSCAN</text>
+      <rect x="246" y="20" width="210" height="206" rx="9" fill="rgba(126,231,135,.05)" stroke="#7ee787" stroke-dasharray="4 3"/>
+      <text x="351" y="44" fill="#7ee787" font-size="9.5" text-anchor="middle" font-weight="bold">why raw is the default</text>
+      <text x="351" y="68" fill="#9aa6b2" font-size="8.3" text-anchor="middle">cosine removes the magnitude axis</text>
+      <text x="351" y="84" fill="#9aa6b2" font-size="8.3" text-anchor="middle">models trained for cosine separability</text>
+      <text x="351" y="100" fill="#9aa6b2" font-size="8.3" text-anchor="middle">personal scale = small n</text>
+      <text x="351" y="116" fill="#9aa6b2" font-size="8.3" text-anchor="middle">aggressive noise rejection is desired</text>
+      <text x="351" y="142" fill="#f0a35e" font-size="8.5" text-anchor="middle" font-weight="bold">committed WITH a gate, not on faith:</text>
+      <text x="351" y="162" fill="#9aa6b2" font-size="8.3" text-anchor="middle">adopt raw only if it WINS or TIES</text>
+      <text x="351" y="178" fill="#9aa6b2" font-size="8.3" text-anchor="middle">the A/B vs PCA-50, AND</text>
+      <text x="351" y="194" fill="#9aa6b2" font-size="8.3" text-anchor="middle">a known project recovers as a cluster</text>
+      <line x1="214" y1="102" x2="246" y2="102" stroke="#7ee787" stroke-width="1.3" stroke-dasharray="3 3"/>
+    </svg>
+    </div>
+  </div>
+  <div class="arrow"><div class="glyph">vs</div><div class="lbl">A / B</div></div>
+  <div class="panel">
+    <div class="ptitle plan">Path B · PCA-50 (the guardrail's promotion path)</div>
+    <div class="diagram">
+    <svg viewBox="0 0 470 250" role="img" aria-label="Path B, PCA-50. The vectors are reduced via clustering-tfjs's deterministic PCA, which uses power iteration with a fixed random_state, down to about 50 dimensions, then L2-renormalized, then clustered through the same precomputed-cosine path. This is scored head-to-head against raw. It is specifically PCA to about 50 dimensions, not PCA-5, because GDELT shows low-dimension PCA collapses HDBSCAN to noise. PCA-50 is also the promotion path: the noise and hubness guardrail trips when the noise fraction is persistently above roughly 0.6 to 0.7 across windows, or the median cluster size collapses toward minClusterSize, and on trip the sweep re-runs with PCA-50 and returns a comparative verdict. That promotion path is exercised by a test.">
+      <rect x="14" y="16" width="200" height="44" rx="8" fill="#161b22" stroke="#2a313a"/>
+      <text x="114" y="34" fill="#d7dde4" font-size="9.5" text-anchor="middle">PageVector[] · full dim</text>
+      <text x="114" y="50" fill="#768390" font-size="8" text-anchor="middle">same input as path A</text>
+      <line x1="114" y1="60" x2="114" y2="78" stroke="#9aa6b2" stroke-width="1.4"/>
+      <rect x="14" y="78" width="200" height="44" rx="7" fill="#0c0f14" stroke="#d2a8ff"/>
+      <text x="114" y="98" fill="#d2a8ff" font-size="9.5" text-anchor="middle" font-weight="bold">PCA → ~50d</text>
+      <text x="114" y="114" fill="#768390" font-size="8" text-anchor="middle">power-iter, fixed random_state</text>
+      <line x1="114" y1="122" x2="114" y2="140" stroke="#9aa6b2" stroke-width="1.4"/>
+      <rect x="14" y="140" width="200" height="36" rx="7" fill="#0c0f14" stroke="#6cb6ff"/>
+      <text x="114" y="162" fill="#6cb6ff" font-size="9" text-anchor="middle">L2-renorm → cosine D → HDBSCAN</text>
+      <rect x="246" y="20" width="210" height="206" rx="9" fill="rgba(255,123,114,.05)" stroke="#ff7b72" stroke-dasharray="4 3"/>
+      <text x="351" y="44" fill="#ff7b72" font-size="9.5" text-anchor="middle" font-weight="bold">guardrail promotion path</text>
+      <text x="351" y="68" fill="#9aa6b2" font-size="8.3" text-anchor="middle">TRIP when, across windows:</text>
+      <text x="351" y="86" fill="#ff7b72" font-size="8.3" text-anchor="middle">default raw cell mean noise &gt; 0.65</text>
+      <text x="351" y="102" fill="#9aa6b2" font-size="8.3" text-anchor="middle">OR median cluster size →  minClusterSize</text>
+      <text x="351" y="126" fill="#d2a8ff" font-size="8.5" text-anchor="middle" font-weight="bold">on trip → re-run sweep with PCA-50</text>
+      <text x="351" y="146" fill="#9aa6b2" font-size="8.3" text-anchor="middle">default raw vs default PCA-50 cell</text>
+      <text x="351" y="170" fill="#7ee787" font-size="8.3" text-anchor="middle">exercised = path RUNS &amp; is asserted</text>
+      <text x="351" y="192" fill="#768390" font-size="8" text-anchor="middle">NOT PCA-5 — low-dim collapses to noise</text>
+      <line x1="214" y1="158" x2="246" y2="120" stroke="#ff7b72" stroke-width="1.3" stroke-dasharray="3 3"/>
+    </svg>
+    </div>
+  </div>
+</div>
+<figcaption>Raw embedding space is the v1 default — but committed <strong>with a gate</strong>: it is adopted only if it wins or ties the head-to-head A/B against deterministic PCA-50, and only if a known project recovers as a cluster rather than dissolving into <code>−1</code>. PCA-50 (not PCA-5, which GDELT shows collapses HDBSCAN to noise) is also the guardrail's promotion path: <code>evaluate_guardrail</code> inspects the <strong>default-params raw cell</strong> (derived from <code>DEFAULT_HDBSCAN_CONFIG</code>, so it cannot drift) and trips when its mean noise &gt; <code>0.65</code> or its typical median size collapses toward <code>minClusterSize</code>; on a trip <code>run_pca_promotion</code> compares the default raw and default PCA-50 cells and records <code>pca_improves</code> — a path a test exercises and asserts.</figcaption>
+</figure>
+
+<!-- ===================================================== LEVERS -->
+<h2 id="levers">The lever order — minClusterSize-fraction first, target-N re-windowing second</h2>
+
+<p class="prose">Cross-window variance is the evidence gate, but it does not by itself activate the heavy windowing seam. The plan fixes an explicit lever order, and the harness's job is only to measure what gates the decision — not to pull the lever.</p>
+
+<div class="steps">
+  <div class="step">
+    <div class="badge one">1</div>
+    <div class="body">
+      <h3>First lever — <code>minClusterSize</code> as a fraction of N</h3>
+      <p>When per-window N varies a lot, the cheaper fix is to scale <code>minClusterSize</code> with window size so a busy month and a quiet one both demand a sensibly-sized cluster. This is tuned by the sweep within the existing windowing, and is tried before anything heavier.</p>
+      <span class="loc">plan §6 · the FIRST lever · a config/sweep change, not a structural one</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge two">2</div>
+    <div class="body">
+      <h3>Second lever — target-N re-windowing (the heavier seam)</h3>
+      <p>Only if the first lever is insufficient is the target-N windowing seam (plan §5) activated to re-shape windows toward a roughly constant page count. The harness's cross-window variance of (N, cluster count, noise fraction) is the evidence that gates this decision — it does not flip it automatically.</p>
+      <span class="loc">plan §5 windowing seam · gated by measured cross-window variance · not in v1</span>
+    </div>
+  </div>
+</div>
+
+<div class="callout info">
+  <span class="label">What the harness measures vs what it decides</span>
+  <p>The harness <strong>reports</strong> cross-window variance and a boundary-fragmentation count (clusters whose <code>time_span</code> touches a window edge); it does not <strong>act</strong> on them.</p>
+  <p>Boundary fragmentation has a hierarchical fix — the Phase-4 tracker and the SOM macro tier, neither in v1 — so the count exists to size the problem before those slices are prioritised.</p>
+</div>
+
+<!-- ===================================================== CONFIG -->
+<h2 id="config">The chosen operating point flows into config as data, not code</h2>
+
+<p class="prose">The grid's starting defaults live in <code>config.ts</code> (code). The <em>chosen</em> point — what the sweep selected — lives in a JSON data file, parameterized by window unit, so re-tuning as history grows is a data edit, never a code change.</p>
+
+<div class="code">
+  <div class="file-label"><span class="new">tdt/operating_point.json</span> &nbsp;·&nbsp; the CHOSEN point, keyed by window unit · seeded with the design default, re-written by select_operating_point when the harness runs against live windows</div>
+<pre><span class="cm">// Seeded with the design-default STARTING point, because there is no live</span>
+<span class="cm">// capture DuckDB in this build environment. select_operating_point()</span>
+<span class="cm">// re-writes it once the harness runs against real windows. selected_at is</span>
+<span class="cm">// injected, never Date.now(); parse_operating_point validates it on load.</span>
+{
+  <span class="str">"version"</span>: <span class="num">1</span>,
+  <span class="str">"by_window_unit"</span>: {
+    <span class="str">"month"</span>: {
+      <span class="str">"min_cluster_size"</span>: <span class="num">3</span>, <span class="str">"min_samples"</span>: <span class="num">5</span>,
+      <span class="str">"method"</span>: <span class="str">"eom"</span>, <span class="str">"epsilon"</span>: <span class="num">0</span>, <span class="hl"><span class="str">"reduction"</span>: <span class="str">"raw"</span></span>
+    },
+    <span class="str">"14d"</span>: {
+      <span class="str">"min_cluster_size"</span>: <span class="num">3</span>, <span class="str">"min_samples"</span>: <span class="num">5</span>,
+      <span class="str">"method"</span>: <span class="str">"eom"</span>, <span class="str">"epsilon"</span>: <span class="num">0</span>, <span class="str">"reduction"</span>: <span class="str">"raw"</span>
+    }
+  },
+  <span class="str">"selected_at"</span>: <span class="str">"2026-06-26T00:00:00.000Z"</span>,
+  <span class="str">"provenance"</span>: <span class="str">"design-default seed (plan §6); re-written by select_operating_point when the harness runs against live windows"</span>
+}</pre>
+</div>
+
+<div class="code">
+  <div class="file-label"><span class="new">tdt/src/validation/operating_point.ts</span> &nbsp;·&nbsp; pure — picks the best grid cell; serialize / parse / load round-trip the JSON, validating the domain on read</div>
+<pre><span class="cm">// Pure selection: best cell = max mean membership probability, among cells in</span>
+<span class="cm">// the healthy noise band [0.05, 0.65] that recover the known project AND have a</span>
+<span class="cm">// non-null coherence signal. Throws if NO cell clears the gate (never selects a</span>
+<span class="cm">// degenerate cell silently). config.ts keeps the grid + starting defaults.</span>
+<span class="kw">export function</span> <span class="fn">select_operating_point</span>(
+  results: <span class="typ">SweepResult</span>[],
+): <span class="typ">OperatingPointEntry</span> {
+  <span class="kw">const</span> healthy = results.<span class="fn">filter</span>((r) =&gt;
+    r.mean_membership_probability !== <span class="kw">null</span> &amp;&amp;
+    r.mean_noise_fraction &gt;= HEALTHY_NOISE_FLOOR &amp;&amp;
+    r.mean_noise_fraction &lt;= HEALTHY_NOISE_CEILING &amp;&amp;
+    <span class="hl">r.known_project_recovered);                    <span class="cm">// hard gate (AC#2)</span></span>
+  <span class="kw">if</span> (healthy.length === <span class="num">0</span>) <span class="kw">throw new</span> <span class="typ">Error</span>(<span class="str">"no cell met the gate…"</span>);
+
+  <span class="kw">let</span> best = healthy[<span class="num">0</span>];                            <span class="cm">// compare_cells: a total order —</span>
+  <span class="kw">for</span> (<span class="kw">const</span> r <span class="kw">of</span> healthy.<span class="fn">slice</span>(<span class="num">1</span>))            <span class="cm">// prob, then lower noise, then smaller</span>
+    <span class="kw">if</span> (<span class="fn">compare_cells</span>(r, best) &lt; <span class="num">0</span>) best = r; <span class="cm">// params, then raw before pca50</span>
+  <span class="kw">return</span> { ...best.cell };                       <span class="cm">// the chosen OperatingPointEntry</span>
+}
+
+<span class="cm">// serialize_operating_point / parse_operating_point / load_operating_point</span>
+<span class="cm">// round-trip the JSON; parse validates DOMAIN (min_cluster_size ≥ 2 integer,</span>
+<span class="cm">// epsilon ≥ 0 finite, method "eom", reduction raw|pca50) so a stale or</span>
+<span class="cm">// hand-edited value fails loud rather than silently mis-clustering a later run.</span></pre>
+</div>
+
+<div class="callout good">
+  <span class="label">Determinism — three anchors hold across the sweep</span>
+  <p>HDBSCAN is bitwise-deterministic per tf backend; PCA uses a fixed <code>random_state</code> (power iteration, no SGD); and any timestamp (the operating-point <code>selected_at</code>) is <strong>injected, not <code>Date.now()</code></strong>. Run the same window twice and the labels, probabilities, scores, and chosen cell are identical — so the sweep's verdict is reproducible.</p>
+</div>
+
+<!-- ===================================================== CADENCE -->
+<h2 id="cadence">Cadence evidence — the two numbers task-36.9 consumes</h2>
+
+<p class="prose">task-36.9 ships an automatic in-host trigger; the only open value is its cadence (default once/day). The harness records the two measurements that justify that default: how much the user actually browses, and how much work each run does.</p>
+
+<figure>
+<div class="grid2">
+  <div class="keycard">
+    <span class="tag" style="color:var(--accent-2);border-color:var(--accent-2)">visits_per_month · pure · from visit metadata</span>
+    <h3>Visits-per-month distribution</h3>
+    <div class="diagram">
+    <svg viewBox="0 0 470 180" role="img" aria-label="An illustrative visits-per-month bar chart. Twelve monthly bars of browsing volume; the chart shows the shape and spread of how much the user browses per month, which determines whether a month stays under the roughly 5000-page ceiling and whether minClusterSize around 3 is right. The tallest, peak month is highlighted. This distribution is computed purely from visit metadata, with no re-download.">
+      <line x1="40" y1="150" x2="456" y2="150" stroke="#2a313a"/>
+      <line x1="40" y1="20" x2="40" y2="150" stroke="#2a313a"/>
+      <text x="20" y="26" fill="#768390" font-size="8">visits</text>
+      <g>
+        <rect x="48" y="96" width="26" height="54" fill="rgba(108,182,255,.5)" stroke="#6cb6ff"/>
+        <rect x="82" y="80" width="26" height="70" fill="rgba(108,182,255,.5)" stroke="#6cb6ff"/>
+        <rect x="116" y="110" width="26" height="40" fill="rgba(108,182,255,.5)" stroke="#6cb6ff"/>
+        <rect x="150" y="64" width="26" height="86" fill="rgba(108,182,255,.5)" stroke="#6cb6ff"/>
+        <rect x="184" y="44" width="26" height="106" fill="rgba(240,163,94,.6)" stroke="#f0a35e"/>
+        <rect x="218" y="72" width="26" height="78" fill="rgba(108,182,255,.5)" stroke="#6cb6ff"/>
+        <rect x="252" y="100" width="26" height="50" fill="rgba(108,182,255,.5)" stroke="#6cb6ff"/>
+        <rect x="286" y="58" width="26" height="92" fill="rgba(108,182,255,.5)" stroke="#6cb6ff"/>
+        <rect x="320" y="88" width="26" height="62" fill="rgba(108,182,255,.5)" stroke="#6cb6ff"/>
+        <rect x="354" y="112" width="26" height="38" fill="rgba(108,182,255,.5)" stroke="#6cb6ff"/>
+        <rect x="388" y="76" width="26" height="74" fill="rgba(108,182,255,.5)" stroke="#6cb6ff"/>
+        <rect x="422" y="104" width="26" height="46" fill="rgba(108,182,255,.5)" stroke="#6cb6ff"/>
+      </g>
+      <text x="197" y="40" fill="#f0a35e" font-size="8" text-anchor="middle">peak month</text>
+      <text x="248" y="168" fill="#768390" font-size="8" text-anchor="middle">12 months — illustrative shape</text>
+    </svg>
+    </div>
+    <ul>
+      <li>Determines whether a month stays under the <code>~5k</code> ceiling.</li>
+      <li>Calibrates whether <code>minClusterSize ≈ 3</code> is right at this scale.</li>
+      <li>No re-download — read straight from visit metadata.</li>
+    </ul>
+  </div>
+  <div class="keycard">
+    <span class="tag" style="color:var(--accent-2);border-color:var(--accent-2)">redownload_volume · tf-free · uses the VectorStore port</span>
+    <h3>Per-run re-download volume</h3>
+    <div class="formula">redownload_volume(ids, model_id, store) → count( pages absent from topic_page_vector )</div>
+    <ul>
+      <li>The count of window pages whose vector is not yet cached — the new public pages a run must re-download and embed.</li>
+      <li>This is the real cost of a clustering run, and the number that makes a once/day cadence cheap or expensive.</li>
+      <li>Reads the <code>topic_page_vector</code> cache through the <code>VectorStore</code> port (the only validation fn that does) — yet it lives in <code>scoring.ts</code>, tf-free and on the barrel, beside its cadence sibling <code>visits_per_month</code>.</li>
+      <li>Surfaced on <code>ValidationReport.redownload_page_count</code> alongside the visits distribution — the evidence for the default <strong>once/day</strong> 36.9 trigger cadence.</li>
+    </ul>
+  </div>
+</div>
+<figcaption>Two measurements justify the 36.9 cadence default: the visits-per-month distribution (pure, from metadata — does a month stay under the ceiling) and the per-run re-download volume (new public pages absent from <code>topic_page_vector</code> — the actual per-run cost). The bar chart is an illustrative shape; the live distribution is measured against real data later.</figcaption>
+</figure>
+
+<!-- ===================================================== AC -->
+<h2 id="ac">Acceptance criteria — and how the harness meets each</h2>
+
+<figure>
+<table>
+  <thead><tr><th>#</th><th>Acceptance criterion</th><th>How it is met</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="c">#1</td>
+      <td>A deterministic harness runs the grid over real windows and reports cluster count, noise fraction, and HDBSCAN-native validity (cluster persistence / mean probability), excluding <code>−1</code></td>
+      <td>Per grid cell, the harness fits HDBSCAN over the cosine <code>D</code> and scores <strong>mean membership probability over non-noise points</strong> plus noise fraction, median size, and cluster count — <code>−1</code> excluded from every score; HDBSCAN is bitwise-deterministic per backend</td>
+    </tr>
+    <tr>
+      <td class="c">#2</td>
+      <td>The raw-dim vs PCA-50 A/B is run and recorded, and a known project is confirmed to recover as a cluster</td>
+      <td>Both reductions run through the same precomputed-cosine path and are scored head-to-head; the known-project check confirms a labeled set's plurality lands in <strong>one</strong> cluster above threshold, not in <code>−1</code>; raw is adopted only if it wins or ties</td>
+    </tr>
+    <tr>
+      <td class="c">#3</td>
+      <td>A noise-rate / hubness guardrail is defined and its PCA-promotion path is exercised</td>
+      <td><code>evaluate_guardrail</code> inspects the default-params raw cell (anchored to <code>DEFAULT_HDBSCAN_CONFIG</code>) and trips when its mean noise <code>&gt; 0.65</code> OR its typical median size collapses to <code>≤ minClusterSize + 1</code>; on trip <code>run_pca_promotion</code> compares the default raw vs PCA-50 cell and records <code>pca_improves</code>. "Exercised" = the path runs and is asserted, NOT that PCA must beat raw — a dedicated test drives both trip reasons and the promotion</td>
+    </tr>
+    <tr>
+      <td class="c">#4</td>
+      <td>The chosen operating point is persisted as config, parameterized by window size, rather than hardcoded</td>
+      <td>A pure <code>select_operating_point(results)</code> returns the best <code>OperatingPointEntry</code> — max mean probability among cells in the healthy noise band <code>[0.05, 0.65]</code> that recover the known project — throwing if none qualifies; <code>serialize</code>/<code>parse</code>/<code>load</code> round-trip <code>operating_point.json</code> keyed by window unit, with domain validation on read; here it is seeded with the design default and re-tuned later</td>
+    </tr>
+    <tr>
+      <td class="c">#5</td>
+      <td>The harness reports cross-window variance, a boundary-fragmentation count, and records the visits-per-month distribution + per-run re-download volume that justify the 36.9 cadence</td>
+      <td><code>summarize_validation</code> rolls all four into one <code>ValidationReport</code>: <code>cross_window_variance</code> of per-window (N, cluster count, noise fraction) — the lever-order gate — <code>total_boundary_fragmentation</code> (clusters whose <code>time_span</code> touches a window edge), <code>visits_per_month</code> (pure), and <code>redownload_page_count</code> (via <code>VectorStore</code>) for the once/day cadence default</td>
+    </tr>
+  </tbody>
+</table>
+</figure>
+
+<div class="callout key">
+  <span class="label">Net effect — shipped (226 unit tests pass, both tsc configs clean)</span>
+  <p>Parameter choice is now evidence-based, not asserted: <code>run_sweep</code> ranks 108 cells per window by a metric the library actually exposes, the raw-vs-PCA decision is measured with a known-project safety gate, <code>evaluate_guardrail</code> has a tested escalation path, and the winning cell is persisted as re-tunable config-data.</p>
+  <p>Honest where the tooling forces it: there is no <code>cluster_persistence</code> attribute and the shipped silhouette is unusable, so the gate is mean membership probability — and <code>score_cell</code> returns <code>null</code>, not <code>0</code>, for an all-noise window.</p>
+  <p>With no live capture DuckDB here, <code>operating_point.json</code> is seeded with the design default and re-written by <code>select_operating_point</code> against real windows later. The orchestrator (36.9) imports <code>run_sweep</code> directly and reads the cadence this harness measures.</p>
+</div>
+
+<footer>
+  Companion for <code>task-36.7</code> (status: Done · build-order step 7 · 226 unit tests pass) — validation harness and parameter sweep · branch <code>tdt</code> ·
+  spec <code>task-36.7 ….md</code> (5 ACs, all checked) ·
+  design <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> §6 · §10 · §11 step 7 · §12 ·
+  shipped <code>tdt/src/validation/types.ts</code> (DTOs) · <code>scoring.ts</code> (tf-free, on barrel: score_cell · summarize_validation · redownload_volume) · <code>sweep.ts</code> (tf, off barrel: run_sweep · evaluate_guardrail · run_pca_promotion) · <code>operating_point.ts</code> (select/serialize/parse/load) ·
+  grid defaults <code>tdt/src/config.ts</code> (DEFAULT_HDBSCAN_CONFIG) · chosen point <code>tdt/operating_point.json</code> (seeded design default).
+</footer>
+
+</main>
+</body>
+</html>

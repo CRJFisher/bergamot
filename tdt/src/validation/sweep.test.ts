@@ -6,9 +6,8 @@ import {
   check_known_project_recovery,
   evaluate_guardrail,
   run_pca_promotion,
-  redownload_volume,
 } from "./sweep";
-import type { GridCell, KnownProject } from "./types";
+import type { GridCell, KnownProject, SweepResult, WindowScore } from "./types";
 import type { HdbscanRaw } from "../types";
 import {
   two_cluster_window,
@@ -17,7 +16,6 @@ import {
   multi_window_set,
   TWO_CLUSTER_KNOWN_PROJECT,
 } from "./__fixtures__/windows";
-import { FakeVectorStore } from "../fakes";
 
 const MAX_SAMPLES = 4000;
 
@@ -165,6 +163,39 @@ describe("evaluate_guardrail", () => {
     expect(verdict.promotion).not.toBeNull();
     expect(typeof verdict.promotion!.pca_improves).toBe("boolean");
   });
+
+  it("trips on median size collapse when noise is below the band", () => {
+    // Hand-built SweepResults (no backend needed): the default raw cell has
+    // acceptable noise but a typical cluster size collapsed to min_cluster_size,
+    // so only the size branch fires.
+    const default_cell = (reduction: GridCell["reduction"]): GridCell => ({
+      min_cluster_size: 3,
+      min_samples: 5,
+      epsilon: 0,
+      method: "eom",
+      reduction,
+    });
+    const collapsed = (reduction: GridCell["reduction"]): SweepResult => ({
+      cell: default_cell(reduction),
+      per_window: [] as WindowScore[],
+      mean_membership_probability: 0.7,
+      mean_noise_fraction: 0.2, // below NOISE_TRIP_CEILING
+      median_cluster_size_typical: 3, // == min_cluster_size → collapsed
+      known_project_recovered: true,
+    });
+    const verdict = evaluate_guardrail([collapsed("raw"), collapsed("pca50")]);
+    expect(verdict.tripped).toBe(true);
+    expect(verdict.reason).toBe("median_size_collapse");
+    expect(verdict.promotion).not.toBeNull();
+  });
+
+  it("returns healthy when results lack a default cell", () => {
+    expect(evaluate_guardrail([])).toEqual({
+      tripped: false,
+      reason: "healthy",
+      promotion: null,
+    });
+  });
 });
 
 describe("run_pca_promotion", () => {
@@ -175,15 +206,8 @@ describe("run_pca_promotion", () => {
     expect(verdict.pca_mean_noise_fraction).toBeGreaterThanOrEqual(0);
     expect(typeof verdict.pca_improves).toBe("boolean");
   });
-});
 
-describe("redownload_volume", () => {
-  it("counts only window pages absent from the vector cache", async () => {
-    const store = new FakeVectorStore();
-    const model = "bge-small-en@384#repr-v1";
-    await store.put("p1", model, "title_plus_lead", new Float32Array([1]));
-    await store.put("p2", model, "title_plus_lead", new Float32Array([1]));
-    const missing = await redownload_volume(["p1", "p2", "p3", "p4"], model, store);
-    expect(missing).toBe(2); // p3, p4 are uncached
+  it("throws when the sweep lacks a default-params cell", () => {
+    expect(() => run_pca_promotion([])).toThrow(/missing a default-params/);
   });
 });

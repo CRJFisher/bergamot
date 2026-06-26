@@ -117,6 +117,23 @@ export interface VisitsPerMonth {
   visits: number;
 }
 
+// The harness's assembled AC#5 report — the four cross-window / cadence signals
+// rolled up for one chosen cell, so "the harness reports X" is a single struct,
+// not four loose helpers a downstream consumer must compose. Built by
+// summarize_validation (scoring.ts) from a run_sweep result.
+export interface ValidationReport {
+  // Dispersion of per-window N / cluster count / noise fraction for the chosen
+  // cell — the evidence gate for the windowing seam (plan §5). First lever is
+  // minClusterSize-as-a-fraction-of-N; target-N re-windowing is the heavier
+  // second lever, only if the first is insufficient.
+  cross_window_variance: CrossWindowVariance;
+  // Clusters whose time span touches a window edge, summed over the cell's
+  // windows — "how bad is fragmentation actually" before the tracker / SOM slices.
+  total_boundary_fragmentation: number;
+  visits_per_month: VisitsPerMonth[]; // cadence evidence (task-36.9)
+  redownload_page_count: number; // per-run re-download volume (task-36.9)
+}
+
 // A WindowInput tagged with the known-project page set to confirm recovery
 // against (AC#2). Optional per sweep: when absent, recovery is not evaluated.
 export interface KnownProject {

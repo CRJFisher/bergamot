@@ -16,7 +16,7 @@ import { PCA } from "clustering-tfjs";
 
 import { cluster_window } from "../cluster_window";
 import { represent_clusters } from "../representations";
-import type { HdbscanConfig } from "../config";
+import { DEFAULT_HDBSCAN_CONFIG, type HdbscanConfig } from "../config";
 import type { PageVector, HdbscanRaw } from "../types";
 import {
   score_cell,
@@ -33,7 +33,6 @@ import type {
   PromotionVerdict,
   KnownProject,
 } from "./types";
-import type { VectorStore } from "../ports";
 
 // The swept grid (plan §6 "Parameters", §11 step 7). Window length is upstream
 // (a WindowConfig choice producing a different WindowInput set), so it is not an
@@ -61,6 +60,11 @@ const NORM_EPSILON = 1e-6;
 const RECOVERY_THRESHOLD = 0.6;
 
 // Guardrail trip thresholds (plan §6 "Noise-rate / hubness guardrail").
+// NOISE_TRIP_CEILING (when to ESCALATE to PCA) is deliberately a separate knob
+// from operating_point.ts's HEALTHY_NOISE_CEILING (when to REJECT a cell as the
+// operating point): the two answer different questions and may be tuned apart,
+// even though they start at the same 0.65 band edge. Keep that in mind if you
+// re-tune one — they are not required to move together.
 const NOISE_TRIP_CEILING = 0.65; // noise fraction persistently above this band
 const MEDIAN_COLLAPSE_SLACK = 1; // median cluster size within this of min_cluster_size
 
@@ -304,31 +308,12 @@ export function run_pca_promotion(results: SweepResult[]): PromotionVerdict {
   };
 }
 
-/**
- * Per-run re-download volume (AC#5): how many of a window's pages are absent from
- * the topic_page_vector cache — the new public pages a run must re-download and
- * embed. With visits_per_month, this is the evidence for the task-36.9 once/day
- * trigger cadence. The only function needing the VectorStore port; the
- * orchestrator calls it with the real store.
- */
-export async function redownload_volume(
-  page_session_ids: string[],
-  embedding_model_id: string,
-  store: VectorStore,
-): Promise<number> {
-  let missing = 0;
-  for (const id of page_session_ids) {
-    const cached = await store.get(id, embedding_model_id);
-    if (cached === null) missing++;
-  }
-  return missing;
-}
-
 // --- internal helpers -------------------------------------------------------
 
-// The default-params cell for a reduction: the design starting point
-// (min_cluster_size 3, min_samples 5, epsilon 0). The guardrail is anchored to a
-// single well-defined cell rather than an ambiguous "across cells" aggregate.
+// The default-params cell for a reduction: the SHIP default (DEFAULT_HDBSCAN_CONFIG,
+// plan §6), so the guardrail provably anchors to the real default rather than bare
+// literals that would silently drift if the default ever changed. A single
+// well-defined cell, not an ambiguous "across cells" aggregate.
 function find_default_cell(
   results: SweepResult[],
   reduction: Reduction,
@@ -337,9 +322,9 @@ function find_default_cell(
     results.find(
       (r) =>
         r.cell.reduction === reduction &&
-        r.cell.min_cluster_size === 3 &&
-        r.cell.min_samples === 5 &&
-        r.cell.epsilon === 0,
+        r.cell.min_cluster_size === DEFAULT_HDBSCAN_CONFIG.min_cluster_size &&
+        r.cell.min_samples === DEFAULT_HDBSCAN_CONFIG.min_samples &&
+        r.cell.epsilon === DEFAULT_HDBSCAN_CONFIG.epsilon,
     ) ?? null
   );
 }

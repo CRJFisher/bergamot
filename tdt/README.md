@@ -113,6 +113,34 @@ In production the same shape is built from the extension's DuckDB reader, the
 local embedder, the `topic_page_vector` cache writer, and the single-writer
 cluster sink.
 
+## Validation harness
+
+`src/validation/` makes parameter choice evidence-based — it sweeps the HDBSCAN
+grid over real windows and scores results, so the shipped clustering parameters
+are measured, not guessed. The entry point is **`run_sweep`** in
+`src/validation/sweep.ts`.
+
+`sweep.ts` is deliberately **not** re-exported from `src/index.ts`: it imports
+`clustering-tfjs` (PCA) and reuses the clustering core, so it pulls the native
+TensorFlow chain, exactly like `cluster_window.ts` and `representations.ts`. The
+orchestrator imports `run_sweep` / `evaluate_guardrail` from it directly. The
+tf-free pieces ARE on the barrel: `score_cell`, `summarize_validation`,
+`redownload_volume`, `cross_window_variance` (`src/validation/scoring.ts`) and
+`select_operating_point` (`src/validation/operating_point.ts`).
+
+- **The coherence signal is mean membership probability over non-noise points,**
+  not silhouette and not cluster persistence: `clustering-tfjs` 0.6.1 exposes no
+  persistence attribute and its silhouette is Euclidean-only and noise-naive
+  (plan §10). Label `-1` is excluded from every score.
+- **The chosen operating point is config data, not code.** `config.ts` holds the
+  grid's starting defaults (the search space); `select_operating_point` writes the
+  selected point into `operating_point.json` at the package root, parameterized by
+  window size — re-tuning is a data edit. The seed file holds the design defaults
+  until the harness runs against live windows.
+
+Design reference: plan §6 (parameters, high-dimensional geometry), §10
+(validation-metric caveat), §11 step 7 (build order).
+
 ## Build and test
 
 ```sh

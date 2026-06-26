@@ -10,6 +10,7 @@
 // score — the one honest signal HDBSCAN produces fit-only.
 
 import type { HdbscanRaw, RepresentedCluster, VisitRow } from "../types";
+import type { VectorStore } from "../ports";
 import type {
   CellScore,
   CrossWindowVariance,
@@ -17,6 +18,7 @@ import type {
   WindowScore,
   SweepResult,
   VisitsPerMonth,
+  ValidationReport,
 } from "./types";
 
 // A cluster's time span "touches" a window edge when its earliest member sits at
@@ -152,6 +154,60 @@ export function aggregate_sweep(
     median_cluster_size_typical: medians.length === 0 ? null : median(medians),
     known_project_recovered: recovered * 2 > per_window.length,
   };
+}
+
+/**
+ * Roll the four AC#5 signals up for one chosen cell into a single report, so
+ * "the harness reports X" is one struct rather than four loose helpers a
+ * downstream consumer must assemble. tf-free and pure: the orchestrator runs
+ * run_sweep (which needs the backend), picks the cell it would ship (the default
+ * raw cell), and hands its per-window scores plus the gathered visits and the
+ * already-measured re-download volume here.
+ *
+ * @param scored_windows one cell's per-window scores (the ship/default cell).
+ * @param visits all visits across the swept windows (for the month distribution).
+ * @param redownload_page_count the per-run re-download volume from
+ *   {@link redownload_volume}.
+ */
+export function summarize_validation(
+  scored_windows: WindowScore[],
+  visits: VisitRow[],
+  redownload_page_count: number,
+): ValidationReport {
+  let total_boundary_fragmentation = 0;
+  for (const w of scored_windows) {
+    total_boundary_fragmentation += w.boundary_fragmentation;
+  }
+  return {
+    cross_window_variance: cross_window_variance(
+      scored_windows.map((w) => w.score),
+    ),
+    total_boundary_fragmentation,
+    visits_per_month: visits_per_month(visits),
+    redownload_page_count,
+  };
+}
+
+/**
+ * Per-run re-download volume (AC#5): how many of a window's pages are absent from
+ * the topic_page_vector cache — the new public pages a run must re-download and
+ * embed. With visits_per_month this is the evidence for the task-36.9 once/day
+ * trigger cadence. The only validation function needing the VectorStore port, but
+ * tf-free, so it lives here beside its cadence sibling visits_per_month (not in
+ * the tf-pulling sweep.ts) and the orchestrator gets cadence evidence without
+ * bundling TensorFlow.
+ */
+export async function redownload_volume(
+  page_session_ids: string[],
+  embedding_model_id: string,
+  store: VectorStore,
+): Promise<number> {
+  let missing = 0;
+  for (const id of page_session_ids) {
+    const cached = await store.get(id, embedding_model_id);
+    if (cached === null) missing++;
+  }
+  return missing;
 }
 
 // --- internal helpers -------------------------------------------------------

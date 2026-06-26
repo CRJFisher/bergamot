@@ -4,9 +4,12 @@ import {
   cross_window_variance,
   visits_per_month,
   aggregate_sweep,
+  summarize_validation,
+  redownload_volume,
 } from "./scoring";
 import type { HdbscanRaw, RepresentedCluster, VisitRow } from "../types";
 import type { CellScore, WindowScore, GridCell } from "./types";
+import { FakeVectorStore } from "../fakes";
 
 function raw(labels: number[], probabilities: number[]): HdbscanRaw {
   return { labels, probabilities, exemplar_indices: new Map() };
@@ -201,5 +204,53 @@ describe("aggregate_sweep", () => {
       window_score(s, false),
     ]);
     expect(agg.known_project_recovered).toBe(true);
+  });
+});
+
+describe("summarize_validation", () => {
+  function scored(
+    n: number,
+    cluster_count: number,
+    noise_fraction: number,
+    boundary: number,
+  ): WindowScore {
+    return {
+      window_start: "2026-03-01T00:00:00.000Z",
+      window_end: "2026-04-01T00:00:00.000Z",
+      cell: CELL,
+      score: { n, cluster_count, noise_fraction, mean_membership_probability: 0.8, median_cluster_size: 3 },
+      boundary_fragmentation: boundary,
+      known_project_recovered: true,
+    };
+  }
+
+  it("rolls the four AC#5 signals up into one report", () => {
+    const visits: VisitRow[] = [
+      { page_session_id: "p1", url: "u", title: null, site_name: null, page_loaded_at: "2026-03-01T00:00:00.000Z", tree_id: "t" },
+      { page_session_id: "p2", url: "u", title: null, site_name: null, page_loaded_at: "2026-04-02T00:00:00.000Z", tree_id: "t" },
+    ];
+    const report = summarize_validation(
+      [scored(10, 2, 0.2, 1), scored(20, 4, 0.4, 2)],
+      visits,
+      7,
+    );
+    expect(report.cross_window_variance.n.mean).toBe(15);
+    expect(report.total_boundary_fragmentation).toBe(3);
+    expect(report.visits_per_month).toEqual([
+      { month: "2026-03", visits: 1 },
+      { month: "2026-04", visits: 1 },
+    ]);
+    expect(report.redownload_page_count).toBe(7);
+  });
+});
+
+describe("redownload_volume", () => {
+  it("counts only window pages absent from the vector cache", async () => {
+    const store = new FakeVectorStore();
+    const model = "bge-small-en@384#repr-v1";
+    await store.put("p1", model, "title_plus_lead", new Float32Array([1]));
+    await store.put("p2", model, "title_plus_lead", new Float32Array([1]));
+    const missing = await redownload_volume(["p1", "p2", "p3", "p4"], model, store);
+    expect(missing).toBe(2); // p3, p4 are uncached
   });
 });
