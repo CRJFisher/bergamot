@@ -35,7 +35,11 @@ four injected port contracts. The package owns the clustering logic and the
   the express server in `server/`, the re-download pipeline in `redownload/`,
   `mcp_server_standalone.ts`, etc.)
 - the `vscode` extension API
-- `node:fs`, `express`, `patchright`, or any other concrete I/O dependency
+- `express`, `patchright`, the capture DuckDB file, the network, or any other
+  concrete I/O dependency — all such I/O arrives through the four ports. (`node:fs`
+  is used only to read bundled package files: the `clustering-tfjs` manifest for
+  `algo_version`, and the `operating_point.json` config the validation harness
+  selects — never the capture data.)
 
 The dependency direction is one-way: `vscode/` depends on `@bergamot/tdt`;
 `@bergamot/tdt` never depends on `vscode/`.

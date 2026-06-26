@@ -51,6 +51,44 @@ export {
   dedupe_visits,
 } from "./page_vectors";
 
+// Validation harness (task-36.7). The tf-free pieces — scoring, the operating
+// point, and all DTOs — are re-exported; validation/sweep.ts is NOT (it imports
+// clustering-tfjs PCA and reuses cluster_window, pulling the native TensorFlow
+// chain), exactly like cluster_window.ts / representations.ts above. The
+// orchestrator (TASK-36.9) imports sweep.ts directly.
+export type {
+  Reduction,
+  WindowInput,
+  GridCell,
+  CellScore,
+  WindowScore,
+  SweepResult,
+  VarianceStat,
+  CrossWindowVariance,
+  GuardrailVerdict,
+  PromotionVerdict,
+  VisitsPerMonth,
+  KnownProject,
+} from "./validation/types";
+export {
+  score_cell,
+  boundary_fragmentation_count,
+  cross_window_variance,
+  visits_per_month,
+  aggregate_sweep,
+} from "./validation/scoring";
+export type {
+  OperatingPoint,
+  OperatingPointEntry,
+} from "./validation/operating_point";
+export {
+  select_operating_point,
+  serialize_operating_point,
+  parse_operating_point,
+  load_operating_point,
+  operating_point_path,
+} from "./validation/operating_point";
+
 // cluster_window.ts and representations.ts are NOT re-exported here: their
 // `clustering-tfjs` import pulls the native TensorFlow backend chain, which any
 // consumer of this barrel (e.g. the extension's embed pass) would then have to

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "by_window_unit": {
+    "month": {
+      "min_cluster_size": 3,
+      "min_samples": 5,
+      "method": "eom",
+      "epsilon": 0,
+      "reduction": "raw"
+    },
+    "14d": {
+      "min_cluster_size": 3,
+      "min_samples": 5,
+      "method": "eom",
+      "epsilon": 0,
+      "reduction": "raw"
+    }
+  },
+  "selected_at": "2026-06-26T00:00:00.000Z",
+  "provenance": "design-default seed (plan §6); re-written by select_operating_point when the harness runs against live windows"
+}
