@@ -32,12 +32,13 @@ export {
 // cluster_window.ts and representations.ts are NOT re-exported here: their
 // `clustering-tfjs` import pulls the native TensorFlow backend chain, which any
 // consumer of this barrel (e.g. the extension's embed pass) would then have to
-// bundle. The labeling/ modules (deterministic_labeler.ts, llm_naming_seam.ts)
-// are tf-free but are also NOT re-exported: they are internal pipeline stages
-// imported directly by the orchestrator (TASK-36.9), not consumer-facing
-// entrypoints. Only their ClusterLabel DTO is re-exported (above), since the
-// persist adapter and MCP surface reference it. The orchestrator owns wiring the
-// tf-pulling stages into the runtime and externalising the native deps.
+// bundle. The labeling/ modules are tf-free but are also NOT re-exported:
+// deterministic_labeler.ts is an internal pipeline stage the orchestrator
+// (TASK-36.9) imports directly, and llm_naming_seam.ts is a documented
+// not-yet-built seam (types only) nothing consumes yet — neither is a
+// consumer-facing entrypoint. Only the ClusterLabel DTO is re-exported (above),
+// since the persist adapter and MCP surface reference it. The orchestrator owns
+// wiring the tf-pulling stages into the runtime and externalising the native deps.
 
 import type { RelationalReader, EmbedFn, VectorStore, ClusterSink } from "./ports";
 

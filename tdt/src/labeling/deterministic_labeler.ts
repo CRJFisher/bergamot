@@ -1,7 +1,7 @@
 // The deterministic, no-LLM labeler (plan §7, build-order step 5). Produces a
 // ClusterLabel bundle of SEPARATE fields from already-captured <head> metadata
-// (the exemplar page's title, member URLs and titles) — no re-download, no HTML
-// parse, no window-relative c-TF-IDF, no LLM. The genuine corpus-relative
+// (the representative page's title, member URLs and titles) — no re-download, no
+// HTML parse, no window-relative c-TF-IDF, no LLM. The genuine corpus-relative
 // keyword extraction (c-TF-IDF) and the LLM rewrite are deferred (see §7 and
 // llm_naming_seam.ts); the typed keyphrases field + representation_version are
 // the seam for swapping a richer extractor in later.
@@ -138,10 +138,12 @@ function build_keyphrases(
  * Compose the human-readable display string from the label parts (plan §7,
  * AC#3 recomposition). Pure and total: the UI and tests call it to recompose
  * `display_label` from the stored fields without re-running label_cluster, so
- * `display_label` is never a separately-baked string. The degradation chain is
- * total over every empty-input combination:
- *   headline → else joined keyphrases → else scope → else a fixed placeholder,
- * with " — <scope>" appended only when both a title part and a scope exist.
+ * `display_label` is never a separately-baked string. Two rules, total over
+ * every empty-input combination:
+ *   1. title_part = headline_title, else the joined keyphrases, else "".
+ *   2. result = "<title_part> — <scope>" when both are non-empty; otherwise
+ *      whichever of the two is non-empty; otherwise the "Untitled cluster"
+ *      placeholder. (scope is an appendix to the title part, not a peer rung.)
  */
 export function compose_display_label(
   headline_title: string,
@@ -163,13 +165,18 @@ export function compose_display_label(
 
 /**
  * Build the deterministic ClusterLabel for one represented cluster (plan §7).
- * `headline_title` is the exemplar page's title; `scope` the registrable-domain
- * distribution; `keyphrases` the title term-frequency terms; `display_label`
- * the composition of those parts; `representation_version` the labeler version.
+ * `headline_title` is the representative page's title; `scope` the
+ * registrable-domain distribution; `keyphrases` the title term-frequency terms;
+ * `display_label` the composition of those parts; `representation_version` the
+ * labeler version.
  *
  * @param cluster the represented cluster; representative_index selects the
- *   exemplar VisitRow, member_indices the pages mined for scope/keyphrases.
- * @param visits  the window's VisitRows, index-aligned to the cluster's indices.
+ *   representative VisitRow (the eom exemplar, or the medoid fallback that
+ *   represent_clusters resolved), member_indices the pages mined for
+ *   scope/keyphrases.
+ * @param visits  the window's deduped VisitRows (dedupe_visits output),
+ *   index-aligned to the cluster's indices — repeat same-URL visits are already
+ *   collapsed, so a duplicate title is genuine keyphrase signal.
  * @param config  labeler knobs; defaults to DEFAULT_LABELER_CONFIG.
  */
 export function label_cluster(
@@ -177,8 +184,8 @@ export function label_cluster(
   visits: VisitRow[],
   config: LabelerConfig = DEFAULT_LABELER_CONFIG,
 ): ClusterLabel {
-  const exemplar_title = visits[cluster.representative_index].title;
-  const headline_title = exemplar_title === null ? "" : exemplar_title.trim();
+  const representative_title = visits[cluster.representative_index].title;
+  const headline_title = representative_title === null ? "" : representative_title.trim();
 
   const scope = build_scope(cluster.member_indices, visits, config);
   const keyphrases = build_keyphrases(cluster.member_indices, visits, config);

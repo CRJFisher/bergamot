@@ -283,6 +283,24 @@ describe("represent_clusters — metadata (AC#1)", () => {
     const result = await represent_clusters(raw, vectors, visits);
     expect(result[0].time_span).toEqual({ start: t(2024, 3, 1), end: t(2024, 3, 20) });
   });
+
+  it("orders time_span by instant, not raw string, across mixed UTC ISO forms", async () => {
+    // Same second, mixed precision: "…00.500Z" sorts lexically BEFORE "…00Z"
+    // ('.' < 'Z'), so a raw string min would wrongly pick the .500 row as start.
+    const vectors = [unit_vector("a0", [1, 0, 0]), unit_vector("a1", [1, 0.05, 0]), unit_vector("a2", [1, 0.1, 0])];
+    const visits = [
+      visit("a0", "https://x.com/0", "2024-03-05T00:00:00.500Z"),
+      visit("a1", "https://x.com/1", "2024-03-05T00:00:00Z"), // earliest instant
+      visit("a2", "https://x.com/2", "2024-03-05T00:00:02Z"), // latest instant
+    ];
+    const raw = make_raw([0, 0, 0], [0.9, 0.8, 0.7], [[0, 0]]);
+
+    const result = await represent_clusters(raw, vectors, visits);
+    expect(result[0].time_span).toEqual({
+      start: "2024-03-05T00:00:00Z",
+      end: "2024-03-05T00:00:02Z",
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -306,5 +324,24 @@ describe("represent_clusters — index alignment guards", () => {
     const vectors = [unit_vector("a0", [1, 0]), unit_vector("a1", [0, 1])];
     const visits = [visit("a0", "https://x.com/0", t(2024, 1, 1)), visit("SWAPPED", "https://x.com/1", t(2024, 1, 2))];
     await expect(represent_clusters(make_raw([0, 0], [1, 1], [[0, 0]]), vectors, visits)).rejects.toThrow(/mis-zipped/);
+  });
+
+  it("throws when the probabilities length disagrees with the row count", async () => {
+    const vectors = [unit_vector("a0", [1, 0]), unit_vector("a1", [0, 1])];
+    const visits = [visit("a0", "https://x.com/0", t(2024, 1, 1)), visit("a1", "https://x.com/1", t(2024, 1, 2))];
+    await expect(represent_clusters(make_raw([0, 0], [1], [[0, 0]]), vectors, visits)).rejects.toThrow(/misaligned/);
+  });
+
+  it("throws on non-contiguous cluster labels when the medoid fallback is needed", async () => {
+    // labels {0,2} (no label 1) + an empty exemplar map → the medoid branch runs
+    // and the contiguity guard must reject the gap before mis-indexing.
+    const vectors = [
+      unit_vector("a0", [1, 0, 0]), unit_vector("a1", [1, 0.05, 0]),
+      unit_vector("c0", [0, 0, 1]), unit_vector("c1", [0, 0.05, 1]),
+    ];
+    const visits = vectors.map((v, i) => visit(v.page_session_id, `https://x.com/${i}`, t(2024, 1, i + 1)));
+    await expect(
+      represent_clusters(make_raw([0, 0, 2, 2], [0.9, 0.8, 0.9, 0.8], []), vectors, visits),
+    ).rejects.toThrow(/non-contiguous/);
   });
 });

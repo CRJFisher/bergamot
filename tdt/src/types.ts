@@ -64,7 +64,7 @@ export interface RepresentedCluster {
 // ClusterRecord, widening non-null to nullable. Computed at page granularity
 // (the member set is already pages).
 export interface ClusterLabel {
-  headline_title: string; // exemplar page's VisitRow.title; "" if it has none
+  headline_title: string; // representative page's VisitRow.title; "" if it has none
   scope: string; // registrable-domain distribution, e.g. "nextjs.org +3 sites"; "" if no URL parses
   keyphrases: string[]; // cheap deterministic terms mined from member titles; never null
   display_label: string; // composed template over the parts (see compose_display_label)

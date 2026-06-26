@@ -184,6 +184,14 @@ describe("label_cluster — empty inputs (AC#2)", () => {
     expect(label.scope).toBe("github.com");
   });
 
+  it("trims a whitespace-only exemplar title to '' and falls through (AC#2)", () => {
+    const visits = [visit("p0", "https://github.com/a", "   "), visit("p1", "https://github.com/b", "code review")];
+    const label = label_cluster(cluster([0, 1], 0), visits);
+    expect(label.headline_title).toBe("");
+    // headline empty → display_label falls through to keyphrases + scope.
+    expect(label.display_label).toBe("code, review — github.com");
+  });
+
   it("produces a defined display_label even with no title, keyphrases or scope (AC#2)", () => {
     const visits = [visit("p0", "about:blank", null), visit("p1", "not-a-url", null)];
     const label = label_cluster(cluster([0, 1], 0), visits);

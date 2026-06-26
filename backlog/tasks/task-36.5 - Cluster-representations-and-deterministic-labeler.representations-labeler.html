@@ -95,10 +95,7 @@
   .callout.good .label { color: var(--green); }
   .callout p { margin: .3rem 0; }
   .callout.decision { background: var(--bg-alt); border: 1px solid var(--accent); border-left: 4px solid var(--accent); }
-  .callout.confirm { background: rgba(240,163,94,.06); border: 1px dashed var(--accent); border-left: 4px solid var(--accent); }
   .callout .pick { color: var(--green); font-weight: 700; }
-  .callout .q { color: var(--accent); font-weight: 700; }
-  .callout .confirm-tag { display:inline-block; font-family: var(--mono); font-size: .62rem; text-transform: uppercase; letter-spacing:.08em; color:#1a1208; background:var(--accent); border-radius: 999px; padding:.1em .55em; margin-left:.5em; font-weight:700; }
 
   .prompt-box { border: 1px solid var(--border); border-left: 3px solid var(--fg-dim); border-radius: 6px; background: var(--bg-alt); padding: .8rem 1.1rem; margin: 1rem 0; }
   .prompt-box .label { font-family: var(--mono); font-size: .66rem; text-transform: uppercase; letter-spacing: .09em; color: var(--fg-dim); display: block; margin-bottom: .35rem; }
@@ -186,7 +183,7 @@
   <a href="#example">A worked window</a>
   <a href="#bundle">The label bundle &amp; recompose</a>
   <a href="#seam">The LLM-naming seam</a>
-  <a href="#confirm">Decisions to confirm</a>
+  <a href="#confirm">Settled decisions</a>
   <a href="#ac">Acceptance criteria</a>
 </nav>
 
@@ -196,24 +193,24 @@
   <h1>Cluster representations and the deterministic labeler</h1>
   <p class="lead">Step 5 turns one <code>HdbscanRaw { labels[], probabilities[], exemplar_indices }</code> into per-cluster <code>RepresentedCluster[]</code> + <code>ClusterLabel[]</code>: each cluster gets a representative page, a frozen representative vector, and a five-field label bundle that recomposes into a display string — with no LLM and no window-relative c-TF-IDF. Noise (<code>-1</code>) gets no representative. Persistence (36.6) and orchestration (36.9) come next; this stage produces in-memory objects only.</p>
   <div class="meta">
-    <span class="chip todo"><strong>status</strong> to do</span>
+    <span class="chip done"><strong>status</strong> built &amp; reviewed</span>
     <span class="chip"><strong>depends</strong> 36.4 HdbscanRaw</span>
     <span class="chip"><strong>feeds</strong> 36.6 persistence</span>
-    <span class="chip done"><strong>types ready</strong> RepresentedCluster · ClusterRecord (label fields)</span>
-    <span class="chip"><strong>new dep</strong> tldts@6.1.86 (registrable domain)</span>
+    <span class="chip done"><strong>ships</strong> represent_clusters · label_cluster · LLM seam (types only)</span>
+    <span class="chip done"><strong>new dep</strong> tldts pinned 6.1.86 (PSL = determinism surface)</span>
     <span class="chip"><strong>parent</strong> task-36</span>
   </div>
 </header>
 
 <div class="prompt-box">
-  <span class="label">Source of truth read to build this page</span>
+  <span class="label">Source of truth read to refresh this page — the as-built code + the task's Implementation Notes</span>
   <ul>
-    <li><code>task-36.5 ….md</code> — the spec: description + 4 acceptance criteria</li>
-    <li><code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> — §7 (representation &amp; labeling) · §6 stage types (<code>HdbscanRaw</code>, <code>RepresentedCluster</code>) · §8 (<code>ClusterRecord</code> label columns) · §10 (<code>select_medoids</code> Phase 3)</li>
-    <li><code>tdt/src/types.ts</code> — <code>RepresentedCluster</code> + <code>ClusterRecord</code>'s label fields already defined</li>
-    <li><code>tdt/src/page_vectors.ts</code> — the fixed-order float64 accumulation discipline this stage mirrors for the frozen vector</li>
-    <li><code>tdt/src/cluster_window.ts</code> + <code>index.ts</code> — the upstream producer and the "NOT re-exported from the barrel" convention <code>representations.ts</code> follows</li>
-    <li><code>node_modules/tldts/package.json</code> — verified <code>tldts@6.1.86</code> hoisted and available (offline Public Suffix List)</li>
+    <li><code>tdt/src/representations.ts</code> — <code>represent_clusters</code>, <code>frozen_representative_vector</code> (degenerate fallback, <code>time_span</code> by parsed instant)</li>
+    <li><code>tdt/src/labeling/deterministic_labeler.ts</code> — <code>label_cluster</code>, <code>compose_display_label</code>, <code>LABELER_VERSION = "det-1"</code>, <code>DEFAULT_LABELER_CONFIG</code></li>
+    <li><code>tdt/src/labeling/llm_naming_seam.ts</code> — <code>ClusterNamer</code> + <code>ClusterFingerprint</code>, types only</li>
+    <li><code>tdt/src/types.ts</code> — <code>ClusterLabel</code>, <code>RepresentedCluster</code>, <code>ClusterRecord</code> label fields</li>
+    <li><code>task-36.5 ….md</code> — the authoritative ## Implementation Notes (summary · decisions · verification: 126 tests pass)</li>
+    <li><code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> — §7 (representation &amp; labeling) · §10 (<code>select_medoids</code> Phase 3)</li>
   </ul>
 </div>
 
@@ -271,7 +268,7 @@
   <!-- label_cluster -->
   <rect x="500" y="100" width="246" height="130" rx="10" fill="#161b22" stroke="#f0a35e" stroke-width="1.5"/>
   <text x="623" y="122" fill="#f0a35e" font-size="10.5" text-anchor="middle" font-weight="bold">label_cluster (no LLM)</text>
-  <text x="623" y="140" fill="#768390" font-size="8.5" text-anchor="middle">headline_title (exemplar title)</text>
+  <text x="623" y="140" fill="#768390" font-size="8.5" text-anchor="middle">headline_title (representative title)</text>
   <text x="623" y="152" fill="#768390" font-size="8.5" text-anchor="middle">scope (registrable-domain dist.)</text>
   <text x="623" y="164" fill="#768390" font-size="8.5" text-anchor="middle">keyphrases (title terms)</text>
   <text x="623" y="176" fill="#768390" font-size="8.5" text-anchor="middle">display_label = compose(…)</text>
@@ -408,7 +405,7 @@
     <div class="badge ok">B</div>
     <div class="body">
       <h3>Frozen representative vector — float64 fixed-order mean, then L2-normalize, then freeze</h3>
-      <p>The representative <em>vector</em> is the L2-normalized mean of member vectors, accumulated in <strong>float64 in ascending index order</strong> with one float32 truncation — the discipline already in <code>page_vectors.ts</code>'s <code>mean_pool</code>. It is then FROZEN: read now for ranking, and banked as the input the Phase-4 tracker's Hungarian match needs.</p>
+      <p>The representative <em>vector</em> is the L2-normalized mean of member vectors, accumulated in <strong>float64 in ascending index order</strong> with one float32 truncation — the discipline already in <code>page_vectors.ts</code>'s <code>mean_pool</code>. It is then FROZEN: read now for ranking, and banked as the input the Phase-4 tracker's Hungarian match needs. On a near-antipodal collapse (mean norm &lt; ε) it falls back to the representative member's own unit vector — never a near-zero direction — a deliberate divergence from <code>page_vectors.ts</code>, which zeroes degenerate segments.</p>
       <span class="loc">tdt/src/representations.ts (new) · mirrors page_vectors.ts mean_pool fixed-order accumulation</span>
     </div>
   </div>
@@ -418,6 +415,14 @@
       <h3>Noise (<code>-1</code>) has no representative</h3>
       <p>A label of <code>-1</code> is "a page in no project" — it produces no <code>RepresentedCluster</code>, no representative page, no vector, no label bundle. Its persistence (a member row with <code>is_noise = TRUE</code>) is 36.6's job, not this stage's.</p>
       <span class="loc">AC #1 · plan §6/§8 noise resolution</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="badge guard">D</div>
+    <div class="body">
+      <h3><code>time_span</code> — ordered by PARSED INSTANT, not raw string compare</h3>
+      <p>The earliest/latest member bounds are chosen by <code>Date.parse(page_loaded_at)</code>, not lexical comparison, so mixed UTC ISO-8601 forms (<code>Z</code> / <code>+00:00</code> / <code>.SSS</code> precision) order correctly; the original strings are stored verbatim as the bounds.</p>
+      <span class="loc">tdt/src/representations.ts · time_span = { start, end }</span>
     </div>
   </div>
 </div>
@@ -475,7 +480,7 @@
   <div class="bcard exem">
     <div class="fld">representative · page_session_id</div>
     <div class="val">= visits[<strong>1</strong>].page_session_id</div>
-    <div class="note">the eom exemplar (row 1, p=0.95)</div>
+    <div class="note">the eom exemplar (row 1, p=0.95); medoid fallback when none</div>
   </div>
   <div class="bcard exem">
     <div class="fld">representative_vector (FROZEN)</div>
@@ -485,7 +490,7 @@
   <div class="bcard">
     <div class="fld">headline_title</div>
     <div class="val">“React — Hooks reference”</div>
-    <div class="note">the exemplar page's title (row 1)</div>
+    <div class="note">the representative page's title (row 1; exemplar here, else the medoid)</div>
   </div>
   <div class="bcard scope">
     <div class="fld">scope</div>
@@ -506,7 +511,7 @@
 
 <div class="callout info">
   <span class="label">Why <code>scope</code> reads "react.dev +2 sites"</span>
-  <p>The 5 members span three distinct registrable domains. With more than one, the format is <code>"&lt;primary&gt; +&lt;N&gt; sites"</code>, N = distinct − 1 (here 2); a single-domain cluster reads just <code>"react.dev"</code>.</p>
+  <p>The 5 members span three distinct registrable domains. With more than one, the format is <code>"&lt;primary&gt; +&lt;N&gt; site(s)"</code>, N = distinct − 1 (here 2, so <code>"+2 sites"</code>; <code>+1</code> reads the singular <code>"+1 site"</code>); a single-domain cluster reads just <code>"react.dev"</code>.</p>
   <p><code>site_name</code> is never used — it is often-NULL <code>&lt;head&gt;</code> metadata; the URL's registrable domain is the always-present signal.</p>
 </div>
 
@@ -536,7 +541,7 @@
 
   <!-- two banked fields -->
   <rect x="20" y="200" width="250" height="34" rx="6" fill="#0c0f14" stroke="#2a313a"/>
-  <text x="34" y="221" fill="#768390" font-size="9">representation_version  "repr-label-v1"</text>
+  <text x="34" y="221" fill="#768390" font-size="9">representation_version  "det-1" (LABELER_VERSION)</text>
 
   <!-- arrows into compose -->
   <line x1="270" y1="64"  x2="360" y2="120" stroke="#9aa6b2" stroke-width="1.4" marker-end="url(#ba)"/>
@@ -584,11 +589,11 @@
   <span class="label">keyphrases — deliberately corpus-INDEPENDENT, not c-TF-IDF</span>
   <p>Keyphrases come from the cluster's own member titles only: lowercase + NFC, tokenize on non-alphanumeric (<code>\p{L}\p{N}</code>), drop stopwords and tokens shorter than 3, count term frequency, take top-k by (count desc, token asc).</p>
   <p>Because they depend on <em>this cluster's titles alone</em>, not the surrounding window, the same enduring project keeps the same keyphrases as its neighbors change — window-relative c-TF-IDF would drift, hostile to the cross-window stability tracking needs.</p>
-  <p><code>keyphrases</code> + <code>representation_version</code> are the seam for a later fixed-corpus pass if measurement shows it is needed.</p>
+  <p>This is an in-house term-frequency pass (~15 lines), NOT a library and NOT c-TF-IDF: a keyword library would pull version-sensitive English POS/stemming that churns labels. The genuine corpus-relative c-TF-IDF is deferred to the LLM namer; <code>keyphrases</code> + <code>representation_version</code> are the seam for a richer extractor later.</p>
 </div>
 
 <!-- ===================================================== LLM SEAM -->
-<h2 id="seam">The LLM-naming seam — documented, deliberately not built</h2>
+<h2 id="seam">The LLM-naming seam — types only, deliberately not built</h2>
 
 <figure>
 <div class="diagram">
@@ -604,9 +609,9 @@
   <text x="170" y="102" fill="#d7dde4" font-size="9.5" text-anchor="middle">the deterministic label bundle</text>
   <text x="170" y="118" fill="#768390" font-size="8.5" text-anchor="middle">headline · scope · keyphrases · display · version</text>
   <rect x="44" y="144" width="252" height="56" rx="7" fill="#161b22" stroke="#d2a8ff"/>
-  <text x="170" y="166" fill="#d2a8ff" font-size="9.5" text-anchor="middle">Labeler interface boundary</text>
-  <text x="170" y="182" fill="#768390" font-size="8.5" text-anchor="middle">the interface a future LLM rewrite</text>
-  <text x="170" y="194" fill="#768390" font-size="8.5" text-anchor="middle">step would implement — documented</text>
+  <text x="170" y="166" fill="#d2a8ff" font-size="9.5" text-anchor="middle">ClusterNamer + ClusterFingerprint</text>
+  <text x="170" y="182" fill="#768390" font-size="8.5" text-anchor="middle">TYPES ONLY — no impl, no config flag</text>
+  <text x="170" y="194" fill="#768390" font-size="8.5" text-anchor="middle">the shape a future LLM rewrite satisfies</text>
 
   <line x1="320" y1="130" x2="380" y2="130" stroke="#768390" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#sa)"/>
   <text x="350" y="120" fill="#768390" font-size="8" text-anchor="middle">later</text>
@@ -649,23 +654,19 @@
 <figcaption>36.5 ships the deterministic bundle, the <code>Labeler</code> interface boundary, and the documented cache-key idea — re-fire when the frozen representative vector moves past a cosine threshold OR the stable core's Jaccard overlap drops below ~0.8, reusing the machinery Phase-4 tracking uses. No LLM code, no config flag, no cache table ship.</figcaption>
 </figure>
 
-<!-- ===================================================== DECISIONS TO CONFIRM -->
-<h2 id="confirm">Decisions to confirm before implementation</h2>
+<!-- ===================================================== SETTLED DECISIONS -->
+<h2 id="confirm">Settled decisions — all built as described</h2>
 
-<div class="callout confirm">
-  <span class="label">Decision #1 — registrable domain: the <code>tldts</code> library, not a heuristic <span class="confirm-tag">confirm</span></span>
-  <p><span class="pick">Add <code>tldts@6.1.86</code> as an explicit <code>tdt</code> dependency.</span> Offline, deterministic, already hoisted. <code>getDomain('https://docs.google.com/x')</code> → <code>google.com</code>; <code>foo.co.uk</code> correct; <code>localhost</code> → null.</p>
-  <p>A true eTLD+1 (every subdomain groups as one) needs the Public Suffix List; a "last two labels" heuristic is wrong for <code>co.uk</code>. This is the one new dependency.</p>
-  <p class="q">Confirm: the new dependency vs a hand-rolled heuristic.</p>
+<div class="callout decision">
+  <span class="label">Decision #1 — registrable domain: <code>tldts</code>, pinned EXACTLY <code>6.1.86</code></span>
+  <p><span class="pick">Built with <code>tldts</code> as an explicit <code>tdt</code> dependency, pinned exact <code>6.1.86</code>.</span> Offline, deterministic, pure (no native deps), so the labeler stays barrel-safe. <code>getDomain('https://docs.google.com/x')</code> → <code>google.com</code>; <code>foo.co.uk</code> correct; <code>localhost</code> → null.</p>
+  <p>The version is pinned exactly because the bundled <strong>Public Suffix List snapshot is part of the labeler's determinism surface</strong> — a PSL update would silently shift which subdomains collapse to which eTLD+1. A "last two labels" heuristic, wrong for <code>co.uk</code>, was rejected.</p>
 </div>
 
-<div class="callout confirm">
-  <span class="label">Decision #5 — the <code>scope</code> string shape and the <code>display_label</code> template <span class="confirm-tag">confirm</span></span>
-  <p><span class="pick"><code>scope</code> = primary domain alone when one distinct domain, else <code>"&lt;primary&gt; +&lt;N&gt; sites"</code></span> (N = distinct − 1), with the domain distribution sorted by (count desc, domain asc). <code>site_name</code> is not used — it is often NULL/junk; the registrable domain is the always-present signal. The <code>display_label</code> template is <code>"&lt;headline or keyphrases&gt; — &lt;scope&gt;"</code>, e.g. <code>"React — Hooks reference — react.dev +2 sites"</code>.</p>
-  <p class="q">Confirm: the scope string shape and the display_label template.</p>
+<div class="callout decision">
+  <span class="label">Decision #5 — the <code>scope</code> string shape and the <code>display_label</code> template</span>
+  <p><span class="pick"><code>scope</code> = <code>"&lt;primary&gt;"</code> for one distinct domain, else <code>"&lt;primary&gt; +&lt;N&gt; site(s)"</code></span> (N = distinct − 1; singular <code>"site"</code> for N=1), the domain distribution sorted by (count desc, domain asc). <code>site_name</code> is never used — often NULL/junk; the registrable domain is the always-present signal. <code>display_label</code> = <code>"&lt;headline or joined keyphrases&gt; — &lt;scope&gt;"</code>, e.g. <code>"React — Hooks reference — react.dev +2 sites"</code>, degrading to scope alone, then to the <code>"Untitled cluster"</code> placeholder. <code>representation_version</code> is the value <code>"det-1"</code> (<code>LABELER_VERSION</code>).</p>
 </div>
-
-<h3>Settled decisions (built as described, no confirmation needed)</h3>
 
 <div class="callout decision">
   <span class="label">Decision #2 — the index-alignment contract</span>
@@ -699,7 +700,7 @@
     <tr>
       <td class="c">#2</td>
       <td>A deterministic labeler produces <code>headline_title</code>, <code>scope</code>, <code>keyphrases</code>, <code>display_label</code>, <code>representation_version</code> as separate fields — no LLM, no per-window c-TF-IDF</td>
-      <td><code>label_cluster</code> populates five separate fields: exemplar title, <code>tldts</code> registrable-domain distribution, corpus-independent title keyphrases, the composed label, and a logic version — no LLM call, no window-relative term weighting</td>
+      <td><code>label_cluster</code> populates five separate fields: representative-page title, <code>tldts</code> registrable-domain distribution, corpus-independent title keyphrases, the composed label, and a logic version — no LLM call, no window-relative term weighting</td>
     </tr>
     <tr>
       <td class="c">#3</td>
@@ -709,7 +710,7 @@
     <tr>
       <td class="c">#4</td>
       <td>The LLM-naming seam (interface boundary + stable-core fingerprint) is documented but not implemented, and no default-off config flag for it is shipped</td>
-      <td><code>labeling/llm_naming_seam.ts</code> documents the <code>Labeler</code> interface + the representative-vector-cosine / stable-core-Jaccard cache key; no rewrite code, no config flag, no cache table ship</td>
+      <td><code>labeling/llm_naming_seam.ts</code> is types only — <code>ClusterNamer</code> + <code>ClusterFingerprint</code> (representative-vector-cosine / stable-core-Jaccard cache key); no rewrite code, no config flag, no cache table ship</td>
     </tr>
   </tbody>
 </table>
@@ -718,16 +719,16 @@
 <div class="callout good">
   <span class="label">Net effect</span>
   <p>After 36.5, every cluster carries a recognizable representative page, a frozen vector that de-risks tracking, and a recomposable label bundle — deterministic, offline, zero-LLM.</p>
-  <p>The only open choices are the <code>tldts</code> dependency (#1) and the scope/label string shape (#5).</p>
+  <p>All five decisions are settled and built; 126 <code>@bergamot/tdt</code> unit tests pass and both <code>tsc</code> configs are clean. The LLM rewrite ships only its types — <code>ClusterNamer</code> + <code>ClusterFingerprint</code> — as the seam Phase-4 fills in.</p>
 </div>
 
 <footer>
-  Companion for <code>task-36.5</code> (status: To Do · build-order step 5) — cluster representations + deterministic labeler · branch <code>tdt</code> ·
+  Companion for <code>task-36.5</code> (status: built &amp; reviewed · build-order step 5) — cluster representations + deterministic labeler · branch <code>tdt</code> ·
   spec <code>task-36.5 ….md</code> (4 ACs) ·
   design <code>backlog/drafts/tdt-hdbscan-micro-tier-plan.md</code> §7 (representation &amp; labeling) · §6 (stage types) · §8 (ClusterRecord columns) · §10 (select_medoids) ·
   types <code>tdt/src/types.ts</code> (RepresentedCluster · ClusterRecord label fields) ·
   new code <code>tdt/src/representations.ts</code> · <code>tdt/src/labeling/deterministic_labeler.ts</code> · <code>tdt/src/labeling/llm_naming_seam.ts</code> (NOT re-exported from the barrel) ·
-  new dependency <code>tldts@6.1.86</code> (offline registrable-domain / Public Suffix List).
+  new dependency <code>tldts</code> pinned exact <code>6.1.86</code> (offline registrable-domain / Public Suffix List — the bundled PSL is part of the labeler's determinism surface).
 </footer>
 
 </main>

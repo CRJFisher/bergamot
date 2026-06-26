@@ -24,11 +24,13 @@ import { select_medoids } from "clustering-tfjs";
 
 import type { HdbscanRaw, PageVector, VisitRow, RepresentedCluster } from "./types";
 
-// The single "is this vector meaningless" floor, shared with page_vectors.ts
-// (degenerate_norm_epsilon there). A cluster mean can collapse below this when
-// members are near-antipodal (HDBSCAN clusters on density, not hemisphere
-// coherence), in which case we fall back to the representative member's own unit
-// vector rather than emit a near-zero direction.
+// The "is this vector meaningless" floor. Pinned to the same value as
+// page_vectors.ts's degenerate_norm_epsilon (config.ts), but kept as a separate
+// literal because this module takes no config — it is not literally the same
+// constant. A cluster mean can collapse below this when members are
+// near-antipodal (HDBSCAN clusters on density, not hemisphere coherence), in
+// which case we fall back to the representative member's own unit vector rather
+// than emit a near-zero direction.
 const NORM_EPSILON = 1e-6;
 
 function l2_norm(v: Float64Array): number {
@@ -43,16 +45,20 @@ function l2_norm(v: Float64Array): number {
  * fetch order, the §6 determinism anchor) and truncated to float32 exactly once.
  *
  * Degenerate guard: if the mean's norm collapses below ε (near-antipodal
- * members), fall back to `fallback_unit` — the representative member's own unit
- * vector, always valid — rather than a near-zero direction. A zero vector would
- * read as "orthogonal to everything" and silently corrupt the tracker's cosine
- * match, so unlike page_vectors.ts (which zeroes degenerate segments) we never
- * emit zero here.
+ * members), fall back to `representative_member_vector` rather than a near-zero
+ * direction. A zero vector would read as "orthogonal to everything" and silently
+ * corrupt the tracker's cosine match, so unlike page_vectors.ts (which zeroes
+ * degenerate segments) we never emit zero here.
+ *
+ * @param representative_member_vector the representative page's own vector, used
+ *   verbatim on collapse. It is already unit-norm because PageVector.vector is
+ *   L2-normalized upstream (types.ts) — this function relies on that invariant
+ *   rather than re-normalizing.
  */
 function frozen_representative_vector(
   member_indices: number[],
   vectors: PageVector[],
-  fallback_unit: Float32Array,
+  representative_member_vector: Float32Array,
 ): Float32Array {
   const dim = vectors[member_indices[0]].vector.length;
   const acc = new Float64Array(dim);
@@ -66,7 +72,7 @@ function frozen_representative_vector(
   const norm = l2_norm(acc);
   const out = new Float32Array(dim);
   if (norm < NORM_EPSILON) {
-    out.set(fallback_unit); // an owned copy of the rep member's unit vector
+    out.set(representative_member_vector); // an owned copy, not an alias
     return out;
   }
   const inv = 1 / norm;
@@ -84,7 +90,10 @@ function frozen_representative_vector(
  * load-bearing (a mis-zip silently mislabels every cluster), so it is asserted
  * up front, fail-loud, before any work.
  *
- * Async because the medoid fallback (`select_medoids`) returns a Promise.
+ * Async to await the `select_medoids` fallback. The fallback is off the v1
+ * default path (eom + storeExemplars always yields exemplars), but the contract
+ * stays async so wiring it in never has to change; the branch is exercised by
+ * representations.test.ts via a raw with an empty exemplar map.
  *
  * @throws if the parallel-array lengths disagree, a per-row page_session_id
  *   mismatch reveals a mis-zip, or a resolved representative index is out of
@@ -134,8 +143,9 @@ export async function represent_clusters(
   let medoid_indices: Int32Array | null = null;
   if (needs_medoid) {
     // Contiguity guard: the library emits dense labels 0..k-1 and select_medoids
-    // indexes its result by label value, so the distinct-label count must equal
-    // max+1. A future library change that broke this would otherwise mis-index.
+    // returns one medoid per label, indexed by label value (clustering-tfjs
+    // medoid_selection.js), so the distinct-label count must equal max+1. A
+    // future library change that broke this would otherwise mis-index.
     const n_clusters = labels_asc[labels_asc.length - 1] + 1;
     if (n_clusters !== labels_asc.length) {
       throw new Error(
@@ -169,12 +179,19 @@ export async function represent_clusters(
       vectors[representative_index].vector,
     );
 
-    let start = visits[member_indices[0]].page_loaded_at;
-    let end = start;
+    // time_span = earliest/latest member visit. Order by parsed instant, not by
+    // raw string: ISO-8601 is only lexicographically ordered when offset and
+    // precision are uniform (mixed `Z` / `+00:00` / `.SSS` forms are not), and
+    // Date.parse is spec-guaranteed to parse the ISO-8601 page_loaded_at. The
+    // original strings are preserved as the stored bounds.
+    let start_i = member_indices[0];
+    let end_i = member_indices[0];
+    let start_ms = Date.parse(visits[start_i].page_loaded_at);
+    let end_ms = start_ms;
     for (const i of member_indices) {
-      const at = visits[i].page_loaded_at;
-      if (at < start) start = at; // ISO-8601 TEXT sorts lexicographically
-      if (at > end) end = at;
+      const ms = Date.parse(visits[i].page_loaded_at);
+      if (ms < start_ms) { start_ms = ms; start_i = i; }
+      if (ms > end_ms) { end_ms = ms; end_i = i; }
     }
 
     clusters.push({
@@ -183,7 +200,7 @@ export async function represent_clusters(
       representative_index,
       representative_vector,
       size: member_indices.length,
-      time_span: { start, end },
+      time_span: { start: visits[start_i].page_loaded_at, end: visits[end_i].page_loaded_at },
     });
   }
   return clusters;
