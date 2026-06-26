@@ -13,6 +13,10 @@
     "test": "jest",
     "clean": "rm -rf out"
   },
+  "dependencies": {
+    "@tensorflow/tfjs-core": "^4.20.0",
+    "clustering-tfjs": "^0.6.1"
+  },
   "devDependencies": {
     "@types/jest": "^29.5.14",
     "@types/node": "20.x",

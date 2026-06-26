@@ -80,6 +80,7 @@
     "@duckdb/node-api": "^1.5.3-r.3",
     "@huggingface/transformers": "3.7.6",
     "@modelcontextprotocol/sdk": "^1.15.1",
+    "@tensorflow/tfjs-node": "^4.20.0",
     "cors": "^2.8.5",
     "defuddle": "^0.18.1",
     "express": "^5.1.0",

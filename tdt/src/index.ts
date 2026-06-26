@@ -28,6 +28,12 @@ export {
   dedupe_visits,
 } from "./page_vectors";
 
+export {
+  build_cosine_distance_matrix,
+  cluster_window,
+  resolve_algo_version,
+} from "./cluster_window";
+
 import type { RelationalReader, EmbedFn, VectorStore, ClusterSink } from "./ports";
 
 export interface TdtDeps {
