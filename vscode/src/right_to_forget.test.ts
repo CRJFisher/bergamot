@@ -4,6 +4,7 @@ import * as path from "path";
 import { DuckDBValue } from "@duckdb/node-api";
 import {
   DuckDB,
+  TOPIC_CLUSTER_MEMBER_TABLE,
   create_metadata_schema,
   get_webpage_capture,
   insert_page_activity_session,
@@ -18,6 +19,8 @@ import {
 } from "./redownload/content_cache";
 import { CorpusContent } from "./redownload/corpus";
 import { PageVectorStore } from "./tdt/page_vector_store";
+import { ClusterStore } from "./tdt/cluster_store";
+import type { RunBundle } from "@bergamot/tdt";
 import { forget } from "./right_to_forget";
 
 /** A production-shaped key: 64 lowercase hex chars (32 bytes). */
@@ -206,6 +209,74 @@ describe("right-to-forget cascade", () => {
     expect(await cache.get("b")).not.toBeNull();
     expect(await vector_store.get("b", VECTOR_MODEL_ID)).not.toBeNull();
     expect(await session_count()).toBe(1);
+  });
+
+  it("forgets a page's TDT cluster memberships (task-36.6 cascade)", async () => {
+    await seed_visit("a", "https://example.com/a", "2026-06-01T10:00:00Z");
+    await seed_visit("b", "https://example.com/b", "2026-06-01T11:00:00Z");
+
+    // One clustering run whose member set includes both pages.
+    const cluster_store = new ClusterStore(metadata_db);
+    const bundle: RunBundle = {
+      run: {
+        id: "run-1",
+        window_start: "2026-06-01T00:00:00.000Z",
+        window_end: "2026-07-01T00:00:00.000Z",
+        params_hash: "ph",
+        params_json: "{}",
+        embedding_model_id: VECTOR_MODEL_ID,
+        algo_version: "hdbscan-1#wasm",
+        input_count: 2,
+        input_fingerprint: "fp",
+        cluster_count: 1,
+        noise_count: 0,
+        status: "complete",
+        created_at: "2026-06-02T00:00:00.000Z",
+        completed_at: "2026-06-02T00:00:00.000Z",
+      },
+      clusters: [
+        {
+          id: "c0",
+          run_id: "run-1",
+          local_label: 0,
+          size: 2,
+          exemplar_page_session_id: "a",
+          representative_vector: new Float32Array([1, 0, 0]),
+          coherence: null,
+          time_span_start: "2026-06-01T10:00:00Z",
+          time_span_end: "2026-06-01T11:00:00Z",
+          headline_title: "T",
+          scope: "example.com",
+          keyphrases: [],
+          display_label: "T",
+          representation_version: "det-1",
+          lifeline_id: null,
+        },
+      ],
+      members: [
+        { run_id: "run-1", page_session_id: "a", cluster_id: "c0", is_noise: false, probability: 0.9, page_loaded_at: "2026-06-01T10:00:00Z", is_exemplar: true },
+        { run_id: "run-1", page_session_id: "b", cluster_id: "c0", is_noise: false, probability: 0.8, page_loaded_at: "2026-06-01T11:00:00Z", is_exemplar: false },
+      ],
+    };
+    await cluster_store.persist(bundle);
+
+    const members_for = async (id: string): Promise<number> => {
+      const row = await metadata_db.query_first<{ n: unknown }>(
+        `SELECT count(*)::INTEGER AS n FROM ${TOPIC_CLUSTER_MEMBER_TABLE} WHERE page_session_id = $id`,
+        { id }
+      );
+      return Number(row?.n);
+    };
+
+    const report = await forget(metadata_db, cache, {
+      kind: "url",
+      url: "https://example.com/a",
+    });
+
+    expect(report.cluster_members_deleted).toBe(1);
+    expect(await members_for("a")).toBe(0);
+    // The other page's membership — and the cluster/run provenance — survive.
+    expect(await members_for("b")).toBe(1);
   });
 
   it("forgets by origin: every page on the site, other origins untouched", async () => {

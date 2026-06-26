@@ -14,7 +14,29 @@ export type {
   RunRecord,
   ClusterRecord,
   MemberRecord,
+  RunBundle,
+  PersistOutcome,
+  PersistResult,
 } from "./types";
+
+// Run keying + record assembly are pure and tf-free (only node `crypto`), so —
+// unlike cluster_window.ts / representations.ts — they are safe to re-export here.
+export type {
+  ResolvedParams,
+  RunNaturalKey,
+  FingerprintEntry,
+} from "./run_keying";
+export {
+  canonical_json,
+  canonical_params_json,
+  canonical_timestamp,
+  compute_params_hash,
+  compute_run_id,
+  compute_cluster_id,
+  compute_input_fingerprint,
+} from "./run_keying";
+export type { AssembleArgs } from "./persist";
+export { assemble_run_bundle } from "./persist";
 
 export type { WindowConfig, HdbscanConfig, PageVectorConfig } from "./config";
 export {

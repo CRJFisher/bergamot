@@ -1,5 +1,12 @@
 import type { RelationalReader, EmbedFn, VectorStore, ClusterSink } from "../ports";
-import type { VisitRow, RunRecord, ClusterRecord, MemberRecord } from "../types";
+import type {
+  VisitRow,
+  RunRecord,
+  ClusterRecord,
+  MemberRecord,
+  RunBundle,
+  PersistResult,
+} from "../types";
 
 /**
  * In-memory RelationalReader. Returns all seeded visits ignoring window bounds
@@ -94,21 +101,69 @@ export class FakeVectorStore implements VectorStore {
   }
 }
 
-/** In-memory ClusterSink. Records every write for test assertions. */
+/**
+ * In-memory ClusterSink that faithfully models the no-op / atomic-replace /
+ * supersede decision (plan §8), so library-level idempotency tests run without
+ * DuckDB. A fake that merely recorded the last bundle would let an idempotency
+ * bug pass; the authoritative version is the production ClusterStore test against
+ * real DuckDB, and this mirror must agree with it.
+ */
 export class FakeClusterSink implements ClusterSink {
-  readonly written_runs: RunRecord[] = [];
-  readonly written_clusters: ClusterRecord[] = [];
-  readonly written_members: MemberRecord[] = [];
+  /** Live + superseded runs, by run_id. */
+  readonly runs = new Map<string, RunRecord>();
+  /** Clusters and members by run_id (an atomic replace overwrites the entry). */
+  readonly clusters = new Map<string, ClusterRecord[]>();
+  readonly members = new Map<string, MemberRecord[]>();
+  /** Every persist outcome, in call order. */
+  readonly results: PersistResult[] = [];
 
-  async write_run(run: RunRecord): Promise<void> {
-    this.written_runs.push(run);
-  }
+  async persist(bundle: RunBundle): Promise<PersistResult> {
+    const { run } = bundle;
+    const existing = this.runs.get(run.id);
 
-  async write_clusters(clusters: ClusterRecord[]): Promise<void> {
-    this.written_clusters.push(...clusters);
-  }
+    if (
+      existing &&
+      existing.status === "complete" &&
+      existing.input_fingerprint === run.input_fingerprint
+    ) {
+      const result: PersistResult = {
+        run_id: run.id,
+        outcome: "noop",
+        superseded_run_ids: [],
+      };
+      this.results.push(result);
+      return result;
+    }
 
-  async write_members(members: MemberRecord[]): Promise<void> {
-    this.written_members.push(...members);
+    let outcome: PersistResult["outcome"];
+    const superseded_run_ids: string[] = [];
+    if (existing) {
+      outcome = "replaced"; // same id, changed fingerprint
+    } else {
+      outcome = "created";
+      for (const other of this.runs.values()) {
+        if (
+          other.status === "complete" &&
+          other.id !== run.id &&
+          other.window_start === run.window_start &&
+          other.window_end === run.window_end
+        ) {
+          other.status = "superseded";
+          superseded_run_ids.push(other.id);
+        }
+      }
+    }
+
+    this.runs.set(run.id, { ...run });
+    this.clusters.set(run.id, [...bundle.clusters]);
+    this.members.set(run.id, [...bundle.members]);
+
+    const result: PersistResult = {
+      run_id: run.id,
+      outcome,
+      superseded_run_ids,
+    };
+    this.results.push(result);
+    return result;
   }
 }

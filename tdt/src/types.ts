@@ -117,3 +117,32 @@ export interface MemberRecord {
   page_loaded_at: string; // denormalized for time filtering
   is_exemplar: boolean;
 }
+
+// One window's clustering result, fully keyed and ready to persist. The pure
+// assembler (persist.ts) produces this; the ClusterSink (the extension's single
+// DuckDB writer) consumes it idempotently. `run.id` is the natural-key hash, so
+// the sink looks a prior run up by it without re-deriving the key.
+export interface RunBundle {
+  run: RunRecord;
+  clusters: ClusterRecord[];
+  members: MemberRecord[]; // one row per input page — clustered AND noise (is_noise)
+}
+
+// What the idempotent persist did (plan §8 "Run keying, idempotency"):
+// - noop:       a complete run with this id and an unchanged input_fingerprint
+//               already exists — nothing was written.
+// - replaced:   the same run id existed with a different input_fingerprint
+//               (re-embedding or a late-arriving visit) — its clusters/members
+//               were atomically replaced.
+// - created:    no run with this id existed — it was inserted. Any prior live
+//               run for the same window (a changed model/params/algo yields a new
+//               id) was marked superseded in the same transaction.
+export type PersistOutcome = "noop" | "replaced" | "created";
+
+export interface PersistResult {
+  run_id: string;
+  outcome: PersistOutcome;
+  // Runs flipped to 'superseded' by this persist (the prior live run(s) for the
+  // window under an older key). Empty for noop/replaced.
+  superseded_run_ids: string[];
+}

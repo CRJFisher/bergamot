@@ -12,7 +12,7 @@
  * Stage 5). HdbscanRaw lives in types.ts. This file is library-agnostic by design.
  */
 
-import type { VisitRow, RunRecord, ClusterRecord, MemberRecord } from "./types";
+import type { VisitRow, RunBundle, PersistResult } from "./types";
 
 /**
  * Reads captured visit metadata from DuckDB through the extension's broker.
@@ -68,13 +68,17 @@ export interface VectorStore {
 }
 
 /**
- * Write port for clustering results. The production implementation is owned by
- * the extension's single DuckDB writer, which persists results in one short
- * transaction (plan §3, §8). The batch CLI does read+compute only and supplies
- * no writing ClusterSink.
+ * Idempotent write port for one window's clustering result (plan §3, §8). The
+ * production implementation is owned by the extension's single DuckDB writer,
+ * which persists the run + clusters + members in ONE short transaction; the batch
+ * CLI does read+compute only and supplies no writing ClusterSink.
+ *
+ * A single method, not three granular writes, because no-op / atomic-replace /
+ * supersede are a DECISION over current DB state (does a complete run with this
+ * id exist? does its input_fingerprint match?). Reading that state and writing
+ * the result must be one atomic unit — three independent writes cannot express
+ * it. The pure library hands over a fully-keyed RunBundle; the sink decides.
  */
 export interface ClusterSink {
-  write_run(run: RunRecord): Promise<void>;
-  write_clusters(clusters: ClusterRecord[]): Promise<void>;
-  write_members(members: MemberRecord[]): Promise<void>;
+  persist(bundle: RunBundle): Promise<PersistResult>;
 }

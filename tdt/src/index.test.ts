@@ -39,9 +39,8 @@ describe("run_tdt (scaffold)", () => {
   it("is a no-op: writes nothing to the sink and embeds nothing", async () => {
     const { deps, sink, embedded_texts } = make_deps();
     await run_tdt(deps, ARGS);
-    expect(sink.written_runs).toHaveLength(0);
-    expect(sink.written_clusters).toHaveLength(0);
-    expect(sink.written_members).toHaveLength(0);
+    expect(sink.results).toHaveLength(0);
+    expect(sink.runs.size).toBe(0);
     expect(embedded_texts).toHaveLength(0);
   });
 

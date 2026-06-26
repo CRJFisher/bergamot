@@ -10,13 +10,24 @@
  *
  * THIS MODULE IS THE CASCADE'S SINGLE HOME: every derived store joins it as
  * it lands. Today that is the metadata tables, the TDT page-vector cache
- * (`topic_page_vector`, task-36.3.1), the encrypted content cache (task-39.3),
- * and the plaintext visit buffers; the TDT cluster tables (task-36.6) and RAG
- * vectors (task-31) are added here when those stores exist (each carries an
- * acceptance criterion pointing back at this module). Page vectors live in the
- * metadata file and are keyed by `page_session_id`, so they are deleted by the
- * resolved id set inside the metadata transaction — atomic with the rows they
- * derive from, with no separate-file ordering concern.
+ * (`topic_page_vector`, task-36.3.1), the TDT cluster memberships
+ * (`topic_cluster_member`, task-36.6), the encrypted content cache (task-39.3),
+ * and the plaintext visit buffers; RAG vectors (task-31) are added here when that
+ * store exists (each carries an acceptance criterion pointing back at this
+ * module). Page vectors and cluster memberships live in the metadata file and are
+ * keyed by `page_session_id`, so they are deleted by the resolved id set inside
+ * the metadata transaction — atomic with the rows they derive from, with no
+ * separate-file ordering concern.
+ *
+ * A forget removes a forgotten page's `topic_cluster_member` rows (which carry its
+ * `page_session_id` and a denormalized `page_loaded_at` — visit metadata). It does
+ * NOT delete the `topic_cluster` / `topic_run` rows: a cluster's frozen
+ * `representative_vector` is an irreversible aggregate (the L2-normalized mean of
+ * many member vectors), not reconstructable page content, and a run is a
+ * window-level reproducibility record, not page-owned. The per-page embedding —
+ * the reconstructable artifact — lives in `topic_page_vector` and IS deleted. The
+ * next clustering run over that window re-keys without the forgotten page (its
+ * `input_fingerprint` changes) and atomically replaces the stale aggregates.
  *
  * Ordering and atomicity, honestly: the metadata-side deletes run in one
  * transaction on a dedicated connection (the empty-tree sweep necessarily
@@ -45,6 +56,7 @@ import * as fs from "fs";
 import * as path from "path";
 import {
   DuckDB,
+  TOPIC_CLUSTER_MEMBER_TABLE,
   TOPIC_PAGE_VECTOR_TABLE,
   WEBPAGE_ACTIVITY_SESSIONS_TABLE,
   WEBPAGE_CAPTURE_TABLE,
@@ -74,6 +86,13 @@ export interface ForgetReport {
    * report number is best-effort.
    */
   page_vectors_deleted: number;
+  /**
+   * TDT cluster memberships deleted from `topic_cluster_member` for the forgotten
+   * pages. Like `page_vectors_deleted`, counted before the cascade transaction, so
+   * a concurrent clustering write can make the figure drift; the DELETE itself is
+   * authoritative.
+   */
+  cluster_members_deleted: number;
   /** Whether the content-cache cascade ran (false when no cache exists). */
   content_cache_swept: boolean;
   /** Plaintext buffer files (visit inbox + dev replay ring) removed. */
@@ -284,9 +303,14 @@ export async function forget(
     }
   }
 
-  // Page vectors are keyed by page_session_id and live in the metadata file, so
-  // they are counted here and deleted inside forget_metadata's transaction.
+  // Page vectors and cluster memberships are keyed by page_session_id and live in
+  // the metadata file, so they are counted here and deleted inside
+  // forget_metadata's transaction.
   const page_vectors_deleted = await count_page_vectors(
+    metadata_db,
+    targets.page_session_ids
+  );
+  const cluster_members_deleted = await count_cluster_members(
     metadata_db,
     targets.page_session_ids
   );
@@ -308,6 +332,7 @@ export async function forget(
     page_session_ids: targets.page_session_ids.length,
     urls: targets.urls.length,
     page_vectors_deleted,
+    cluster_members_deleted,
     content_cache_swept: content_cache !== null,
     files_removed,
   };
@@ -329,6 +354,27 @@ async function count_page_vectors(
   const ids = in_list(page_session_ids, "id");
   const row = await metadata_db.query_first<{ n: unknown }>(
     `SELECT count(*) AS n FROM ${TOPIC_PAGE_VECTOR_TABLE}
+     WHERE page_session_id IN (${ids.placeholders})`,
+    ids.params
+  );
+  return Number(row?.n ?? 0);
+}
+
+/**
+ * Counts the TDT cluster memberships the cascade will delete — the rows in
+ * `topic_cluster_member` for the resolved sessions, across every run. Read before
+ * the metadata transaction removes them, mirroring {@link count_page_vectors}.
+ */
+async function count_cluster_members(
+  metadata_db: DuckDB,
+  page_session_ids: string[]
+): Promise<number> {
+  if (page_session_ids.length === 0) {
+    return 0;
+  }
+  const ids = in_list(page_session_ids, "id");
+  const row = await metadata_db.query_first<{ n: unknown }>(
+    `SELECT count(*) AS n FROM ${TOPIC_CLUSTER_MEMBER_TABLE}
      WHERE page_session_id IN (${ids.placeholders})`,
     ids.params
   );
@@ -384,6 +430,15 @@ async function forget_metadata(
       // selector kinds; vectors carry no URL, so there is nothing else to match.
       await run(
         `DELETE FROM ${TOPIC_PAGE_VECTOR_TABLE}
+         WHERE page_session_id IN (${ids.placeholders})`,
+        ids.params
+      );
+      // TDT cluster memberships carry the forgotten page's id + visit time; delete
+      // them in the same transaction. The cluster/run rows (irreversible aggregate
+      // vectors, window-level provenance) are left for the next run to re-key (see
+      // module header).
+      await run(
+        `DELETE FROM ${TOPIC_CLUSTER_MEMBER_TABLE}
          WHERE page_session_id IN (${ids.placeholders})`,
         ids.params
       );

@@ -63,6 +63,11 @@ export const WEBPAGE_FETCH_TABLE = "webpage_fetch";
 // TDT-owned page-vector cache (TASK-36.3.1). Lives in the metadata store so the
 // extension's single writer owns it; exported for the right-to-forget cascade.
 export const TOPIC_PAGE_VECTOR_TABLE = "topic_page_vector";
+// TDT clustering output (TASK-36.6): a run over one window, its clusters, and the
+// per-page memberships. Written only by the extension's single writer.
+export const TOPIC_RUN_TABLE = "topic_run";
+export const TOPIC_CLUSTER_TABLE = "topic_cluster";
+export const TOPIC_CLUSTER_MEMBER_TABLE = "topic_cluster_member";
 
 /**
  * Capture metadata columns selected (aliased `cap_*`) when a tree query joins
@@ -1273,6 +1278,75 @@ export async function create_metadata_schema(db: DuckDB): Promise<void> {
   ].join(", ");
   await db.create_table(TOPIC_PAGE_VECTOR_TABLE, topic_page_vector_schema);
 
+  // TDT clustering output (TASK-36.6), written only by the extension's single
+  // writer. Cross-table references are SOFT refs (plain TEXT, no FOREIGN KEY),
+  // matching every other table here: DuckDB rejects `ON DELETE CASCADE` outright
+  // and cannot delete a FK parent and child in one transaction, which would make
+  // the atomic-replace path (delete members→clusters→run, repopulate, all in one
+  // transaction) impossible. Integrity is enforced by ClusterStore.persist, which
+  // always writes and deletes a run's three tables together in one transaction.
+
+  // A clustering RUN over one window: the unit of reproducibility and the cache
+  // key. `id` is sha256 of the natural key; the UNIQUE constraint over that key
+  // is a redundant corruption guard (a hash-input bug that collides ids for two
+  // different keys trips it instead of silently overwriting).
+  const topic_run_schema = [
+    "id TEXT PRIMARY KEY", // compute_run_id(natural key)
+    "window_start TEXT NOT NULL", // ISO, inclusive (ACTUAL bounds, incl. subdivision)
+    "window_end TEXT NOT NULL", // ISO, exclusive
+    "params_hash TEXT NOT NULL", // HDBSCAN + pooling + windowing policy + matryoshka dim
+    "params_json TEXT NOT NULL", // resolved params, forensics
+    "embedding_model_id TEXT NOT NULL", // model + dim + page-representation rule
+    "algo_version TEXT NOT NULL", // 'hdbscan-1#clustering-tfjs@<ver>#<tf-backend>'
+    "input_count INTEGER NOT NULL", // pages fed to HDBSCAN
+    "input_fingerprint TEXT NOT NULL", // sorted (page_session_id, vector_version) hash — data drift
+    "cluster_count INTEGER", // null while status='running' (unused in v1)
+    "noise_count INTEGER",
+    "status TEXT NOT NULL", // running | complete | failed | superseded
+    "created_at TEXT NOT NULL",
+    "completed_at TEXT",
+    "UNIQUE (window_start, window_end, params_hash, embedding_model_id, algo_version)",
+  ].join(", ");
+  await db.create_table(TOPIC_RUN_TABLE, topic_run_schema);
+
+  // One row per CLUSTER (HDBSCAN label >= 0). Noise (-1) is NOT a cluster row —
+  // it is a member row with is_noise=TRUE.
+  const topic_cluster_schema = [
+    "id TEXT PRIMARY KEY", // hash(run_id | local_label)
+    "run_id TEXT NOT NULL", // soft ref -> topic_run.id
+    "local_label INTEGER NOT NULL", // HDBSCAN labels_ value (>= 0), run-local
+    "size INTEGER NOT NULL",
+    "exemplar_page_session_id TEXT NOT NULL", // soft ref -> webpage_activity_sessions.id
+    "representative_vector FLOAT[] NOT NULL", // FROZEN; dim fixed by embedding_model_id
+    "coherence DOUBLE", // validation score (TASK-36.7); null in v1
+    "time_span_start TEXT NOT NULL",
+    "time_span_end TEXT NOT NULL",
+    "headline_title TEXT", // labeler
+    "scope TEXT", // labeler
+    "keyphrases TEXT[]", // labeler (NULL when empty — DuckDB rejects an empty list literal)
+    "display_label TEXT", // labeler
+    "representation_version TEXT", // labeler logic version
+    "lifeline_id TEXT", // NULL in v1; Phase-4 tracking seam
+    "UNIQUE (run_id, local_label)",
+  ].join(", ");
+  await db.create_table(TOPIC_CLUSTER_TABLE, topic_cluster_schema);
+
+  // One row per (run, page). PK enforces one cluster per page per run. Noise is
+  // recorded explicitly via is_noise (no NULL cluster_id sentinel), so coverage =
+  // COUNT(*) FILTER (WHERE NOT is_noise) / COUNT(*) is derivable from this table
+  // alone.
+  const topic_cluster_member_schema = [
+    "run_id TEXT NOT NULL", // soft ref -> topic_run.id
+    "page_session_id TEXT NOT NULL", // soft ref -> webpage_activity_sessions.id
+    "cluster_id TEXT", // soft ref -> topic_cluster.id; NULL iff is_noise
+    "is_noise BOOLEAN NOT NULL DEFAULT FALSE", // TRUE => HDBSCAN -1
+    "probability DOUBLE NOT NULL", // probabilities_ [0,1]; 0 for noise
+    "page_loaded_at TEXT NOT NULL", // denormalized for time filtering
+    "is_exemplar BOOLEAN NOT NULL DEFAULT FALSE",
+    "PRIMARY KEY (run_id, page_session_id)",
+  ].join(", ");
+  await db.create_table(TOPIC_CLUSTER_MEMBER_TABLE, topic_cluster_member_schema);
+
   // Indexes for the common query patterns over the metadata tables.
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_activity_sessions_url
                  ON ${WEBPAGE_ACTIVITY_SESSIONS_TABLE}(url)`);
@@ -1289,4 +1363,18 @@ export async function create_metadata_schema(db: DuckDB): Promise<void> {
   // The right-to-forget cascade deletes page vectors by page_session_id.
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_topic_page_vector_page
                  ON ${TOPIC_PAGE_VECTOR_TABLE}(page_session_id)`);
+
+  // TDT clustering output (TASK-36.6).
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_topic_run_window
+                 ON ${TOPIC_RUN_TABLE}(window_start, window_end)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_topic_run_status
+                 ON ${TOPIC_RUN_TABLE}(status)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_topic_cluster_run
+                 ON ${TOPIC_CLUSTER_TABLE}(run_id)`);
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_topic_member_cluster
+                 ON ${TOPIC_CLUSTER_MEMBER_TABLE}(cluster_id)`);
+  // Both the right-to-forget cascade and list_clusters_for_page (TASK-36.8) read
+  // members by page_session_id.
+  await db.exec(`CREATE INDEX IF NOT EXISTS idx_topic_member_page
+                 ON ${TOPIC_CLUSTER_MEMBER_TABLE}(page_session_id)`);
 }
