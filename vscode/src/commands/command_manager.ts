@@ -72,7 +72,59 @@ export class CommandManager {
     this.register_core_commands();
     this.register_forget_command();
     this.register_embed_pages_command();
+    this.register_rebuild_clusters_command();
     this.register_dev_commands();
+  }
+
+  /**
+   * Registers the TDT clustering command (TASK-36.9): cluster the recent window
+   * range on demand (and for testing). The same `rebuild_clusters` entry the
+   * automatic scheduler fires; single-flighted, off-thread compute, idempotent
+   * persistence.
+   * @private
+   */
+  private register_rebuild_clusters_command(): void {
+    const command = vscode.commands.registerCommand(
+      'bergamot.tdt.rebuildClusters',
+      () => this.run_rebuild_clusters()
+    );
+    this.config.context.subscriptions.push(command);
+    this.disposables.push(command);
+  }
+
+  /**
+   * Clusters the default recent range (previous + current month) under a progress
+   * notification and reports the per-window outcome. The heavy cosine build +
+   * HDBSCAN fit run in a forked worker, so the UI stays responsive throughout.
+   * @private
+   */
+  private async run_rebuild_clusters(): Promise<void> {
+    try {
+      const { default_window_spec } = await import('../tdt/rebuild_clusters');
+      const report = await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: 'Bergamot: detecting topic clusters from your browsing…',
+        },
+        () =>
+          this.config.server_manager.rebuild_clusters(
+            default_window_spec(new Date())
+          )
+      );
+      const clustered = report.windows.filter(
+        (w) => w.status === 'clustered'
+      ).length;
+      vscode.window.showInformationMessage(
+        `Bergamot: clustered ${clustered} window(s) over ${report.total_visits} ` +
+          `visit(s) (${report.windows.length} window(s) in range, ` +
+          `${report.excluded_origins} blocked origin(s) excluded).`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      vscode.window.showErrorMessage(
+        `Bergamot: clustering run failed — ${message}`
+      );
+    }
   }
 
   /**
@@ -108,8 +160,8 @@ export class CommandManager {
       );
       vscode.window.showInformationMessage(
         `Bergamot: embedded ${report.embedded}, skipped ${report.skipped}, ` +
-          `excluded ${report.excluded}, failed ${report.failed} ` +
-          `(of ${report.scanned} page(s)).`
+          `excluded ${report.excluded}, blocked ${report.origin_excluded}, ` +
+          `failed ${report.failed} (of ${report.scanned} page(s)).`
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

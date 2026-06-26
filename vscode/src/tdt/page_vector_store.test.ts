@@ -93,4 +93,32 @@ describe("PageVectorStore", () => {
     ).rejects.toThrow(RangeError);
     expect(await row_count()).toBe(0);
   });
+
+  describe("list_for_pages (TASK-36.9 window vector read)", () => {
+    it("bulk-reads vectors + built_at for the requested pages under one model", async () => {
+      await store.put("p1", MODEL_ID, REPR, new Float32Array([1, 0, 0]));
+      await store.put("p2", MODEL_ID, REPR, new Float32Array([0, 1, 0]));
+      await store.put("p3", MODEL_ID, REPR, new Float32Array([0, 0, 1]));
+
+      const rows = await store.list_for_pages(["p1", "p3"], MODEL_ID);
+
+      const by_id = new Map(rows.map((r) => [r.page_session_id, r]));
+      expect([...by_id.keys()].sort()).toEqual(["p1", "p3"]);
+      expect(bytes_equal(by_id.get("p1")!.vector, new Float32Array([1, 0, 0]))).toBe(true);
+      expect(typeof by_id.get("p1")!.built_at).toBe("string");
+    });
+
+    it("omits pages absent from the cache and pages under another model id", async () => {
+      await store.put("p1", MODEL_ID, REPR, new Float32Array([1, 0, 0]));
+      await store.put("p2", "other-model/q8/384#repr-v1", REPR, new Float32Array([0, 1, 0]));
+
+      const rows = await store.list_for_pages(["p1", "p2", "missing"], MODEL_ID);
+
+      expect(rows.map((r) => r.page_session_id)).toEqual(["p1"]);
+    });
+
+    it("returns [] for an empty id list without querying", async () => {
+      expect(await store.list_for_pages([], MODEL_ID)).toEqual([]);
+    });
+  });
 });

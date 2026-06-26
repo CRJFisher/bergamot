@@ -10,11 +10,13 @@ import { METADATA_DB_KEY_SECRET, get_or_create_store_key } from './database/encr
 import { ServerManager } from './server/server_manager';
 import { MCPServerManager } from './server/mcp_server_manager';
 import { CommandManager } from './commands/command_manager';
+import { ClusterScheduler } from './tdt/cluster_scheduler';
 
 let database_manager: DatabaseManager;
 let server_manager: ServerManager;
 let mcp_server_manager: MCPServerManager;
 let command_manager: CommandManager;
+let cluster_scheduler: ClusterScheduler | undefined;
 
 /**
  * Activates the Bergamot VS Code extension.
@@ -80,6 +82,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // Quarantined staging root for note-stub write-back (TASK-36.8), resolved
       // from the workspace; undefined when no workspace is open.
       staging_root: resolve_staging_root() ?? undefined,
+      // Install root, used to locate the compiled off-thread clustering worker
+      // (out/tdt/cluster_worker.js) the TDT run forks (TASK-36.9).
+      extension_path: context.extensionPath,
       // One-time Chromium download on first content fetch (packaged installs
       // ship no browser). Surfaced as a progress notification; never blocks
       // activation — the fetch path serves 503 until the download completes.
@@ -121,6 +126,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     mcp_server_manager = new MCPServerManager({ context });
     mcp_server_manager.start_deferred(2000);
 
+    // Step 6: Arm the automatic TDT clustering trigger (TASK-36.9) — the
+    // passive-product path. A catch-up tick runs shortly after activation, then
+    // on the configured cadence (default daily); quiet-day ticks are no-ops via
+    // §8 idempotency. A run failure is logged but never disrupts capture.
+    cluster_scheduler = new ClusterScheduler({
+      run: (spec) => server_manager.rebuild_clusters(spec),
+      cadence_hours: () => ConfigManager.get_cluster_cadence_hours(),
+      now: () => new Date(),
+      on_error: (error) =>
+        console.error('TDT scheduled clustering run failed:', error),
+    });
+    cluster_scheduler.start();
+
     // Register cleanup handlers
     context.subscriptions.push({
       dispose: async () => {
@@ -154,6 +172,14 @@ export async function deactivate(): Promise<void> {
   console.log('Deactivating Bergamot extension...');
 
   try {
+    // Stop the clustering scheduler before the DB closes so no tick fires into
+    // a torn-down writer.
+    if (cluster_scheduler) {
+      cluster_scheduler.dispose();
+      cluster_scheduler = undefined;
+      console.log('Cluster scheduler disposed');
+    }
+
     // Stop servers
     if (server_manager) {
       await server_manager.stop();

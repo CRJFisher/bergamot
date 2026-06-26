@@ -24,6 +24,19 @@ export class ConfigManager {
   }
 
   /**
+   * Cadence (in hours) for the automatic TDT clustering run (TASK-36.9). Default
+   * once/day — the evidence-based judgement from TASK-36.7: personal browsing is
+   * low hundreds–low thousands of pages/month, and §8 idempotency makes a tick
+   * over an unchanged window a no-op, so a daily tick costs ~nothing on quiet
+   * days while a faster cadence buys nothing (re-download is politeness-gated).
+   * Clamped to a sane floor by the scheduler. `0` disables the automatic run.
+   */
+  static get_cluster_cadence_hours(): number {
+    const config = vscode.workspace.getConfiguration(this.CONFIG_NAMESPACE);
+    return config.get<number>('tdt.clusterCadenceHours', 24);
+  }
+
+  /**
    * Gets the path for the DuckDB database file.
    * Constructs the full path by appending the database filename to the storage path.
    * 

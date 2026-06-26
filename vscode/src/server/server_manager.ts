@@ -42,6 +42,19 @@ import type { ContentCache } from '../redownload/content_cache';
 // lazily imported inside run_one_embed_pass so it never loads eagerly.
 import type { EmbedPassReport } from '../tdt/embed_pass';
 import { single_flight, SingleFlightHolder } from '../tdt/single_flight';
+import {
+  list_visits_in_window,
+  make_relational_reader,
+  MAX_VISITS_IN_WINDOW,
+} from '../tdt/visit_reads';
+// Type-only: the orchestrator's value side (and the forking worker client) is
+// lazily imported inside rebuild_clusters so neither it nor clustering-tfjs loads
+// eagerly; the clustering-tfjs chain only loads in the forked worker process.
+import type {
+  RebuildDeps,
+  RebuildReport,
+  WindowSpec,
+} from '../tdt/rebuild_clusters';
 
 /**
  * Candidate ports the server tries to bind, in order. The browser extension
@@ -141,6 +154,13 @@ export interface ServerConfig {
    * unavailable rather than writing somewhere the user cannot see.
    */
   staging_root?: string;
+  /**
+   * The extension's install root (`context.extensionPath`), used to resolve the
+   * compiled `out/tdt/cluster_worker.js` the TDT clustering run forks off the
+   * event loop (TASK-36.9). Absent in the headless standalone / tests, where no
+   * clustering run is triggered; {@link rebuild_clusters} requires it.
+   */
+  extension_path?: string;
 }
 
 /**
@@ -185,6 +205,14 @@ export class ServerManager {
    * `topic_page_vector` key.
    */
   private readonly embed_pass_flight: SingleFlightHolder<EmbedPassReport> = {};
+  /**
+   * Single-flight latch for a TDT clustering run (TASK-36.9): the manual command
+   * and the automatic scheduler share it, so a run already in flight is joined
+   * rather than duplicated across windows and reloads (AC #5). Cross-process
+   * duplication is separately prevented by the single-writer DuckDB + §8
+   * idempotency (a second window's run over the same inputs is a no-op).
+   */
+  private readonly cluster_run_flight: SingleFlightHolder<RebuildReport> = {};
 
   constructor(private config: ServerConfig) {
     this.app = express();
@@ -511,6 +539,29 @@ export class ServerManager {
           reason: format_error_detail(error),
         });
       }
+    });
+
+    // TDT Stage-1 input read (TASK-36.9, plan §9): the windowed bulk visit read
+    // that feeds clustering — NOT a cluster surface (it reads webpage_* visit
+    // rows, not clusters). Row-capped to a full window so the read stays bounded;
+    // the clustering orchestrator reads the same fn in-process.
+    this.app.get('/query/visits_in_window', async (req, res) => {
+      const from = String(req.query.from ?? '');
+      const to = String(req.query.to ?? '');
+      if (!from || !to) {
+        res.status(400).json({ error: 'Missing from/to query parameter' });
+        return;
+      }
+      const requested = Number(req.query.limit ?? MAX_VISITS_IN_WINDOW);
+      const limit = Math.min(
+        Number.isFinite(requested) && requested > 0
+          ? requested
+          : MAX_VISITS_IN_WINDOW,
+        MAX_VISITS_IN_WINDOW
+      );
+      res.json(
+        await list_visits_in_window(this.config.duck_db, { from, to, limit })
+      );
     });
 
     // TDT cluster surface (TASK-36.8). Four read routes over the cluster read
@@ -901,9 +952,16 @@ export class ServerManager {
    * Single-flight: concurrent calls coalesce onto the running pass. The embed
    * runs off the capture hot path; per-page failures are isolated inside the
    * pass, so the returned report's `failed` count is the only failure surface.
+   *
+   * Never-cluster origins are always excluded: when the caller does not supply
+   * the list (the standalone command), the pass reads it from the control store
+   * itself, so a blocked origin's content is never embedded regardless of entry
+   * point (constitution §3, AC #8).
    */
-  embed_pages(): Promise<EmbedPassReport> {
-    return single_flight(this.embed_pass_flight, () => this.run_one_embed_pass());
+  embed_pages(exclude_origins?: string[]): Promise<EmbedPassReport> {
+    return single_flight(this.embed_pass_flight, () =>
+      this.run_one_embed_pass(exclude_origins)
+    );
   }
 
   /**
@@ -914,7 +972,9 @@ export class ServerManager {
    * nor needs, so it must stay off the eager load path (mirroring the content
    * cache's lazy import).
    */
-  private async run_one_embed_pass(): Promise<EmbedPassReport> {
+  private async run_one_embed_pass(
+    exclude_origins?: string[]
+  ): Promise<EmbedPassReport> {
     if (!this.config.storage_base) {
       throw new Error(
         'TDT embed pass requires a storage base for the local model cache'
@@ -931,6 +991,12 @@ export class ServerManager {
       PAGE_EMBEDDING_CONFIG,
     } = await import('../tdt/embedding_config');
 
+    const origins =
+      exclude_origins ??
+      (await new ClusterControlStore(
+        this.config.duck_db
+      ).list_never_cluster_origins());
+
     const store = new PageVectorStore(this.config.duck_db);
     const embedder = await load_local_embedder(model_cache_dir);
     try {
@@ -940,10 +1006,87 @@ export class ServerManager {
         embedder.embed,
         PAGE_EMBEDDING_MODEL_ID,
         PAGE_EMBEDDING_REPR,
-        PAGE_EMBEDDING_CONFIG
+        PAGE_EMBEDDING_CONFIG,
+        new Set(origins)
       );
     } finally {
       await embedder.dispose();
     }
+  }
+
+  /**
+   * Run the TDT clustering pipeline over `spec` (TASK-36.9, plan §11 step 9) —
+   * the entry both the `bergamot.tdt.rebuildClusters` command and the automatic
+   * scheduler call. Single-flight (shared with itself across windows/reloads,
+   * AC #5); the heavy cosine build + HDBSCAN fit run in a forked worker off the
+   * event loop (AC #2); results persist through the single DuckDB writer (AC #3).
+   *
+   * The orchestrator, the worker client, and the cluster/vector stores are lazily
+   * imported so the clustering-tfjs chain only ever loads in the forked worker,
+   * never in the extension host.
+   */
+  rebuild_clusters(spec: WindowSpec): Promise<RebuildReport> {
+    return single_flight(this.cluster_run_flight, () =>
+      this.run_one_cluster_rebuild(spec)
+    );
+  }
+
+  private async run_one_cluster_rebuild(
+    spec: WindowSpec
+  ): Promise<RebuildReport> {
+    if (!this.config.extension_path) {
+      throw new Error(
+        'TDT clustering run requires the extension path to locate the worker'
+      );
+    }
+    const worker_path = path.join(
+      this.config.extension_path,
+      'out',
+      'tdt',
+      'cluster_worker.js'
+    );
+
+    const { rebuild_clusters } = await import('../tdt/rebuild_clusters');
+    const { run_cluster_compute } = await import('../tdt/cluster_worker_client');
+    const { PageVectorStore } = await import('../tdt/page_vector_store');
+    const { ClusterStore } = await import('../tdt/cluster_store');
+    const {
+      PAGE_EMBEDDING_MODEL_ID,
+      PAGE_EMBEDDING_CONFIG,
+    } = await import('../tdt/embedding_config');
+    const { DEFAULT_WINDOW_CONFIG, DEFAULT_HDBSCAN_CONFIG } = await import(
+      '@bergamot/tdt'
+    );
+
+    const vector_store = new PageVectorStore(this.config.duck_db);
+    const control_store = new ClusterControlStore(this.config.duck_db);
+    const cluster_store = new ClusterStore(this.config.duck_db);
+
+    const deps: RebuildDeps = {
+      reader: make_relational_reader(this.config.duck_db),
+      vectorise: async (exclude_origins): Promise<void> => {
+        await this.embed_pages(exclude_origins);
+      },
+      read_vectors: (page_session_ids) =>
+        vector_store.list_for_pages(page_session_ids, PAGE_EMBEDDING_MODEL_ID),
+      compute: (input) => run_cluster_compute(input, { worker_path }),
+      sink: cluster_store,
+      live_run_fingerprint: (window_start, window_end, params_hash) =>
+        cluster_store.live_run_fingerprint(
+          window_start,
+          window_end,
+          params_hash,
+          PAGE_EMBEDDING_MODEL_ID,
+        ),
+      list_never_cluster_origins: () =>
+        control_store.list_never_cluster_origins(),
+      now: () => new Date().toISOString(),
+      embedding_model_id: PAGE_EMBEDDING_MODEL_ID,
+      window_config: DEFAULT_WINDOW_CONFIG,
+      hdbscan_config: DEFAULT_HDBSCAN_CONFIG,
+      page_vector_config: PAGE_EMBEDDING_CONFIG,
+    };
+
+    return rebuild_clusters(deps, spec);
   }
 }

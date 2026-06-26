@@ -27,6 +27,7 @@ import type {
   PageVectorConfig,
   VectorStore,
 } from "@bergamot/tdt";
+import { getDomain } from "tldts";
 import type { ContentCorpus, CorpusContent } from "../redownload/corpus";
 
 /** What one embed pass did, by per-page outcome. `scanned` is their sum. */
@@ -39,6 +40,8 @@ export interface EmbedPassReport {
   skipped: number;
   /** Pages excluded — no extractable text / degenerate vector (nothing stored). */
   excluded: number;
+  /** Pages on a never-cluster origin, skipped before any embed (constitution §3). */
+  origin_excluded: number;
   /** Pages whose embed or store raised; isolated so the pass continues. */
   failed: number;
 }
@@ -66,6 +69,9 @@ function to_page_content(content: CorpusContent): PageContent {
  * @param embedding_model_id the cache key (model + dim + repr-rule version)
  * @param repr the representation strategy whose version the id encodes
  * @param config page-vector construction knobs
+ * @param exclude_origins registrable domains the user never wants clustered
+ *        (TASK-36.8 never-cluster-origin); their pages are skipped before any
+ *        embed, so a blocked origin's content is never even vectorised (AC #8).
  */
 export async function run_embed_pass(
   corpus: ContentCorpus,
@@ -74,17 +80,27 @@ export async function run_embed_pass(
   embedding_model_id: string,
   repr: PageRepr,
   config: PageVectorConfig,
+  exclude_origins: ReadonlySet<string> = new Set(),
 ): Promise<EmbedPassReport> {
   const report: EmbedPassReport = {
     scanned: 0,
     embedded: 0,
     skipped: 0,
     excluded: 0,
+    origin_excluded: 0,
     failed: 0,
   };
 
   for await (const content of corpus.iter_public_pages()) {
     report.scanned++;
+    if (exclude_origins.size > 0) {
+      const domain = getDomain(content.url);
+      if (domain !== null && exclude_origins.has(domain)) {
+        report.origin_excluded++;
+        await yield_to_event_loop();
+        continue;
+      }
+    }
     try {
       // resolve_page_vector is the single source of the get-skip / build-on-miss
       // / exclude semantics; the extra cheap pre-read here only lets the report

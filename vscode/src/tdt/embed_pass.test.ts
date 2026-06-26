@@ -97,7 +97,7 @@ describe("run_embed_pass", () => {
 
     const report = await run_embed_pass(corpus, store, embed, MODEL_A, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
-    expect(report).toEqual({ scanned: 3, embedded: 3, skipped: 0, excluded: 0, failed: 0 });
+    expect(report).toEqual({ scanned: 3, embedded: 3, skipped: 0, excluded: 0, origin_excluded: 0, failed: 0 });
     for (const id of ["p1", "p2", "p3"]) {
       const v = await store.get(id, MODEL_A);
       expect(v).not.toBeNull();
@@ -116,7 +116,7 @@ describe("run_embed_pass", () => {
     const { embed, calls } = counting_embed();
     const report = await run_embed_pass(corpus, store, embed, MODEL_A, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
-    expect(report).toEqual({ scanned: 2, embedded: 1, skipped: 1, excluded: 0, failed: 0 });
+    expect(report).toEqual({ scanned: 2, embedded: 1, skipped: 1, excluded: 0, origin_excluded: 0, failed: 0 });
     // p1's text is never embedded; only p2 is.
     expect(calls.some((t) => t.includes("alpha"))).toBe(false);
     expect(calls.some((t) => t.includes("beta"))).toBe(true);
@@ -129,7 +129,7 @@ describe("run_embed_pass", () => {
     const second = counting_embed();
     const report = await run_embed_pass(corpus, store, second.embed, MODEL_A, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
-    expect(report).toEqual({ scanned: 2, embedded: 0, skipped: 2, excluded: 0, failed: 0 });
+    expect(report).toEqual({ scanned: 2, embedded: 0, skipped: 2, excluded: 0, origin_excluded: 0, failed: 0 });
     expect(second.calls).toHaveLength(0);
   });
 
@@ -140,7 +140,7 @@ describe("run_embed_pass", () => {
     const second = counting_embed();
     const report = await run_embed_pass(corpus, store, second.embed, MODEL_B, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
-    expect(report).toEqual({ scanned: 1, embedded: 1, skipped: 0, excluded: 0, failed: 0 });
+    expect(report).toEqual({ scanned: 1, embedded: 1, skipped: 0, excluded: 0, origin_excluded: 0, failed: 0 });
     expect(second.calls.length).toBeGreaterThan(0); // it DID re-embed
     expect(await store.get("p1", MODEL_A)).not.toBeNull();
     expect(await store.get("p1", MODEL_B)).not.toBeNull();
@@ -204,5 +204,35 @@ describe("run_embed_pass", () => {
     const second_embed_index = events.findIndex((e) => e.includes("two"));
     expect(loop_index).toBeGreaterThan(-1);
     expect(loop_index).toBeLessThan(second_embed_index);
+  });
+
+  it("skips never-cluster origins before embedding — content never vectorised (AC #8)", async () => {
+    const bank: CorpusContent = {
+      ...corpus_content("bank1", "sensitive balance"),
+      url: "https://mybank.com/account",
+    };
+    const ok: CorpusContent = {
+      ...corpus_content("ok1", "public article"),
+      url: "https://blog.example.com/post",
+    };
+    const corpus = new FakeCorpus([bank, ok]);
+    const { embed, calls } = counting_embed();
+
+    const report = await run_embed_pass(
+      corpus,
+      store,
+      embed,
+      MODEL_A,
+      REPR,
+      DEFAULT_PAGE_VECTOR_CONFIG,
+      new Set(["mybank.com"]),
+    );
+
+    expect(report.origin_excluded).toBe(1);
+    expect(report.embedded).toBe(1);
+    // The blocked origin's content is never embedded, and nothing is stored.
+    expect(calls.some((t) => t.includes("balance"))).toBe(false);
+    expect(await store.get("bank1", MODEL_A)).toBeNull();
+    expect(await store.get("ok1", MODEL_A)).not.toBeNull();
   });
 });

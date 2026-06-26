@@ -22,6 +22,14 @@ import { DuckDB, TOPIC_PAGE_VECTOR_TABLE } from "../duck_db";
 import { listValue, DuckDBListValue } from "@duckdb/node-api";
 import type { VectorStore } from "@bergamot/tdt";
 
+/** One cached vector plus its freshness token, for the clustering input read. */
+export interface StoredPageVector {
+  page_session_id: string;
+  vector: Float32Array;
+  /** `built_at`, rewritten on every re-embed — the run's input-fingerprint key. */
+  built_at: string;
+}
+
 /** Columns of {@link TOPIC_PAGE_VECTOR_TABLE}, in insert order. */
 const TOPIC_PAGE_VECTOR_COLUMNS = [
   "page_session_id",
@@ -53,6 +61,39 @@ export class PageVectorStore implements VectorStore {
     );
     if (!row) return null;
     return to_float32(row.vector);
+  }
+
+  /**
+   * Bulk-read the cached vectors (+ `built_at`) for the given pages under one
+   * model id — the clustering orchestrator's per-window vector read (TASK-36.9).
+   * One query rather than N round-trips. Pages absent from the cache (no-text /
+   * auth-walled / not yet embedded) are simply not returned; the caller drops
+   * them from the window. Order is not guaranteed — the caller re-zips by id.
+   */
+  async list_for_pages(
+    page_session_ids: string[],
+    embedding_model_id: string,
+  ): Promise<StoredPageVector[]> {
+    if (page_session_ids.length === 0) return [];
+    const rows = await this.db.query<{
+      page_session_id: string;
+      vector: unknown;
+      built_at: string;
+    }>(
+      `SELECT page_session_id, vector, built_at
+       FROM ${TOPIC_PAGE_VECTOR_TABLE}
+       WHERE embedding_model_id = $embedding_model_id
+         AND page_session_id IN (${page_session_ids.map((_, i) => `$p${i}`).join(", ")})`,
+      {
+        embedding_model_id,
+        ...Object.fromEntries(page_session_ids.map((id, i) => [`p${i}`, id])),
+      },
+    );
+    return rows.map((r) => ({
+      page_session_id: String(r.page_session_id),
+      vector: to_float32(r.vector),
+      built_at: String(r.built_at),
+    }));
   }
 
   /**

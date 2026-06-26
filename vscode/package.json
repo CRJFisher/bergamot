@@ -42,6 +42,10 @@
       {
         "command": "bergamot.tdt.embedPages",
         "title": "Bergamot: Embed pages for topic detection"
+      },
+      {
+        "command": "bergamot.tdt.rebuildClusters",
+        "title": "Bergamot: Detect topic clusters from browsing"
       }
     ],
     "configuration": {
@@ -56,6 +60,12 @@
           "type": "string",
           "default": "",
           "description": "Absolute path for the quarantined bergamot.staging/ directory where agent-authored topic-cluster note stubs are written. Empty = a 'bergamot.staging' folder in the first workspace folder. Stubs are drafts you promote by hand; this directory is auto-gitignored and never committed."
+        },
+        "bergamot.tdt.clusterCadenceHours": {
+          "type": "number",
+          "default": 24,
+          "minimum": 0,
+          "description": "How often (in hours) Bergamot automatically detects topic clusters from your browsing. Default once/day. A run over an unchanged window is a no-op, so a daily run costs ~nothing on quiet days. Set to 0 to disable the automatic run (the manual 'Detect topic clusters' command still works)."
         }
       }
     }

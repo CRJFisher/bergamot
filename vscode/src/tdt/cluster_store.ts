@@ -177,6 +177,32 @@ export class ClusterStore implements ClusterSink {
   }
 
   /**
+   * The `input_fingerprint` of the live (`complete`) run for this window under
+   * the given model + params, or null if none — the §6 memoization probe the
+   * orchestrator uses to skip an unchanged window's re-fit (TASK-36.9, AC #6).
+   * At most one `complete` run survives per window (the supersede invariant), so
+   * this is a point lookup. `algo_version` is intentionally not matched: the host
+   * cannot resolve the active TensorFlow backend without loading it, so a pure
+   * backend change re-clusters when the window's inputs next change.
+   */
+  async live_run_fingerprint(
+    window_start: string,
+    window_end: string,
+    params_hash: string,
+    embedding_model_id: string,
+  ): Promise<string | null> {
+    const row = await this.db.query_first<{ input_fingerprint: string }>(
+      `SELECT input_fingerprint FROM ${TOPIC_RUN_TABLE}
+       WHERE window_start = $window_start AND window_end = $window_end
+         AND params_hash = $params_hash
+         AND embedding_model_id = $embedding_model_id
+         AND status = 'complete'`,
+      { window_start, window_end, params_hash, embedding_model_id },
+    );
+    return row ? String(row.input_fingerprint) : null;
+  }
+
+  /**
    * Per-window coverage for one run, from `topic_cluster_member` alone — no join
    * to the capture tables. `COUNT(*) FILTER (WHERE NOT is_noise)` is exact because
    * noise is a non-null `is_noise` flag, never a NULL `cluster_id` sentinel.
