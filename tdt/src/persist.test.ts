@@ -245,8 +245,14 @@ describe("assemble_run_bundle — fail-loud guards", () => {
 
   it("throws when a clustered row has no represented cluster", () => {
     const args = base_args();
-    // row 4 now claims label 7, which no represented cluster covers.
+    // row 4 claims label 7, which no represented cluster covers.
     args.raw = { ...args.raw, labels: [0, 0, 0, -1, 7] };
     expect(() => assemble_run_bundle(args)).toThrow(/no\s+represented cluster/);
+  });
+
+  it("throws when a cluster's representative_index is out of range", () => {
+    const args = base_args();
+    args.represented = [represented(0, [0, 1, 2], 99)];
+    expect(() => assemble_run_bundle(args)).toThrow(/out of range/);
   });
 });

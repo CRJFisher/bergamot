@@ -117,8 +117,6 @@ export function assemble_run_bundle(args: AssembleArgs): RunBundle {
   for (const label of args.raw.labels) if (label < 0) noise_count++;
 
   const clusters: ClusterRecord[] = [];
-  // local_label -> cluster_id, for resolving member rows; representative row
-  // index set, for flagging is_exemplar.
   const cluster_id_by_label = new Map<number, string>();
   const exemplar_rows = new Set<number>();
   for (let k = 0; k < args.represented.length; k++) {
