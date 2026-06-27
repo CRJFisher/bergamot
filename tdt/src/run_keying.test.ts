@@ -73,6 +73,31 @@ describe("canonical_json", () => {
     o.a = 1;
     expect(canonical_json(o)).toBe('{"a":1}');
   });
+
+  it("serializes arrays preserving order while sorting keys within elements", () => {
+    expect(canonical_json([3, 1, 2])).toBe("[3,1,2]");
+    expect(canonical_json([{ b: 1, a: 2 }, "x", true, null])).toBe(
+      '[{"a":2,"b":1},"x",true,null]',
+    );
+  });
+
+  it("serializes top-level primitives", () => {
+    expect(canonical_json(true)).toBe("true");
+    expect(canonical_json(false)).toBe("false");
+    expect(canonical_json("hi")).toBe('"hi"');
+    expect(canonical_json(42)).toBe("42");
+  });
+
+  it("escapes string content so a quote in a key or value cannot break the preimage", () => {
+    expect(canonical_json('a"b')).toBe('"a\\"b"');
+    expect(canonical_json({ 'k"x': 'v"y' })).toBe('{"k\\"x":"v\\"y"}');
+  });
+
+  it("throws on a value type with no defined serialization (undefined/function/bigint)", () => {
+    expect(() => canonical_json(undefined)).toThrow(/unsupported value type/);
+    expect(() => canonical_json(() => 0)).toThrow(/unsupported value type/);
+    expect(() => canonical_json(BigInt(1))).toThrow(/unsupported value type/);
+  });
 });
 
 // Bitwise-stable golden digests. These pin the canonical hash preimage across
@@ -262,5 +287,21 @@ describe("compute_input_fingerprint", () => {
     expect(compute_input_fingerprint(fewer)).not.toBe(
       compute_input_fingerprint(base),
     );
+  });
+
+  it("is a sha256 hex digest for an empty input (a window with no pages)", () => {
+    expect(compute_input_fingerprint([])).toMatch(SHA256_HEX);
+  });
+
+  it("breaks ties on version when two entries share a page_session_id", () => {
+    const a = [
+      { page_session_id: "p1", embedding_vector_version: "v2" },
+      { page_session_id: "p1", embedding_vector_version: "v1" },
+    ];
+    const b = [
+      { page_session_id: "p1", embedding_vector_version: "v1" },
+      { page_session_id: "p1", embedding_vector_version: "v2" },
+    ];
+    expect(compute_input_fingerprint(a)).toBe(compute_input_fingerprint(b));
   });
 });
