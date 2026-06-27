@@ -136,14 +136,10 @@ function build_keyphrases(
 
 /**
  * Compose the human-readable display string from the label parts (plan §7,
- * AC#3 recomposition). Pure and total: the UI and tests call it to recompose
- * `display_label` from the stored fields without re-running label_cluster, so
- * `display_label` is never a separately-baked string. Two rules, total over
- * every empty-input combination:
- *   1. title_part = headline_title, else the joined keyphrases, else "".
- *   2. result = "<title_part> — <scope>" when both are non-empty; otherwise
- *      whichever of the two is non-empty; otherwise the "Untitled cluster"
- *      placeholder. (scope is an appendix to the title part, not a peer rung.)
+ * AC#3 recomposition). Pure and total over every empty-input combination, so the
+ * UI and tests recompose `display_label` from the stored fields rather than
+ * baking it as a separate string. scope is an appendix to the title part, not a
+ * peer rung — it is dropped unless a title part exists to anchor it.
  */
 export function compose_display_label(
   headline_title: string,
@@ -165,19 +161,10 @@ export function compose_display_label(
 
 /**
  * Build the deterministic ClusterLabel for one represented cluster (plan §7).
- * `headline_title` is the representative page's title; `scope` the
- * registrable-domain distribution; `keyphrases` the title term-frequency terms;
- * `display_label` the composition of those parts; `representation_version` the
- * labeler version.
  *
- * @param cluster the represented cluster; representative_index selects the
- *   representative VisitRow (the eom exemplar, or the medoid fallback that
- *   represent_clusters resolved), member_indices the pages mined for
- *   scope/keyphrases.
- * @param visits  the window's deduped VisitRows (dedupe_visits output),
- *   index-aligned to the cluster's indices — repeat same-URL visits are already
- *   collapsed, so a duplicate title is genuine keyphrase signal.
- * @param config  labeler knobs; defaults to DEFAULT_LABELER_CONFIG.
+ * `visits` must be index-aligned to the cluster's indices (the same array
+ * represent_clusters consumed). It is the dedupe_visits output, so a repeated
+ * title is genuine keyphrase signal rather than a same-URL reload artifact.
  */
 export function label_cluster(
   cluster: RepresentedCluster,

@@ -101,6 +101,17 @@ describe("label_cluster — scope via registrable domain (AC#2)", () => {
     expect(label_cluster(cluster([0, 1, 2], 0), visits).scope).toBe("nextjs.org +1 site");
   });
 
+  it("names top_k_domains domains joined by ', ' before the '+N sites' tail (AC#2)", () => {
+    const visits = [
+      visit("p0", "https://nextjs.org/a", "A"),
+      visit("p1", "https://nextjs.org/b", "B"),
+      visit("p2", "https://react.dev/c", "C"),
+      visit("p3", "https://vercel.com/d", "D"),
+    ];
+    const config = { ...DEFAULT_LABELER_CONFIG, top_k_domains: 2 };
+    expect(label_cluster(cluster([0, 1, 2, 3], 0), visits, config).scope).toBe("nextjs.org, react.dev +1 site");
+  });
+
   it("yields scope='' when no member URL parses to a registrable domain (AC#2)", () => {
     const visits = [
       visit("p0", "http://localhost:3000/x", "X"),
@@ -161,6 +172,18 @@ describe("label_cluster — keyphrases from title term-frequency (AC#2)", () => 
     expect(kp).toHaveLength(DEFAULT_LABELER_CONFIG.max_keyphrases);
   });
 
+  it("honors a custom config's max_keyphrases, min_token_len and stopwords (AC#2)", () => {
+    const visits = [visit("p0", "https://x.com/0", "alpha beta gamma alpha to go")];
+    const config = {
+      ...DEFAULT_LABELER_CONFIG,
+      max_keyphrases: 2,
+      min_token_len: 2,
+      stopwords: new Set<string>(["beta"]),
+    };
+    const kp = label_cluster(cluster([0], 0), visits, config).keyphrases;
+    expect(kp).toEqual(["alpha", "gamma"]);
+  });
+
   it("depends only on the cluster's own titles, not on any window corpus (AC#2)", () => {
     // The signature carries no corpus/window argument, so keyphrases cannot be
     // window-relative (c-TF-IDF): identical member titles → identical keyphrases.
@@ -182,6 +205,11 @@ describe("label_cluster — empty inputs (AC#2)", () => {
     const label = label_cluster(cluster([0, 1], 0), visits);
     expect(label.headline_title).toBe("");
     expect(label.scope).toBe("github.com");
+  });
+
+  it("strips surrounding whitespace from the exemplar title (AC#2)", () => {
+    const visits = [visit("p0", "https://github.com/a", "  React hooks  "), visit("p1", "https://github.com/b", null)];
+    expect(label_cluster(cluster([0, 1], 0), visits).headline_title).toBe("React hooks");
   });
 
   it("trims a whitespace-only exemplar title to '' and falls through (AC#2)", () => {
