@@ -14,9 +14,8 @@ export type WindowSignal =
   | { kind: "window"; start: string; end: string; visits: VisitRow[] }
   | { kind: "skip"; start: string; end: string; reason: "not_enough_data" };
 
-// ---------------------------------------------------------------------------
-// ISO helpers — all operate on UTC epoch milliseconds (integers, no floats).
-// ---------------------------------------------------------------------------
+// All ISO helpers operate on UTC epoch milliseconds (integers, no floats) to
+// keep window bounds a byte-identical pure function of their inputs.
 
 function parse_iso_ms(iso: string): number {
   const re =
@@ -43,10 +42,6 @@ function add_months_ms(month_start: number, n: number): number {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1, 0, 0, 0, 0);
 }
 
-// ---------------------------------------------------------------------------
-// Calendar window enumeration
-// ---------------------------------------------------------------------------
-
 function enumerate_calendar_windows(
   range_start: string,
   range_end: string,
@@ -68,7 +63,6 @@ function enumerate_calendar_windows(
       cursor_ms = next_ms;
     }
   } else {
-    // unit === "days"
     if (!config.days || config.days <= 0) {
       throw new Error(
         `enumerate_calendar_windows: config.unit is "days" but config.days is ${config.days}`,
@@ -86,41 +80,57 @@ function enumerate_calendar_windows(
   return windows;
 }
 
-// ---------------------------------------------------------------------------
-// Subdivision helpers
-// ---------------------------------------------------------------------------
-
 // Returns the epoch-ms split point (= page_loaded_at of the right visit of the
 // largest gap), or null when no gap exists (< 2 visits or all same timestamp).
-// Tie-break: lower right-visit page_loaded_at ms, then lower page_session_id.
+// Equal-sized gaps tie-break to the lower right-visit ms; visits sharing a
+// timestamp sort adjacently, so two distinct gaps can never share a right-visit
+// ms and no further tie-break is reachable.
 function find_largest_gap_ms(visits: VisitRow[]): number | null {
   if (visits.length < 2) return null;
 
   let best_gap = -1;
   let best_split_ms = -1;
-  let best_right_psid = "";
 
   for (let i = 1; i < visits.length; i++) {
     const left_ms = parse_iso_ms(visits[i - 1].page_loaded_at);
     const right_ms = parse_iso_ms(visits[i].page_loaded_at);
     const gap = right_ms - left_ms;
-    const psid = visits[i].page_session_id;
 
     const beats =
-      gap > best_gap ||
-      (gap === best_gap && right_ms < best_split_ms) ||
-      (gap === best_gap && right_ms === best_split_ms && psid < best_right_psid);
+      gap > best_gap || (gap === best_gap && right_ms < best_split_ms);
 
     if (beats) {
       best_gap = gap;
       best_split_ms = right_ms;
-      best_right_psid = psid;
     }
   }
 
   if (best_gap <= 0) return null; // all visits at identical timestamp
 
   return best_split_ms;
+}
+
+// The split-point timestamp nearest the median visit by COUNT — the terminal
+// bisection used once the calendar strategies are exhausted. Searching outward
+// from the median index for the first boundary where the timestamp advances
+// guarantees a balanced, non-degenerate split for any window that is not a single
+// instant: it keeps every visit clustered (no shedding) and halves the count, so
+// recursion depth is O(log n) and the O(n²) count guard is honored even for
+// near-uniform browsing with no dominant gap. Returns null only when every visit
+// shares one timestamp (genuinely unsplittable by time).
+function median_split_ms(visits: VisitRow[]): number | null {
+  const n = visits.length;
+  if (n < 2) return null;
+  const mid = n >> 1;
+  for (let d = 0; d < n; d++) {
+    for (const i of [mid - d, mid + d]) {
+      if (i <= 0 || i >= n) continue;
+      const left_ms = parse_iso_ms(visits[i - 1].page_loaded_at);
+      const right_ms = parse_iso_ms(visits[i].page_loaded_at);
+      if (right_ms > left_ms) return right_ms;
+    }
+  }
+  return null;
 }
 
 // Returns ms of YYYY-MM-16T00:00:00.000Z for the month containing window_start_ms.
@@ -149,9 +159,18 @@ function iso_week_split_ms(window_start_ms: number, window_end_ms: number): numb
   return midnight_ms - days_back * 86_400_000;
 }
 
-// ---------------------------------------------------------------------------
-// Core recursion
-// ---------------------------------------------------------------------------
+// A gap split is only "material progress" when each side keeps at least this
+// share of the window's visits. Under near-uniform spacing the largest gap is no
+// larger than the typical gap, so `find_largest_gap_ms` peels a single visit off
+// the earliest of the equal-largest gaps; recursing on that 1-vs-rest split with
+// the SAME strategy would peel one visit at a time — shedding most of a dense,
+// steadily-browsed window as sub-min-visit skips and growing recursion depth to
+// O(n). Requiring a balanced split makes a non-dominant gap fall through to
+// calendar bisection (half_month → iso_week) instead, which both keeps the
+// visits clustered and bounds recursion depth to O(log n). A genuine multi-burst
+// window — dense bursts separated by large inter-burst gaps — still splits on the
+// gap, because each burst clears the share floor.
+const GAP_SPLIT_MIN_SHARE = 0.2;
 
 function subdivide_window(
   start_ms: number,
@@ -171,9 +190,20 @@ function subdivide_window(
     return [{ kind: "window", start, end, visits }];
   }
 
-  // Overflow: try next strategy.
   if (remaining_strategies.length === 0) {
-    // All strategies exhausted — emit as-is to guarantee termination.
+    // Named (calendar/gap) strategies exhausted. Bisect at the median visit by
+    // count so the count guard is honored even when no calendar boundary or
+    // dominant gap subdivides the window (e.g. near-uniform dense browsing).
+    const mid_split = median_split_ms(visits);
+    if (mid_split !== null) {
+      const left = visits.filter(v => parse_iso_ms(v.page_loaded_at) < mid_split);
+      const right = visits.filter(v => parse_iso_ms(v.page_loaded_at) >= mid_split);
+      return [
+        ...subdivide_window(start_ms, mid_split, left, config, remaining_strategies),
+        ...subdivide_window(mid_split, end_ms, right, config, remaining_strategies),
+      ];
+    }
+    // Genuinely unsplittable (every visit at one instant) — emit as-is.
     console.warn(
       `[tdt/windowing] ${start}/${end}: ${visits.length} visits exceed ` +
         `max_samples=${config.max_samples} but all subdivision strategies exhausted`,
@@ -208,8 +238,16 @@ function subdivide_window(
   const left = visits.filter(v => parse_iso_ms(v.page_loaded_at) < split_ms!);
   const right = visits.filter(v => parse_iso_ms(v.page_loaded_at) >= split_ms!);
 
-  // Degenerate split (one side empty) — advance to next strategy.
-  if (left.length === 0 || right.length === 0) {
+  // Degenerate split (one side empty) — advance to next strategy. A gap split
+  // additionally requires both sides to clear GAP_SPLIT_MIN_SHARE: a non-dominant
+  // gap (near-uniform spacing) that only peels a sliver off one end is not real
+  // progress, so fall through to calendar bisection rather than peel one-by-one.
+  const min_share =
+    strategy === "gap"
+      ? Math.min(left.length, right.length) >=
+        GAP_SPLIT_MIN_SHARE * visits.length
+      : true;
+  if (left.length === 0 || right.length === 0 || !min_share) {
     return subdivide_window(start_ms, end_ms, visits, config, strategies_tail);
   }
 
@@ -218,10 +256,6 @@ function subdivide_window(
     ...subdivide_window(split_ms, end_ms, right, config, remaining_strategies),
   ];
 }
-
-// ---------------------------------------------------------------------------
-// Public entry
-// ---------------------------------------------------------------------------
 
 /**
  * Slice a visit stream into window signals per config.

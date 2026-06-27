@@ -407,6 +407,77 @@ describe("compute_windows — gap-split subdivision (AC #3)", () => {
     // First split should be at v3 (lower right-visit ms wins the tie).
     expect(result1[0]!.end).toBe(visits[3]!.page_loaded_at);
   });
+
+  it("splits cleanly when duplicate-timestamp visits straddle the gap boundary", () => {
+    // Two visits share the pre-gap timestamp and two share the post-gap
+    // timestamp. The gap's right visit is the first post-gap visit; both
+    // duplicate-timestamp visits land in the same half (no visit is orphaned at
+    // the boundary), and the result is deterministic.
+    const DAY = 86_400_000;
+    const base = new Date(t(2026, 1, 5)).getTime();
+    const left_ts = new Date(base + 0 * DAY).toISOString();
+    const right_ts = new Date(base + 4 * DAY).toISOString();
+    const visits = [
+      make_visit("L_a", left_ts),
+      make_visit("L_b", left_ts),
+      make_visit("R_z", right_ts),
+      make_visit("R_m", right_ts),
+    ];
+    const cfg = overflow_config(2);
+    const result = compute_windows(visits, cfg, t(2026, 1, 1), t(2026, 2, 1));
+    expect(result[0]!.end).toBe(right_ts);
+    const w0 = result[0] as Extract<WindowSignal, { kind: "window" }>;
+    expect(w0.visits.map(v => v.page_session_id).sort()).toEqual(["L_a", "L_b"]);
+    const w1 = result[1] as Extract<WindowSignal, { kind: "window" }>;
+    expect(w1.visits.map(v => v.page_session_id).sort()).toEqual(["R_m", "R_z"]);
+  });
+});
+
+describe("compute_windows — uniform overflow does not degenerate", () => {
+  // Regression: under near-uniform spacing the largest gap is no larger than the
+  // typical gap, so gap-split would peel one visit off the earliest equal-largest
+  // gap and recurse on the 1-vs-rest remainder — shedding most of a dense window
+  // as sub-min-visit skips (and growing recursion depth to O(n)). The gap strategy
+  // must instead fall through to calendar bisection so the visits stay clustered.
+  it("keeps a dense uniform window's visits instead of peeling them off as skips", () => {
+    const cfg: WindowConfig = {
+      ...DEFAULT_WINDOW_CONFIG,
+      max_samples: 100,
+      // default subdivide_order ['gap','half_month','iso_week'] and min_window_visits.
+    };
+    // 300 evenly spaced visits across January (2h apart, all inside the month).
+    const visits = spaced_visits("u", t(2026, 1, 3), 300, 7_200_000);
+    const result = compute_windows(visits, cfg, t(2026, 1, 1), t(2026, 2, 1));
+
+    // No window exceeds the count guard.
+    for (const s of result) {
+      if (s.kind === "window") expect(s.visits.length).toBeLessThanOrEqual(100);
+    }
+    // Every visit is retained in a real window — none shed as single-visit skips.
+    const retained = result.flatMap(s =>
+      s.kind === "window" ? s.visits.map(v => v.page_session_id) : [],
+    );
+    expect(retained.sort()).toEqual(visits.map(v => v.page_session_id).sort());
+    // Calendar bisection yields a handful of balanced windows, not ~200 skips.
+    expect(result.every(s => s.kind === "window")).toBe(true);
+    expect(result.length).toBeLessThan(20);
+  });
+
+  it("still gap-splits a genuine multi-burst window (dominant gaps survive the share floor)", () => {
+    // Two dense bursts of 60, separated by a 20-day gap, total 120 > max_samples=100.
+    const cfg: WindowConfig = { ...DEFAULT_WINDOW_CONFIG, max_samples: 100 };
+    const visits = [
+      ...spaced_visits("a", t(2026, 1, 3, 0), 60, 600_000),
+      ...spaced_visits("b", t(2026, 1, 23, 0), 60, 600_000),
+    ];
+    const result = compute_windows(visits, cfg, t(2026, 1, 1), t(2026, 2, 1));
+    // The dominant inter-burst gap splits into the two 60-visit bursts.
+    const sizes = result
+      .filter(s => s.kind === "window")
+      .map(s => (s as Extract<WindowSignal, { kind: "window" }>).visits.length)
+      .sort((a, b) => a - b);
+    expect(sizes).toEqual([60, 60]);
+  });
 });
 
 // ---------------------------------------------------------------------------
