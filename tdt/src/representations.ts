@@ -126,7 +126,7 @@ export async function represent_clusters(
   const members_by_label = new Map<number, number[]>();
   for (let i = 0; i < n; i++) {
     const label = raw.labels[i];
-    if (label < 0) continue; // noise: no representative
+    if (label < 0) continue;
     const bucket = members_by_label.get(label);
     if (bucket === undefined) members_by_label.set(label, [i]);
     else bucket.push(i);

@@ -332,6 +332,16 @@ describe("represent_clusters — index alignment guards", () => {
     await expect(represent_clusters(make_raw([0, 0], [1], [[0, 0]]), vectors, visits)).rejects.toThrow(/misaligned/);
   });
 
+  it("throws when an exemplar index resolves out of the input row range", async () => {
+    // A library-contract regression: the exemplar map points at row 9 with only
+    // 3 rows present. The guard must reject it rather than read undefined.
+    const vectors = [unit_vector("a0", [1, 0, 0]), unit_vector("a1", [1, 0.05, 0]), unit_vector("a2", [1, 0.1, 0])];
+    const visits = vectors.map((v, i) => visit(v.page_session_id, `https://x.com/${i}`, t(2024, 1, i + 1)));
+    await expect(
+      represent_clusters(make_raw([0, 0, 0], [0.9, 0.8, 0.7], [[0, 9]]), vectors, visits),
+    ).rejects.toThrow(/out-of-range/);
+  });
+
   it("throws on non-contiguous cluster labels when the medoid fallback is needed", async () => {
     // labels {0,2} (no label 1) + an empty exemplar map → the medoid branch runs
     // and the contiguity guard must reject the gap before mis-indexing.
