@@ -175,6 +175,36 @@ describe("build_page_vector — guards", () => {
       build_page_vector(make_content("p", "", "aaaabbbb"), embed, EXTRACT, TINY),
     ).rejects.toThrow(/dim mismatch/);
   });
+
+  it("excludes a page whose embedding has dimension zero", async () => {
+    const { embed } = scripted_embed({ aaaa: [] });
+    const v = await build_page_vector(
+      make_content("p", "", "aaaa"),
+      embed,
+      EXTRACT,
+      TINY,
+    );
+    expect(v).toBeNull();
+  });
+
+  it("falls back to the dominant segment when cohesive segments pool to zero", async () => {
+    // The backstop for the numerically-collapsed pool: anti-aligned segments
+    // ([1,0] and [-1,0]) only reach the pool branch when the dispersion gate is
+    // set permissively (-1), since -1 < -1 is false. Their raw mean cancels to
+    // [0,0] (norm < eps), so the build re-uses the medoid (index 0 on the tie)
+    // and marks low_confidence rather than returning a degenerate vector.
+    const { embed } = scripted_embed({ aaaa: [1, 0], bbbb: [-1, 0] });
+    const config: PageVectorConfig = { ...TINY, dispersion_min_mean_cosine: -1 };
+    const v = await build_page_vector(
+      make_content("p", "", "aaaabbbb"),
+      embed,
+      EXTRACT,
+      config,
+    );
+    expect(v).not.toBeNull();
+    expect(v!.low_confidence).toBe(true);
+    expect(bytes_equal(v!.vector, Float32Array.from([1, 0]))).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
