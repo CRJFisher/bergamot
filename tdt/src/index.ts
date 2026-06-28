@@ -19,8 +19,8 @@ export type {
   PersistResult,
 } from "./types";
 
-// Run keying + record assembly are pure and tf-free (only node `crypto`), so —
-// unlike cluster_window.ts / representations.ts — they are safe to re-export here.
+// Run keying and record assembly are tf-free (node `crypto` only), so re-exporting
+// them here does not pull the native TensorFlow chain into barrel consumers.
 export type {
   ResolvedParams,
   RunNaturalKey,
@@ -51,14 +51,11 @@ export {
   dedupe_visits,
 } from "./page_vectors";
 
-// Validation harness (task-36.7). The tf-free pieces — scoring, the cadence/
-// report helpers, the operating point, and all DTOs — are re-exported;
-// validation/sweep.ts is NOT (it imports clustering-tfjs PCA and reuses
-// cluster_window, pulling the native TensorFlow chain), exactly like
-// cluster_window.ts / representations.ts above. The orchestrator (TASK-36.9)
-// imports its entry points — run_sweep, evaluate_guardrail — from
-// ./validation/sweep directly, then feeds the results to the tf-free
-// summarize_validation / select_operating_point re-exported here.
+// Validation harness: only the tf-free pieces (scoring, report helpers, the
+// operating point, and DTOs) are re-exported. validation/sweep.ts is NOT — it
+// imports clustering-tfjs PCA and reuses the clustering core, pulling the native
+// TensorFlow chain — so consumers import run_sweep / evaluate_guardrail from
+// ./validation/sweep directly and feed the results to the tf-free helpers here.
 export type {
   Reduction,
   WindowInput,
@@ -95,16 +92,11 @@ export {
   operating_point_path,
 } from "./validation/operating_point";
 
-// cluster_window.ts and representations.ts are NOT re-exported here: their
+// cluster_window.ts and representations.ts are NOT re-exported: their
 // `clustering-tfjs` import pulls the native TensorFlow backend chain, which any
-// consumer of this barrel (e.g. the extension's embed pass) would then have to
-// bundle. The labeling/ modules are tf-free but are also NOT re-exported:
-// deterministic_labeler.ts is an internal pipeline stage the orchestrator
-// (TASK-36.9) imports directly, and llm_naming_seam.ts is a documented
-// not-yet-built seam (types only) nothing consumes yet — neither is a
-// consumer-facing entrypoint. Only the ClusterLabel DTO is re-exported (above),
-// since the persist adapter and MCP surface reference it. The orchestrator owns
-// wiring the tf-pulling stages into the runtime and externalising the native deps.
+// barrel consumer would then have to bundle. The labeling/ modules are tf-free
+// but are internal pipeline stages a consumer imports directly, so only the
+// ClusterLabel DTO (above) is re-exported for the persist adapter and MCP surface.
 
 import type { RelationalReader, EmbedFn, VectorStore, ClusterSink } from "./ports";
 
@@ -122,11 +114,11 @@ export interface TdtArgs {
 }
 
 /**
- * Run the windowed HDBSCAN micro-tier over one window.
- *
- * Stub: the pipeline stages (fetch visits, resolve page vectors, build the
- * cosine distance matrix, fit HDBSCAN, represent, label, persist) land in
- * later subtasks of TASK-36. The dependency-injection seam is fixed here.
+ * The package's public entry point for the windowed HDBSCAN micro-tier over one
+ * window. It fixes the dependency-injection seam: callers supply concrete ports
+ * via {@link TdtDeps}, the library owns the pipeline (fetch visits, resolve page
+ * vectors, build the cosine distance matrix, fit HDBSCAN, represent, label,
+ * persist).
  */
 export async function run_tdt(_deps: TdtDeps, _args: TdtArgs): Promise<void> {
   return;

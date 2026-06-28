@@ -30,6 +30,33 @@ const ARGS: TdtArgs = {
   embedding_model_id: "test-model@1",
 };
 
+describe("public barrel surface", () => {
+  // The extension (vscode/src/tdt/*) imports these runtime values from
+  // "@bergamot/tdt". Removing a re-export silently breaks those consumers at
+  // their compiled deep-import boundary, so the barrel must keep exposing them.
+  it.each([
+    "run_tdt",
+    "compute_windows",
+    "resolve_page_vector",
+    "assemble_run_bundle",
+    "canonical_json",
+    "canonical_timestamp",
+    "compute_params_hash",
+    "compute_input_fingerprint",
+    "load_operating_point",
+    "DEFAULT_WINDOW_CONFIG",
+    "DEFAULT_HDBSCAN_CONFIG",
+    "DEFAULT_PAGE_VECTOR_CONFIG",
+  ])("re-exports %s", (name) => {
+    expect(name in tdt).toBe(true);
+  });
+
+  it("re-exports run_tdt as the live no-op function", () => {
+    expect(typeof tdt.run_tdt).toBe("function");
+    expect(tdt.run_tdt).toBe(run_tdt);
+  });
+});
+
 describe("run_tdt (scaffold)", () => {
   it("resolves without error when wired to in-memory fakes", async () => {
     const { deps } = make_deps();
