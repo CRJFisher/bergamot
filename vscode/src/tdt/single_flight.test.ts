@@ -23,8 +23,8 @@ describe("single_flight", () => {
 
     const a = single_flight(holder, op);
     const b = single_flight(holder, op);
-    expect(runs).toBe(1); // second call joined the first
-    expect(a).toBe(b); // same promise instance
+    expect(runs).toBe(1);
+    expect(a).toBe(b);
 
     gate.resolve(42);
     expect(await a).toBe(42);
@@ -40,7 +40,7 @@ describe("single_flight", () => {
     };
 
     expect(await single_flight(holder, op)).toBe(1);
-    expect(await single_flight(holder, op)).toBe(2); // new run, not the cached promise
+    expect(await single_flight(holder, op)).toBe(2);
     expect(runs).toBe(2);
   });
 
@@ -54,8 +54,36 @@ describe("single_flight", () => {
     };
 
     await expect(single_flight(holder, op)).rejects.toThrow("boom");
-    // The latch cleared, so the next call runs again (does not wedge).
     expect(await single_flight(holder, op)).toBe(2);
     expect(runs).toBe(2);
+  });
+
+  it("shares one rejection across concurrent callers without caching it", async () => {
+    const holder: SingleFlightHolder<number> = {};
+    let runs = 0;
+    const gate = deferred<number>();
+    const op = () => {
+      runs++;
+      return gate.promise;
+    };
+
+    const a = single_flight(holder, op);
+    const b = single_flight(holder, op);
+    expect(runs).toBe(1);
+    expect(a).toBe(b);
+
+    gate.reject(new Error("boom"));
+    await expect(a).rejects.toThrow("boom");
+    await expect(b).rejects.toThrow("boom");
+
+    const next = deferred<number>();
+    const c = single_flight(holder, () => {
+      runs++;
+      return next.promise;
+    });
+    expect(c).not.toBe(a);
+    expect(runs).toBe(2);
+    next.resolve(7);
+    expect(await c).toBe(7);
   });
 });

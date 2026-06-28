@@ -1,21 +1,13 @@
 /**
- * Promise-coalescing single-flight (TASK-36.3.1).
- *
- * While an operation is in flight, concurrent callers join the SAME promise
- * rather than starting a second run; the holder's `in_flight` latch is cleared
- * when the operation settles (success OR failure), so the next call starts
- * fresh. Used to keep the TDT embed pass single — one model load, no two passes
- * racing writes to the same `topic_page_vector` key — when the command (or, a
- * later clustering run) triggers it concurrently.
+ * Keeps the TDT embed pass single: one model load, no two passes racing writes
+ * to the same `topic_page_vector` key when the command and a clustering run
+ * trigger it concurrently. The latch clears on settle (success or failure) so a
+ * transient failure does not wedge all future calls onto a cached rejection.
  */
 export interface SingleFlightHolder<T> {
   in_flight?: Promise<T>;
 }
 
-/**
- * Run `operation` under the holder's single-flight latch, returning the
- * in-flight promise to any caller that arrives while it is running.
- */
 export function single_flight<T>(
   holder: SingleFlightHolder<T>,
   operation: () => Promise<T>,
