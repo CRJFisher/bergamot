@@ -67,7 +67,7 @@ function counting_embed(
       throw new Error("embed boom");
     }
     const v = new Float32Array(DIM);
-    if (behavior.zero_if && text.includes(behavior.zero_if)) return v; // all zeros
+    if (behavior.zero_if && text.includes(behavior.zero_if)) return v;
     let h = 0x811c9dc5;
     for (let i = 0; i < text.length; i++) {
       h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
@@ -94,6 +94,16 @@ describe("run_embed_pass", () => {
 
   afterEach(async () => {
     await db.close();
+  });
+
+  it("returns an all-zero report over an empty corpus, embedding nothing", async () => {
+    const corpus = new FakeCorpus([]);
+    const { embed, calls } = counting_embed();
+
+    const report = await run_embed_pass(corpus, store, embed, MODEL_A, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
+
+    expect(report).toEqual({ scanned: 0, embedded: 0, skipped: 0, excluded: 0, failed: 0 });
+    expect(calls).toHaveLength(0);
   });
 
   it("vectorises every public page on a first pass (build-on-miss)", async () => {
@@ -150,7 +160,7 @@ describe("run_embed_pass", () => {
     const report = await run_embed_pass(corpus, store, second.embed, MODEL_B, REPR, DEFAULT_PAGE_VECTOR_CONFIG);
 
     expect(report).toEqual({ scanned: 1, embedded: 1, skipped: 0, excluded: 0, failed: 0 });
-    expect(second.calls.length).toBeGreaterThan(0); // it DID re-embed
+    expect(second.calls.length).toBeGreaterThan(0);
     expect(await store.get("p1", MODEL_A)).not.toBeNull();
     expect(await store.get("p1", MODEL_B)).not.toBeNull();
   });
