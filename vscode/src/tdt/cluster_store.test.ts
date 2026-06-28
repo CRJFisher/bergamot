@@ -34,6 +34,7 @@ interface BundleOverrides {
   window_start?: string;
   window_end?: string;
   embedding_model_id?: string;
+  params_hash?: string;
   input_fingerprint?: string;
   created_at?: string;
   /** Number of clustered members (label 0); plus `noise` noise members. */
@@ -51,8 +52,10 @@ function make_bundle(o: BundleOverrides = {}): RunBundle {
   const window_start = o.window_start ?? "2024-01-01T00:00:00.000Z";
   const window_end = o.window_end ?? "2024-02-01T00:00:00.000Z";
   const embedding_model_id = o.embedding_model_id ?? "model-a@384";
+  const params_hash = o.params_hash ?? "ph";
   const run_id =
-    o.run_id ?? `run:${window_start}:${window_end}:${embedding_model_id}`;
+    o.run_id ??
+    `run:${window_start}:${window_end}:${embedding_model_id}:${params_hash}`;
   const created_at = o.created_at ?? "2024-02-02T00:00:00.000Z";
   const clustered = o.clustered ?? 2;
   const noise = o.noise ?? 1;
@@ -103,7 +106,7 @@ function make_bundle(o: BundleOverrides = {}): RunBundle {
     id: run_id,
     window_start,
     window_end,
-    params_hash: "ph",
+    params_hash,
     params_json: '{"k":1}',
     embedding_model_id,
     algo_version: "hdbscan-1#wasm",
@@ -331,7 +334,7 @@ describe("ClusterStore", () => {
               embedding_model_id, algo_version, input_count, input_fingerprint,
               cluster_count, noise_count, status, created_at, completed_at
            FROM ${TOPIC_RUN_TABLE} WHERE id = $id`,
-          { id: "run:2024-01-01T00:00:00.000Z:2024-02-01T00:00:00.000Z:model-a@384" },
+          { id: "run:2024-01-01T00:00:00.000Z:2024-02-01T00:00:00.000Z:model-a@384:ph" },
         ),
       ).rejects.toThrow();
     });
@@ -396,27 +399,59 @@ describe("ClusterStore", () => {
     });
   });
 
-  describe("coverage (AC#4, AC#5)", () => {
-    it("derives clustered/total from member rows alone", async () => {
-      const { run_id } = await store.persist(make_bundle({ clustered: 3, noise: 1 }));
-      const cov = await store.coverage(run_id);
-      expect(cov).toEqual({
-        run_id,
-        total: 4,
-        clustered: 3,
-        noise: 1,
-        coverage: 0.75,
-      });
+  describe("live_run_fingerprint (AC#6)", () => {
+    const WS = "2024-01-01T00:00:00.000Z";
+    const WE = "2024-02-01T00:00:00.000Z";
+
+    it("returns the fingerprint of the live run for a matching key", async () => {
+      await store.persist(make_bundle({ input_fingerprint: "fp-live" }));
+      expect(
+        await store.live_run_fingerprint(WS, WE, "ph", "model-a@384"),
+      ).toBe("fp-live");
     });
 
-    it("reports coverage 0 for an all-noise run", async () => {
-      const { run_id } = await store.persist(make_bundle({ clustered: 0, noise: 3 }));
-      const cov = await store.coverage(run_id);
-      expect(cov).toMatchObject({ total: 3, clustered: 0, noise: 3, coverage: 0 });
+    it("returns null when no run exists for the window", async () => {
+      expect(
+        await store.live_run_fingerprint(WS, WE, "ph", "model-a@384"),
+      ).toBeNull();
     });
 
-    it("returns null for a run with no members", async () => {
-      expect(await store.coverage("no-such-run")).toBeNull();
+    it("returns null when params_hash differs", async () => {
+      await store.persist(make_bundle({ params_hash: "ph" }));
+      expect(
+        await store.live_run_fingerprint(WS, WE, "other-ph", "model-a@384"),
+      ).toBeNull();
+    });
+
+    it("returns null when embedding_model_id differs", async () => {
+      await store.persist(make_bundle({ embedding_model_id: "model-a@384" }));
+      expect(
+        await store.live_run_fingerprint(WS, WE, "ph", "model-b@384"),
+      ).toBeNull();
+    });
+
+    it("ignores a superseded run, returning only the live run's fingerprint", async () => {
+      await store.persist(
+        make_bundle({ embedding_model_id: "model-a@384", input_fingerprint: "fp-old" }),
+      );
+      await store.persist(
+        make_bundle({ embedding_model_id: "model-b@384", input_fingerprint: "fp-new" }),
+      );
+      // model-a's run is now superseded, so its fingerprint is no longer live.
+      expect(
+        await store.live_run_fingerprint(WS, WE, "ph", "model-a@384"),
+      ).toBeNull();
+      expect(
+        await store.live_run_fingerprint(WS, WE, "ph", "model-b@384"),
+      ).toBe("fp-new");
+    });
+
+    it("reflects the new fingerprint after an atomic replace", async () => {
+      await store.persist(make_bundle({ input_fingerprint: "fp-1" }));
+      await store.persist(make_bundle({ input_fingerprint: "fp-2", clustered: 3 }));
+      expect(
+        await store.live_run_fingerprint(WS, WE, "ph", "model-a@384"),
+      ).toBe("fp-2");
     });
   });
 });

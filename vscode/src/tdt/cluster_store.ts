@@ -46,16 +46,6 @@ import type {
   MemberRecord,
 } from "@bergamot/tdt";
 
-/** Per-window coverage, derivable from `topic_cluster_member` alone (plan §8). */
-export interface WindowCoverage {
-  run_id: string;
-  total: number;
-  clustered: number;
-  noise: number;
-  /** clustered / total, or 0 for an empty run (no divide-by-zero). */
-  coverage: number;
-}
-
 /** A SQL statement runner bound to one transaction connection. */
 type TxRun = (
   sql: string,
@@ -200,31 +190,6 @@ export class ClusterStore implements ClusterSink {
       { window_start, window_end, params_hash, embedding_model_id },
     );
     return row ? String(row.input_fingerprint) : null;
-  }
-
-  /**
-   * Per-window coverage for one run, from `topic_cluster_member` alone — no join
-   * to the capture tables. `COUNT(*) FILTER (WHERE NOT is_noise)` is exact because
-   * noise is a non-null `is_noise` flag, never a NULL `cluster_id` sentinel.
-   * Returns null when the run has no members.
-   */
-  async coverage(run_id: string): Promise<WindowCoverage | null> {
-    const row = await this.db.query_first<{
-      total: bigint;
-      clustered: bigint;
-      noise: bigint;
-    }>(
-      `SELECT count(*) AS total,
-              count(*) FILTER (WHERE NOT is_noise) AS clustered,
-              count(*) FILTER (WHERE is_noise) AS noise
-       FROM ${TOPIC_CLUSTER_MEMBER_TABLE} WHERE run_id = $run_id`,
-      { run_id },
-    );
-    const total = Number(row?.total ?? 0);
-    if (total === 0) return null;
-    const clustered = Number(row?.clustered ?? 0);
-    const noise = Number(row?.noise ?? 0);
-    return { run_id, total, clustered, noise, coverage: clustered / total };
   }
 }
 
