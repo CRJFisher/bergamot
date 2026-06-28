@@ -4,6 +4,7 @@ import * as path from "path";
 import { DuckDBValue } from "@duckdb/node-api";
 import {
   DuckDB,
+  TOPIC_CLUSTER_TABLE,
   TOPIC_CLUSTER_MEMBER_TABLE,
   create_metadata_schema,
   get_webpage_capture,
@@ -271,15 +272,28 @@ describe("right-to-forget cascade", () => {
       return Number(row?.n);
     };
 
+    const clusters_count = async (): Promise<number> => {
+      const row = await metadata_db.query_first<{ n: unknown }>(
+        `SELECT count(*)::INTEGER AS n FROM ${TOPIC_CLUSTER_TABLE} WHERE id = 'c0'`,
+      );
+      return Number(row?.n);
+    };
+    expect(await clusters_count()).toBe(1);
+
     const report = await forget(metadata_db, cache, {
       kind: "url",
       url: "https://example.com/a",
     });
 
     expect(report.cluster_members_deleted).toBe(1);
+    expect(report.clusters_dissolved).toBe(1);
     expect(await members_for("a")).toBe(0);
-    // The other page's membership — and the cluster/run provenance — survive.
-    expect(await members_for("b")).toBe(1);
+    // The cluster 'a' contributed to is DISSOLVED: its representative_vector (the
+    // member-mean embedding) and exemplar carried a's forgotten contribution, so
+    // the whole topic_cluster row and its co-member ('b') rows go — privacy over
+    // retained derived data. The next in-range run re-derives it.
+    expect(await clusters_count()).toBe(0);
+    expect(await members_for("b")).toBe(0);
   });
 
   describe("cluster controls + staged stubs (task-36.8)", () => {
@@ -289,6 +303,7 @@ describe("right-to-forget cascade", () => {
           id: "c0",
           run_id: "run-1",
           display_label: "T",
+          renamed_label: null,
           headline_title: "T",
           scope: "example.com",
           keyphrases: [],

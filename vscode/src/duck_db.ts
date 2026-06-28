@@ -2,6 +2,7 @@ import {
   DuckDBInstance,
   DuckDBConnection,
   DuckDBValue,
+  DuckDBType,
 } from "@duckdb/node-api";
 import * as path from "path";
 import * as fs from "fs";
@@ -302,9 +303,15 @@ export class DuckDB {
    */
   async execute(
     sql: string,
-    params: Record<string, DuckDBValue> = {}
+    params: Record<string, DuckDBValue> = {},
+    // Explicit per-parameter DuckDB types. Pass this when DuckDB's automatic
+    // value-type inference would pick the wrong type — notably a FLOAT[]/DOUBLE[]
+    // list bound from a JS number[] whose leading element is integer-valued (e.g.
+    // a page vector starting with 0.0), which infers INTEGER[] and silently
+    // truncates every fractional component to 0 (see PageVectorStore.put).
+    types?: Record<string, DuckDBType | undefined>
   ): Promise<void> {
-    await this.connection.run(sql, params);
+    await this.connection.run(sql, params, types);
   }
 
   /**

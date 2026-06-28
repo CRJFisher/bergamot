@@ -59,6 +59,15 @@ export interface ClusterSummary {
   id: string;
   run_id: string;
   display_label: string | null;
+  /**
+   * The user's rename override, or null when the cluster carries the labeler's
+   * deterministic label. A rename overwrites `display_label` (the read-surface
+   * label every consumer shows) AND is mirrored here, so a downstream renderer
+   * can distinguish a user override from the labeler default — the note-stub
+   * heading honours the rename while its filename/lineage stays anchored on the
+   * rename-independent original label.
+   */
+  renamed_label: string | null;
   headline_title: string | null;
   scope: string | null;
   keyphrases: string[];
@@ -139,6 +148,7 @@ function row_to_summary(row: ClusterRow): ClusterSummary {
     id: row.id,
     run_id: row.run_id,
     display_label: row.display_label,
+    renamed_label: null,
     headline_title: row.headline_title,
     scope: row.scope,
     keyphrases: to_string_array(row.keyphrases),
@@ -172,10 +182,12 @@ function apply_rename(
   controls: ResolvedControls,
 ): ClusterSummary {
   const by_id = controls.rename_by_exemplar_id.get(row.exemplar_page_session_id);
-  if (by_id !== undefined) return { ...summary, display_label: by_id };
+  if (by_id !== undefined)
+    return { ...summary, display_label: by_id, renamed_label: by_id };
   if (controls.rename_by_signature.size > 0) {
     const by_sig = controls.rename_by_signature.get(signature_of(row));
-    if (by_sig !== undefined) return { ...summary, display_label: by_sig };
+    if (by_sig !== undefined)
+      return { ...summary, display_label: by_sig, renamed_label: by_sig };
   }
   return summary;
 }

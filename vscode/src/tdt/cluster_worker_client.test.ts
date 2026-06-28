@@ -38,6 +38,9 @@ process.on('message', () => process.send({ ok: false, error: 'stub failure' }));
 
 const STUB_SILENT = `process.on('message', () => { /* never replies */ });`;
 
+// The real-world TF-OOM / segfault case: the worker dies WITHOUT sending a result.
+const STUB_CRASH = `process.on('message', () => process.exit(1));`;
+
 let dir: string;
 function write_stub(name: string, body: string): string {
   const file = path.join(dir, name);
@@ -102,5 +105,20 @@ describe("run_cluster_compute", () => {
     await expect(
       run_cluster_compute(input(), { worker_path, timeout_ms: 200 }),
     ).rejects.toThrow(/timed out/);
+  });
+
+  it("rejects when the worker cannot be spawned (bad path → child 'error')", async () => {
+    const worker_path = path.join(dir, "does-not-exist.js");
+    // No result, no hang, no leaked timer — the fork error settles the promise.
+    await expect(
+      run_cluster_compute(input(), { worker_path, timeout_ms: 5000 }),
+    ).rejects.toBeInstanceOf(Error);
+  });
+
+  it("rejects when the worker exits without returning a result (crash → child 'exit')", async () => {
+    const worker_path = write_stub("crash.js", STUB_CRASH);
+    await expect(
+      run_cluster_compute(input(), { worker_path, timeout_ms: 5000 }),
+    ).rejects.toThrow(/exited before returning a result/);
   });
 });

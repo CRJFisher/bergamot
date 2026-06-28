@@ -9,6 +9,7 @@ export function make_cluster_detail(
       id: "c0",
       run_id: "run-1",
       display_label: "Local graph clustering — arxiv.org +2 sites",
+      renamed_label: null,
       headline_title: "Local graph clustering",
       scope: "arxiv.org, github.com +2 sites",
       keyphrases: ["hdbscan", "graph-clustering", "embeddings"],

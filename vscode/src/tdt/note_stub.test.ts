@@ -57,6 +57,38 @@ describe("note_stub renderer", () => {
     expect(markdown).toContain("# Local graph clustering — arxiv.org +2 sites");
   });
 
+  describe("user rename", () => {
+    it("shows the rename in the H1 heading and the summary", () => {
+      const { markdown } = render_note_stub(
+        make_cluster_detail({ renamed_label: "My HDBSCAN research" }),
+        CTX,
+      );
+      expect(markdown).toContain("# My HDBSCAN research");
+      expect(markdown).toMatch(/^>.*cohered around My HDBSCAN research/m);
+    });
+
+    it("keeps the filename/lineage anchored on the original label (no duplicate on rename)", () => {
+      const original = compute_stub_filename(make_cluster_detail());
+      const renamed = compute_stub_filename(
+        make_cluster_detail({ renamed_label: "My HDBSCAN research" }),
+      );
+      expect(renamed).toBe(original);
+    });
+
+    it("re-renders the stub (fingerprint changes) when a rename takes effect", () => {
+      // The rename overwrites display_label on the read surface, so the change
+      // gate fires and the in-place stub is refreshed with the new heading.
+      const a = compute_stub_fingerprint(make_cluster_detail());
+      const b = compute_stub_fingerprint(
+        make_cluster_detail({
+          renamed_label: "My HDBSCAN research",
+          display_label: "My HDBSCAN research",
+        }),
+      );
+      expect(a).not.toBe(b);
+    });
+  });
+
   it("cited_page_session_ids lists every member", () => {
     const { cited_page_session_ids } = render_note_stub(make_cluster_detail(), CTX);
     expect(cited_page_session_ids).toEqual(["ps_exemplar", "ps_leiden", "ps_survey"]);

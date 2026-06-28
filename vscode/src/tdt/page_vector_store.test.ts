@@ -51,6 +51,20 @@ describe("PageVectorStore", () => {
     expect(bytes_equal(got!, vector)).toBe(true);
   });
 
+  it("round-trips a vector whose leading component is integer-valued (FLOAT[] typing)", async () => {
+    // Regression: a vector that starts with an integer-valued component (here 0,
+    // common when a page's signal concentrates on later embedding dims) made
+    // DuckDB infer an INTEGER[] list and truncate every fractional component to 0,
+    // corrupting the vector to noise. The explicit FLOAT[] bind type prevents it.
+    const leading_zero = new Float32Array([0, 0, 0, 0, 0.9759, 0.1952, 0.0976, 0]);
+    await store.put("p1", MODEL_ID, REPR, leading_zero);
+    expect(bytes_equal((await store.get("p1", MODEL_ID))!, leading_zero)).toBe(true);
+
+    const leading_one = new Float32Array([1, 0.5, 0.25]);
+    await store.put("p2", MODEL_ID, REPR, leading_one);
+    expect(bytes_equal((await store.get("p2", MODEL_ID))!, leading_one)).toBe(true);
+  });
+
   it("upserts in place under the same (page, model) key", async () => {
     const v1 = new Float32Array([1, 0, 0]);
     const v2 = new Float32Array([0, 1, 0]);

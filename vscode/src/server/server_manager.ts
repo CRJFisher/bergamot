@@ -1057,6 +1057,7 @@ export class ServerManager {
     const { DEFAULT_WINDOW_CONFIG, DEFAULT_HDBSCAN_CONFIG } = await import(
       '@bergamot/tdt'
     );
+    const { resolve_hdbscan_config } = await import('../tdt/operating_config');
 
     const vector_store = new PageVectorStore(this.config.duck_db);
     const control_store = new ClusterControlStore(this.config.duck_db);
@@ -1083,7 +1084,12 @@ export class ServerManager {
       now: () => new Date().toISOString(),
       embedding_model_id: PAGE_EMBEDDING_MODEL_ID,
       window_config: DEFAULT_WINDOW_CONFIG,
-      hdbscan_config: DEFAULT_HDBSCAN_CONFIG,
+      // The sweep-selected operating point for this window unit (AC#5), not the
+      // grid's compile-time default — re-tuning is a data edit to operating_point.json.
+      hdbscan_config: resolve_hdbscan_config(
+        DEFAULT_WINDOW_CONFIG,
+        DEFAULT_HDBSCAN_CONFIG,
+      ),
       page_vector_config: PAGE_EMBEDDING_CONFIG,
     };
 

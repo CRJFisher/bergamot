@@ -26,18 +26,25 @@
  * note stub citing a forgotten URL/origin/time (the `bergamot.staging/` filesystem
  * sweep, TASK-36.8). `never_cluster_origin` controls deliberately SURVIVE every
  * forget — they are a user preference about a domain, not page-derived state, so
- * forgetting your history of a site does not un-block it. It does NOT delete the
- * `topic_cluster` / `topic_run` rows. The per-page embedding — the
- * reconstructable artifact — lives in `topic_page_vector` and IS deleted; what a
- * retained cluster keeps is its frozen `representative_vector` (the L2-normalized
- * mean of its members) and `exemplar_page_session_id`. The mean is an irreversible
- * aggregate, but honestly: for a small cluster (min size 3) it still carries a
- * bounded contribution from a forgotten member, and the retained cluster may now
- * reference a forgotten exemplar page or overstate its `size`. This residual is
- * accepted because it is non-reconstructable and short-lived — the next clustering
- * run over that window re-keys without the forgotten page (its `input_fingerprint`
- * changes) and atomically replaces the stale cluster/run. Consumers must therefore
- * tolerate a dangling `exemplar_page_session_id` (it is a soft ref) until then.
+ * forgetting your history of a site does not un-block it.
+ *
+ * Every cluster a forgotten page CONTRIBUTED TO is DISSOLVED — its `topic_cluster`
+ * row and all of that cluster's `topic_cluster_member` rows are deleted, across
+ * ALL runs (live and superseded). This is the privacy-load-bearing step: the
+ * per-page embedding in `topic_page_vector` is deleted, but a cluster's frozen
+ * `representative_vector` is the L2-normalized MEAN of its members' vectors and
+ * its `exemplar_page_session_id` may name the forgotten page — so the forgotten
+ * page's contribution is baked into the cluster aggregate. Deleting only the
+ * member row would leave that aggregate behind; for a small cluster (min size 3)
+ * the mean carries a bounded but real contribution from the forgotten vector. The
+ * mean is non-reconstructable, but forgetting is deletion, not hiding, so the
+ * whole cluster goes. Dissolving a cluster also drops its surviving co-members'
+ * membership for that run — privacy-safe over-deletion of derived data: an
+ * in-range window re-derives the cluster on the next clustering run (its
+ * `input_fingerprint` changed), and out-of-range / superseded runs stay dissolved.
+ * The `topic_run` row itself survives as window/param provenance (its
+ * `cluster_count` may now overstate — a retained-history imprecision the next
+ * re-key corrects).
  *
  * Ordering and atomicity, honestly: the metadata-side deletes run in one
  * transaction on a dedicated connection (the empty-tree sweep necessarily
@@ -68,6 +75,7 @@ import {
   DuckDB,
   TOPIC_CLUSTER_CONTROL_TABLE,
   TOPIC_CLUSTER_MEMBER_TABLE,
+  TOPIC_CLUSTER_TABLE,
   TOPIC_PAGE_VECTOR_TABLE,
   WEBPAGE_ACTIVITY_SESSIONS_TABLE,
   WEBPAGE_CAPTURE_TABLE,
@@ -112,6 +120,14 @@ export interface ForgetReport {
    * `never_cluster_origin` controls are never counted here — they survive forgets.
    */
   cluster_controls_deleted: number;
+  /**
+   * TDT clusters dissolved because a forgotten page contributed to them — the
+   * `topic_cluster` rows deleted (with their member rows) so no forgotten-tainted
+   * `representative_vector` / exemplar survives. Counted before the cascade
+   * transaction, so like the counts above it is best-effort; the DELETE is
+   * authoritative.
+   */
+  clusters_dissolved: number;
   /** Whether the content-cache cascade ran (false when no cache exists). */
   content_cache_swept: boolean;
   /** Plaintext buffer files (visit inbox + dev replay ring) removed. */
@@ -351,9 +367,13 @@ export async function forget(
     metadata_db,
     targets.page_session_ids
   );
+  const affected_cluster_ids = await resolve_affected_clusters(
+    metadata_db,
+    targets.page_session_ids
+  );
 
   if (targets.page_session_ids.length > 0 || targets.urls.length > 0) {
-    await forget_metadata(metadata_db, selector, targets);
+    await forget_metadata(metadata_db, selector, targets, affected_cluster_ids);
   }
 
   // Always sweep: completes a previously-failed sweep even when this
@@ -371,6 +391,7 @@ export async function forget(
     page_vectors_deleted,
     cluster_members_deleted,
     cluster_controls_deleted,
+    clusters_dissolved: affected_cluster_ids.length,
     content_cache_swept: content_cache !== null,
     files_removed,
     staged_stubs_removed,
@@ -444,6 +465,31 @@ async function count_cluster_controls(
 }
 
 /**
+ * Resolves the clusters a forgotten page contributed to — the distinct
+ * `cluster_id`s its non-noise `topic_cluster_member` rows name, across ALL runs.
+ * Read before the cascade transaction so the report can state how many clusters
+ * the forget dissolved and the transaction can delete them by explicit id list
+ * (a cluster created between this read and the transaction is missed — the same
+ * best-effort bound the counts above carry; the single-writer + forget's isolated
+ * connection make that race vanishingly small).
+ */
+async function resolve_affected_clusters(
+  metadata_db: DuckDB,
+  page_session_ids: string[]
+): Promise<string[]> {
+  if (page_session_ids.length === 0) {
+    return [];
+  }
+  const ids = in_list(page_session_ids, "id");
+  const rows = await metadata_db.query<{ cluster_id: unknown }>(
+    `SELECT DISTINCT cluster_id FROM ${TOPIC_CLUSTER_MEMBER_TABLE}
+     WHERE page_session_id IN (${ids.placeholders}) AND cluster_id IS NOT NULL`,
+    ids.params
+  );
+  return rows.map((r) => String(r.cluster_id));
+}
+
+/**
  * The metadata-side cascade: one transaction — on a dedicated connection, so
  * a concurrent visit write never joins (or gets rolled back with) the forget
  * — covering the fetch log, the capture rows, the activity sessions, and the
@@ -453,12 +499,15 @@ async function count_cluster_controls(
 async function forget_metadata(
   metadata_db: DuckDB,
   selector: ForgetSelector,
-  targets: ForgetTargets
+  targets: ForgetTargets,
+  affected_cluster_ids: string[]
 ): Promise<void> {
   const ids = in_list(targets.page_session_ids, "id");
   const urls = in_list(targets.urls, "url");
   const have_ids = targets.page_session_ids.length > 0;
   const have_urls = targets.urls.length > 0;
+  const clusters = in_list(affected_cluster_ids, "cl");
+  const have_clusters = affected_cluster_ids.length > 0;
 
   await metadata_db.isolated_transaction(async (run) => {
     // Fetch-log rows: by session id, and by stored/final URL — a redirect can
@@ -496,14 +545,30 @@ async function forget_metadata(
         ids.params
       );
       // TDT cluster memberships carry the forgotten page's id + visit time; delete
-      // them in the same transaction. The cluster/run rows (irreversible aggregate
-      // vectors, window-level provenance) are left for the next run to re-key (see
-      // module header).
+      // them in the same transaction. This also covers the forgotten page's NOISE
+      // rows (cluster_id NULL), which the cluster-dissolution below does not reach.
       await run(
         `DELETE FROM ${TOPIC_CLUSTER_MEMBER_TABLE}
          WHERE page_session_id IN (${ids.placeholders})`,
         ids.params
       );
+      // Dissolve every cluster the forgotten page contributed to: its
+      // representative_vector (member-mean embedding) and exemplar carry the
+      // forgotten page's contribution, so the whole cluster — and its surviving
+      // co-members' rows — go, removing the aggregate the member delete leaves
+      // behind (see module header). The topic_run row survives as provenance.
+      if (have_clusters) {
+        await run(
+          `DELETE FROM ${TOPIC_CLUSTER_MEMBER_TABLE}
+           WHERE cluster_id IN (${clusters.placeholders})`,
+          clusters.params
+        );
+        await run(
+          `DELETE FROM ${TOPIC_CLUSTER_TABLE}
+           WHERE id IN (${clusters.placeholders})`,
+          clusters.params
+        );
+      }
       // Page-anchored cluster controls (suppress/rename) are swept with the page
       // they target — same metadata file, same transaction. never_cluster_origin
       // controls key on a domain, not a page, so they are deliberately left intact.

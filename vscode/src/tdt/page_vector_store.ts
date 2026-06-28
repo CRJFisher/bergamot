@@ -19,7 +19,7 @@
  * (tdt-hdbscan-micro-tier-plan.md §8).
  */
 import { DuckDB, TOPIC_PAGE_VECTOR_TABLE } from "../duck_db";
-import { listValue, DuckDBListValue } from "@duckdb/node-api";
+import { listValue, DuckDBListValue, LIST, FLOAT } from "@duckdb/node-api";
 import type { VectorStore } from "@bergamot/tdt";
 
 /** One cached vector plus its freshness token, for the clustering input read. */
@@ -135,13 +135,18 @@ export class PageVectorStore implements VectorStore {
       {
         page_session_id,
         embedding_model_id,
-        // listValue binds a JS number[] as a DuckDB list; DuckDB rounds each
-        // element to the column's 32-bit FLOAT at insert. The input is already
-        // float32, so that rounding is the identity — the round-trip is exact.
+        // The input is already float32, so storing into the FLOAT[] column is an
+        // exact round-trip — PROVIDED the bound list is typed FLOAT[]. Without the
+        // explicit type below, DuckDB infers the list's element type from the JS
+        // values, and a vector whose leading component is integer-valued (e.g.
+        // 0.0 — common when a page concentrates on later embedding dims) infers
+        // INTEGER[], truncating every fractional component to 0 and corrupting the
+        // vector to noise. The explicit FLOAT[] type pins it.
         vector: listValue(Array.from(vector)),
         repr,
         built_at: new Date().toISOString(),
       },
+      { vector: LIST(FLOAT) },
     );
   }
 }

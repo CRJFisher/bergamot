@@ -68,8 +68,30 @@ export function slug(text: string): string {
     .replace(/-+$/g, "");
 }
 
-function cluster_label(cluster: ClusterDetail["cluster"]): string {
-  return cluster.headline_title?.trim() || cluster.display_label?.trim() || "";
+/**
+ * The label shown in the stub's HEADING and SUMMARY. A user rename takes
+ * precedence so the curation surface's most visible promise — "I renamed this
+ * thread" — survives into the staged note. Absent a rename it is the labeler's
+ * deterministic label (headline title, else the composed display label).
+ */
+function heading_label(cluster: ClusterDetail["cluster"]): string {
+  return (
+    cluster.renamed_label?.trim() ||
+    cluster.headline_title?.trim() ||
+    cluster.display_label?.trim() ||
+    ""
+  );
+}
+
+/**
+ * The label the FILENAME/lineage anchors on — deliberately rename-INDEPENDENT,
+ * so renaming a thread overwrites its existing stub in place rather than spawning
+ * a duplicate under a new name. Uses only the labeler's headline title (the
+ * representative page's title); when that is empty {@link compute_lineage_key}
+ * falls back to the stable exemplar id, never the rename-mutated display label.
+ */
+function lineage_label(cluster: ClusterDetail["cluster"]): string {
+  return cluster.headline_title?.trim() || "";
 }
 
 /**
@@ -86,7 +108,7 @@ function cluster_label(cluster: ClusterDetail["cluster"]): string {
  */
 export function compute_lineage_key(cluster: ClusterDetail): string {
   const week = iso_week(cluster.cluster.time_span.start);
-  const label = cluster_label(cluster.cluster);
+  const label = lineage_label(cluster.cluster);
   // Empty-label fallback anchors on the exemplar page (a stable id), else the
   // first member, else the cluster id — so the key is always non-degenerate.
   const exemplar_id =
@@ -161,11 +183,11 @@ export function render_note_stub(
   const fingerprint = compute_stub_fingerprint(cluster);
   const members = ordered_members(cluster.members);
 
-  const heading = cluster_label(c) || lineage_key.replace(/-/g, " ");
+  const heading = heading_label(c) || lineage_key.replace(/-/g, " ");
   const span = `${date_only(c.time_span.start)} → ${date_only(c.time_span.end)}`;
   const scope_line = c.scope ? `Scope: ${c.scope} · ${span}` : span;
   const summary = `> ${c.size} page${c.size === 1 ? "" : "s"} cohered around ${
-    cluster_label(c) || "this topic"
+    heading_label(c) || "this topic"
   } over ${span}. Review and promote to make it yours.`;
 
   const tags =

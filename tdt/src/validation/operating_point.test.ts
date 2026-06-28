@@ -7,6 +7,8 @@ import {
   type OperatingPoint,
   type OperatingPointEntry,
 } from "./operating_point";
+import { run_sweep, build_grid } from "./sweep";
+import { two_cluster_window, TWO_CLUSTER_KNOWN_PROJECT } from "./__fixtures__/windows";
 import type { SweepResult, GridCell, WindowScore } from "./types";
 
 function cell(
@@ -174,5 +176,42 @@ describe("seeded operating_point.json", () => {
     };
     expect(point.by_window_unit.month).toEqual(expected);
     expect(point.by_window_unit["14d"]).toEqual(expected);
+  });
+});
+
+// Proves the END-TO-END selection PATH — sweep → select_operating_point —
+// produces a shippable entry (AC#5), not just that the hand-written seed parses.
+// A regression in the gate/tie-break that left select_operating_point unable to
+// emit a grid-resident, round-trippable point would be caught here.
+describe("selection path: run_sweep → select_operating_point", () => {
+  it("selects a grid-resident, round-trippable operating point from a real sweep", async () => {
+    const results = await run_sweep([two_cluster_window()], {
+      max_samples: 4000,
+      known_project: { page_session_ids: TWO_CLUSTER_KNOWN_PROJECT },
+    });
+
+    const entry = select_operating_point(results);
+
+    // (a) The selected params are a member of the config.ts search grid.
+    const grid = build_grid();
+    const in_grid = grid.some(
+      (c) =>
+        c.min_cluster_size === entry.min_cluster_size &&
+        c.min_samples === entry.min_samples &&
+        c.epsilon === entry.epsilon &&
+        c.method === entry.method &&
+        c.reduction === entry.reduction,
+    );
+    expect(in_grid).toBe(true);
+
+    // (b) The entry survives the serialize → parse round trip the data file uses.
+    const point: OperatingPoint = {
+      version: 1,
+      by_window_unit: { month: entry },
+      selected_at: "2026-06-26T00:00:00.000Z",
+      provenance: "sweep over two_cluster_window fixture (test)",
+    };
+    const reparsed = parse_operating_point(serialize_operating_point(point));
+    expect(reparsed.by_window_unit.month).toEqual(entry);
   });
 });
