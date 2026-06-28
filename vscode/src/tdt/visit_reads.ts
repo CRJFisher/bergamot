@@ -104,7 +104,7 @@ export async function list_visits_in_window(
 }
 
 /** The in-process {@link RelationalReader} the orchestrator wires inside the
- *  extension — `list_visits_in_window` bound to the shared DuckDB handle. */
+ *  extension, as opposed to the HTTP route the batch CLI reads over. */
 export function make_relational_reader(db: DuckDB): RelationalReader {
   return {
     list_visits_in_window: (start, end) =>

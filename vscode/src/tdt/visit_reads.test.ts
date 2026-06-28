@@ -83,7 +83,6 @@ describe("list_visits_in_window", () => {
       page_loaded_at: "2026-06-05T09:00:00.000Z",
       title: "A",
     });
-    // Out of range — must not appear.
     await seed_session(db, {
       id: "old",
       url: "https://x.com/old",
@@ -116,7 +115,6 @@ describe("list_visits_in_window", () => {
       id: "uncaptured",
       url: "https://x.com/u",
       page_loaded_at: "2026-06-11T09:00:00.000Z",
-      // no title => no webpage_capture row
     });
 
     const rows = await list_visits_in_window(db, {
@@ -125,6 +123,28 @@ describe("list_visits_in_window", () => {
     });
 
     expect(rows.map((r) => r.page_session_id)).toEqual(["captured"]);
+  });
+
+  it("includes a visit at from and excludes one at to", async () => {
+    await seed_session(db, {
+      id: "at_from",
+      url: "https://x.com/from",
+      page_loaded_at: "2026-06-01T00:00:00.000Z",
+      title: "From",
+    });
+    await seed_session(db, {
+      id: "at_to",
+      url: "https://x.com/to",
+      page_loaded_at: "2026-07-01T00:00:00.000Z",
+      title: "To",
+    });
+
+    const rows = await list_visits_in_window(db, {
+      from: "2026-06-01T00:00:00.000Z",
+      to: "2026-07-01T00:00:00.000Z",
+    });
+
+    expect(rows.map((r) => r.page_session_id)).toEqual(["at_from"]);
   });
 
   it("carries site_name from the most recent re-download that parsed one", async () => {
@@ -142,6 +162,124 @@ describe("list_visits_in_window", () => {
     });
 
     expect(rows[0].site_name).toBe("Example News");
+  });
+
+  it("picks the latest fetched_at when several re-downloads parsed a site_name", async () => {
+    await seed_session(db, {
+      id: "s",
+      url: "https://news.example.com/a",
+      page_loaded_at: "2026-06-10T09:00:00.000Z",
+      title: "Story",
+      site_name: "Old Name",
+    });
+    await db.execute(
+      `INSERT INTO ${WEBPAGE_FETCH_TABLE}
+         (fetch_id, page_session_id, url, outcome, site_name, fetched_at)
+       VALUES ($fid, $id, $url, 'ok', $site, $t)`,
+      {
+        fid: "f-s-2",
+        id: "s",
+        url: "https://news.example.com/a",
+        site: "New Name",
+        t: "2026-06-15T09:00:00.000Z",
+      },
+    );
+
+    const rows = await list_visits_in_window(db, {
+      from: "2026-06-01T00:00:00.000Z",
+      to: "2026-07-01T00:00:00.000Z",
+    });
+
+    expect(rows[0].site_name).toBe("New Name");
+  });
+
+  it("yields a null site_name when no re-download parsed one", async () => {
+    await seed_session(db, {
+      id: "s",
+      url: "https://x.com/s",
+      page_loaded_at: "2026-06-10T09:00:00.000Z",
+      title: "S",
+    });
+    await db.execute(
+      `INSERT INTO ${WEBPAGE_FETCH_TABLE}
+         (fetch_id, page_session_id, url, outcome, site_name, fetched_at)
+       VALUES ($fid, $id, $url, 'ok', NULL, $t)`,
+      { fid: "f-s", id: "s", url: "https://x.com/s", t: "2026-06-10T09:00:00.000Z" },
+    );
+
+    const rows = await list_visits_in_window(db, {
+      from: "2026-06-01T00:00:00.000Z",
+      to: "2026-07-01T00:00:00.000Z",
+    });
+
+    expect(rows[0].site_name).toBeNull();
+  });
+
+  it("falls back to the cap for a non-positive or non-finite limit", async () => {
+    for (let i = 0; i < 3; i++) {
+      await seed_session(db, {
+        id: `p${i}`,
+        url: `https://x.com/${i}`,
+        page_loaded_at: `2026-06-0${i + 1}T09:00:00.000Z`,
+        title: `P${i}`,
+      });
+    }
+
+    for (const limit of [0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const rows = await list_visits_in_window(db, {
+        from: "2026-06-01T00:00:00.000Z",
+        to: "2026-07-01T00:00:00.000Z",
+        limit,
+      });
+      expect(rows).toHaveLength(3);
+    }
+  });
+
+  it("warns when the read fills the row cap exactly", async () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (let i = 0; i < 3; i++) {
+        await seed_session(db, {
+          id: `p${i}`,
+          url: `https://x.com/${i}`,
+          page_loaded_at: `2026-06-0${i + 1}T09:00:00.000Z`,
+          title: `P${i}`,
+        });
+      }
+
+      await list_visits_in_window(db, {
+        from: "2026-06-01T00:00:00.000Z",
+        to: "2026-07-01T00:00:00.000Z",
+        limit: 3,
+      });
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain("3-row cap");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("does not warn when the read stays below the cap", async () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await seed_session(db, {
+        id: "p0",
+        url: "https://x.com/0",
+        page_loaded_at: "2026-06-01T09:00:00.000Z",
+        title: "P0",
+      });
+
+      await list_visits_in_window(db, {
+        from: "2026-06-01T00:00:00.000Z",
+        to: "2026-07-01T00:00:00.000Z",
+        limit: 3,
+      });
+
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("clamps the row cap to MAX_VISITS_IN_WINDOW (AC #7)", async () => {
