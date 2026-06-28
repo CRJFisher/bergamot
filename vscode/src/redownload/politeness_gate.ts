@@ -9,19 +9,16 @@
  */
 
 export interface PolitenessConfig {
-  /** Max re-downloads in flight at once across all hosts. */
   max_global_concurrency: number;
-  /** Max simultaneous re-downloads to a single host. */
   max_host_concurrency: number;
-  /** Minimum gap between the end of one fetch to a host and the next start. */
+  /** Minimum gap measured from the end of one fetch to a host to the next start. */
   per_host_min_interval_ms: number;
-  /** Retry attempts after the first try, for transient failures only. */
+  /** Retries after the first try; only transient failures are retried. */
   max_retries: number;
-  /** Base backoff; attempt N waits `base * 2**N` (capped, jittered). */
+  /** Attempt N waits `base * 2**N`, capped and jittered. */
   backoff_base_ms: number;
-  /** Upper bound on a single backoff delay. */
   backoff_max_ms: number;
-  /** Fraction of the backoff delay that is randomized away, to de-sync retries. */
+  /** Fraction of each backoff delay randomized away, to de-sync concurrent retries. */
   jitter_ratio: number;
 }
 
