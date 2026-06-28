@@ -46,7 +46,6 @@ import {
   PAGE_EMBEDDING_MODEL_REPO,
 } from "./embedding_config";
 
-/** A loaded embedder: the injected {@link EmbedFn} plus a model release. */
 export interface LocalEmbedder {
   embed: EmbedFn;
   dispose(): Promise<void>;

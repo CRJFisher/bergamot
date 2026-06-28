@@ -14,6 +14,8 @@ interface MockState {
   remote_at_load: boolean[];
   /** (text, options) of each extractor invocation. */
   embed_calls: { text: string; options: unknown }[];
+  /** The tensor buffer the extractor reuses across calls (the copy hazard). */
+  reused_buffer: Float32Array;
   disposed: number;
 }
 
@@ -22,6 +24,7 @@ jest.mock("@huggingface/transformers", () => {
     cached: true,
     remote_at_load: [],
     embed_calls: [],
+    reused_buffer: new Float32Array(PAGE_EMBEDDING_DIM),
     disposed: 0,
   };
   const env = {
@@ -38,7 +41,11 @@ jest.mock("@huggingface/transformers", () => {
       state.cached = true; // a remote-allowed load populates the cache
       const extractor = async (text: string, options: unknown) => {
         state.embed_calls.push({ text, options });
-        return { data: new Float32Array(PAGE_EMBEDDING_DIM).fill(0.5) };
+        // Mirror onnxruntime: overwrite and hand back the SAME buffer each call
+        // (a distinct value per call), so a returned view rather than a copy
+        // would be clobbered by the next embed.
+        state.reused_buffer.fill(0.5 + state.embed_calls.length - 1);
+        return { data: state.reused_buffer };
       };
       extractor.dispose = async () => {
         state.disposed++;
@@ -50,8 +57,10 @@ jest.mock("@huggingface/transformers", () => {
     state.cached = true;
     state.remote_at_load = [];
     state.embed_calls = [];
+    state.reused_buffer = new Float32Array(PAGE_EMBEDDING_DIM);
     state.disposed = 0;
     env.cacheDir = "";
+    env.allowLocalModels = false;
     env.allowRemoteModels = true;
   } };
 });
@@ -92,19 +101,40 @@ describe("load_local_embedder", () => {
       executionMode: "sequential",
     });
     expect(transformers.env.cacheDir).toBe(CACHE_DIR);
+    expect(transformers.env.allowLocalModels).toBe(true);
     await embedder.dispose();
   });
 
-  it("embeds raw per-segment vectors (pooling=mean, normalize=false) and copies the tensor", async () => {
+  it("embeds raw per-segment vectors with pooling=mean, normalize=false", async () => {
     const embedder = await load_local_embedder(CACHE_DIR, false);
     const vector = await embedder.embed("a segment of page text");
 
+    expect(transformers.__state.embed_calls[0].text).toBe(
+      "a segment of page text",
+    );
     expect(transformers.__state.embed_calls[0].options).toEqual({
       pooling: "mean",
       normalize: false,
     });
     expect(vector).toBeInstanceOf(Float32Array);
     expect(vector.length).toBe(PAGE_EMBEDDING_DIM);
+    expect(Array.from(vector)).toEqual(
+      Array(PAGE_EMBEDDING_DIM).fill(0.5),
+    );
+    await embedder.dispose();
+  });
+
+  it("copies each segment out of the pipeline's reused tensor buffer", async () => {
+    const embedder = await load_local_embedder(CACHE_DIR, false);
+
+    const first = await embedder.embed("segment one");
+    // The pipeline overwrites and returns its single buffer on every call; an
+    // earlier vector must survive a later embed for build_page_vector's pooling.
+    await embedder.embed("segment two");
+
+    expect(first).not.toBe(transformers.__state.reused_buffer);
+    expect(transformers.__state.reused_buffer[0]).toBe(1.5);
+    expect(first[0]).toBe(0.5);
     await embedder.dispose();
   });
 
