@@ -53,8 +53,9 @@ export class BrowserPool implements PageRunner {
   constructor(private readonly options: BrowserPoolOptions = {}) {}
 
   /**
-   * Opens a fresh page, runs `fn`, and always closes the page. The shared browser
-   * and context are launched on first call and reused thereafter.
+   * Runs `fn` on a fresh page that is always closed afterwards. The shared
+   * browser and context are launched on first call and reused thereafter, so a
+   * fetch never pays the launch cost twice.
    */
   async with_page<T>(fn: (page: Page) => Promise<T>): Promise<T> {
     const context = await this.ensure_context();
@@ -84,7 +85,7 @@ export class BrowserPool implements PageRunner {
     if (browser) await browser.close().catch(ignore_error);
   }
 
-  /** True once the browser has been launched (lets shutdown skip idle pools). */
+  /** True once the browser has been launched and not yet closed. */
   is_launched(): boolean {
     return this.browser !== null;
   }

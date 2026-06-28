@@ -1,8 +1,18 @@
+import type { Page } from "patchright";
 import { BrowserPool } from "./browser_pool";
 import {
   BrowserProvisioningError,
   ensure_browser_provisioned,
 } from "./browser_provisioner";
+
+/** Polls until `predicate` holds, since the `disconnected` handler runs async. */
+async function waitFor(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 5000;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error("waitFor timed out");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
 
 // The provisioning gate is mocked so a machine without ~/.bergamot/ms-playwright
 // can never trigger a real CDN download from a unit-test run; the real
@@ -48,6 +58,46 @@ describe("BrowserPool lifecycle", () => {
     await pool.close();
     await fetch;
     expect(pool.is_launched()).toBe(false);
+  }, 30000);
+
+  it("reuses the same browser across fetches without relaunching", async () => {
+    const pool = new BrowserPool();
+    const first = await pool.with_page(async (page) => page.url());
+    expect(first).toBe("about:blank");
+    expect(pool.is_launched()).toBe(true);
+    const second = await pool.with_page(async (page) => page.url());
+    expect(second).toBe("about:blank");
+    expect(pool.is_launched()).toBe(true);
+    await pool.close();
+  }, 30000);
+
+  it("closes the page even when the callback throws", async () => {
+    const pool = new BrowserPool();
+    let leaked: Page;
+    await expect(
+      pool.with_page(async (page) => {
+        leaked = page;
+        throw new Error("callback failed");
+      })
+    ).rejects.toThrow("callback failed");
+    expect(leaked!.isClosed()).toBe(true);
+    await pool.close();
+  }, 30000);
+
+  it("relaunches after the browser disconnects so the next fetch still serves", async () => {
+    const pool = new BrowserPool();
+    const browser = await pool.with_page(async (page) => page.context().browser());
+    expect(pool.is_launched()).toBe(true);
+    // Simulate a Chromium crash: forcing the underlying browser closed fires the
+    // pool's `disconnected` handler, which nulls the singletons.
+    await browser!.close();
+    await waitFor(() => !pool.is_launched());
+    expect(pool.is_launched()).toBe(false);
+
+    const url = await pool.with_page(async (page) => page.url());
+    expect(url).toBe("about:blank");
+    expect(pool.is_launched()).toBe(true);
+    await pool.close();
   }, 30000);
 
   it("retries the launch after a provisioning failure instead of caching the rejection", async () => {
