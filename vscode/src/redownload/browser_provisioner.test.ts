@@ -100,6 +100,66 @@ describe("ensure_browser_provisioned", () => {
     await expect(surfaced[0]).resolves.toBeUndefined();
   });
 
+  it("throws while an install runs even if the executable has appeared", async () => {
+    // The installer extracts into the final directory as it goes, so the
+    // executable can exist before the tree is complete; the in-flight guard
+    // must win over the existsSync check to avoid launching a partial tree.
+    const child = fake_install_child();
+    (child_process.spawn as jest.Mock).mockReturnValue(child);
+    const executable = path.join(temp_dir, "chromium");
+
+    expect(() => ensure_browser_provisioned(executable)).toThrow(
+      BrowserProvisioningError
+    );
+    fs.writeFileSync(executable, "");
+    expect(() => ensure_browser_provisioned(executable)).toThrow(
+      BrowserProvisioningError
+    );
+
+    expect(child_process.spawn).toHaveBeenCalledTimes(1);
+    child.emit("exit", 0);
+    await new Promise(setImmediate);
+  });
+
+  it("spawns the install as plain node so it runs under the Electron host", async () => {
+    const child = fake_install_child();
+    (child_process.spawn as jest.Mock).mockReturnValue(child);
+    const missing = path.join(temp_dir, "missing", "chromium");
+
+    expect(() => ensure_browser_provisioned(missing)).toThrow(
+      BrowserProvisioningError
+    );
+
+    const [exec, , options] = (child_process.spawn as jest.Mock).mock.calls[0];
+    expect(exec).toBe(process.execPath);
+    expect(options.env.ELECTRON_RUN_AS_NODE).toBe("1");
+    child.emit("exit", 0);
+    await new Promise(setImmediate);
+  });
+
+  it("a spawn error rejects the surfaced promise and clears the slot", async () => {
+    const first_child = fake_install_child();
+    const second_child = fake_install_child();
+    (child_process.spawn as jest.Mock)
+      .mockReturnValueOnce(first_child)
+      .mockReturnValueOnce(second_child);
+    const missing = path.join(temp_dir, "missing", "chromium");
+    const surfaced: Promise<void>[] = [];
+
+    expect(() =>
+      ensure_browser_provisioned(missing, (done) => surfaced.push(done))
+    ).toThrow(BrowserProvisioningError);
+    first_child.emit("error", new Error("spawn ENOENT"));
+    await expect(surfaced[0]).rejects.toThrow(/spawn ENOENT/);
+
+    expect(() =>
+      ensure_browser_provisioned(missing, (done) => surfaced.push(done))
+    ).toThrow(BrowserProvisioningError);
+    expect(child_process.spawn).toHaveBeenCalledTimes(2);
+    second_child.emit("exit", 0);
+    await expect(surfaced[1]).resolves.toBeUndefined();
+  });
+
   it("a failed install with no observer does not raise an unhandled rejection", async () => {
     // The headless server passes no on_provisioning callback; a failed
     // download must degrade to per-fetch retry, never crash the process.
