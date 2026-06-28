@@ -39,7 +39,6 @@ export interface CorpusContent {
   author: string | null;
   published_at: string | null;
   lang: string | null;
-  /** Fidelity: when it was fetched, the status, and the content hash. */
   fetched_at: string;
   http_status: number;
   /** sha-256 of the rendered HTML the body was extracted from; does not hash the stored body. */

@@ -21,6 +21,7 @@ class FakeFetcher implements Fetcher {
 
 const OK_URL = "https://example.com/public";
 const AUTH_URL = "https://example.com/members";
+const PDF_URL = "https://example.com/report.pdf";
 
 // The corpus parses this HTML itself (one Defuddle pass), so the metadata the
 // assertions check is embedded here, and the body carries enough text to extract.
@@ -70,6 +71,23 @@ const AUTH_RESULT: FetchResult = {
   retry_after_ms: null,
 };
 
+const PDF_RESULT: FetchResult = {
+  outcome: {
+    kind: "non_html",
+    content_type: "application/pdf",
+    http_status: 200,
+    reason: "non-html content type application/pdf",
+  },
+  fidelity: {
+    fetched_at: "2026-06-09T00:02:00.000Z",
+    http_status: 200,
+    content_hash: null,
+    final_url: PDF_URL,
+    redirect_count: 0,
+  },
+  retry_after_ms: null,
+};
+
 describe("ReDownloadCorpus", () => {
   let db: DuckDB;
   let corpus: ReDownloadCorpus;
@@ -81,10 +99,12 @@ describe("ReDownloadCorpus", () => {
     // Seed two metadata rows whose URLs the fake fetcher knows.
     await seed_capture(db, "ok1", OK_URL);
     await seed_capture(db, "auth1", AUTH_URL);
+    await seed_capture(db, "pdf1", PDF_URL);
     const fetcher = new FakeFetcher(
       new Map([
         [OK_URL, OK_RESULT],
         [AUTH_URL, AUTH_RESULT],
+        [PDF_URL, PDF_RESULT],
       ])
     );
     corpus = new ReDownloadCorpus(db, fetcher);
@@ -134,6 +154,17 @@ describe("ReDownloadCorpus", () => {
     const fetch = await get_latest_webpage_fetch(db, "auth1");
     expect(fetch?.outcome).toBe("auth_redirect");
     expect(fetch?.content_hash).toBeNull();
+  });
+
+  it("records the response content type only for a non_html exclusion (AC#4)", async () => {
+    await corpus.get_content("pdf1");
+    const non_html_fetch = await get_latest_webpage_fetch(db, "pdf1");
+    expect(non_html_fetch?.outcome).toBe("non_html");
+    expect(non_html_fetch?.content_type).toBe("application/pdf");
+
+    await corpus.get_content("auth1");
+    const auth_fetch = await get_latest_webpage_fetch(db, "auth1");
+    expect(auth_fetch?.content_type).toBeNull();
   });
 
   it("iterates only the re-downloadable public subset (AC#7)", async () => {
