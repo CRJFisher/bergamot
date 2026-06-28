@@ -12,6 +12,7 @@ import {
 import {
   list_clusters_in_range,
   get_cluster,
+  get_cluster_anchor,
   list_clusters_for_page,
   window_coverage,
   MAX_QUERY_LIMIT,
@@ -294,7 +295,7 @@ describe("cluster_reads", () => {
       expect(out).toEqual([]);
     });
 
-    it("applies a rename override to display_label", async () => {
+    it("applies a rename override to display_label and mirrors it in renamed_label", async () => {
       await new ClusterControlStore(db).upsert(
         {
           kind: "rename",
@@ -306,6 +307,13 @@ describe("cluster_reads", () => {
       );
       const out = await list_clusters_in_range(db, { from: W_START, to: W_END });
       expect(out[0].display_label).toBe("My research thread");
+      expect(out[0].renamed_label).toBe("My research thread");
+    });
+
+    it("leaves renamed_label null when no rename override applies", async () => {
+      const out = await list_clusters_in_range(db, { from: W_START, to: W_END });
+      expect(out[0].display_label).toBe("Alpha — x.com");
+      expect(out[0].renamed_label).toBeNull();
     });
 
     it("applies a rename matched only by signature (exemplar churned)", async () => {
@@ -427,6 +435,35 @@ describe("cluster_reads", () => {
     });
   });
 
+  describe("get_cluster_anchor", () => {
+    beforeEach(async () => {
+      await insert_run(db, { id: "run-live" });
+      await insert_cluster(db, { id: "c0", run_id: "run-live", exemplar: "p0" });
+    });
+
+    it("resolves a live cluster to its exemplar id and content signature", async () => {
+      const anchor = await get_cluster_anchor(db, "c0");
+      expect(anchor).toEqual({
+        exemplar_page_session_id: "p0",
+        content_signature: compute_content_signature({
+          headline_title: "Alpha",
+          scope: "x.com",
+          keyphrases: ["alpha", "beta"],
+        }),
+      });
+    });
+
+    it("returns null for an unknown id", async () => {
+      expect(await get_cluster_anchor(db, "nope")).toBeNull();
+    });
+
+    it("returns null for a cluster of a non-live run", async () => {
+      await insert_run(db, { id: "run-old", status: "superseded" });
+      await insert_cluster(db, { id: "c-old", run_id: "run-old", exemplar: "p0" });
+      expect(await get_cluster_anchor(db, "c-old")).toBeNull();
+    });
+  });
+
   describe("list_clusters_for_page", () => {
     it("clustered: page in a live cluster", async () => {
       await insert_run(db, { id: "run-live" });
@@ -439,6 +476,23 @@ describe("cluster_reads", () => {
       const out = await list_clusters_for_page(db, { page_session_id: "p0" });
       expect(out.page_status).toBe("clustered");
       expect(out.clusters.map((c) => c.id)).toEqual(["c0"]);
+    });
+
+    it("clustered-but-suppressed: page_status stays clustered with an empty clusters array", async () => {
+      await insert_run(db, { id: "run-live" });
+      await insert_cluster(db, { id: "c0", run_id: "run-live", exemplar: "p0" });
+      await insert_member(db, {
+        run_id: "run-live",
+        page_session_id: "p0",
+        cluster_id: "c0",
+      });
+      await new ClusterControlStore(db).upsert(
+        { kind: "suppress", target_page_session_id: "p0", content_signature: "x" },
+        W_START,
+      );
+      const out = await list_clusters_for_page(db, { page_session_id: "p0" });
+      expect(out.page_status).toBe("clustered");
+      expect(out.clusters).toEqual([]);
     });
 
     it("noise: page processed in a live run but landed as noise", async () => {

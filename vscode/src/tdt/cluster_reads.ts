@@ -159,7 +159,6 @@ function row_to_summary(row: ClusterRow): ClusterSummary {
   };
 }
 
-/** True when this cluster is suppressed by exemplar id or label signature. */
 function is_suppressed(row: ClusterRow, controls: ResolvedControls): boolean {
   if (controls.suppressed_exemplar_ids.has(row.exemplar_page_session_id))
     return true;
@@ -175,7 +174,6 @@ function signature_of(row: ClusterRow): string {
   });
 }
 
-/** Apply a rename override (by exemplar id, else by signature) if any. */
 function apply_rename(
   summary: ClusterSummary,
   row: ClusterRow,
@@ -192,7 +190,6 @@ function apply_rename(
   return summary;
 }
 
-/** Drop suppressed clusters and apply rename overrides to the survivors. */
 function curate(rows: ClusterRow[], controls: ResolvedControls): ClusterSummary[] {
   const out: ClusterSummary[] = [];
   for (const row of rows) {
