@@ -1,6 +1,6 @@
-// Standalone leaf module: imports nothing.
-// Defaults are starting points for the validation sweep (plan §11);
-// re-tuning as history grows is a data change, not a code change.
+// Defaults are starting points for the validation sweep (plan §11); the sweep
+// selects the operative value into operating_point.json, so re-tuning as history
+// grows is a data change, not a code change.
 
 export interface WindowConfig {
   unit: "month" | "days";
@@ -40,10 +40,9 @@ export interface HdbscanConfig {
   epsilon: number; // clusterSelectionEpsilon, cosine-distance units
 }
 
-// These are the GRID's starting points (the search space). The validation sweep
-// selects an operating point from the grid into operating_point.json (see
-// validation/operating_point.ts); at runtime that file, parameterized by window
-// size, is the operative value — re-tuning is a data change, not a code change.
+// The GRID's starting points define the sweep's search space; at runtime the
+// operating point (parameterized by window size, in operating_point.json — see
+// validation/operating_point.ts) is the operative value, not these defaults.
 export const DEFAULT_HDBSCAN_CONFIG = {
   min_cluster_size: 3,
   min_samples: 5,
@@ -53,8 +52,7 @@ export const DEFAULT_HDBSCAN_CONFIG = {
 
 // Page-vector construction knobs (plan §4). Character budgets are deterministic
 // proxies for the embedder's token budget: the pure library cannot tokenize, so
-// it splits on code-point offsets. Sizes are starting points — re-tuning as the
-// chosen embedder changes is a config change, not a code change.
+// it splits on code-point offsets.
 export interface PageVectorConfig {
   lead_chars: number; // title_plus_lead: lead length, in code points
   segment_chars: number; // split content into segments of this many code points
