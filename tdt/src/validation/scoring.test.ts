@@ -114,6 +114,17 @@ describe("boundary_fragmentation_count", () => {
     expect(boundary_fragmentation_count([c], ws, we)).toBe(0);
   });
 
+  it("counts each boundary-touching cluster and ignores interior ones", () => {
+    const at_start = cluster("2026-03-01T00:00:00.000Z", "2026-03-05T00:00:00.000Z");
+    const interior = cluster("2026-03-10T00:00:00.000Z", "2026-03-20T00:00:00.000Z");
+    const at_end = cluster("2026-03-25T00:00:00.000Z", "2026-03-31T23:59:59.500Z");
+    expect(boundary_fragmentation_count([at_start, interior, at_end], ws, we)).toBe(2);
+  });
+
+  it("counts zero for no clusters", () => {
+    expect(boundary_fragmentation_count([], ws, we)).toBe(0);
+  });
+
   it("parses ISO instants, not raw strings, across mixed offset forms", () => {
     // +00:00 form for the window start; the cluster touches it despite the
     // different spelling that would break a lexical compare.
@@ -205,6 +216,19 @@ describe("aggregate_sweep", () => {
     ]);
     expect(agg.known_project_recovered).toBe(true);
   });
+
+  it("returns null probability and median when every window is all-noise", () => {
+    const all_noise: CellScore = {
+      n: 3, cluster_count: 0, noise_fraction: 1, mean_membership_probability: null, median_cluster_size: null,
+    };
+    const agg = aggregate_sweep([
+      window_score(all_noise, false),
+      window_score(all_noise, false),
+    ]);
+    expect(agg.mean_membership_probability).toBeNull();
+    expect(agg.median_cluster_size_typical).toBeNull();
+    expect(agg.mean_noise_fraction).toBe(1);
+  });
 });
 
 describe("summarize_validation", () => {
@@ -252,5 +276,16 @@ describe("redownload_volume", () => {
     await store.put("p2", model, "title_plus_lead", new Float32Array([1]));
     const missing = await redownload_volume(["p1", "p2", "p3", "p4"], model, store);
     expect(missing).toBe(2); // p3, p4 are uncached
+  });
+
+  it("counts zero pages to re-download for an empty page set", async () => {
+    const store = new FakeVectorStore();
+    expect(await redownload_volume([], "m", store)).toBe(0);
+  });
+
+  it("treats a vector cached under a different model as missing", async () => {
+    const store = new FakeVectorStore();
+    await store.put("p1", "model-a", "title_plus_lead", new Float32Array([1]));
+    expect(await redownload_volume(["p1"], "model-b", store)).toBe(1);
   });
 });

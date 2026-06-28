@@ -32,13 +32,9 @@ const BOUNDARY_TOLERANCE_MS = 1000;
 
 /**
  * Score one HDBSCAN result, excluding noise (-1) from every field (plan §10).
- *
- * - noise_fraction: |label == -1| / n (0 for an empty window).
- * - mean_membership_probability: mean of probabilities over label >= 0 points,
- *   or null when there are none (an all-noise window has no cluster to score —
- *   null, never 0, so it cannot out-rank a real-but-weak cluster).
- * - cluster_count: distinct labels >= 0.
- * - median_cluster_size: median over the cluster sizes, or null when none.
+ * mean_membership_probability and median_cluster_size are null (never 0) for an
+ * all-noise window: it has no cluster to score and must not out-rank a
+ * real-but-weak cluster.
  */
 export function score_cell(raw: HdbscanRaw): CellScore {
   const n = raw.labels.length;
@@ -163,11 +159,6 @@ export function aggregate_sweep(
  * run_sweep (which needs the backend), picks the cell it would ship (the default
  * raw cell), and hands its per-window scores plus the gathered visits and the
  * already-measured re-download volume here.
- *
- * @param scored_windows one cell's per-window scores (the ship/default cell).
- * @param visits all visits across the swept windows (for the month distribution).
- * @param redownload_page_count the per-run re-download volume from
- *   {@link redownload_volume}.
  */
 export function summarize_validation(
   scored_windows: WindowScore[],
