@@ -73,8 +73,6 @@ export function default_window_spec(now: Date): WindowSpec {
   };
 }
 
-export type { StoredPageVector };
-
 export interface RebuildDeps {
   /** Stage-1 windowed visit read (in-process reader fns or the HTTP broker). */
   reader: RelationalReader;

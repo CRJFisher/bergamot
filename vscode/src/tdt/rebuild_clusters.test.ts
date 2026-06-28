@@ -2,8 +2,8 @@ import {
   rebuild_clusters,
   default_window_spec,
   type RebuildDeps,
-  type StoredPageVector,
 } from "./rebuild_clusters";
+import type { StoredPageVector } from "./page_vector_store";
 import {
   compute_input_fingerprint,
   compute_params_hash,
@@ -241,6 +241,74 @@ describe("rebuild_clusters", () => {
     expect(report.windows[0].status).toBe("skipped_no_vectors");
     expect(h.compute_calls).toHaveLength(0);
     expect(h.persisted).toHaveLength(0);
+  });
+
+  it("clusters only the pages with cached vectors, keeping versions index-aligned", async () => {
+    const visits = june_visits(12);
+    // Only the even-indexed pages have an embedded vector; each carries a distinct
+    // built_at so a versions/visits misalignment would surface in the fingerprint.
+    const vectored = visits.filter((_, i) => i % 2 === 0);
+    const built_at_of = new Map(
+      vectored.map((v, i) => [
+        v.page_session_id,
+        `2026-06-${String(10 + i).padStart(2, "0")}T00:00:00.000Z`,
+      ]),
+    );
+    const probe_args: Array<[string, string, string]> = [];
+    const h = harness(visits, {
+      read_vectors: async (ids) =>
+        vectored
+          .filter((v) => ids.includes(v.page_session_id))
+          .map((v) => ({
+            page_session_id: v.page_session_id,
+            vector: Float32Array.from([1, 0, 0]),
+            built_at: built_at_of.get(v.page_session_id)!,
+          })),
+      live_run_fingerprint: async (ws, we, ph) => {
+        probe_args.push([ws, we, ph]);
+        return null;
+      },
+    });
+
+    const report = await rebuild_clusters(h.deps, JUNE);
+
+    expect(report.windows[0].status).toBe("clustered");
+    const clustered_ids = h.compute_calls[0].visits.map((v) => v.page_session_id);
+    expect(clustered_ids).toEqual(vectored.map((v) => v.page_session_id));
+    expect(report.windows[0].input_count).toBe(vectored.length);
+
+    // The memoization fingerprint pairs each kept page with its own built_at —
+    // proving the parallel vector_versions array tracks the filtered visits.
+    expect(probe_args[0][0]).toBeDefined();
+    const expected_fingerprint = compute_input_fingerprint(
+      vectored.map((v) => ({
+        page_session_id: v.page_session_id,
+        embedding_vector_version: built_at_of.get(v.page_session_id)!,
+      })),
+    );
+    const h2 = harness(visits, {
+      read_vectors: h.deps.read_vectors,
+      live_run_fingerprint: async () => expected_fingerprint,
+    });
+    const report2 = await rebuild_clusters(h2.deps, JUNE);
+    expect(report2.windows[0].status).toBe("unchanged");
+  });
+
+  it("reports total visits before exclusion and the excluded-origin count", async () => {
+    const visits = [
+      ...june_visits(9),
+      visit("bank", "https://mybank.com/account", 15),
+    ];
+    const h = harness(visits, {
+      list_never_cluster_origins: async () => ["mybank.com"],
+    });
+
+    const report = await rebuild_clusters(h.deps, JUNE);
+
+    expect(report.total_visits).toBe(10);
+    expect(report.excluded_origins).toBe(1);
+    expect(report.range_start).toBe(JUNE.range_start);
+    expect(report.range_end).toBe(JUNE.range_end);
   });
 
   it("marks a too-sparse window as skipped (below min_window_visits)", async () => {
