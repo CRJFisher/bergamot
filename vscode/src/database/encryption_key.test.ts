@@ -86,4 +86,22 @@ describe("get_or_create_store_key", () => {
       get_or_create_store_key(broken, METADATA_DB_KEY_SECRET, false)
     ).rejects.toThrow(/did not persist/);
   });
+
+  it("fails loudly when SecretStorage reads back a different key than written", async () => {
+    const secrets = fake_secret_storage();
+    let written = false;
+    const corrupting: vscode.SecretStorage = {
+      ...secrets,
+      get: async (key: string) =>
+        written ? "deadbeef".repeat(8) : secrets.get(key),
+      store: async (key: string, value: string) => {
+        written = true;
+        return secrets.store(key, value);
+      },
+    };
+
+    await expect(
+      get_or_create_store_key(corrupting, METADATA_DB_KEY_SECRET, false)
+    ).rejects.toThrow(/did not persist/);
+  });
 });
