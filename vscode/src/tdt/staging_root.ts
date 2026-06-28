@@ -1,5 +1,5 @@
 /**
- * Resolves the staging root from the VS Code workspace (TASK-36.8). Kept SEPARATE
+ * Resolves the staging root from the VS Code workspace. Kept SEPARATE
  * from {@link staging_writer} — which is pure `fs` and gets bundled into the
  * headless `server_standalone` — because this is the one piece that imports
  * `vscode`. Extension-host code (activation, the forget command) resolves the
