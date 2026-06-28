@@ -57,6 +57,61 @@ describe("note_stub renderer", () => {
     expect(markdown).toContain("# Local graph clustering — arxiv.org +2 sites");
   });
 
+  it("H1 falls back to the de-slugged lineage key when every label is empty", () => {
+    const cluster = make_cluster_detail({ headline_title: "", display_label: "" });
+    const { markdown, lineage_key } = render_note_stub(cluster, CTX);
+    expect(markdown).toContain(`# ${lineage_key.replace(/-/g, " ")}`);
+  });
+
+  it("omits the scope prefix when the cluster has no scope", () => {
+    const { markdown } = render_note_stub(
+      make_cluster_detail({ scope: "" }),
+      CTX,
+    );
+    expect(markdown).toContain("\n2026-06-16 → 2026-06-22\n");
+    expect(markdown).not.toContain("Scope:");
+  });
+
+  it("omits the tags block when the cluster has no keyphrases", () => {
+    const { markdown } = render_note_stub(
+      make_cluster_detail({ keyphrases: [] }),
+      CTX,
+    );
+    expect(markdown).not.toContain("tags:");
+  });
+
+  it("uses the singular 'page' in the summary for a single-page cluster", () => {
+    const { markdown } = render_note_stub(
+      make_cluster_detail({ size: 1 }),
+      CTX,
+    );
+    expect(markdown).toMatch(/^> 1 page cohered around/m);
+  });
+
+  it("uses 'this topic' in the summary when no label is present", () => {
+    const { markdown } = render_note_stub(
+      make_cluster_detail({ headline_title: "", display_label: "" }),
+      CTX,
+    );
+    expect(markdown).toMatch(/^>.*cohered around this topic/m);
+  });
+
+  it("collapses newlines in a member title to keep its link on one line", () => {
+    const cluster = make_cluster_detail();
+    cluster.members[1].title = "Leiden\nvs\nLouvain";
+    const { markdown } = render_note_stub(cluster, CTX);
+    expect(markdown).toContain("[Leiden vs Louvain](https://github.com/leiden)");
+  });
+
+  it("uses the page_session_id as link text when a member has neither title nor URL", () => {
+    const cluster = make_cluster_detail();
+    cluster.members[1].title = null;
+    cluster.members[1].url = null;
+    const { markdown } = render_note_stub(cluster, CTX);
+    expect(markdown).toContain("- ps_leiden\n");
+    expect(markdown).not.toContain("[ps_leiden]");
+  });
+
   describe("user rename", () => {
     it("shows the rename in the H1 heading and the summary", () => {
       const { markdown } = render_note_stub(
@@ -117,6 +172,21 @@ describe("note_stub renderer", () => {
       );
       expect(key).toMatch(/--cluster-ps_exemplar$/);
     });
+
+    it("empty label with no exemplar -> first-member-anchored fallback", () => {
+      const cluster = make_cluster_detail({ headline_title: "" });
+      cluster.exemplar_page = null;
+      const key = compute_lineage_key(cluster);
+      expect(key).toMatch(/--cluster-ps_exemplar$/);
+    });
+
+    it("empty label with no exemplar and no members -> cluster-id fallback", () => {
+      const cluster = make_cluster_detail({ headline_title: "", id: "c0xyz" });
+      cluster.exemplar_page = null;
+      cluster.members = [];
+      const key = compute_lineage_key(cluster);
+      expect(key).toMatch(/--cluster-c0xyz$/);
+    });
   });
 
   describe("fingerprint", () => {
@@ -154,6 +224,13 @@ describe("note_stub renderer", () => {
       const { markdown } = render_note_stub(cluster, CTX);
       const cites = parse_citations(markdown);
       expect(cites[0].url).toBe("https://x.com/a b-->c?q=1");
+    });
+
+    it("keeps the raw url when its percent-encoding is malformed", () => {
+      const cites = parse_citations(
+        "<!-- bergamot:cite page_session_id=ps_x url=%E0%A4%A -->",
+      );
+      expect(cites).toEqual([{ page_session_id: "ps_x", url: "%E0%A4%A" }]);
     });
 
     it("emits a citation (page id intact) even when a member has no URL", () => {

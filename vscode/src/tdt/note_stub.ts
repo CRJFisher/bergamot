@@ -17,9 +17,9 @@ import { canonical_json } from "@bergamot/tdt";
 import type { ClusterDetail, ClusterMember } from "./cluster_reads";
 
 export interface RenderedStub {
-  filename: string; // deterministic per lineage, e.g. "2026-W25--local-graph-clustering.md"
-  lineage_key: string; // the stable identity the filename derives from
-  fingerprint: string; // content fingerprint for the change gate
+  filename: string;
+  lineage_key: string;
+  fingerprint: string;
   markdown: string;
   cited_page_session_ids: string[];
 }
