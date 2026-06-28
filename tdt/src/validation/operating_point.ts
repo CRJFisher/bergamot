@@ -32,11 +32,11 @@ export interface OperatingPointEntry {
 
 export interface OperatingPoint {
   version: 1;
-  // Keyed by window unit ("month", "14d", ...) so the operating point is
-  // parameterized by window size (AC#4).
+  // Keyed by window unit ("month", "14d", ...): the operating point is tuned per
+  // window size, since cluster density shifts with the window's span (AC#4).
   by_window_unit: Record<string, OperatingPointEntry>;
-  selected_at: string; // injected ISO-8601; never Date.now()
-  provenance: string; // how this point was chosen (sweep run vs design-default seed)
+  selected_at: string; // injected ISO-8601, never Date.now(), to keep selection deterministic
+  provenance: string; // sweep run vs design-default seed — distinguishes a tuned point from the seed
 }
 
 /**

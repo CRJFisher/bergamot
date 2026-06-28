@@ -63,6 +63,21 @@ describe("select_operating_point", () => {
     expect(chosen.min_samples).toBe(5);
   });
 
+  it("accepts a cell sitting exactly on the noise-band edges", () => {
+    const on_floor = select_operating_point([result(cell(3, 5, 0), 0.8, 0.05, true)]);
+    expect(on_floor.min_cluster_size).toBe(3);
+    const on_ceiling = select_operating_point([result(cell(4, 5, 0), 0.8, 0.65, true)]);
+    expect(on_ceiling.min_cluster_size).toBe(4);
+  });
+
+  it("rejects a cell with no coherence signal (null mean probability)", () => {
+    const chosen = select_operating_point([
+      result(cell(4, 5, 0), null, 0.3, true), // highest-looking but probability undefined
+      result(cell(3, 5, 0), 0.6, 0.3, true),
+    ]);
+    expect(chosen.min_cluster_size).toBe(3);
+  });
+
   it("tie-breaks deterministically by noise then smaller params then reduction", () => {
     const chosen = select_operating_point([
       result(cell(5, 8, 0.2, "pca50"), 0.8, 0.3, true),
@@ -141,6 +156,15 @@ describe("operating-point persistence", () => {
     );
     expect(() => parse_operating_point(with_entry({ ...base, min_cluster_size: 2.5 }))).toThrow(
       /min_cluster_size must be an integer >= 2/,
+    );
+  });
+
+  it("rejects an out-of-domain min_samples (below 1 or fractional)", () => {
+    expect(() => parse_operating_point(with_entry({ ...base, min_samples: 0 }))).toThrow(
+      /min_samples must be an integer >= 1/,
+    );
+    expect(() => parse_operating_point(with_entry({ ...base, min_samples: 1.5 }))).toThrow(
+      /min_samples must be an integer >= 1/,
     );
   });
 
