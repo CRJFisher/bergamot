@@ -81,7 +81,9 @@ function write_ledger(staging_root: string, ledger: StagingLedger): void {
   const target = ledger_path(staging_root);
   const tmp = `${target}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(ledger, null, 2));
-  fs.renameSync(tmp, target); // atomic replace
+  // Write-then-rename so a crash mid-write never leaves a truncated ledger that
+  // read_ledger would discard, losing every lineage's promotion history.
+  fs.renameSync(tmp, target);
 }
 
 /**

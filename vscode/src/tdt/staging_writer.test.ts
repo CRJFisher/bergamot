@@ -82,6 +82,23 @@ describe("staging_writer", () => {
       const out = stage_note_stub(root, make_cluster_detail(), CTX);
       expect(out.kind).toBe("written");
     });
+
+    it("re-stages a lineage a forget sweep removed (distinct from promotion)", () => {
+      const out = stage_note_stub(root, make_cluster_detail(), CTX);
+      sweep_staged_stubs(root, {
+        kind: "url",
+        url: "https://arxiv.org/abs/hdbscan",
+      });
+      expect(fs.existsSync(path.join(root, out.filename))).toBe(false);
+      const restaged = stage_note_stub(root, make_cluster_detail(), CTX);
+      expect(restaged.kind).toBe("written");
+      expect(fs.existsSync(path.join(root, restaged.filename))).toBe(true);
+    });
+
+    it("leaves no .tmp ledger file after a write (atomic replace)", () => {
+      stage_note_stub(root, make_cluster_detail(), CTX);
+      expect(fs.readdirSync(root)).not.toContain(".bergamot-ledger.json.tmp");
+    });
   });
 
   describe("sweep_staged_stubs", () => {
@@ -161,6 +178,35 @@ describe("staging_writer", () => {
         fs.readFileSync(path.join(root, ".bergamot-ledger.json"), "utf8"),
       );
       expect(Object.keys(ledger.entries)).toHaveLength(0);
+    });
+
+    it("deletes a user-owned stub absent from the ledger that cites a forgotten URL", () => {
+      const filename = compute_stub_filename(make_cluster_detail());
+      ensure_staging_gitignore(root);
+      fs.writeFileSync(
+        path.join(root, filename),
+        "<!-- bergamot:cite page_session_id=ps_x url=https%3A%2F%2Farxiv.org%2Fabs%2Fhdbscan -->",
+      );
+      const removed = sweep_staged_stubs(root, {
+        kind: "url",
+        url: "https://arxiv.org/abs/hdbscan",
+      });
+      expect(removed).toBe(1);
+      expect(fs.existsSync(path.join(root, filename))).toBe(false);
+    });
+
+    it("time_range with no resolved ids leaves a promoted stub's ledger entry", () => {
+      const out = stage_note_stub(root, make_cluster_detail(), CTX);
+      fs.unlinkSync(path.join(root, out.filename));
+      sweep_staged_stubs(root, {
+        kind: "time_range",
+        from: "2026-06-20T00:00:00.000Z",
+        to: "2026-06-25T00:00:00.000Z",
+      });
+      const ledger = JSON.parse(
+        fs.readFileSync(path.join(root, ".bergamot-ledger.json"), "utf8"),
+      );
+      expect(Object.keys(ledger.entries)).toHaveLength(1);
     });
 
     it("is idempotent and never throws on an empty/absent dir", () => {
