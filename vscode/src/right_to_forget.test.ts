@@ -26,6 +26,7 @@ import { stage_note_stub } from "./tdt/staging_writer";
 import type { ClusterDetail } from "./tdt/cluster_reads";
 import type { RunBundle } from "@bergamot/tdt";
 import { forget } from "./right_to_forget";
+import { record_outcome, get_recent_outcomes, purge_outcomes } from "./dev_log";
 
 /** A production-shaped key: 64 lowercase hex chars (32 bytes). */
 const TEST_KEY = "abcdef0123456789".repeat(4);
@@ -770,6 +771,77 @@ describe("right-to-forget cascade", () => {
     await forget(metadata_db, cache, { kind: "url", url: "https://example.com/a" });
 
     expect(await cache.get("a-old")).toBeNull();
+  });
+
+  it("purges the forgotten URL from the in-memory outcome ring, keeping others", async () => {
+    purge_outcomes(() => true);
+    record_outcome({ visit_id: "a", url: "https://example.com/a", decision: "stored" });
+    record_outcome({ visit_id: "b", url: "https://example.com/b", decision: "stored" });
+    await seed_visit("a", "https://example.com/a", "2026-06-01T10:00:00Z");
+
+    await forget(metadata_db, cache, { kind: "url", url: "https://example.com/a" });
+
+    expect(get_recent_outcomes().map((o) => o.url)).toEqual([
+      "https://example.com/b",
+    ]);
+  });
+
+  it("an origin forget purges every outcome on the origin from the ring", async () => {
+    purge_outcomes(() => true);
+    record_outcome({ visit_id: "x", url: "https://secret.example.com/one", decision: "stored" });
+    record_outcome({ visit_id: "y", url: "https://secret.example.com/two", decision: "failed" });
+    record_outcome({ visit_id: "z", url: "https://kept.com/page", decision: "stored" });
+
+    await forget(metadata_db, cache, {
+      kind: "origin",
+      origin: "https://secret.example.com",
+    });
+
+    expect(get_recent_outcomes().map((o) => o.url)).toEqual([
+      "https://kept.com/page",
+    ]);
+  });
+
+  it("forgets a page's NOISE membership (cluster_id NULL) that no dissolution reaches", async () => {
+    await seed_visit("a", "https://example.com/a", "2026-06-01T10:00:00Z");
+    const cluster_store = new ClusterStore(metadata_db);
+    const bundle: RunBundle = {
+      run: {
+        id: "run-noise",
+        window_start: "2026-06-01T00:00:00.000Z",
+        window_end: "2026-07-01T00:00:00.000Z",
+        params_hash: "ph",
+        params_json: "{}",
+        embedding_model_id: VECTOR_MODEL_ID,
+        algo_version: "hdbscan-1#clustering-tfjs@0.6.1#wasm",
+        input_count: 1,
+        input_fingerprint: "fp",
+        cluster_count: 0,
+        noise_count: 1,
+        status: "complete",
+        created_at: "2026-06-02T00:00:00.000Z",
+        completed_at: "2026-06-02T00:00:00.000Z",
+      },
+      clusters: [],
+      members: [
+        { run_id: "run-noise", page_session_id: "a", cluster_id: null, is_noise: true, probability: 0, page_loaded_at: "2026-06-01T10:00:00Z", is_exemplar: false },
+      ],
+    };
+    await cluster_store.persist(bundle);
+
+    const report = await forget(metadata_db, cache, {
+      kind: "url",
+      url: "https://example.com/a",
+    });
+
+    // The noise row carries the forgotten page's id, so the member delete reaches
+    // it even though no cluster dissolves around it.
+    expect(report.cluster_members_deleted).toBe(1);
+    expect(report.clusters_dissolved).toBe(0);
+    const remaining = await metadata_db.query_first<{ n: unknown }>(
+      `SELECT count(*)::INTEGER AS n FROM ${TOPIC_CLUSTER_MEMBER_TABLE} WHERE page_session_id = 'a'`
+    );
+    expect(Number(remaining?.n)).toBe(0);
   });
 });
 
