@@ -29,6 +29,34 @@ describe("ClusterControlStore", () => {
       expect(control_id("suppress", "p0")).not.toBe(control_id("rename", "p0"));
     });
 
+    it("signature ignores case and surrounding whitespace in title and scope", () => {
+      const a = compute_content_signature({
+        headline_title: "  Graph Clustering ",
+        scope: "X.com",
+        keyphrases: ["HDBSCAN"],
+      });
+      const b = compute_content_signature({
+        headline_title: "graph clustering",
+        scope: "x.com",
+        keyphrases: ["hdbscan"],
+      });
+      expect(a).toBe(b);
+    });
+
+    it("signature treats null title and scope as empty", () => {
+      const a = compute_content_signature({
+        headline_title: null,
+        scope: null,
+        keyphrases: [],
+      });
+      const b = compute_content_signature({
+        headline_title: "",
+        scope: "",
+        keyphrases: [],
+      });
+      expect(a).toBe(b);
+    });
+
     it("signature is stable under keyphrase reordering, sensitive to content", () => {
       const a = compute_content_signature({
         headline_title: "Graph clustering",
@@ -92,6 +120,55 @@ describe("ClusterControlStore", () => {
       expect(rows[0].content_signature).toBe("b");
     });
 
+    it("upsert of an existing rename overwrites its display_label_override", async () => {
+      await store.upsert(
+        {
+          kind: "rename",
+          target_page_session_id: "p1",
+          content_signature: "sig1",
+          display_label_override: "First",
+        },
+        NOW,
+      );
+      await store.upsert(
+        {
+          kind: "rename",
+          target_page_session_id: "p1",
+          content_signature: "sig1",
+          display_label_override: "Second",
+        },
+        LATER,
+      );
+      const resolved = await store.resolve_controls();
+      expect(resolved.rename_by_exemplar_id.get("p1")).toBe("Second");
+      const rows = await store.list("rename");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].created_at).toBe(NOW);
+      expect(rows[0].updated_at).toBe(LATER);
+    });
+
+    it("lists controls newest-updated first", async () => {
+      await store.upsert(
+        { kind: "suppress", target_page_session_id: "p0", content_signature: "s0" },
+        NOW,
+      );
+      await store.upsert(
+        { kind: "suppress", target_page_session_id: "p1", content_signature: "s1" },
+        LATER,
+      );
+      const rows = await store.list("suppress");
+      expect(rows.map((r) => r.target_page_session_id)).toEqual(["p1", "p0"]);
+    });
+
+    it("delete of a control that does not exist is a no-op", async () => {
+      await store.upsert(
+        { kind: "suppress", target_page_session_id: "p0", content_signature: "s" },
+        NOW,
+      );
+      await store.delete("suppress", { page_session_id: "absent" });
+      expect(await store.list()).toHaveLength(1);
+    });
+
     it("suppress and rename of one page coexist as distinct rows", async () => {
       await store.upsert(
         { kind: "suppress", target_page_session_id: "p0", content_signature: "s" },
@@ -131,13 +208,13 @@ describe("ClusterControlStore", () => {
   });
 
   describe("never_cluster_origin", () => {
-    it("lists blocked registrable domains", async () => {
+    it("lists blocked registrable domains sorted alphabetically", async () => {
       await store.upsert(
-        { kind: "never_cluster_origin", target_origin: "bank.com" },
+        { kind: "never_cluster_origin", target_origin: "health.gov" },
         NOW,
       );
       await store.upsert(
-        { kind: "never_cluster_origin", target_origin: "health.gov" },
+        { kind: "never_cluster_origin", target_origin: "bank.com" },
         NOW,
       );
       expect(await store.list_never_cluster_origins()).toEqual([

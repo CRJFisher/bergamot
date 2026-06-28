@@ -104,9 +104,8 @@ export function compute_content_signature(parts: {
   scope: string | null;
   keyphrases: string[];
 }): string {
-  // Normalize every field identically (NFC + lowercase) so the signature is robust
-  // regardless of upstream labeler discipline — keyphrases included, not just the
-  // title/scope. Keyphrases are sorted so member-order changes do not perturb it.
+  // NFC-normalize before lowercasing so visually-identical labels that differ only
+  // in Unicode composition produce the same signature.
   const norm = (s: string): string => s.normalize("NFC").trim().toLowerCase();
   return sha256_hex(
     canonical_json({
