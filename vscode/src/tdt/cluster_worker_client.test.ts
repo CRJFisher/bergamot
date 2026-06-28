@@ -41,6 +41,24 @@ const STUB_SILENT = `process.on('message', () => { /* never replies */ });`;
 // The real-world TF-OOM / segfault case: the worker dies WITHOUT sending a result.
 const STUB_CRASH = `process.on('message', () => process.exit(1));`;
 
+// A well-behaved worker exits on its own right after answering: the result
+// message and the follow-on 'exit' both fire, exercising the single-settle path.
+const STUB_OK_THEN_EXIT = `
+process.on('message', (msg) => {
+  process.send({
+    ok: true,
+    output: {
+      labels: msg.input.visits.map(() => 0),
+      probabilities: msg.input.visits.map(() => 0.9),
+      represented: [],
+      cluster_labels: [],
+      algo_version: 'stub#exit',
+    },
+  });
+  process.exit(0);
+});
+`;
+
 let dir: string;
 function write_stub(name: string, body: string): string {
   const file = path.join(dir, name);
@@ -120,5 +138,14 @@ describe("run_cluster_compute", () => {
     await expect(
       run_cluster_compute(input(), { worker_path, timeout_ms: 5000 }),
     ).rejects.toThrow(/exited before returning a result/);
+  });
+
+  it("resolves with the result when the worker exits right after answering (result wins the race with 'exit')", async () => {
+    const worker_path = write_stub("ok-then-exit.js", STUB_OK_THEN_EXIT);
+    const out = await run_cluster_compute(input(), {
+      worker_path,
+      timeout_ms: 5000,
+    });
+    expect(out.algo_version).toBe("stub#exit");
   });
 });
