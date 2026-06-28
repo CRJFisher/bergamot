@@ -93,19 +93,19 @@ function decompress_content(value: unknown): string {
  */
 export async function create_content_cache_schema(db: DuckDB): Promise<void> {
   const cached_content_schema = [
-    "page_session_id TEXT PRIMARY KEY", // the metadata row this content serves
-    "url TEXT NOT NULL", // the public URL the content was re-downloaded from
-    "scope TEXT NOT NULL", // the named consumer that requested caching
+    "page_session_id TEXT PRIMARY KEY",
+    "url TEXT NOT NULL",
+    "scope TEXT NOT NULL",
     "title TEXT NOT NULL",
     "content BLOB NOT NULL", // main-content markdown (raw HTML if extraction degraded), brotli-compressed
     "author TEXT", // Defuddle-derived metadata, as parsed at re-download time
     "site_name TEXT",
     "published_at TEXT",
     "lang TEXT",
-    "fetched_at TEXT NOT NULL", // fidelity of the cached fetch
+    "fetched_at TEXT NOT NULL",
     "http_status INTEGER NOT NULL",
     "content_hash TEXT NOT NULL", // sha-256 of the rendered HTML, not of the stored body
-    "cached_at TEXT NOT NULL", // when the entry was written to the cache
+    "cached_at TEXT NOT NULL",
   ].join(", ");
   await db.create_table(CACHED_CONTENT_TABLE, cached_content_schema);
   await db.exec(`CREATE INDEX IF NOT EXISTS idx_cached_content_scope

@@ -128,6 +128,91 @@ describe("ContentCache (in-memory)", () => {
     expect(await cache.get("p2")).not.toBeNull();
   });
 
+  it("delete_by_origin removes every cached row sharing an origin and spares others", async () => {
+    await cache.put(
+      corpus_content("a", "<html>a</html>", "https://example.com/one"),
+      "scope"
+    );
+    await cache.put(
+      corpus_content("b", "<html>b</html>", "https://example.com/two?q=1"),
+      "scope"
+    );
+    await cache.put(
+      corpus_content("c", "<html>c</html>", "https://other.example/page"),
+      "scope"
+    );
+
+    await cache.delete_by_origin("https://example.com");
+
+    expect(await cache.get("a")).toBeNull();
+    expect(await cache.get("b")).toBeNull();
+    expect(await cache.get("c")).not.toBeNull();
+  });
+
+  it("delete_by_origin distinguishes port and scheme when matching origin", async () => {
+    await cache.put(
+      corpus_content("plain", "<html>p</html>", "https://example.com/x"),
+      "scope"
+    );
+    await cache.put(
+      corpus_content("ported", "<html>q</html>", "https://example.com:8443/x"),
+      "scope"
+    );
+
+    await cache.delete_by_origin("https://example.com:8443");
+
+    expect(await cache.get("plain")).not.toBeNull();
+    expect(await cache.get("ported")).toBeNull();
+  });
+
+  it("delete_by_origin matching no row leaves the cache untouched", async () => {
+    await cache.put(corpus_content("p1", "<html>keep</html>"), "scope");
+
+    await cache.delete_by_origin("https://nowhere.example");
+
+    expect(await cache.get("p1")).not.toBeNull();
+  });
+
+  it("delete_items with an empty list is a no-op", async () => {
+    await cache.put(corpus_content("p1", "<html>keep</html>"), "scope");
+
+    await expect(cache.delete_items([])).resolves.toBeUndefined();
+    expect(await cache.get("p1")).not.toBeNull();
+  });
+
+  it("delete_items removes the whole set in one batch", async () => {
+    await cache.put(corpus_content("p1", "<html>one</html>"), "scope");
+    await cache.put(corpus_content("p2", "<html>two</html>"), "scope");
+    await cache.put(corpus_content("p3", "<html>three</html>"), "scope");
+
+    await cache.delete_items(["p1", "p3"]);
+
+    expect(await cache.get("p1")).toBeNull();
+    expect(await cache.get("p2")).not.toBeNull();
+    expect(await cache.get("p3")).toBeNull();
+  });
+
+  it("preserves nullable metadata fields through a round-trip", async () => {
+    const content = corpus_content("meta", "<html>m</html>");
+    content.author = "Ada Lovelace";
+    content.published_at = "2026-01-01T00:00:00Z";
+    await cache.put(content, "scope");
+
+    const hit = await cache.get("meta");
+    expect(hit?.author).toBe("Ada Lovelace");
+    expect(hit?.published_at).toBe("2026-01-01T00:00:00Z");
+    expect(hit?.site_name).toBe("Example");
+    expect(hit?.lang).toBe("en");
+  });
+
+  it("returns null metadata fields as null, not the string \"null\"", async () => {
+    await cache.put(corpus_content("nulls", "<html>n</html>"), "scope");
+
+    const hit = await cache.get("nulls");
+    expect(hit?.author).toBeNull();
+    expect(hit?.published_at).toBeNull();
+  });
+
   it("round-trips quoted and large content (1MB+) through bound parameters", async () => {
     const big = `<html>${"x".repeat(1_200_000)}it's "quoted" content</html>`;
     await cache.put(corpus_content("big", big), "scope");
