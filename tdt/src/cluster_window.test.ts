@@ -88,6 +88,14 @@ describe("build_cosine_distance_matrix", () => {
       /page ragged has dimension 3, expected 2/,
     );
   });
+
+  it("returns an empty matrix for an empty window", () => {
+    expect(build_cosine_distance_matrix([], MAX_SAMPLES)).toEqual([]);
+  });
+
+  it("returns a 1x1 zero matrix for a single-page window", () => {
+    expect(build_cosine_distance_matrix([page_vector("solo", [1, 0])], MAX_SAMPLES)).toEqual([[0]]);
+  });
 });
 
 // ---------------------------------------------------------------------------
