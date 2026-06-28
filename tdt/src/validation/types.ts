@@ -1,7 +1,7 @@
-// Validation-harness DTOs (plan §11 step 7, task-36.7). tf-free leaf module:
-// imports only the package's own VisitRow/PageVector. Both the tf module
-// (sweep.ts) and the tf-free modules (scoring.ts, operating_point.ts) depend on
-// these types, so keeping them here lets neither pull the TensorFlow chain.
+// Validation-harness DTOs. tf-free leaf module: imports only the package's own
+// VisitRow/PageVector. The tf module (sweep.ts) and the tf-free modules
+// (scoring.ts, operating_point.ts) both depend on these types, so keeping them
+// here lets neither pull the TensorFlow chain.
 
 import type { VisitRow, PageVector } from "../types";
 
@@ -20,7 +20,7 @@ export interface WindowInput {
   window_start: string; // ISO-8601 UTC, inclusive (ACTUAL bounds, post-subdivision)
   window_end: string; // ISO-8601 UTC, exclusive
   visits: VisitRow[];
-  vectors: PageVector[]; // already-resolved, L2-normalized
+  vectors: PageVector[]; // L2-normalized
 }
 
 // One point in the parameter grid (plan §6 "Parameters"). `method` is fixed at
@@ -110,17 +110,17 @@ export interface PromotionVerdict {
   pca_improves: boolean; // PCA lowers noise OR raises mean probability at the same params
 }
 
-// Cadence evidence for task-36.9: the live visits-per-month distribution. With
-// per-run re-download volume it justifies the once/day automatic-trigger default.
+// The live visits-per-month distribution. With per-run re-download volume it is
+// the cadence evidence that justifies the once/day automatic-trigger default.
 export interface VisitsPerMonth {
   month: string; // "YYYY-MM" (UTC)
   visits: number;
 }
 
-// The harness's assembled AC#5 report — the four cross-window / cadence signals
-// rolled up for one chosen cell, so "the harness reports X" is a single struct,
-// not four loose helpers a downstream consumer must compose. Built by
-// summarize_validation (scoring.ts) from a run_sweep result.
+// The four cross-window / cadence signals rolled up for one chosen cell, so "the
+// harness reports X" is a single struct, not four loose helpers a downstream
+// consumer must compose. Built by summarize_validation (scoring.ts) from a
+// run_sweep result.
 export interface ValidationReport {
   // Dispersion of per-window N / cluster count / noise fraction for the chosen
   // cell — the evidence gate for the windowing seam (plan §5). First lever is
@@ -130,8 +130,8 @@ export interface ValidationReport {
   // Clusters whose time span touches a window edge, summed over the cell's
   // windows — "how bad is fragmentation actually" before the tracker / SOM slices.
   total_boundary_fragmentation: number;
-  visits_per_month: VisitsPerMonth[]; // cadence evidence (task-36.9)
-  redownload_page_count: number; // per-run re-download volume (task-36.9)
+  visits_per_month: VisitsPerMonth[];
+  redownload_page_count: number;
 }
 
 // A WindowInput tagged with the known-project page set to confirm recovery
