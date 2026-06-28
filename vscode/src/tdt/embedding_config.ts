@@ -1,15 +1,13 @@
 /**
- * The canonical page-embedding configuration (TASK-36.3.1): the model identity,
- * representation strategy, and vector-construction knobs the batched embed pass
- * runs under. Centralized here so the `embedding_model_id` (the cache + cluster
- * key) and the actually-loaded model stay in lockstep — the
- * `resolve_page_vector` caller invariant (page_vectors.ts).
+ * Page-embedding configuration: model identity, representation strategy, and
+ * vector-construction knobs for the batched embed pass. Centralized so the
+ * `embedding_model_id` (the cache + cluster key) and the actually-loaded model
+ * stay in lockstep.
  *
  * Changing any component (model, quantization, dim, or the representation rule)
  * yields a new {@link PAGE_EMBEDDING_MODEL_ID}, which is a clean page-vector
- * cache miss: the next embed pass re-embeds affected pages, and (downstream) a
- * new clustering run key supersedes the old. See
- * backlog/drafts/tdt-embedding-model-selection.md.
+ * cache miss: the next embed pass re-embeds affected pages, and a new clustering
+ * run key supersedes the old.
  */
 import {
   DEFAULT_PAGE_VECTOR_CONFIG,
@@ -23,10 +21,9 @@ import {
  */
 export const PAGE_EMBEDDING_MODEL_REPO = "Xenova/bge-small-en-v1.5";
 
-/** ONNX quantization variant selected via the pipeline `dtype` option. */
+/** Passed as the pipeline `dtype`; a component of {@link PAGE_EMBEDDING_MODEL_ID}. */
 export const PAGE_EMBEDDING_DTYPE = "q8";
 
-/** Embedding dimension `PAGE_EMBEDDING_MODEL_REPO` produces. */
 export const PAGE_EMBEDDING_DIM = 384;
 
 /**
@@ -37,10 +34,10 @@ export const PAGE_EMBEDDING_DIM = 384;
 export const PAGE_REPRESENTATION_VERSION = "repr-v1";
 
 /**
- * The page-representation strategy. `main_content_extract` embeds the full
- * extracted main content (segmented + mean-pooled under the 512-token budget),
- * the richest signal for whole-page clustering. Pinned in lockstep with the
- * `#repr-v1` suffix of {@link PAGE_EMBEDDING_MODEL_ID}.
+ * `main_content_extract` embeds the full extracted main content (segmented +
+ * mean-pooled under the 512-token budget) — the richest signal for whole-page
+ * clustering. Pinned in lockstep with the `#repr-v1` suffix of
+ * {@link PAGE_EMBEDDING_MODEL_ID}.
  */
 export const PAGE_EMBEDDING_REPR: PageRepr = "main_content_extract";
 
@@ -52,5 +49,4 @@ export const PAGE_EMBEDDING_REPR: PageRepr = "main_content_extract";
  */
 export const PAGE_EMBEDDING_MODEL_ID = `bge-small-en-v1.5/${PAGE_EMBEDDING_DTYPE}/${PAGE_EMBEDDING_DIM}#${PAGE_REPRESENTATION_VERSION}`;
 
-/** Page-vector construction knobs (segment budget, dispersion floor, epsilon). */
 export const PAGE_EMBEDDING_CONFIG: PageVectorConfig = DEFAULT_PAGE_VECTOR_CONFIG;
