@@ -140,6 +140,22 @@ describe("check_known_project_recovery", () => {
     };
     expect(check_known_project_recovery(raw, window, { page_session_ids: [] })).toBe(false);
   });
+
+  it("is false when the project splits across clusters below the recovery threshold", () => {
+    const wanted = new Set(TWO_CLUSTER_KNOWN_PROJECT);
+    const labels = window.visits.map((v, i) => {
+      if (!wanted.has(v.page_session_id)) return 0;
+      // Split the 5 known pages 2/2/1 across labels 1, 2, and noise: the plurality
+      // is 2/5 = 0.4 < RECOVERY_THRESHOLD, so the project counts as dissolved.
+      return [1, 1, 2, 2, -1][i];
+    });
+    const raw: HdbscanRaw = {
+      labels,
+      probabilities: window.visits.map(() => 1),
+      exemplar_indices: new Map(),
+    };
+    expect(check_known_project_recovery(raw, window, known)).toBe(false);
+  });
 });
 
 describe("evaluate_guardrail", () => {
@@ -209,5 +225,42 @@ describe("run_pca_promotion", () => {
 
   it("throws when the sweep lacks a default-params cell", () => {
     expect(() => run_pca_promotion([])).toThrow(/missing a default-params/);
+  });
+
+  const default_cell = (
+    reduction: GridCell["reduction"],
+    overrides: Partial<SweepResult>,
+  ): SweepResult => ({
+    cell: { min_cluster_size: 3, min_samples: 5, epsilon: 0, method: "eom", reduction },
+    per_window: [] as WindowScore[],
+    mean_membership_probability: null,
+    mean_noise_fraction: 0.5,
+    median_cluster_size_typical: 4,
+    known_project_recovered: false,
+    ...overrides,
+  });
+
+  it("improves when PCA lowers the noise fraction", () => {
+    const verdict = run_pca_promotion([
+      default_cell("raw", { mean_noise_fraction: 0.6, mean_membership_probability: 0.7 }),
+      default_cell("pca50", { mean_noise_fraction: 0.3, mean_membership_probability: 0.7 }),
+    ]);
+    expect(verdict.pca_improves).toBe(true);
+  });
+
+  it("improves when PCA raises mean probability at equal noise", () => {
+    const verdict = run_pca_promotion([
+      default_cell("raw", { mean_noise_fraction: 0.4, mean_membership_probability: 0.5 }),
+      default_cell("pca50", { mean_noise_fraction: 0.4, mean_membership_probability: 0.8 }),
+    ]);
+    expect(verdict.pca_improves).toBe(true);
+  });
+
+  it("does not improve when PCA worsens both noise and probability", () => {
+    const verdict = run_pca_promotion([
+      default_cell("raw", { mean_noise_fraction: 0.3, mean_membership_probability: 0.8 }),
+      default_cell("pca50", { mean_noise_fraction: 0.5, mean_membership_probability: 0.5 }),
+    ]);
+    expect(verdict.pca_improves).toBe(false);
   });
 });
