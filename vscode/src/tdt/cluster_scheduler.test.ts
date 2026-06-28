@@ -31,6 +31,84 @@ describe("ClusterScheduler", () => {
     scheduler.dispose();
   });
 
+  it("clamps a sub-hourly cadence to the minimum so a misconfig cannot busy-loop", async () => {
+    let runs = 0;
+    const scheduler = new ClusterScheduler({
+      run: async () => {
+        runs++;
+      },
+      cadence_hours: () => 0.001, // 3.6s configured; floor is one hour
+      now: () => new Date(),
+      initial_delay_ms: 0,
+    });
+
+    scheduler.start();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(runs).toBe(1); // catch-up tick
+
+    // Advancing well past the configured 3.6s but short of the clamp floor must
+    // not fire a second tick.
+    await jest.advanceTimersByTimeAsync(59 * 60 * 1000);
+    expect(runs).toBe(1);
+
+    await jest.advanceTimersByTimeAsync(60 * 1000); // reaches the one-hour floor
+    expect(runs).toBe(2);
+
+    scheduler.dispose();
+  });
+
+  it("re-reads the cadence each cycle so a settings change takes effect without reload", async () => {
+    let runs = 0;
+    // Widen the cadence the moment the catch-up tick runs; its finally re-reads
+    // the value and must arm the next tick at the new interval, not the old one.
+    let cadence = 1;
+    const scheduler = new ClusterScheduler({
+      run: async () => {
+        runs++;
+        cadence = 2;
+      },
+      cadence_hours: () => cadence,
+      now: () => new Date(),
+      initial_delay_ms: 0,
+    });
+
+    scheduler.start();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(runs).toBe(1);
+
+    await jest.advanceTimersByTimeAsync(60 * 60 * 1000); // the old 1h must not fire
+    expect(runs).toBe(1);
+
+    await jest.advanceTimersByTimeAsync(60 * 60 * 1000); // the new 2h elapses
+    expect(runs).toBe(2);
+
+    scheduler.dispose();
+  });
+
+  it("clusters the window from the start of the previous month through now", async () => {
+    const specs: WindowSpec[] = [];
+    const scheduler = new ClusterScheduler({
+      run: async (spec) => {
+        specs.push(spec);
+      },
+      cadence_hours: () => 24,
+      now: () => new Date("2026-06-26T12:30:00.000Z"),
+      initial_delay_ms: 0,
+    });
+
+    scheduler.start();
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(specs).toEqual([
+      {
+        range_start: "2026-05-01T00:00:00.000Z",
+        range_end: "2026-06-26T12:30:00.000Z",
+      },
+    ]);
+
+    scheduler.dispose();
+  });
+
   it("never overlaps runs: the next tick is armed only after the current settles (AC #5)", async () => {
     let active = 0;
     let max_active = 0;

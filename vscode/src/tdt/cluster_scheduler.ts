@@ -65,8 +65,6 @@ export class ClusterScheduler {
     } catch (error) {
       this.options.on_error?.(error);
     } finally {
-      // Re-read the cadence each cycle. `<= 0` disables further runs (the user
-      // turned the automatic trigger off); a manual command still works.
       const hours = this.options.cadence_hours();
       if (hours > 0) {
         this.arm(Math.max(MIN_CADENCE_MS, hours * 60 * 60 * 1000));
