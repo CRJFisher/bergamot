@@ -2,7 +2,9 @@ import {
   classify_fetch,
   extract_markers_from_html,
   is_login_url,
+  is_retryable_outcome,
   FetchObservation,
+  FetchOutcome,
   DomMarkers,
 } from "./fetch_outcome";
 
@@ -55,6 +57,19 @@ describe("classify_fetch", () => {
     }
   });
 
+  it("classifies 429 (rate limited) as dead_link", () => {
+    const out = classify_fetch(observation({ http_status: 429 }));
+    expect(out.kind).toBe("dead_link");
+    if (out.kind === "dead_link") {
+      expect(out.http_status).toBe(429);
+    }
+  });
+
+  it("treats a missing content-type as HTML and admits the page", () => {
+    const out = classify_fetch(observation({ content_type: null }));
+    expect(out.kind).toBe("ok");
+  });
+
   it("classifies a transport failure as dead_link with null status", () => {
     const out = classify_fetch(
       observation({
@@ -90,6 +105,48 @@ describe("classify_fetch", () => {
     );
     expect(out.kind).toBe("auth_redirect");
     expect("html" in out).toBe(false);
+  });
+
+  it("classifies a redirect hop through a login url as auth_redirect", () => {
+    const out = classify_fetch(
+      observation({
+        requested_url: "https://app.example.com/dashboard",
+        final_url: "https://app.example.com/dashboard",
+        redirect_chain: [
+          { url: "https://app.example.com/dashboard", status: 302 },
+          { url: "https://sso.example.com/saml/login", status: 302 },
+        ],
+      })
+    );
+    expect(out.kind).toBe("auth_redirect");
+    if (out.kind === "auth_redirect") {
+      expect(out.reason).toContain("sso.example.com/saml/login");
+    }
+  });
+
+  it("classifies a meta-refresh bounce to a login url as auth_redirect", () => {
+    const out = classify_fetch(
+      observation({
+        dom_markers: {
+          ...EMPTY_MARKERS,
+          meta_refresh_target: "https://login.example.com/?next=/x",
+        },
+      })
+    );
+    expect(out.kind).toBe("auth_redirect");
+    if (out.kind === "auth_redirect") {
+      expect(out.reason).toContain("meta-refresh");
+    }
+  });
+
+  it("does NOT flag auth when the requested url is itself a login endpoint", () => {
+    const out = classify_fetch(
+      observation({
+        requested_url: "https://accounts.google.com/o/oauth2/auth",
+        final_url: "https://accounts.google.com/o/oauth2/auth",
+      })
+    );
+    expect(out.kind).toBe("ok");
   });
 
   it("classifies a same-URL password wall (200, short text) as auth_redirect", () => {
@@ -152,12 +209,80 @@ describe("classify_fetch", () => {
   });
 });
 
+describe("is_retryable_outcome", () => {
+  const dead = (http_status: number | null): FetchOutcome => ({
+    kind: "dead_link",
+    http_status,
+    reason: "x",
+  });
+
+  it("retries a transport failure (null status)", () => {
+    expect(is_retryable_outcome(dead(null))).toBe(true);
+  });
+
+  it("retries 429 and 5xx dead links", () => {
+    expect(is_retryable_outcome(dead(429))).toBe(true);
+    expect(is_retryable_outcome(dead(500))).toBe(true);
+    expect(is_retryable_outcome(dead(503))).toBe(true);
+  });
+
+  it("does not retry a permanently dead 404/410", () => {
+    expect(is_retryable_outcome(dead(404))).toBe(false);
+    expect(is_retryable_outcome(dead(410))).toBe(false);
+  });
+
+  it("never retries an auth, paywall, forbidden, non_html, or ok verdict", () => {
+    const verdicts: FetchOutcome[] = [
+      { kind: "ok", html: "<p>x</p>", final_url: "https://x", http_status: 200 },
+      {
+        kind: "auth_redirect",
+        final_url: "https://login.x",
+        http_status: 200,
+        reason: "wall",
+      },
+      { kind: "forbidden", http_status: 403, reason: "http 403" },
+      {
+        kind: "paywall",
+        final_url: "https://x",
+        http_status: 200,
+        reason: "locked",
+      },
+      {
+        kind: "non_html",
+        content_type: "application/pdf",
+        http_status: 200,
+        reason: "pdf",
+      },
+    ];
+    for (const v of verdicts) {
+      expect(is_retryable_outcome(v)).toBe(false);
+    }
+  });
+});
+
 describe("is_login_url", () => {
   it("matches identity-provider hosts and login paths", () => {
     expect(is_login_url("https://accounts.google.com/o/oauth2/auth")).toBe(true);
     expect(is_login_url("https://login.microsoftonline.com/x")).toBe(true);
     expect(is_login_url("https://example.com/account/login?next=/x")).toBe(true);
     expect(is_login_url("https://example.com/articles/today")).toBe(false);
+  });
+
+  it("matches sso, oauth-authorize, sign-in, and saml paths on any host", () => {
+    expect(is_login_url("https://app.example.com/sso/start")).toBe(true);
+    expect(is_login_url("https://app.example.com/oauth2/authorize")).toBe(true);
+    expect(is_login_url("https://app.example.com/sign-in")).toBe(true);
+    expect(is_login_url("https://app.example.com/saml/acs")).toBe(true);
+  });
+
+  it("matches okta and auth0 identity hosts", () => {
+    expect(is_login_url("https://acme.okta.com/")).toBe(true);
+    expect(is_login_url("https://acme.auth0.com/authorize")).toBe(true);
+    expect(is_login_url("https://auth.acme.com/")).toBe(true);
+  });
+
+  it("returns false for an unparseable url", () => {
+    expect(is_login_url("not a url")).toBe(false);
   });
 });
 
@@ -204,6 +329,13 @@ describe("extract_markers_from_html", () => {
         `<meta http-equiv="refresh" content="0; url=https://example.com/login">`
       ).meta_refresh_target
     ).toBe("https://example.com/login");
+  });
+
+  it("leaves the meta-refresh target null when there is no refresh tag", () => {
+    expect(
+      extract_markers_from_html(`<html><body><p>plain page</p></body></html>`)
+        .meta_refresh_target
+    ).toBeNull();
   });
 
   it("leaves markers empty for a clean article", () => {

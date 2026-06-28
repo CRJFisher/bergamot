@@ -63,7 +63,6 @@ export const FETCH_OUTCOME_KINDS = [
   "non_html",
 ] as const;
 
-// Compile-time guarantee that FETCH_OUTCOME_KINDS and the union stay in lock-step.
 type AssertSame<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 const _kinds_cover_union: AssertSame<
   FetchOutcomeKind,
@@ -110,7 +109,6 @@ export interface FetchObservation {
    * leaves as empty placeholders on this path.
    */
   transport_error: string | null;
-  /** Signals extracted from the rendered HTML. */
   dom_markers: DomMarkers;
   /** The rendered HTML; empty string on transport failure. */
   html: string;
@@ -120,7 +118,7 @@ export interface FetchObservation {
  * Host/path signatures of identity providers and login pages. A re-download that
  * lands on one of these is an authenticated page behind the login wall.
  */
-export const LOGIN_HOST_PATTERNS: readonly RegExp[] = [
+const LOGIN_HOST_PATTERNS: readonly RegExp[] = [
   /(^|\.)accounts\.google\.com$/i,
   /(^|\.)login\./i,
   /(^|\.)signin\./i,
@@ -132,7 +130,7 @@ export const LOGIN_HOST_PATTERNS: readonly RegExp[] = [
 ];
 
 /** Path fragments that mark a login/SSO endpoint regardless of host. */
-export const LOGIN_PATH_PATTERNS: readonly RegExp[] = [
+const LOGIN_PATH_PATTERNS: readonly RegExp[] = [
   /\/login(\/|$|\?)/i,
   /\/signin(\/|$|\?)/i,
   /\/sign[_-]?in(\/|$|\?)/i,
@@ -146,7 +144,7 @@ export const LOGIN_PATH_PATTERNS: readonly RegExp[] = [
  * Below this many characters of visible text, a page bearing a password input is
  * treated as a login wall rather than an article that happens to embed a form.
  */
-export const LOGIN_WALL_MAX_TEXT = 1500;
+const LOGIN_WALL_MAX_TEXT = 1500;
 
 /** Returns the lower-cased host of a URL, or null if it cannot be parsed. */
 export function host_of(url: string): string | null {
@@ -177,7 +175,7 @@ export function is_login_url(url: string): boolean {
  * redirected to (or bounces toward) a login endpoint the requested URL was not,
  * or renders a password form as its dominant content.
  */
-export function is_auth_redirect(obs: FetchObservation): { hit: boolean; reason: string } {
+function is_auth_redirect(obs: FetchObservation): { hit: boolean; reason: string } {
   const requested_is_login = is_login_url(obs.requested_url);
 
   if (!requested_is_login && is_login_url(obs.final_url)) {
@@ -210,7 +208,7 @@ export function is_auth_redirect(obs: FetchObservation): { hit: boolean; reason:
  * structured signal (schema.org `isAccessibleForFree:false`) or a known paywall
  * container, never mere presence of the word "subscribe".
  */
-export function is_paywalled(obs: FetchObservation): { hit: boolean; reason: string } {
+function is_paywalled(obs: FetchObservation): { hit: boolean; reason: string } {
   if (obs.dom_markers.jsonld_accessible_for_free === false) {
     return { hit: true, reason: "schema.org isAccessibleForFree is false" };
   }
