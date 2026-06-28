@@ -88,7 +88,6 @@ describe("CachedCorpus", () => {
     if (second?.outcome === "ok") {
       expect(second.content.content).toBe("<html>x</html>");
     }
-    // Exactly one live read: the second was a cache hit.
     expect(fake.live_reads).toEqual(["p1"]);
   });
 
@@ -114,7 +113,7 @@ describe("CachedCorpus", () => {
 
     expect(first?.outcome).toBe("auth_redirect");
     expect(second?.outcome).toBe("auth_redirect");
-    // Both reads went live: nothing was cached for the exclusion.
+    // Both reads go live: an exclusion is never cached, so it cannot serve a hit.
     expect(fake.live_reads).toEqual(["walled", "walled"]);
     expect(await cache.get("walled")).toBeNull();
   });
@@ -128,7 +127,6 @@ describe("CachedCorpus", () => {
   });
 
   it("iterates the public subset through the cache (second pass fetch-free)", async () => {
-    // Two stored metadata rows: one public, one auth-walled.
     await seed_capture("pub");
     await seed_capture("walled");
     const fake = new FakeCorpus(
@@ -159,7 +157,7 @@ describe("CachedCorpus", () => {
       second_pass.push(page.page_session_id);
     }
     expect(second_pass).toEqual(["pub"]);
-    // The public page came from the cache; only the exclusion re-classified.
+    // The public page is served from the cache; only the exclusion re-classifies.
     expect(fake.live_reads).toEqual(["walled"]);
   });
 
@@ -176,7 +174,6 @@ describe("CachedCorpus", () => {
     await corpus.get_content("p1");
     expect(await cache.get("p1")).not.toBeNull();
 
-    // Forget the metadata row (the cascade's metadata-side delete).
     await metadata_db.execute(
       "DELETE FROM webpage_capture WHERE page_session_id = $id",
       { id: "p1" }
@@ -184,6 +181,22 @@ describe("CachedCorpus", () => {
 
     expect(await corpus.get_content("p1")).toBeNull();
     expect(await cache.get("p1")).toBeNull();
+  });
+
+  it("returns null without throwing when stale-row eviction fails", async () => {
+    // A cache failure while purging a forgotten page must not surface as an
+    // error to the caller — eviction is the cascade's best-effort backstop.
+    const fake = new FakeCorpus(new Map());
+    cache.get = async () => {
+      throw new Error("simulated cache read failure during eviction");
+    };
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const corpus = new CachedCorpus(metadata_db, fake, cache, "scope");
+
+    expect(await corpus.get_content("forgotten")).toBeNull();
+    warn.mockRestore();
+    // No metadata row exists, so the live corpus is never consulted.
+    expect(fake.live_reads).toEqual([]);
   });
 
   it("does not cache an ok page whose metadata was forgotten during the live fetch", async () => {
@@ -276,7 +289,7 @@ describe("CachedCorpus", () => {
     await cache.delete_scope("tdt-run-1");
     expect(await cache.get("p1")).toBeNull();
 
-    // The next read goes live again.
+    // With the cache row evicted, the next read falls through to a live fetch.
     fake.live_reads = [];
     await corpus.get_content("p1");
     expect(fake.live_reads).toEqual(["p1"]);
