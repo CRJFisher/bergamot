@@ -67,10 +67,10 @@ export function create_deterministic_embed(dim = 8): {
     let nonzero = false;
     for (let d = 0; d < dim; d++) {
       state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-      v[d] = (state / 0xffffffff) * 2 - 1; // [-1, 1]
+      v[d] = (state / 0xffffffff) * 2 - 1;
       if (v[d] !== 0) nonzero = true;
     }
-    if (!nonzero) v[0] = 1; // never an all-zero (un-normalizable) vector
+    if (!nonzero) v[0] = 1; // an all-zero vector is un-normalizable downstream
     return v;
   };
   return { embed, embedded_texts };
@@ -109,12 +109,10 @@ export class FakeVectorStore implements VectorStore {
  * real DuckDB, and this mirror must agree with it.
  */
 export class FakeClusterSink implements ClusterSink {
-  /** Live + superseded runs, by run_id. */
+  /** Holds both live and superseded runs; status distinguishes them. */
   readonly runs = new Map<string, RunRecord>();
-  /** Clusters and members by run_id (an atomic replace overwrites the entry). */
   readonly clusters = new Map<string, ClusterRecord[]>();
   readonly members = new Map<string, MemberRecord[]>();
-  /** Every persist outcome, in call order. */
   readonly results: PersistResult[] = [];
 
   async persist(bundle: RunBundle): Promise<PersistResult> {
