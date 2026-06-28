@@ -1,10 +1,3 @@
-/**
- * Visit Queue Processor
- * 
- * Handles asynchronous batch processing of webpage visits with retry logic,
- * orphan handling, and performance optimizations.
- */
-
 import { DuckDB } from "./duck_db";
 import {
   PageActivitySessionWithoutTree,
@@ -16,18 +9,11 @@ import { run_page_capture } from "./workflow/page_capture_pipeline";
 import { load_inbox, remove_visit } from "./visit_inbox";
 import { record_outcome, format_error_detail } from "./dev_log";
 
-/**
- * Extended visit type that includes the page title (captured from the browser
- * tab) and tab metadata.
- */
 export interface ExtendedPageVisit extends PageActivitySessionWithoutTree {
   /** Correlation token threaded through the pipeline for end-to-end tracing */
   visit_id: string;
-  /** Page title, captured from the browser tab */
   title: string;
-  /** Browser tab ID that opened this page */
   opener_tab_id?: number;
-  /** Browser tab ID of this page */
   tab_id?: number;
 }
 
@@ -53,13 +39,10 @@ export function is_complete_visit(value: unknown): value is ExtendedPageVisit {
   );
 }
 
-/**
- * Configuration options for the visit queue processor
- */
 export interface QueueProcessorConfig {
   /** Maximum number of visits to process in parallel */
   batch_size?: number;
-  /** Milliseconds to wait before processing incomplete batch */
+  /** Milliseconds to wait before processing an incomplete batch */
   batch_timeout?: number;
   /** Interval for retrying orphaned visits (milliseconds) */
   orphan_retry_interval?: number;
@@ -75,52 +58,19 @@ export interface QueueProcessorConfig {
   on_captured?: (page_session_id: string) => void;
 }
 
-/**
- * Result of inserting a page activity session
- */
 interface InsertionResult {
-  /** ID of the tree the visit was assigned to */
   tree_id: string | null;
-  /** Whether the tree structure was modified */
   was_tree_changed: boolean;
   /** ID of the parent session this visit linked to, or null if it became a root (orphan). */
   referrer_session_id: string | null;
 }
 
-/**
- * Manages asynchronous batch processing of webpage visits.
- * 
- * Features:
- * - Batch processing for improved performance
- * - Orphaned visit handling for tabs opened from other tabs
- * - Automatic retry logic for failed processing
- * - Smart scheduling to optimize throughput
- * 
- * @example
- * ```typescript
- * const processor = new VisitQueueProcessor(
- *   duck_db,
- *   orphan_manager,
- *   { batch_size: 5, batch_timeout: 1000 }
- * );
- * 
- * // Add visits to the queue
- * processor.enqueue(visitData);
- * 
- * // Start processing (called automatically on enqueue)
- * processor.start();
- * 
- * // Stop processing
- * processor.stop();
- * ```
- */
 export class VisitQueueProcessor {
   private request_queue: ExtendedPageVisit[] = [];
   private is_processing = false;
   private batch_timer: NodeJS.Timeout | null = null;
   private orphan_retry_timer: NodeJS.Timeout | null = null;
-  
-  // Configuration with defaults
+
   private readonly batch_size: number;
   private readonly batch_timeout: number;
   private readonly orphan_retry_interval: number;
@@ -139,13 +89,7 @@ export class VisitQueueProcessor {
     this.on_captured = config.on_captured;
   }
 
-  /**
-   * Adds a webpage visit to the processing queue.
-   * Automatically schedules batch processing if not already running.
-   * 
-   * @param visit - The webpage visit data to process
-   * @returns Current queue position
-   */
+  /** @returns the resulting queue length */
   enqueue(visit: ExtendedPageVisit): number {
     this.request_queue.push(visit);
     this.schedule_batch_processing();
@@ -153,10 +97,8 @@ export class VisitQueueProcessor {
   }
 
   /**
-   * Adds multiple visits to the front of the queue for priority processing.
-   * Used for re-queuing orphaned visits that now have their parent available.
-   * 
-   * @param visits - Array of visits to add to front of queue
+   * Adds visits to the front of the queue so re-queued orphans, which now have a
+   * resolvable parent, are processed ahead of newly arriving visits.
    */
   enqueue_priority(visits: ExtendedPageVisit[]): void {
     this.request_queue.unshift(...visits);
@@ -182,9 +124,6 @@ export class VisitQueueProcessor {
     return dropped_from_queue + dropped_orphans;
   }
 
-  /**
-   * Starts the queue processor and orphan retry timer.
-   */
   start(): void {
     this.reload_persisted_visits();
     this.start_orphan_retry_timer();
@@ -205,9 +144,6 @@ export class VisitQueueProcessor {
     }
   }
 
-  /**
-   * Stops all processing and clears timers.
-   */
   stop(): void {
     if (this.batch_timer) {
       clearTimeout(this.batch_timer);
@@ -220,9 +156,6 @@ export class VisitQueueProcessor {
     }
   }
 
-  /**
-   * Gets current queue statistics.
-   */
   get_stats(): {
     queue_length: number;
     is_processing: boolean;
@@ -236,8 +169,8 @@ export class VisitQueueProcessor {
   }
 
   /**
-   * Determines if a visit is a potential orphan based on insertion results.
-   * A visit is considered an orphan if it has an opener tab but no referrer parent was found.
+   * A visit is a potential orphan when it was opened from another tab yet the
+   * insert found no referrer parent — its opener has not been captured yet.
    */
   private is_potential_orphan(
     visit: ExtendedPageVisit,
@@ -250,9 +183,6 @@ export class VisitQueueProcessor {
     );
   }
 
-  /**
-   * Handles a visit that appears to be orphaned (parent not yet processed).
-   */
   private async handle_orphan_visit(
     visit: ExtendedPageVisit,
     opener_tab_id: number
@@ -263,9 +193,6 @@ export class VisitQueueProcessor {
     this.orphan_manager.add_orphan(visit, opener_tab_id);
   }
 
-  /**
-   * Processes a successfully inserted visit through the workflow.
-   */
   private async handle_successful_visit(
     visit: ExtendedPageVisit,
     tree_id: string
@@ -281,19 +208,13 @@ export class VisitQueueProcessor {
       visit_id: visit.visit_id,
     });
 
-    // The metadata row is now committed — the id the re-download corpus resolves
-    // against. Kick off the eager re-download of this freshly captured page.
-    // Fire-and-forget by contract: it runs off the capture path so a slow or
-    // failing fetch never stalls the queue (page_session_id === the visit id).
+    // Fire only after the metadata row is committed, so the re-download corpus
+    // can resolve against page_session_id (=== the visit id).
     this.on_captured?.(page_with_tree_id.id);
 
-    // Process any orphaned children waiting for this page
     await this.process_orphaned_children(visit);
   }
 
-  /**
-   * Checks for and processes any orphaned visits waiting for this page.
-   */
   private async process_orphaned_children(
     visit: ExtendedPageVisit
   ): Promise<void> {
@@ -307,15 +228,12 @@ export class VisitQueueProcessor {
       `👨‍👧‍👦 Found ${orphans.length} orphaned children for tab ${tab_id}, re-queuing...`
     );
 
-    // Re-queue orphaned children with updated parent reference
     const updated_visits = orphans.map(orphan => ({
       ...orphan.visit,
       referrer_page_session_id: visit.id,
     }));
-    
+
     this.enqueue_priority(updated_visits);
-    
-    // Remove processed orphans
     this.orphan_manager.remove_orphans_for_tab(tab_id);
   }
 
@@ -353,28 +271,22 @@ export class VisitQueueProcessor {
     return false;
   }
 
-  /**
-   * Processes queued visits in batches for improved performance.
-   */
   async process_queue(): Promise<void> {
     if (this.is_processing || this.request_queue.length === 0) return;
 
     this.is_processing = true;
 
-    // Clear any pending batch timer since we're processing now
     if (this.batch_timer) {
       clearTimeout(this.batch_timer);
       this.batch_timer = null;
     }
 
     try {
-      // Process items in batches for better performance
       const batch_size = Math.min(this.batch_size, this.request_queue.length);
       const batch = this.request_queue.splice(0, batch_size);
 
       console.log(`🚀 Processing batch of ${batch.length} page visits...`);
 
-      // Process batch items in parallel for independent operations
       const batch_promises = batch.map(async (visit) => {
         try {
           const completed = await this.process_single_visit(visit);
@@ -402,25 +314,20 @@ export class VisitQueueProcessor {
     } finally {
       this.is_processing = false;
 
-      // Continue processing remaining items if any
       if (this.request_queue.length > 0) {
-        // Use setTimeout to prevent stack overflow on large queues
+        // Yield to the event loop between batches to avoid unbounded recursion
+        // on a large queue.
         setTimeout(() => this.process_queue(), 0);
       }
     }
   }
 
-  /**
-   * Schedules batch processing with smart timing based on queue state.
-   */
   private schedule_batch_processing(): void {
-    if (this.batch_timer) return; // Timer already scheduled
+    if (this.batch_timer) return;
 
     if (this.request_queue.length >= this.batch_size) {
-      // Process immediately when we have a full batch
       this.process_queue();
     } else if (this.request_queue.length > 0) {
-      // Schedule processing after timeout for partial batches
       this.batch_timer = setTimeout(() => {
         this.batch_timer = null;
         this.process_queue();
@@ -428,11 +335,8 @@ export class VisitQueueProcessor {
     }
   }
 
-  /**
-   * Starts the timer for periodic orphan retry processing.
-   */
   private start_orphan_retry_timer(): void {
-    if (this.orphan_retry_timer) return; // Already running
+    if (this.orphan_retry_timer) return;
 
     this.orphan_retry_timer = setInterval(() => {
       void this.retry_orphans();
@@ -445,9 +349,10 @@ export class VisitQueueProcessor {
    * Each orphan is re-inserted (without re-parking): the tree-management layer
    * re-links it to its parent's tree if the parent is now present, in which case
    * the visit is processed and the orphan removed. Otherwise its retry count
-   * advances and it is dropped once the ceiling is reached. Re-linking by parent
-   * is what restores processing — the previous implementation re-queued the
-   * raw orphan, which only re-parked it because the row already existed.
+   * advances and it is dropped once the ceiling is reached. Re-inserting (rather
+   * than re-enqueuing the raw orphan) is essential — re-enqueuing would only
+   * re-park it, since its row already exists and the parent link is what unblocks
+   * processing.
    */
   private async retry_orphans(): Promise<void> {
     const orphans = this.orphan_manager.get_orphans_for_retry();

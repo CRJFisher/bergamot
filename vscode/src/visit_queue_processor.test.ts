@@ -4,11 +4,12 @@ import { DuckDB } from "./duck_db";
 import * as pipeline from "./workflow/page_capture_pipeline";
 import * as webpageTree from "./webpage_tree";
 import { record_outcome } from "./dev_log";
+import { load_inbox, remove_visit } from "./visit_inbox";
 
-// Mock dependencies
 jest.mock("./duck_db");
 jest.mock("./webpage_tree");
 jest.mock("./workflow/page_capture_pipeline");
+jest.mock("./visit_inbox");
 // Keep the real dev_log module (so format_error_detail renders actual stacks)
 // and stub only the side-effecting outcome recorder we assert against. The real
 // dev_log() is a no-op here because logging is never enabled in the test.
@@ -16,6 +17,9 @@ jest.mock("./dev_log", () => ({
   ...jest.requireActual("./dev_log"),
   record_outcome: jest.fn(),
 }));
+
+const mock_load_inbox = load_inbox as jest.MockedFunction<typeof load_inbox>;
+const mock_remove_visit = remove_visit as jest.MockedFunction<typeof remove_visit>;
 
 describe("VisitQueueProcessor", () => {
   let processor: VisitQueueProcessor;
@@ -52,7 +56,8 @@ describe("VisitQueueProcessor", () => {
       })
     } as Partial<jest.Mocked<OrphanedVisitsManager>> as jest.Mocked<OrphanedVisitsManager>;
     
-    // Default mock implementations
+    mock_load_inbox.mockReturnValue([]);
+
     mockInsertPageActivitySession.mockResolvedValue({
       tree_id: "tree-123",
       was_tree_changed: true,
@@ -77,7 +82,7 @@ describe("VisitQueueProcessor", () => {
   });
 
   describe("enqueue", () => {
-    it("should add visit to queue and return position", () => {
+    it("adds a visit to the queue and returns its position", () => {
       const visit: ExtendedPageVisit = {
         id: "visit-1",
         visit_id: "v-visit-1",
@@ -95,7 +100,7 @@ describe("VisitQueueProcessor", () => {
       expect(stats.queue_length).toBe(1);
     });
 
-    it("should trigger immediate processing for full batch", async () => {
+    it("triggers immediate processing for a full batch", async () => {
       const visits: ExtendedPageVisit[] = [
         {
           id: "visit-1",
@@ -132,7 +137,7 @@ describe("VisitQueueProcessor", () => {
       expect(mockInsertPageActivitySession).toHaveBeenCalledTimes(3);
     });
 
-    it("should schedule delayed processing for partial batch", () => {
+    it("schedules delayed processing for a partial batch", () => {
       const visit: ExtendedPageVisit = {
         id: "visit-1",
         visit_id: "v-visit-1",
@@ -156,7 +161,7 @@ describe("VisitQueueProcessor", () => {
   });
 
   describe("enqueue_priority", () => {
-    it("should add visits to front of queue", () => {
+    it("adds visits to the front of the queue", () => {
       // Add regular visits first
       processor.enqueue({
         id: "regular-1",
@@ -204,7 +209,7 @@ describe("VisitQueueProcessor", () => {
   });
 
   describe("process_single_visit", () => {
-    it("should handle successful visit with tree change", async () => {
+    it("captures a successful visit with a tree change", async () => {
       const visit: ExtendedPageVisit = {
         id: "visit-1",
         visit_id: "v-visit-1",
@@ -290,7 +295,7 @@ describe("VisitQueueProcessor", () => {
       expect(on_captured).not.toHaveBeenCalled();
     });
 
-    it("should handle orphaned visit", async () => {
+    it("parks an orphaned visit", async () => {
       const visit: ExtendedPageVisit = {
         id: "orphan-1",
         visit_id: "v-orphan-1",
@@ -314,7 +319,7 @@ describe("VisitQueueProcessor", () => {
       expect(mockRunPageCapture).not.toHaveBeenCalled(); // Should not run workflow for orphans
     });
 
-    it("should process orphaned children when parent is processed", async () => {
+    it("re-queues orphaned children when the parent is processed", async () => {
       const parentVisit: ExtendedPageVisit = {
         id: "parent-1",
         visit_id: "v-parent-1",
@@ -351,7 +356,7 @@ describe("VisitQueueProcessor", () => {
       expect(stats.queue_length).toBe(1);
     });
 
-    it("should handle visit with no tree assignment", async () => {
+    it("skips capture for a visit with no tree assignment", async () => {
       const visit: ExtendedPageVisit = {
         id: "aggregator-1",
         visit_id: "v-aggregator-1",
@@ -376,7 +381,7 @@ describe("VisitQueueProcessor", () => {
   });
 
   describe("process_queue", () => {
-    it("should process visits in batches", async () => {
+    it("processes visits in batches", async () => {
       const visits: ExtendedPageVisit[] = Array.from({ length: 7 }, (_, i) => ({
         id: `visit-${i}`,
         visit_id: `v-visit-${i}`,
@@ -402,7 +407,7 @@ describe("VisitQueueProcessor", () => {
       expect(mockInsertPageActivitySession).toHaveBeenCalledTimes(7);
     });
 
-    it("should handle errors gracefully", async () => {
+    it("records a failed visit without stopping the batch", async () => {
       const visits: ExtendedPageVisit[] = [
         {
           id: "good-1",
@@ -456,7 +461,7 @@ describe("VisitQueueProcessor", () => {
       );
     });
 
-    it("should prevent concurrent processing", async () => {
+    it("prevents concurrent processing", async () => {
       const visit: ExtendedPageVisit = {
         id: "visit-1",
         visit_id: "v-visit-1",
@@ -480,7 +485,7 @@ describe("VisitQueueProcessor", () => {
   });
 
   describe("orphan retry mechanism", () => {
-    it("should re-attempt orphans and advance the retry count while the parent is still missing", async () => {
+    it("re-attempts orphans and advances the retry count while the parent is still missing", async () => {
       const orphan = {
         visit: {
           id: "orphan-1",
@@ -515,7 +520,7 @@ describe("VisitQueueProcessor", () => {
       expect(processor.get_stats().queue_length).toBe(0); // not re-queued
     });
 
-    it("should classify and remove an orphan once its parent has arrived", async () => {
+    it("classifies and removes an orphan once its parent has arrived", async () => {
       const orphan = {
         visit: {
           id: "orphan-1",
@@ -549,7 +554,7 @@ describe("VisitQueueProcessor", () => {
       expect(mockOrphanManager.increment_retry_count).not.toHaveBeenCalled();
     });
 
-    it("should not retry when no orphans available", () => {
+    it("does not retry when no orphans are available", () => {
       mockOrphanManager.get_orphans_for_retry.mockReturnValue([]);
 
       processor.start();
@@ -565,7 +570,7 @@ describe("VisitQueueProcessor", () => {
   });
 
   describe("stats", () => {
-    it("should provide comprehensive statistics", () => {
+    it("provides queue and orphan statistics", () => {
       const visits: ExtendedPageVisit[] = [
         {
           id: "visit-1",
@@ -608,7 +613,7 @@ describe("VisitQueueProcessor", () => {
   });
 
   describe("lifecycle", () => {
-    it("should start and stop cleanly", () => {
+    it("starts and stops cleanly", () => {
       processor.start();
       
       // Should set up retry timer
@@ -625,7 +630,7 @@ describe("VisitQueueProcessor", () => {
       expect(mockOrphanManager.get_orphans_for_retry).toHaveBeenCalledTimes(1);
     });
 
-    it("should handle multiple start calls gracefully", () => {
+    it("ignores a second start call", () => {
       processor.start();
       processor.start(); // Second call should be ignored
       
@@ -637,13 +642,13 @@ describe("VisitQueueProcessor", () => {
   });
 
   describe("edge cases", () => {
-    it("should handle empty queue gracefully", async () => {
+    it("handles an empty queue", async () => {
       await processor.process_queue();
       
       expect(mockInsertPageActivitySession).not.toHaveBeenCalled();
     });
 
-    it("should handle very large batches", async () => {
+    it("drains a very large queue across batches", async () => {
       const visits: ExtendedPageVisit[] = Array.from({ length: 100 }, (_, i) => ({
         id: `visit-${i}`,
         visit_id: `v-visit-${i}`,
@@ -664,7 +669,7 @@ describe("VisitQueueProcessor", () => {
       expect(mockInsertPageActivitySession).toHaveBeenCalledTimes(100);
     });
 
-    it("should handle visits with missing optional fields", async () => {
+    it("processes a visit with missing optional fields", async () => {
       const minimalVisit: ExtendedPageVisit = {
         id: "minimal-1",
         visit_id: "v-minimal-1",
@@ -676,9 +681,168 @@ describe("VisitQueueProcessor", () => {
       };
       
       await processor.process_single_visit(minimalVisit);
-      
+
       expect(mockInsertPageActivitySession).toHaveBeenCalled();
       expect(mockOrphanManager.get_orphans_for_tab).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("durable inbox", () => {
+    const make_inbox_processor = () =>
+      new VisitQueueProcessor(mockDuckDb, mockOrphanManager, {
+        batch_size: 3,
+        batch_timeout: 100,
+        orphan_retry_interval: 1000,
+        inbox_dir: "/tmp/inbox",
+      });
+
+    const captured_visit: ExtendedPageVisit = {
+      id: "inbox-1",
+      visit_id: "v-inbox-1",
+      url: "https://example.com",
+      referrer: null,
+      page_loaded_at: "2024-01-01T12:00:00Z",
+      title: "<html>Inbox</html>",
+    };
+
+    it("removes a visit from the durable inbox once it is fully captured", async () => {
+      const inbox_processor = make_inbox_processor();
+      inbox_processor.enqueue(captured_visit);
+
+      await inbox_processor.process_queue();
+      inbox_processor.stop();
+
+      expect(mock_remove_visit).toHaveBeenCalledWith("/tmp/inbox", "inbox-1");
+    });
+
+    it("retains a failed visit in the durable inbox so it retries on restart", async () => {
+      mockInsertPageActivitySession.mockRejectedValueOnce(
+        new Error("Database error")
+      );
+      const inbox_processor = make_inbox_processor();
+      inbox_processor.enqueue(captured_visit);
+
+      await inbox_processor.process_queue();
+      inbox_processor.stop();
+
+      expect(mock_remove_visit).not.toHaveBeenCalled();
+    });
+
+    it("retains an orphaned visit in the durable inbox until it is captured", async () => {
+      mockInsertPageActivitySession.mockResolvedValue({
+        tree_id: "tree-orphan",
+        was_tree_changed: true,
+        referrer_session_id: null,
+      });
+      const inbox_processor = make_inbox_processor();
+      inbox_processor.enqueue({
+        ...captured_visit,
+        opener_tab_id: 10,
+        tab_id: 20,
+      });
+
+      await inbox_processor.process_queue();
+      inbox_processor.stop();
+
+      expect(mockOrphanManager.add_orphan).toHaveBeenCalled();
+      expect(mock_remove_visit).not.toHaveBeenCalled();
+    });
+
+    it("re-enqueues visits left in the durable inbox by a previous run on start", () => {
+      const persisted: ExtendedPageVisit[] = [
+        { ...captured_visit, id: "persisted-1" },
+        { ...captured_visit, id: "persisted-2" },
+      ];
+      mock_load_inbox.mockReturnValue(persisted);
+
+      const inbox_processor = make_inbox_processor();
+      inbox_processor.start();
+
+      expect(mock_load_inbox).toHaveBeenCalledWith("/tmp/inbox");
+      expect(inbox_processor.get_stats().queue_length).toBe(2);
+
+      inbox_processor.stop();
+    });
+
+    it("removes a retried orphan from the durable inbox once its parent arrives", async () => {
+      const orphan = {
+        visit: {
+          id: "retry-inbox-1",
+          visit_id: "v-retry-inbox-1",
+          url: "https://example.com/orphan",
+          referrer: "https://example.com/parent",
+          page_loaded_at: "2024-01-01T12:00:00Z",
+          title: "<html>Orphan</html>",
+          opener_tab_id: 10,
+        },
+        opener_tab_id: 10,
+        arrival_time: Date.now(),
+        retry_count: 0,
+      };
+      mockInsertPageActivitySession.mockResolvedValue({
+        tree_id: "tree-parent",
+        was_tree_changed: true,
+        referrer_session_id: "parent-session",
+      });
+      mockOrphanManager.get_orphans_for_retry.mockReturnValue([orphan]);
+
+      const inbox_processor = make_inbox_processor();
+      inbox_processor.start();
+      await jest.advanceTimersByTimeAsync(1000);
+      inbox_processor.stop();
+
+      expect(mock_remove_visit).toHaveBeenCalledWith("/tmp/inbox", "retry-inbox-1");
+    });
+  });
+
+  describe("purge", () => {
+    it("drops matching queued visits and returns the count removed", () => {
+      mockOrphanManager.purge = jest.fn().mockReturnValue(0);
+
+      const visits: ExtendedPageVisit[] = [
+        {
+          id: "keep-1",
+          visit_id: "v-keep-1",
+          url: "https://keep.example.com",
+          referrer: null,
+          page_loaded_at: "2024-01-01T12:00:00Z",
+          title: "<html>Keep</html>",
+        },
+        {
+          id: "forget-1",
+          visit_id: "v-forget-1",
+          url: "https://forget.example.com",
+          referrer: null,
+          page_loaded_at: "2024-01-01T12:01:00Z",
+          title: "<html>Forget</html>",
+        },
+      ];
+      visits.forEach((v) => processor.enqueue(v));
+
+      const dropped = processor.purge((visit) =>
+        visit.url.startsWith("https://forget.")
+      );
+
+      expect(dropped).toBe(1);
+      expect(processor.get_stats().queue_length).toBe(1);
+    });
+
+    it("also purges parked orphans and sums both counts", () => {
+      mockOrphanManager.purge = jest.fn().mockReturnValue(2);
+
+      processor.enqueue({
+        id: "forget-2",
+        visit_id: "v-forget-2",
+        url: "https://forget.example.com",
+        referrer: null,
+        page_loaded_at: "2024-01-01T12:00:00Z",
+        title: "<html>Forget</html>",
+      });
+
+      const dropped = processor.purge(() => true);
+
+      expect(mockOrphanManager.purge).toHaveBeenCalled();
+      expect(dropped).toBe(3);
     });
   });
 });
