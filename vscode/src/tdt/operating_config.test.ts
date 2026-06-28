@@ -45,7 +45,6 @@ describe("resolve_hdbscan_config", () => {
       DEFAULT_HDBSCAN_CONFIG,
       () => point({}),
     );
-    // The tuned month entry overrides the compile-time DEFAULT_HDBSCAN_CONFIG.
     expect(resolved).toEqual({
       min_cluster_size: 4,
       min_samples: 7,
@@ -53,6 +52,29 @@ describe("resolve_hdbscan_config", () => {
       epsilon: 0.1,
     });
     expect(resolved).not.toEqual(DEFAULT_HDBSCAN_CONFIG);
+  });
+
+  it("resolves a tuned day-stride entry by its '<days>d' key", () => {
+    const resolved = resolve_hdbscan_config(
+      { ...DEFAULT_WINDOW_CONFIG, unit: "days", days: 14 },
+      DEFAULT_HDBSCAN_CONFIG,
+      () =>
+        point({
+          "14d": {
+            min_cluster_size: 6,
+            min_samples: 3,
+            method: "eom",
+            epsilon: 0.2,
+            reduction: "raw",
+          },
+        }),
+    );
+    expect(resolved).toEqual({
+      min_cluster_size: 6,
+      min_samples: 3,
+      method: "eom",
+      epsilon: 0.2,
+    });
   });
 
   it("falls back to the grid default when no entry is tuned for the unit", () => {
