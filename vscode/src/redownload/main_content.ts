@@ -18,15 +18,12 @@ import * as path from "path";
 
 /** The subset of Defuddle's response this module reads. */
 interface DefuddleResponse {
-  /** Main content as markdown (because `markdown: true` is passed). */
+  /** Markdown rather than HTML because `markdown: true` is passed. */
   content: string;
   title: string;
   author: string;
-  /** Publication time, passed through verbatim from the page. */
   published: string;
-  /** Site / publication name. */
   site: string;
-  /** Document language, from `<html lang>`. */
   language: string;
 }
 
@@ -67,21 +64,16 @@ function load_defuddle(): DefuddleModule {
 
 /** Derived metadata read from a re-downloaded page. */
 export interface PageMetadata {
-  /** Page title; falls back to the URL when the page carries none. Always set. */
+  /** Falls back to the URL when the page carries no title; never null. */
   title: string;
-  /** Site / publication name, if present. */
   site_name: string | null;
-  /** Author, if present. */
   author: string | null;
-  /** Publication timestamp, if present. */
   published_at: string | null;
-  /** Document language (`<html lang>`), if present. */
   lang: string | null;
 }
 
-/** The clean body and derived metadata of one parsed page. */
 export interface ParsedPage {
-  /** Main-content markdown (boilerplate pruned); the raw HTML when extraction degrades. */
+  /** The raw HTML when extraction degrades, so a page is never dropped. */
   body_markdown: string;
   metadata: PageMetadata;
 }

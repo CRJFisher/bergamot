@@ -48,17 +48,38 @@ describe("parse_page", () => {
     expect(metadata.lang).toBeNull();
   });
 
-  it("degrades to the raw input when there is no extractable content", async () => {
-    // The parser logs the failure; silence it so the expected degrade path does
-    // not print an error during a passing test.
+  it("degrades to raw input and URL-only metadata when the parser throws", async () => {
     const logged = jest.spyOn(console, "error").mockImplementation(() => {});
     try {
       const html = "   ";
-      const { body_markdown } = await parse_page(
+      const { body_markdown, metadata } = await parse_page(
         html,
         "https://example.com/empty"
       );
       expect(body_markdown).toBe(html);
+      expect(metadata).toEqual({
+        title: "https://example.com/empty",
+        site_name: null,
+        author: null,
+        published_at: null,
+        lang: null,
+      });
+      expect(logged).toHaveBeenCalledTimes(1);
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it("falls back to raw HTML when a valid parse yields empty content", async () => {
+    const logged = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const html = "<html><body></body></html>";
+      const { body_markdown } = await parse_page(
+        html,
+        "https://example.com/blank"
+      );
+      expect(body_markdown).toBe(html);
+      expect(logged).not.toHaveBeenCalled();
     } finally {
       logged.mockRestore();
     }
