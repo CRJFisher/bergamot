@@ -31,7 +31,6 @@ export type DevLogStage =
   // Browser-relayed stages (occur before the visit reaches the server).
   | 'capture_attempted'
   | 'capture_failed'
-  // Server pipeline stages.
   | 'http_received'
   | 'parse_failed'
   | 'queued'
