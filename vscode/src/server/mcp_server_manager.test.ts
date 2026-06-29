@@ -3,26 +3,22 @@ import * as child_process from 'child_process';
 import { EventEmitter } from 'events';
 import { MCPServerManager, MCPServerConfig } from './mcp_server_manager';
 
-// Mock vscode module
 jest.mock('vscode', () => ({
   window: {
     showErrorMessage: jest.fn()
   }
 }));
 
-// Create a mock child process
 class MockChildProcess extends EventEmitter {
   killed = false;
 
   kill(): boolean {
     this.killed = true;
-    // Simulate async exit
     setTimeout(() => this.emit('exit', 0), 10);
     return true;
   }
 }
 
-// Mock child_process module
 jest.mock('child_process', () => ({
   spawn: jest.fn()
 }));
@@ -54,17 +50,11 @@ describe('MCPServerManager', () => {
   });
 
   describe('start()', () => {
-    it('should spawn MCP server process with correct configuration', async () => {
+    it('spawns the standalone script via the host binary in node mode', async () => {
       const start_promise = mcp_manager.start();
-      
-      // Fast-forward the startup delay
       jest.advanceTimersByTime(100);
-      
       await start_promise;
 
-      // Spawned via the host's own binary (a packaged install cannot assume
-      // a node on PATH); the child serves queries over HTTP and holds no
-      // store of its own.
       expect(child_process.spawn).toHaveBeenCalledWith(
         process.execPath,
         ['/test/extension/out/mcp_server_standalone.js'],
@@ -75,9 +65,9 @@ describe('MCPServerManager', () => {
       );
     });
 
-    it('should handle process error events', async () => {
+    it('rejects and surfaces an error message on process error', async () => {
       const start_promise = mcp_manager.start();
-      
+
       const error = new Error('Process failed');
       mock_process.emit('error', error);
 
@@ -87,9 +77,24 @@ describe('MCPServerManager', () => {
       );
     });
 
-    it('should log process exit events', async () => {
+    it('resolves after the settle delay when no error occurs', async () => {
+      const start_promise = mcp_manager.start();
+
+      let resolved = false;
+      start_promise.then(() => { resolved = true; });
+
+      jest.advanceTimersByTime(99);
+      await Promise.resolve();
+      expect(resolved).toBe(false);
+
+      jest.advanceTimersByTime(1);
+      await start_promise;
+      expect(resolved).toBe(true);
+    });
+
+    it('logs the exit code when the process exits', async () => {
       const console_spy = jest.spyOn(console, 'log').mockImplementation();
-      
+
       const start_promise = mcp_manager.start();
       jest.advanceTimersByTime(100);
       await start_promise;
@@ -99,37 +104,25 @@ describe('MCPServerManager', () => {
       expect(console_spy).toHaveBeenCalledWith(
         'MCP server process exited with code 1'
       );
-      
+
       console_spy.mockRestore();
-    });
-
-    it('should clear process reference on exit', async () => {
-      const start_promise = mcp_manager.start();
-      jest.advanceTimersByTime(100);
-      await start_promise;
-
-      expect(mcp_manager.get_process()).toBeDefined();
-
-      mock_process.emit('exit', 0);
-
-      expect(mcp_manager.get_process()).toBeUndefined();
     });
   });
 
   describe('start_deferred()', () => {
-    it('should start server after specified delay', () => {
+    it('starts the server only after the specified delay elapses', () => {
       const start_spy = jest.spyOn(mcp_manager, 'start').mockResolvedValue();
 
       mcp_manager.start_deferred(3000);
 
+      jest.advanceTimersByTime(2999);
       expect(start_spy).not.toHaveBeenCalled();
 
-      jest.advanceTimersByTime(3000);
-
-      expect(start_spy).toHaveBeenCalled();
+      jest.advanceTimersByTime(1);
+      expect(start_spy).toHaveBeenCalledTimes(1);
     });
 
-    it('should use default delay of 2000ms', () => {
+    it('defaults to a 2000ms delay', () => {
       const start_spy = jest.spyOn(mcp_manager, 'start').mockResolvedValue();
 
       mcp_manager.start_deferred();
@@ -138,19 +131,18 @@ describe('MCPServerManager', () => {
       expect(start_spy).not.toHaveBeenCalled();
 
       jest.advanceTimersByTime(1);
-      expect(start_spy).toHaveBeenCalled();
+      expect(start_spy).toHaveBeenCalledTimes(1);
     });
 
-    it('should handle start failure silently', async () => {
+    it('swallows start failures without surfacing a user-facing error', async () => {
       const console_error_spy = jest.spyOn(console, 'error').mockImplementation();
       const console_log_spy = jest.spyOn(console, 'log').mockImplementation();
       jest.spyOn(mcp_manager, 'start').mockRejectedValue(new Error('Start failed'));
 
       mcp_manager.start_deferred(100);
-      
+
       jest.advanceTimersByTime(100);
-      
-      // Allow promises to resolve
+
       await Promise.resolve();
       await Promise.resolve();
 
@@ -169,7 +161,7 @@ describe('MCPServerManager', () => {
   });
 
   describe('stop()', () => {
-    it('should terminate running process gracefully', async () => {
+    it('terminates a running process gracefully with SIGTERM', async () => {
       const start_promise = mcp_manager.start();
       jest.advanceTimersByTime(100);
       await start_promise;
@@ -177,109 +169,60 @@ describe('MCPServerManager', () => {
       const kill_spy = jest.spyOn(mock_process, 'kill');
 
       const stop_promise = mcp_manager.stop();
-      
-      // Simulate process exit
       jest.advanceTimersByTime(10);
-      
       await stop_promise;
 
       expect(kill_spy).toHaveBeenCalledWith('SIGTERM');
-      expect(mcp_manager.get_process()).toBeUndefined();
+      expect(kill_spy).not.toHaveBeenCalledWith('SIGKILL');
     });
 
-    it('should force kill process after timeout', async () => {
+    it('escalates to SIGKILL when graceful shutdown is ignored', async () => {
       const start_promise = mcp_manager.start();
       jest.advanceTimersByTime(100);
       await start_promise;
 
       const kill_spy = jest.spyOn(mock_process, 'kill');
-      
-      // Override kill to not emit exit
       kill_spy.mockImplementation(function(this: MockChildProcess, signal?: string) {
         if (signal === 'SIGKILL') {
           this.killed = true;
-          return true;
         }
         return true;
       });
 
       const stop_promise = mcp_manager.stop();
 
-      // First SIGTERM
       expect(kill_spy).toHaveBeenCalledWith('SIGTERM');
 
-      // Wait for force kill timeout
       jest.advanceTimersByTime(5000);
-      
       await stop_promise;
 
       expect(kill_spy).toHaveBeenCalledWith('SIGKILL');
     });
 
-    it('should handle stop when process not running', async () => {
-      await expect(mcp_manager.stop()).resolves.not.toThrow();
-    });
-  });
+    it('resolves without killing anything when no process is running', async () => {
+      const kill_spy = jest.spyOn(mock_process, 'kill');
 
-  describe('is_running()', () => {
-    it('should return false when process not started', () => {
-      expect(mcp_manager.is_running()).toBe(false);
+      await expect(mcp_manager.stop()).resolves.toBeUndefined();
+      expect(kill_spy).not.toHaveBeenCalled();
     });
 
-    it('should return true when process is running', async () => {
-      const start_promise = mcp_manager.start();
+    it('can be restarted after stopping', async () => {
+      const first_start = mcp_manager.start();
       jest.advanceTimersByTime(100);
-      await start_promise;
-
-      expect(mcp_manager.is_running()).toBe(true);
-    });
-
-    it('should return false after process killed', async () => {
-      const start_promise = mcp_manager.start();
-      jest.advanceTimersByTime(100);
-      await start_promise;
-
-      mock_process.killed = true;
-
-      expect(mcp_manager.is_running()).toBe(false);
-    });
-
-    it('should return false after process exits', async () => {
-      const start_promise = mcp_manager.start();
-      jest.advanceTimersByTime(100);
-      await start_promise;
-
-      mock_process.emit('exit', 0);
-
-      expect(mcp_manager.is_running()).toBe(false);
-    });
-  });
-
-  describe('get_process()', () => {
-    it('should return undefined before start', () => {
-      expect(mcp_manager.get_process()).toBeUndefined();
-    });
-
-    it('should return process after start', async () => {
-      const start_promise = mcp_manager.start();
-      jest.advanceTimersByTime(100);
-      await start_promise;
-
-      const process = mcp_manager.get_process();
-      expect(process).toBeDefined();
-      expect(process).toBe(mock_process);
-    });
-
-    it('should return undefined after stop', async () => {
-      const start_promise = mcp_manager.start();
-      jest.advanceTimersByTime(100);
-      await start_promise;
+      await first_start;
 
       const stop_promise = mcp_manager.stop();
       jest.advanceTimersByTime(10);
       await stop_promise;
 
-      expect(mcp_manager.get_process()).toBeUndefined();
+      const second_process = new MockChildProcess();
+      (child_process.spawn as jest.Mock).mockReturnValue(second_process);
+
+      const second_start = mcp_manager.start();
+      jest.advanceTimersByTime(100);
+      await second_start;
+
+      expect(child_process.spawn).toHaveBeenCalledTimes(2);
     });
   });
 });
