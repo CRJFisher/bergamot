@@ -65,6 +65,24 @@ describe("visit_inbox", () => {
     expect(fs.existsSync(legacy)).toBe(false);
   });
 
+  it("skips an unreadable entry while retaining the rest of the inbox", () => {
+    ensure_inbox(dir);
+    persist_visit(dir, make_visit("good", "https://good.com"));
+    fs.writeFileSync(path.join(dir, "corrupt.json"), "{ not valid json");
+
+    expect(load_inbox(dir).map((v) => v.id)).toEqual(["good"]);
+    // A corrupt file is left in place: it may be a transient write, so it must
+    // not be deleted, but it must not discard the valid entries either.
+    expect(fs.existsSync(path.join(dir, "corrupt.json"))).toBe(true);
+  });
+
+  it("creates the inbox directory, including missing parents, and is idempotent", () => {
+    const nested = path.join(dir, "a", "b", "visit_inbox");
+    ensure_inbox(nested);
+    expect(fs.existsSync(nested)).toBe(true);
+    expect(() => ensure_inbox(nested)).not.toThrow();
+  });
+
   it("returns an empty list for a missing inbox and tolerates double-remove", () => {
     expect(load_inbox(path.join(dir, "missing"))).toEqual([]);
     expect(() => remove_visit(dir, "never-existed")).not.toThrow();
