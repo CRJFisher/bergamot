@@ -12,12 +12,10 @@ import path from "path";
 import os from "os";
 import fs from "fs";
 
-// All queries are served by the extension's local HTTP server (it owns the
-// single-writer DuckDB connection). Discover its port from the canonical file
-// the server writes on startup. Semantic search is deferred to the RAG-prep
-// pipeline (task-31); this server exposes only the deterministic capture/tree
-// reads backed by DuckDB.
-function get_server_base_url(): string | null {
+// Queries are served by the extension's local HTTP server because it owns the
+// single-writer DuckDB connection; this process discovers its port from the
+// canonical file the server writes on startup.
+export function get_server_base_url(): string | null {
   try {
     const raw = fs.readFileSync(
       path.join(os.homedir(), ".bergamot", "port.json"),
@@ -30,7 +28,7 @@ function get_server_base_url(): string | null {
   }
 }
 
-async function query_server(
+export async function query_server(
   endpoint: string,
   params: Record<string, string>
 ): Promise<unknown> {
@@ -70,7 +68,6 @@ async function main() {
     }
   );
 
-  // Register tool handlers
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       {
@@ -175,12 +172,10 @@ async function main() {
     }
   });
 
-  // Start server
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("MCP Server started");
 
-  // Handle graceful shutdown
   process.on("SIGINT", () => {
     console.error("Shutting down MCP server...");
     process.exit(0);
@@ -192,8 +187,11 @@ async function main() {
   });
 }
 
-// Run the server
-main().catch((error) => {
-  console.error("Fatal error:", error);
-  process.exit(1);
-});
+// Guard against auto-running when imported (e.g. by tests); only the spawned
+// entrypoint process starts the transport.
+if (require.main === module) {
+  main().catch((error) => {
+    console.error("Fatal error:", error);
+    process.exit(1);
+  });
+}
