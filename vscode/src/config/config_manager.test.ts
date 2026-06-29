@@ -1,15 +1,20 @@
 import * as vscode from 'vscode';
 import { ConfigManager } from './config_manager';
 
-// Mock vscode module
 jest.mock('vscode', () => ({
   workspace: {
     getConfiguration: jest.fn()
-  },
-  window: {
-    showErrorMessage: jest.fn()
   }
 }));
+
+function mock_config(values: Record<string, unknown>): void {
+  const config = {
+    get: jest.fn((key: string, default_value: unknown) =>
+      key in values ? values[key] : default_value
+    )
+  };
+  (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue(config);
+}
 
 describe('ConfigManager', () => {
   beforeEach(() => {
@@ -17,32 +22,43 @@ describe('ConfigManager', () => {
   });
 
   describe('get_dev_mode()', () => {
-    it('should default to false', () => {
-      const mock_config = {
-        get: jest.fn((_key: string, default_value: unknown) => default_value)
-      };
-      (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue(mock_config);
-
+    it('defaults to false when devMode is unset', () => {
+      mock_config({});
       expect(ConfigManager.get_dev_mode()).toBe(false);
-      expect(mock_config.get).toHaveBeenCalledWith('devMode', false);
+    });
+
+    it('returns the configured value when devMode is set', () => {
+      mock_config({ devMode: true });
+      expect(ConfigManager.get_dev_mode()).toBe(true);
+    });
+
+    it('reads from the bergamot namespace', () => {
+      mock_config({});
+      ConfigManager.get_dev_mode();
+      expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('bergamot');
     });
   });
 
-  describe('get_duck_db_path()', () => {
-    it('should construct correct DuckDB path from storage path', () => {
-      const storage_path = '/test/storage/path';
-      
-      const result = ConfigManager.get_duck_db_path(storage_path);
-      
-      expect(result).toBe('/test/storage/path/webpage_categorizations.db');
+  describe('get_cluster_cadence_hours()', () => {
+    it('defaults to 24 hours when the setting is unset', () => {
+      mock_config({});
+      expect(ConfigManager.get_cluster_cadence_hours()).toBe(24);
     });
 
-    it('should handle storage paths with trailing slash', () => {
-      const storage_path = '/test/storage/path/';
-      
-      const result = ConfigManager.get_duck_db_path(storage_path);
-      
-      expect(result).toBe('/test/storage/path//webpage_categorizations.db');
+    it('returns the configured cadence when set', () => {
+      mock_config({ 'tdt.clusterCadenceHours': 6 });
+      expect(ConfigManager.get_cluster_cadence_hours()).toBe(6);
+    });
+
+    it('returns 0 when the automatic run is disabled', () => {
+      mock_config({ 'tdt.clusterCadenceHours': 0 });
+      expect(ConfigManager.get_cluster_cadence_hours()).toBe(0);
+    });
+
+    it('reads from the bergamot namespace', () => {
+      mock_config({});
+      ConfigManager.get_cluster_cadence_hours();
+      expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('bergamot');
     });
   });
 });
