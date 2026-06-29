@@ -49,12 +49,12 @@ export class WebpageHoverProvider implements vscode.HoverProvider {
     const line = document.lineAt(position.line);
     const text = line.text;
 
-    // Look for markdown link pattern [text](url)
     const markdown_link_regex = /\[([^\]]+)\]\(([^)]+)\)/g;
     let match;
 
     while ((match = markdown_link_regex.exec(text)) !== null) {
-      const link_start = match.index + match[1].length + 3; // Start of URL
+      // Skip past `[text](` to reach the URL: 3 chars for `]`, `(`, and `[`.
+      const link_start = match.index + match[1].length + 3;
       const link_end = link_start + match[2].length;
 
       if (position.character >= link_start && position.character <= link_end) {
@@ -62,7 +62,6 @@ export class WebpageHoverProvider implements vscode.HoverProvider {
       }
     }
 
-    // Look for plain URLs
     const url_regex = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g;
 
     while ((match = url_regex.exec(text)) !== null) {

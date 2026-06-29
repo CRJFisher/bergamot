@@ -51,6 +51,25 @@ export class Uri {
     constructor(public readonly fsPath: string) { }
 }
 
+export class MarkdownString {
+    value = "";
+    supportHtml = false;
+    isTrusted = false;
+
+    appendMarkdown(text: string): MarkdownString {
+        this.value += text;
+        return this;
+    }
+}
+
+export class Hover {
+    constructor(public readonly contents: MarkdownString) { }
+}
+
+export const languages = {
+    registerHoverProvider: jest.fn(() => ({ dispose: jest.fn() })),
+};
+
 export const EventEmitter = jest.fn().mockImplementation(() => ({
     event: jest.fn(),
     fire: jest.fn(),
