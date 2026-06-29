@@ -13,43 +13,13 @@ import {
 import { ForgetSelector, forget, selector_matches } from '../right_to_forget';
 import { resolve_staging_root } from '../tdt/staging_root';
 
-/**
- * Configuration for command registration.
- * Contains all dependencies required to register VS Code commands.
- *
- * @interface CommandConfig
- * @property {vscode.ExtensionContext} context - VS Code extension context for registrations
- * @property {DuckDB} duck_db - Database for structured data queries
- */
 export interface CommandConfig {
   context: vscode.ExtensionContext;
   duck_db: DuckDB;
-  /** Owns the live queue processor; used by the dev observability commands */
   server_manager: ServerManager;
-  /** Resolved storage base; used to locate replay visits + the visit inbox */
   storage_base: string;
 }
 
-/**
- * Manages registration of all VS Code extension commands.
- * Centralizes command registration and lifecycle management for Bergamot.
- * 
- * @example
- * ```typescript
- * const commandManager = new CommandManager({
- *   context: extensionContext,
- *   duck_db: duckDb,
- *   server_manager,
- *   storage_base
- * });
- * 
- * // Register all commands
- * commandManager.register_all();
- * 
- * // Later, during cleanup
- * commandManager.dispose();
- * ```
- */
 export class CommandManager {
   private disposables: vscode.Disposable[] = [];
   /** Reused across invocations so repeated commands don't pile up duplicate
@@ -58,16 +28,6 @@ export class CommandManager {
 
   constructor(private config: CommandConfig) {}
 
-  /**
-   * Registers all extension commands.
-   * This is the main entry point that registers all command categories.
-   * 
-   * @example
-   * ```typescript
-   * commandManager.register_all();
-   * // All commands are now available in VS Code
-   * ```
-   */
   register_all(): void {
     this.register_core_commands();
     this.register_forget_command();
@@ -76,13 +36,6 @@ export class CommandManager {
     this.register_dev_commands();
   }
 
-  /**
-   * Registers the TDT clustering command (TASK-36.9): cluster the recent window
-   * range on demand (and for testing). The same `rebuild_clusters` entry the
-   * automatic scheduler fires; single-flighted, off-thread compute, idempotent
-   * persistence.
-   * @private
-   */
   private register_rebuild_clusters_command(): void {
     const command = vscode.commands.registerCommand(
       'bergamot.tdt.rebuildClusters',
@@ -92,12 +45,6 @@ export class CommandManager {
     this.disposables.push(command);
   }
 
-  /**
-   * Clusters the default recent range (previous + current month) under a progress
-   * notification and reports the per-window outcome. The heavy cosine build +
-   * HDBSCAN fit run in a forked worker, so the UI stays responsive throughout.
-   * @private
-   */
   private async run_rebuild_clusters(): Promise<void> {
     try {
       const { default_window_spec } = await import('../tdt/rebuild_clusters');
@@ -127,13 +74,6 @@ export class CommandManager {
     }
   }
 
-  /**
-   * Registers the TDT page-vector embed command (TASK-36.3.1): vectorise every
-   * re-downloadable public page missing a current-model vector, ahead of a
-   * clustering run. Manual trigger for now; a clustering run drives the same
-   * pass later.
-   * @private
-   */
   private register_embed_pages_command(): void {
     const embed_command = vscode.commands.registerCommand(
       'bergamot.tdt.embedPages',
@@ -143,12 +83,6 @@ export class CommandManager {
     this.disposables.push(embed_command);
   }
 
-  /**
-   * Runs one embed pass under a progress notification and reports the per-page
-   * outcome. The pass is single-flight in the server manager, so re-triggering
-   * while one runs joins the in-flight pass rather than starting a second.
-   * @private
-   */
   private async run_embed_pages(): Promise<void> {
     try {
       const report = await vscode.window.withProgress(
@@ -169,12 +103,6 @@ export class CommandManager {
     }
   }
 
-  /**
-   * Registers the right-to-forget command (constitution principle 4): the
-   * user picks a selector — URL, origin, or time range — confirms, and the
-   * cascade deletes the matching metadata rows and every derived artifact.
-   * @private
-   */
   private register_forget_command(): void {
     const forget_command = vscode.commands.registerCommand(
       'bergamot.forget',
@@ -184,12 +112,6 @@ export class CommandManager {
     this.disposables.push(forget_command);
   }
 
-  /**
-   * Drives one forget: selector pick → input → modal confirmation → live
-   * pipeline purge → cascade. The content cache is opened only when its
-   * store file already exists — forgetting never creates a cache.
-   * @private
-   */
   private async run_forget(): Promise<void> {
     const selector = await this.pick_forget_selector();
     if (!selector) return;
@@ -266,10 +188,6 @@ export class CommandManager {
     }
   }
 
-  /**
-   * Collects the forget selector from the user.
-   * @private
-   */
   private async pick_forget_selector(): Promise<ForgetSelector | undefined> {
     const pick = await vscode.window.showQuickPick(
       [
@@ -315,9 +233,8 @@ export class CommandManager {
   }
 
   /**
-   * Collects and validates one timestamp. A typo must not silently become a
-   * window that matches nothing — this is a deletion primitive.
-   * @private
+   * Validates the timestamp on input: a typo must not silently become a window
+   * that matches nothing, since this feeds a deletion primitive.
    */
   private async pick_timestamp(
     prompt: string,
@@ -335,12 +252,6 @@ export class CommandManager {
     return new Date(raw).toISOString();
   }
 
-  /**
-   * Registers dev-phase observability commands: a recent-visit-outcomes view
-   * (why each visit dropped, plus live queue/inbox/orphan counts) and a replay
-   * command that re-runs a persisted visit through the capture pipeline.
-   * @private
-   */
   private register_dev_commands(): void {
     const show_outcomes = vscode.commands.registerCommand(
       'bergamot.showVisitOutcomes',
@@ -354,12 +265,6 @@ export class CommandManager {
     this.disposables.push(show_outcomes, replay);
   }
 
-  /**
-   * Renders a point-in-time snapshot of recent per-visit outcomes plus live
-   * pipeline counts to the "Bergamot Visit Outcomes" output channel, then
-   * reveals the live "Bergamot Dev Log" channel.
-   * @private
-   */
   private show_visit_outcomes(): void {
     const stats = this.config.server_manager.get_queue_processor()?.get_stats();
     const inbox_count = this.count_inbox();
@@ -395,21 +300,12 @@ export class CommandManager {
     show_dev_log_channel();
   }
 
-  /**
-   * Counts unprocessed visits remaining in the durable inbox.
-   * @private
-   */
   private count_inbox(): number {
     const inbox = path.join(this.config.storage_base, 'visit_inbox');
     if (!fs.existsSync(inbox)) return 0;
     return fs.readdirSync(inbox).filter((f) => f.endsWith('.json')).length;
   }
 
-  /**
-   * Lets the developer pick a persisted visit and re-injects it into the queue,
-   * re-running the capture pipeline without re-browsing the page.
-   * @private
-   */
   private async replay_visit(): Promise<void> {
     const replay_visits = list_replay_visits(this.config.storage_base);
     if (replay_visits.length === 0) {
@@ -442,29 +338,14 @@ export class CommandManager {
     vscode.window.showInformationMessage(`Bergamot: replaying ${visit.url}`);
   }
 
-  /**
-   * Registers core extension commands (the webpage hover provider).
-   * @private
-   */
   private register_core_commands(): void {
-    // Hover over a webpage link shows its captured metadata (title / visited).
     // Semantic search over page content is deferred to the RAG-prep pipeline
     // (task-31), so no LanceDB-backed search command is registered.
     register_webpage_hover_provider(this.config.context, this.config.duck_db);
   }
 
-  /**
-   * Disposes all registered commands.
-   * Should be called during extension deactivation for proper cleanup.
-   * 
-   * @example
-   * ```typescript
-   * // In deactivate function
-   * commandManager.dispose();
-   * ```
-   */
   dispose(): void {
-    this.disposables.forEach(d => d.dispose());
+    this.disposables.forEach((d) => d.dispose());
     this.disposables = [];
   }
 }
