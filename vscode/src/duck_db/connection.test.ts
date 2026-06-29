@@ -1,4 +1,5 @@
 import { DuckDB } from "./connection";
+import { LIST, FLOAT, listValue, DuckDBListValue } from "@duckdb/node-api";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
