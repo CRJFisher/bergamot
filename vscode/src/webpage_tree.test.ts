@@ -26,7 +26,6 @@ describe("Webpage Tree Management", () => {
     await create_metadata_schema(db);
     mock_md5_hash.mockClear();
     mock_md5_hash.mockImplementation((input) => {
-      // Default implementation that generates unique IDs
       return `tree-${input}-${Date.now()}-${Math.random()}`;
     });
   });
@@ -44,7 +43,7 @@ describe("Webpage Tree Management", () => {
     };
 
     describe("when session has no referrer", () => {
-      it("should create a new tree as root", async () => {
+      it("creates a new tree as root", async () => {
         const session = { ...base_session, referrer: null };
         mock_md5_hash.mockReturnValueOnce("new-tree-id");
 
@@ -62,7 +61,6 @@ describe("Webpage Tree Management", () => {
           `${session.url}:${session.page_loaded_at}`
         );
 
-        // Verify tree was created in database
         const tree = await db.query_first(
           "SELECT * FROM webpage_trees WHERE id = $id",
           { id: "new-tree-id" }
@@ -70,9 +68,9 @@ describe("Webpage Tree Management", () => {
         expect(tree).toBeDefined();
       });
 
-      // Note: Aggregator filtering has been moved to the workflow phase
-      // These tests are kept but updated to reflect the new behavior
-      it("should create trees for aggregator URLs (filtering happens in workflow)", async () => {
+      // Tree construction does not special-case aggregator/nav URLs; relevance
+      // filtering happens later in the workflow phase, so every URL gets a tree.
+      it("creates trees for aggregator URLs", async () => {
         const aggregator_urls = [
           "https://news.ycombinator.com",
           "https://www.google.com",
@@ -86,7 +84,7 @@ describe("Webpage Tree Management", () => {
           const url = aggregator_urls[i];
           const aggregator_session = {
             ...base_session,
-            id: `aggregator-session-${i}`, // Unique ID for each session
+            id: `aggregator-session-${i}`,
             url,
             referrer: null,
           };
@@ -98,13 +96,12 @@ describe("Webpage Tree Management", () => {
             aggregator_session
           );
 
-          // Now aggregators DO get trees (filtering happens later)
-          expect(result.tree_id).toBeTruthy();
+          expect(result.tree_id).toBe(`tree-${i}`);
           expect(result.was_tree_changed).toBe(true);
         }
       });
 
-      it("should handle aggregator URLs with trailing slash", async () => {
+      it("handles aggregator URLs with trailing slash", async () => {
         const session = {
           ...base_session,
           url: "https://news.ycombinator.com/",
@@ -118,7 +115,6 @@ describe("Webpage Tree Management", () => {
           session
         );
 
-        // Now aggregators DO get trees (filtering happens later)
         expect(result.tree_id).toBe("tree-hn");
         expect(result.was_tree_changed).toBe(true);
       });
@@ -130,25 +126,21 @@ describe("Webpage Tree Management", () => {
         referrer: "https://example.com/referrer",
       };
 
-      it("should add to existing tree when referrer found", async () => {
-        // First, insert a session that will be the referrer
+      it("adds to existing tree when referrer found", async () => {
         const referrer_session: PageActivitySessionWithoutTree = {
           id: "referrer-session-id",
           url: "https://example.com/referrer",
           referrer: null,
-          page_loaded_at: "2024-12-31T23:55:00Z", // 5 minutes earlier
+          page_loaded_at: "2024-12-31T23:55:00Z",
         };
 
-        // Use mockReturnValue instead of mockReturnValueOnce for consistency
         mock_md5_hash.mockReturnValue("existing-tree-id-1");
 
-        // Insert the referrer session first
         await insert_page_activity_session_with_tree_management(
           db,
           referrer_session
         );
 
-        // Now insert the session with referrer
         const result = await insert_page_activity_session_with_tree_management(
           db,
           session_with_referrer
@@ -160,7 +152,6 @@ describe("Webpage Tree Management", () => {
           referrer_session_id: "referrer-session-id",
         });
 
-        // Verify the session was added with correct referrer
         const session = await db.query_first<{ tree_id: string; referrer_page_session_id: string | null }>(
           "SELECT * FROM webpage_activity_sessions WHERE id = $id",
           { id: "test-session-id" }
@@ -169,7 +160,7 @@ describe("Webpage Tree Management", () => {
         expect(session?.referrer_page_session_id).toBe("referrer-session-id");
       });
 
-      it("should create new tree when referrer not found (phantom referrer)", async () => {
+      it("creates new tree when referrer not found (phantom referrer)", async () => {
         mock_md5_hash.mockReturnValueOnce("phantom-tree-id");
 
         const result = await insert_page_activity_session_with_tree_management(
@@ -184,8 +175,7 @@ describe("Webpage Tree Management", () => {
         });
       });
 
-      it("should handle fuzzy URL matching for referrer", async () => {
-        // Insert a session with full URL including query params
+      it("matches referrer by prefix when referrer policy truncates the URL", async () => {
         const referrer_session: PageActivitySessionWithoutTree = {
           id: "referrer-session-id",
           url: "https://example.com/page?query=test&param=value",
@@ -199,10 +189,11 @@ describe("Webpage Tree Management", () => {
           referrer_session
         );
 
-        // Session with truncated referrer (simulating referrer policy)
+        // strict-origin-when-cross-origin truncates the referrer, so the stored
+        // full URL must still match by prefix.
         const session = {
           ...base_session,
-          referrer: "https://example.com/page", // Truncated URL
+          referrer: "https://example.com/page",
         };
 
         const result = await insert_page_activity_session_with_tree_management(
@@ -216,8 +207,7 @@ describe("Webpage Tree Management", () => {
     });
 
     describe("error handling", () => {
-      it("should handle database errors gracefully", async () => {
-        // Close database to simulate error
+      it("rethrows when the database is unavailable", async () => {
         await db.close();
 
         const session = { ...base_session };
@@ -227,8 +217,7 @@ describe("Webpage Tree Management", () => {
         ).rejects.toThrow();
       });
 
-      it("should handle invalid session data", async () => {
-        // Invalid: missing the required id, so the insert must reject.
+      it("rejects session data missing a required id", async () => {
         const invalid_session = {
           url: "https://example.com",
           referrer: null,
@@ -244,7 +233,6 @@ describe("Webpage Tree Management", () => {
 
   describe("get_tree_with_id", () => {
     beforeEach(async () => {
-      // Setup test tree and sessions
       await db.execute(
         `INSERT INTO webpage_trees (id, first_load_time, latest_activity_time) 
          VALUES ($id, $first_load_time, $latest_activity_time)`,
@@ -256,7 +244,7 @@ describe("Webpage Tree Management", () => {
       );
     });
 
-    it("should build a simple tree with root only", async () => {
+    it("builds a simple tree with root only", async () => {
       const root_session = {
         id: "root-session",
         url: "https://example.com/root",
@@ -284,8 +272,7 @@ describe("Webpage Tree Management", () => {
       expect(tree.children).toHaveLength(0);
     });
 
-    it("should build a tree with multiple levels", async () => {
-      // Insert root and children
+    it("builds a tree with multiple levels", async () => {
       const sessions = [
         {
           id: "root",
@@ -344,14 +331,13 @@ describe("Webpage Tree Management", () => {
       expect(tree.children[0].children[0].webpage_session.id).toBe("grandchild1");
     });
 
-    it("should handle tree with split (orphaned branch)", async () => {
-      // Create a tree that has been split - where a child's parent is not in the tree
+    it("treats a session whose parent is absent as a local root", async () => {
       const sessions = [
         {
           id: "new-root",
           url: "https://example.com/new",
-          referrer: "https://external.com", // External referrer
-          referrer_page_session_id: "external-session", // Not in this tree
+          referrer: "https://external.com",
+          referrer_page_session_id: "external-session",
           page_loaded_at: "2025-01-01T00:00:00Z",
           tree_id: "test-tree-id",
         },
@@ -380,14 +366,13 @@ describe("Webpage Tree Management", () => {
       );
       const tree = get_tree_with_id(tree_members);
 
-      // Should treat new-root as root since its parent is not in the tree
       expect(tree.webpage_session.id).toBe("new-root");
       expect(tree.children).toHaveLength(1);
       expect(tree.children[0].webpage_session.id).toBe("child");
     });
 
-    it("should throw error when no root node can be identified", async () => {
-      // Create circular reference (impossible in real scenario but tests error handling)
+    it("throws when no root node can be identified", async () => {
+      // A referrer cycle leaves every session with an in-tree parent, so no root exists.
       const sessions = [
         {
           id: "session1",
@@ -426,7 +411,7 @@ describe("Webpage Tree Management", () => {
       );
     });
 
-    it("should build tree with capture metadata", async () => {
+    it("builds tree with capture metadata", async () => {
       await db.execute(
         `INSERT INTO webpage_activity_sessions
          (id, url, referrer, referrer_page_session_id, page_loaded_at, tree_id)
@@ -441,7 +426,6 @@ describe("Webpage Tree Management", () => {
         }
       );
 
-      // Capture metadata is the canonical per-page record.
       await insert_webpage_capture(db, {
         page_session_id: "session-with-meta",
         content_type: "text/html",
@@ -463,16 +447,15 @@ describe("Webpage Tree Management", () => {
       expect(session_with_meta.capture?.url).toBe("https://example.com/analyzed");
     });
 
-    it("should handle empty tree members array", async () => {
+    it("throws on an empty tree members array", async () => {
       const empty_tree_members: PageActivitySessionWithMeta[] = [];
-      
+
       expect(() => get_tree_with_id(empty_tree_members)).toThrow(
         "No root node found for tree_members"
       );
     });
 
-    it("should build complex tree with multiple branches", async () => {
-      // Create a more complex tree structure
+    it("builds complex tree with multiple branches", async () => {
       const sessions = [
         { id: "r", referrer_page_session_id: null },
         { id: "a", referrer_page_session_id: "r" },
@@ -509,27 +492,25 @@ describe("Webpage Tree Management", () => {
       );
       const tree = get_tree_with_id(tree_members);
 
-      // Verify tree structure
       expect(tree.webpage_session.id).toBe("r");
-      expect(tree.children).toHaveLength(3); // a, b, c
-      
+      expect(tree.children).toHaveLength(3);
+
       const child_a = tree.children.find(c => c.webpage_session.id === "a");
-      expect(child_a?.children).toHaveLength(2); // a1, a2
-      
+      expect(child_a?.children).toHaveLength(2);
+
       const child_a1 = child_a?.children.find(c => c.webpage_session.id === "a1");
-      expect(child_a1?.children).toHaveLength(2); // a1a, a1b
-      
+      expect(child_a1?.children).toHaveLength(2);
+
       const child_b = tree.children.find(c => c.webpage_session.id === "b");
-      expect(child_b?.children).toHaveLength(1); // b1
-      
+      expect(child_b?.children).toHaveLength(1);
+
       const child_c = tree.children.find(c => c.webpage_session.id === "c");
-      expect(child_c?.children).toHaveLength(0); // no children
+      expect(child_c?.children).toHaveLength(0);
     });
   });
 
   describe("performance and edge cases", () => {
-    it("should handle large trees efficiently", async () => {
-      // Create a large tree with many nodes
+    it("builds large trees in under a second", async () => {
       const num_nodes = 100;
       
       await db.execute(
@@ -542,9 +523,8 @@ describe("Webpage Tree Management", () => {
         }
       );
 
-      // Insert root
       await db.execute(
-        `INSERT INTO webpage_activity_sessions 
+        `INSERT INTO webpage_activity_sessions
          (id, url, referrer, referrer_page_session_id, page_loaded_at, tree_id)
          VALUES ($id, $url, $referrer, $referrer_page_session_id, $page_loaded_at, $tree_id)`,
         {
@@ -557,9 +537,9 @@ describe("Webpage Tree Management", () => {
         }
       );
 
-      // Insert many children
+      // Fan-out of ~3 children per node exercises a wide, multi-level tree.
       for (let i = 1; i < num_nodes; i++) {
-        const parent_id = `node-${Math.floor(i / 3)}`; // Each node has ~3 children
+        const parent_id = `node-${Math.floor(i / 3)}`;
         await db.execute(
           `INSERT INTO webpage_activity_sessions 
            (id, url, referrer, referrer_page_session_id, page_loaded_at, tree_id)
@@ -585,10 +565,10 @@ describe("Webpage Tree Management", () => {
 
       expect(tree).toBeDefined();
       expect(tree.webpage_session.id).toBe("node-0");
-      expect(elapsed_time).toBeLessThan(1000); // Should complete in under 1 second
+      expect(elapsed_time).toBeLessThan(1000);
     });
 
-    it("should handle special characters in URLs", async () => {
+    it("handles special characters in URLs", async () => {
       const session: PageActivitySessionWithoutTree = {
         id: "special-chars",
         url: "https://example.com/page?q=test&foo=bar%20baz#section",
@@ -607,7 +587,7 @@ describe("Webpage Tree Management", () => {
       expect(result.was_tree_changed).toBe(true);
     });
 
-    it("should handle very long URLs", async () => {
+    it("handles very long URLs", async () => {
       const very_long_url = "https://example.com/" + "a".repeat(2000);
       const session: PageActivitySessionWithoutTree = {
         id: "long-url",
