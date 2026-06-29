@@ -5,7 +5,6 @@ import { record_outcome } from "../dev_log";
 
 export interface CaptureInputs {
   new_page: PageActivitySession;
-  /** Page title, captured from the browser tab. */
   title: string;
   visit_id?: string;
 }
