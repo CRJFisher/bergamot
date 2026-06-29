@@ -18,19 +18,6 @@ let mcp_server_manager: MCPServerManager;
 let command_manager: CommandManager;
 let cluster_scheduler: ClusterScheduler | undefined;
 
-/**
- * Activates the Bergamot VS Code extension.
- *
- * Initializes all core components:
- * - Sets up DuckDB for the relational + raw-page capture store
- * - Starts the Express capture server for browser extension communication
- * - Starts MCP (Model Context Protocol) server for external tool access
- * - Registers VS Code commands and the webpage hover provider
- *
- * @param context - VS Code extension context providing access to extension resources
- * @returns Promise that resolves when activation is complete
- * @throws {Error} If required configuration is missing or initialization fails
- */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   console.log('Starting Bergamot extension activation...');
 
@@ -46,10 +33,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       ConfigManager.get_dev_mode() || !!process.env.BERGAMOT_STORAGE_PATH
     );
 
-    // Step 2: Initialize databases. The metadata store is encrypted at rest;
-    // its data-encryption key lives in the OS keystore via SecretStorage and
-    // is generated on first run. Key loss means the store is unrecoverable
-    // (no plaintext fallback) — see docs/threat-model.md.
+    // The metadata store is encrypted at rest; its data-encryption key lives in
+    // the OS keystore via SecretStorage and is generated on first run. Key loss
+    // means the store is unrecoverable (no plaintext fallback) — see
+    // docs/threat-model.md.
     console.log('Initializing databases...');
     database_manager = new DatabaseManager();
 
@@ -66,7 +53,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       encryption_key
     );
 
-    // Step 3: Start Express server for webpage categorization
     console.log('Starting webpage categorizer service...');
     server_manager = new ServerManager({
       duck_db: databases.duck_db,
@@ -111,7 +97,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const port = await server_manager.start();
     console.log(`Server started on port ${port}`);
 
-    // Step 4: Register all extension commands
     console.log('Registering extension commands...');
     command_manager = new CommandManager({
       context,
@@ -121,15 +106,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     });
     command_manager.register_all();
 
-    // Step 5: Start MCP server in background (deferred)
     console.log('Scheduling MCP server startup...');
     mcp_server_manager = new MCPServerManager({ context });
     mcp_server_manager.start_deferred(2000);
 
-    // Step 6: Arm the automatic TDT clustering trigger (TASK-36.9) — the
-    // passive-product path. A catch-up tick runs shortly after activation, then
-    // on the configured cadence (default daily); quiet-day ticks are no-ops via
-    // §8 idempotency. A run failure is logged but never disrupts capture.
+    // The passive-product path: a catch-up tick runs shortly after activation,
+    // then on the configured cadence (default daily); quiet-day ticks are no-ops
+    // via §8 idempotency. A run failure is logged but never disrupts capture.
     cluster_scheduler = new ClusterScheduler({
       run: (spec) => server_manager.rebuild_clusters(spec),
       cadence_hours: () => ConfigManager.get_cluster_cadence_hours(),
@@ -139,7 +122,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     });
     cluster_scheduler.start();
 
-    // Register cleanup handlers
     context.subscriptions.push({
       dispose: async () => {
         await deactivate();
@@ -158,16 +140,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 }
 
-/**
- * Deactivates the Bergamot extension.
- * Performs cleanup of all resources including:
- * - Stopping the Express server
- * - Closing database connections
- * - Terminating the MCP server process
- * - Disposing of registered commands
- *
- * @returns Promise that resolves when deactivation is complete
- */
 export async function deactivate(): Promise<void> {
   console.log('Deactivating Bergamot extension...');
 
@@ -180,7 +152,6 @@ export async function deactivate(): Promise<void> {
       console.log('Cluster scheduler disposed');
     }
 
-    // Stop servers
     if (server_manager) {
       await server_manager.stop();
       console.log('Express server stopped');
@@ -191,20 +162,17 @@ export async function deactivate(): Promise<void> {
       console.log('MCP server stopped');
     }
 
-    // Close databases
     if (database_manager) {
       await database_manager.close_all();
       console.log('Databases closed');
     }
 
-    // Dispose commands
     if (command_manager) {
       command_manager.dispose();
       console.log('Commands disposed');
     }
 
     console.log('Bergamot extension deactivated successfully');
-    
   } catch (error) {
     console.error('Error during deactivation:', error);
     // Don't throw during deactivation to avoid blocking VS Code shutdown
