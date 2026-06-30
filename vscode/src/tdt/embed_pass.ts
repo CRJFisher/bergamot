@@ -19,6 +19,9 @@ import type {
   VectorStore,
 } from "@bergamot/tdt";
 import type { ContentCorpus, CorpusContent } from "../redownload/corpus";
+import { dev_log } from "../dev_log";
+
+const PROGRESS_LOG_INTERVAL = 10;
 
 /** Per-page outcome counts; `scanned` is the sum of the rest. Never-cluster
  *  origins never appear: the corpus drops them upstream, before re-download, so
@@ -107,7 +110,25 @@ export async function run_embed_pass(
       );
     }
     await yield_to_event_loop();
+    if (report.scanned % PROGRESS_LOG_INTERVAL === 0) {
+      dev_log('embed_progress', {
+        scanned: report.scanned,
+        embedded: report.embedded,
+        // Pages already vectorised under the current model — a cache hit, no
+        // re-embed. Named `cached` (not the report's `skipped`) so the log does
+        // not read as a failure.
+        cached: report.skipped,
+        failed: report.failed,
+      });
+    }
   }
 
+  dev_log('embed_pass_complete', {
+    scanned: report.scanned,
+    embedded: report.embedded,
+    cached: report.skipped,
+    excluded: report.excluded,
+    failed: report.failed,
+  });
   return report;
 }

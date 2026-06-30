@@ -37,7 +37,17 @@ export type DevLogStage =
   | 'workflow_failed'
   | 'stored'
   | 'orphan_parked'
-  | 'orphan_dropped';
+  | 'orphan_dropped'
+  // TDT clustering pipeline stages.
+  | 'cluster_run_started'
+  | 'embed_model_downloading'
+  | 'embed_model_ready'
+  | 'embed_progress'
+  | 'embed_pass_complete'
+  | 'cluster_window_skipped'
+  | 'cluster_window_started'
+  | 'cluster_window_complete'
+  | 'cluster_run_complete';
 
 /**
  * Stages a browser-relayed dev signal may carry. The browser side is untrusted
@@ -90,17 +100,6 @@ const DECISION_TO_STAGE: Record<VisitDecision, DevLogStage> = {
   orphan_dropped: 'orphan_dropped',
 };
 
-function try_create_channel(): OutputChannelLike | undefined {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const vscode = require('vscode');
-    return vscode.window.createOutputChannel('Bergamot Dev Log');
-  } catch {
-    // Headless (no extension host) — JSONL sink only.
-    return undefined;
-  }
-}
-
 function rotate_if_needed(): void {
   if (!log_file_path) return;
   try {
@@ -115,13 +114,18 @@ function rotate_if_needed(): void {
 
 /**
  * Initializes dev logging. Call once during activation (and from the headless
- * entrypoint). When `is_enabled` is false the output channel is still created
- * but no events are written, so the channel can be inspected without cost.
+ * entrypoint). Pass `create_channel` in the extension host to wire up the VS
+ * Code output panel; omit it in headless processes where only the JSONL sink
+ * is active.
  */
-export function init_dev_log(storage_base: string, is_enabled: boolean): void {
+export function init_dev_log(
+  storage_base: string,
+  is_enabled: boolean,
+  create_channel?: () => OutputChannelLike
+): void {
   enabled = is_enabled;
-  if (!channel) {
-    channel = try_create_channel();
+  if (create_channel) {
+    channel = create_channel();
   }
   log_file_path = path.join(storage_base, 'dev-log.jsonl');
   if (enabled) {
@@ -210,7 +214,3 @@ export function purge_outcomes(matches: (url: string) => boolean): void {
   }
 }
 
-/** Reveals the Bergamot Dev output channel, if running in the extension host. */
-export function show_dev_log_channel(): void {
-  channel?.show(true);
-}

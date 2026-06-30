@@ -208,3 +208,51 @@ describe("dev_log enable gating", () => {
     expect(entry.ts).toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/);
   });
 });
+
+describe("dev_log channel factory", () => {
+  let storage_base: string;
+  let channel_lines: string[];
+  let mock_channel: { appendLine: (s: string) => void; show: () => void; clear: () => void };
+
+  beforeEach(() => {
+    storage_base = fs.mkdtempSync(path.join(os.tmpdir(), "bergamot-devlog-"));
+    channel_lines = [];
+    mock_channel = {
+      appendLine: (line: string) => { channel_lines.push(line); },
+      show: () => {},
+      clear: () => {},
+    };
+  });
+
+  afterEach(() => {
+    init_dev_log(storage_base, false);
+    fs.rmSync(storage_base, { recursive: true, force: true });
+  });
+
+  it("writes to the channel when a factory is provided and logging is enabled", () => {
+    init_dev_log(storage_base, true, () => mock_channel);
+    dev_log("http_received", { visit_id: "1", url: "https://a.com" });
+    expect(channel_lines).toHaveLength(1);
+    const entry = JSON.parse(channel_lines[0]);
+    expect(entry.stage).toBe("http_received");
+    expect(entry.visit_id).toBe("1");
+  });
+
+  it("does not write to the channel when logging is disabled", () => {
+    init_dev_log(storage_base, false, () => mock_channel);
+    dev_log("http_received", { visit_id: "1", url: "https://a.com" });
+    expect(channel_lines).toHaveLength(0);
+  });
+
+  it("replaces the channel on each init call that provides a factory", () => {
+    const lines_a: string[] = [];
+    const lines_b: string[] = [];
+    init_dev_log(storage_base, true, () => ({ appendLine: (l: string) => { lines_a.push(l); }, show: () => {}, clear: () => {} }));
+    dev_log("http_received", { visit_id: "1", url: "https://a.com" });
+    init_dev_log(storage_base, true, () => ({ appendLine: (l: string) => { lines_b.push(l); }, show: () => {}, clear: () => {} }));
+    dev_log("queued", { visit_id: "2", url: "https://b.com" });
+    expect(lines_a).toHaveLength(1);
+    expect(lines_b).toHaveLength(1);
+    expect(JSON.parse(lines_b[0]).stage).toBe("queued");
+  });
+});

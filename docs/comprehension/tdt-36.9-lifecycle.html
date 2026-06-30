@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TDT 36.9 — Trigger &amp; Off-Thread Orchestration: lifecycle of a clustering run</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --bg-alt: #161b22;
+    --bg-card: #1a212b;
+    --bg-code: #0c0f14;
+    --fg: #d7dde4;
+    --fg-dim: #9aa6b2;
+    --accent: #f0a35e;     /* bergamot orange */
+    --accent-2: #6cb6ff;
+    --green: #7ee787;
+    --red: #ff7b72;
+    --purple: #d2a8ff;
+    --yellow: #e3b341;
+    --border: #2a313a;
+    --kw: #ff7b72;
+    --str: #a5d6ff;
+    --com: #768390;
+    --typ: #d2a8ff;
+    --fn: #d2a8ff;
+    --num: #f0a35e;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent-2); }
+
+  /* ---- layout: fixed left rail + content ---- */
+  .layout { display: flex; align-items: flex-start; }
+  nav.rail {
+    position: sticky; top: 0; align-self: flex-start;
+    width: 270px; min-width: 270px; height: 100vh;
+    overflow-y: auto;
+    background: var(--bg-alt);
+    border-right: 1px solid var(--border);
+    padding: 22px 16px 40px;
+  }
+  nav.rail .brand {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 4px;
+  }
+  nav.rail .brand-sub { font-family: var(--mono); font-size: 11px; color: var(--fg-dim); margin-bottom: 22px; }
+  nav.rail ol { list-style: none; margin: 0; padding: 0; counter-reset: nv; }
+  nav.rail li { margin: 1px 0; }
+  nav.rail a.nlink {
+    display: block; padding: 7px 10px 7px 34px; position: relative;
+    color: var(--fg-dim); text-decoration: none; font-size: 13.5px;
+    border-radius: 7px; border-left: 2px solid transparent;
+    transition: background .12s, color .12s;
+  }
+  nav.rail a.nlink::before {
+    counter-increment: nv; content: counter(nv);
+    position: absolute; left: 10px; top: 7px;
+    font-family: var(--mono); font-size: 11px; color: var(--border);
+  }
+  nav.rail a.nlink:hover { color: var(--fg); background: #20283340; }
+  nav.rail a.nlink.active {
+    color: var(--accent); background: #20283366; border-left-color: var(--accent);
+  }
+  nav.rail a.nlink.active::before { color: var(--accent); }
+
+  main { flex: 1 1 auto; min-width: 0; padding: 0 0 120px; }
+  .wrap { width: 90%; max-width: 1180px; margin: 0 auto; }
+  section { padding-top: 54px; }
+  section:first-of-type { padding-top: 30px; }
+
+  /* ---- hero ---- */
+  header.hero { border-bottom: 1px solid var(--border); padding: 46px 0 38px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 600; font-size: 38px;
+    line-height: 1.15; margin: 12px 0 14px; color: #fff;
+  }
+  .hero p.lead { color: var(--fg-dim); max-width: 72ch; margin: 0 0 22px; font-size: 16px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill {
+    font-family: var(--mono); font-size: 11.5px; color: var(--fg-dim);
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 999px; padding: 5px 12px;
+  }
+  .pill b { color: var(--fg); font-weight: 600; }
+  .pill.ok b { color: var(--green); }
+
+  h2 {
+    font-family: var(--serif); font-weight: 600; font-size: 26px;
+    color: #fff; margin: 0 0 6px; scroll-margin-top: 18px;
+  }
+  h2 .secnum {
+    font-family: var(--mono); font-size: 14px; color: var(--accent);
+    margin-right: 12px; vertical-align: middle;
+  }
+  h3 {
+    font-family: var(--sans); font-weight: 600; font-size: 16px;
+    color: var(--fg); margin: 26px 0 8px;
+  }
+  p.note { color: var(--fg-dim); max-width: 74ch; margin: 4px 0 18px; }
+  p.note code, li code, td code, h3 code, .card p code, .callout p code { font-family: var(--mono); font-size: .88em; color: var(--accent); background: #00000033; padding: 1px 5px; border-radius: 4px; }
+
+  /* ---- mermaid figure ---- */
+  figure.diagram {
+    margin: 18px 0 8px; padding: 18px; background: var(--bg-alt);
+    border: 1px solid var(--border); border-radius: 12px; overflow-x: auto;
+  }
+  .mmd { text-align: center; min-height: 40px; }
+  .mmd svg { max-width: 100%; height: auto; }
+  .mmd-fallback {
+    text-align: left; font-family: var(--mono); font-size: 12px; color: var(--fg-dim);
+    white-space: pre; overflow-x: auto; padding: 4px 0;
+  }
+  figcaption {
+    font-family: var(--mono); font-size: 11.5px; color: var(--fg-dim);
+    margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);
+    text-transform: uppercase; letter-spacing: .08em;
+  }
+
+  /* ---- callouts ---- */
+  .callout {
+    border-left: 4px solid var(--accent); background: var(--bg-card);
+    border-radius: 0 10px 10px 0; padding: 14px 18px; margin: 22px 0;
+    max-width: 84ch;
+  }
+  .callout.warn { border-left-color: var(--red); }
+  .callout.good { border-left-color: var(--green); }
+  .callout .k {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 4px;
+  }
+  .callout.warn .k { color: var(--red); }
+  .callout.good .k { color: var(--green); }
+  .callout p { margin: 0; color: var(--fg); }
+
+  /* ---- cards / grids ---- */
+  .grid { display: grid; gap: 16px; margin: 20px 0; }
+  .grid.c3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .grid.c2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 18px;
+  }
+  .card .tag {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
+    text-transform: uppercase; display: inline-block; padding: 3px 9px;
+    border-radius: 999px; margin-bottom: 10px;
+  }
+  .tag.noop { color: var(--fg-dim); background: #76839022; border: 1px solid #76839055; }
+  .tag.replace { color: var(--accent); background: #f0a35e22; border: 1px solid #f0a35e55; }
+  .tag.create { color: var(--green); background: #7ee78722; border: 1px solid #7ee78755; }
+  .card h4 { margin: 0 0 6px; font-size: 15px; color: #fff; }
+  .card p { margin: 0; color: var(--fg-dim); font-size: 13.5px; }
+
+  /* status legend chips */
+  .statuses { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+  .status {
+    font-family: var(--mono); font-size: 12.5px; padding: 6px 13px;
+    border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .status .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .d-green { background: var(--green); } .d-orange { background: var(--accent); }
+  .d-dim { background: var(--fg-dim); } .d-blue { background: var(--accent-2); }
+
+  /* ---- code ---- */
+  .codewrap { margin: 16px 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .codewrap .file {
+    font-family: var(--mono); font-size: 11.5px; color: var(--fg-dim);
+    background: var(--bg-alt); padding: 8px 14px; border-bottom: 1px solid var(--border);
+  }
+  .codewrap .file b { color: var(--accent); font-weight: 600; }
+  pre.code {
+    margin: 0; padding: 16px; background: var(--bg-code); overflow-x: auto;
+    font-family: var(--mono); font-size: 12.8px; line-height: 1.62; color: var(--fg);
+  }
+  pre.code .kw { color: var(--kw); } pre.code .str { color: var(--str); }
+  pre.code .com { color: var(--com); font-style: italic; } pre.code .typ { color: var(--typ); }
+  pre.code .fn { color: var(--fn); } pre.code .num { color: var(--num); } pre.code .hl { background: #f0a35e1f; display: inline-block; width: 100%; }
+
+  /* ---- tabs ---- */
+  .tabs { margin: 18px 0; }
+  .tabbar { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--border); }
+  .tabbar button {
+    font-family: var(--mono); font-size: 12.5px; color: var(--fg-dim);
+    background: none; border: none; padding: 9px 15px; cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tabbar button:hover { color: var(--fg); }
+  .tabbar button.on { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-pane { display: none; }
+  .tab-pane.on { display: block; }
+
+  /* ---- details ---- */
+  details {
+    border: 1px solid var(--border); border-radius: 10px; margin: 12px 0;
+    background: var(--bg-alt); overflow: hidden;
+  }
+  details > summary {
+    cursor: pointer; padding: 12px 16px; list-style: none;
+    font-family: var(--sans); font-weight: 600; font-size: 14px; color: var(--fg);
+    display: flex; align-items: center; gap: 10px;
+  }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before {
+    content: "\25B8"; color: var(--accent); transition: transform .15s; display: inline-block;
+  }
+  details[open] > summary::before { transform: rotate(90deg); }
+  details .inner { padding: 0 16px 14px; }
+  details .inner > *:first-child { margin-top: 0; }
+
+  /* ---- tables ---- */
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--fg-dim); }
+  td code { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+
+  footer { border-top: 1px solid var(--border); margin-top: 70px; padding: 24px 0; }
+  footer .stamp { font-family: var(--mono); font-size: 11.5px; color: var(--com); }
+
+  @media (max-width: 880px) {
+    .layout { flex-direction: column; }
+    nav.rail {
+      position: sticky; top: 0; width: 100%; min-width: 0; height: auto;
+      border-right: none; border-bottom: 1px solid var(--border);
+      display: flex; gap: 4px; overflow-x: auto; padding: 12px;
+      z-index: 30;
+    }
+    nav.rail .brand, nav.rail .brand-sub { display: none; }
+    nav.rail ol { display: flex; gap: 4px; }
+    nav.rail a.nlink { white-space: nowrap; padding: 6px 12px; }
+    nav.rail a.nlink::before { display: none; }
+    section { padding-top: 40px; scroll-margin-top: 60px; }
+    .grid.c3, .grid.c2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="rail" aria-label="Section navigation">
+    <div class="brand">Bergamot &middot; TDT</div>
+    <div class="brand-sub">task 36.9</div>
+    <ol>
+      <li><a class="nlink" href="#overview">Overview</a></li>
+      <li><a class="nlink" href="#triggers">Two entry surfaces</a></li>
+      <li><a class="nlink" href="#window">Window spec</a></li>
+      <li><a class="nlink" href="#orchestrator">Orchestrator pipeline</a></li>
+      <li><a class="nlink" href="#perwindow">Per-window decisions</a></li>
+      <li><a class="nlink" href="#worker">The clustering worker</a></li>
+      <li><a class="nlink" href="#persist">Persist outcomes</a></li>
+      <li><a class="nlink" href="#lifecycle">Extension lifecycle</a></li>
+      <li><a class="nlink" href="#constraints">Architectural constraints</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="hero">
+      <div class="wrap">
+        <div class="eyebrow">Temporal Topic Detection &middot; lifecycle of a clustering run</div>
+        <h1>Trigger &amp; off-thread orchestration</h1>
+        <p class="lead">Task 36.9 wires the windowed HDBSCAN clustering run behind two entry surfaces and keeps every heavy stage — re-download, embedding, and the multi-second fit — off the extension-host event loop, so a run never freezes the UI or stalls the <code>/visit</code> capture endpoint.</p>
+        <div class="meta-row">
+          <span class="pill">command &middot; <b>bergamot.tdt.rebuildClusters</b></span>
+          <span class="pill">scheduler &middot; <b>default 24h</b></span>
+          <span class="pill">compute &middot; <b>forked child process</b></span>
+          <span class="pill ok">DB writers &middot; <b>exactly 1</b></span>
+          <span class="pill">status &middot; <b>Done</b></span>
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap">
+
+    <!-- ============ OVERVIEW ============ -->
+    <section id="overview">
+      <h2><span class="secnum">00</span>The whole run, at a glance</h2>
+      <p class="note">Both entry surfaces funnel through one single-flight guard into the same pure orchestrator, <code>rebuild_clusters(deps, spec)</code>. The orchestrator prepares vectors and visits, splits the range into calendar windows, and for each window either memoizes away the work or dispatches the fit to a forked worker before the single DuckDB writer persists the result.</p>
+
+      <figure class="diagram">
+        <div class="mmd" data-key="overview"></div>
+        <figcaption>Fig 0 — one code path from either trigger to the single writer</figcaption>
+      </figure>
+
+      <div class="grid c3">
+        <div class="card"><div class="tag replace">pure core</div><h4>Dependency-injected</h4><p>The orchestrator imports no <code>vscode</code>, no DuckDB, and no clustering-tfjs values — fakes drive it in unit tests; production injects the real reader, worker client, and sink.</p></div>
+        <div class="card"><div class="tag create">passive</div><h4>Runs itself</h4><p>The scheduler surfaces projects without the user remembering to trigger anything; a quiet day costs ~nothing thanks to fingerprint idempotency.</p></div>
+        <div class="card"><div class="tag noop">single writer</div><h4>One DB handle</h4><p>The forked worker never opens DuckDB. All writes go through the extension's one handle via <code>ClusterStore</code> (plan §3).</p></div>
+      </div>
+    </section>
+
+    <!-- ============ TRIGGERS ============ -->
+    <section id="triggers">
+      <h2><span class="secnum">01</span>Two entry surfaces, one guard</h2>
+      <p class="note">A run starts one of two ways: the user invokes the <b>manual command</b>, or the in-host <b>scheduler</b> ticks. Both call <code>server_manager.rebuild_clusters(spec)</code>, which wraps the work in a <code>single_flight()</code> latch — if the scheduler fires while a manual run is live, the tick joins the in-flight promise instead of starting a second run.</p>
+
+      <figure class="diagram">
+        <div class="mmd" data-key="triggers"></div>
+        <figcaption>Fig 1 — manual command vs. scheduler converge through the single-flight latch</figcaption>
+      </figure>
+
+      <div class="grid c2">
+        <div class="card">
+          <div class="tag replace">manual</div>
+          <h4><code>bergamot.tdt.rebuildClusters</code></h4>
+          <p>Registered in <code>command_manager.ts</code>. Wraps the run in a progress notification and reports a result message (windows clustered, visits read, origins excluded). On-demand and the testing path.</p>
+        </div>
+        <div class="card">
+          <div class="tag create">automatic</div>
+          <h4><code>ClusterScheduler</code></h4>
+          <p>An in-host VS Code timer — <b>not</b> OS cron. First tick 60s after activation; then every <code>tdt.clusterCadenceHours</code> (default 24, <code>0</code> disables). Re-arms only after a tick settles.</p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <span class="k">Why an in-host timer, not OS cron</span>
+        <p>An OS cron job would need its own headless writer, violating the single-writer model (plan §3). The trigger lives inside the one process that owns the database. A floor of 1 hour (<code>MIN_CADENCE_MS</code>) stops a misconfigured tiny cadence from busy-looping the re-download.</p>
+      </div>
+
+      <details>
+        <summary>The scheduler's self-re-arming tick (cluster_scheduler.ts)</summary>
+        <div class="inner">
+          <p class="note">Each tick runs in a <code>try/finally</code>: a run error is surfaced via <code>on_error</code> but never kills the schedule, and the next tick is armed only in <code>finally</code> — after the current one settles — so the scheduler can never overlap itself.</p>
+          <div class="codewrap">
+            <div class="file"><b>vscode/src/tdt/cluster_scheduler.ts</b> &middot; tick()</div>
+<pre class="code"><span class="kw">private async</span> <span class="fn">tick</span>(): <span class="typ">Promise</span>&lt;<span class="kw">void</span>&gt; {
+  <span class="kw">try</span> {
+    <span class="kw">await this</span>.options.<span class="fn">run</span>(<span class="fn">default_window_spec</span>(<span class="kw">this</span>.options.<span class="fn">now</span>()));
+  } <span class="kw">catch</span> (error) {
+    <span class="kw">this</span>.options.on_error?.(error);  <span class="com">// a run error must not kill the schedule</span>
+  } <span class="kw">finally</span> {
+    <span class="kw">const</span> hours = <span class="kw">this</span>.options.<span class="fn">cadence_hours</span>();
+    <span class="kw">if</span> (hours &gt; <span class="num">0</span>) {
+      <span class="kw">this</span>.<span class="fn">arm</span>(<span class="typ">Math</span>.<span class="fn">max</span>(MIN_CADENCE_MS, hours * <span class="num">60</span> * <span class="num">60</span> * <span class="num">1000</span>));
+    }
+  }
+}</pre>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <!-- ============ WINDOW SPEC ============ -->
+    <section id="window">
+      <h2><span class="secnum">02</span>The default window spec</h2>
+      <p class="note">Both surfaces cluster the same default range: <b>the start of the previous calendar month → now</b>. The closed previous month re-runs once more to pick up late-arriving visits and then becomes a no-op; the open current month re-clusters as visits accumulate.</p>
+
+      <figure class="diagram">
+        <div class="mmd" data-key="window"></div>
+        <figcaption>Fig 2 — the two-month default window straddles the month edge so a project spanning it clusters on both sides</figcaption>
+      </figure>
+
+      <div class="codewrap">
+        <div class="file"><b>vscode/src/tdt/rebuild_clusters.ts</b> &middot; default_window_spec()</div>
+<pre class="code"><span class="kw">export function</span> <span class="fn">default_window_spec</span>(now: <span class="typ">Date</span>): <span class="typ">WindowSpec</span> {
+  <span class="kw">const</span> range_start = <span class="kw">new</span> <span class="typ">Date</span>(
+    <span class="typ">Date</span>.<span class="fn">UTC</span>(now.<span class="fn">getUTCFullYear</span>(), now.<span class="fn">getUTCMonth</span>() - <span class="num">1</span>, <span class="num">1</span>, <span class="num">0</span>, <span class="num">0</span>, <span class="num">0</span>, <span class="num">0</span>),
+  );
+  <span class="kw">return</span> { range_start: range_start.<span class="fn">toISOString</span>(), range_end: now.<span class="fn">toISOString</span>() };
+}</pre>
+      </div>
+    </section>
+
+    <!-- ============ ORCHESTRATOR ============ -->
+    <section id="orchestrator">
+      <h2><span class="secnum">03</span>Inside the orchestrator pipeline</h2>
+      <p class="note"><code>rebuild_clusters(deps, spec)</code> runs five sequential stages before the per-window loop. The first three prepare a clean, vectorised, origin-filtered visit set; windowing then subdivides the range into the units that actually get clustered.</p>
+
+      <figure class="diagram">
+        <div class="mmd" data-key="orchestrator"></div>
+        <figcaption>Fig 3 — the sequential preparation stages feeding the per-window loop</figcaption>
+      </figure>
+
+      <details open>
+        <summary>Stage 2 — why vectorise is "off the event loop"</summary>
+        <div class="inner">
+          <p class="note">The embed pass never blocks the JS thread: ONNX inference runs on libuv's threadpool, fetches are async I/O, and a <code>setImmediate</code> yield between pages lets <code>/visit</code> capture interleave. Never-cluster origins are dropped <b>before</b> re-download. An <code>embed_pass_flight</code> single-flight prevents two concurrent passes.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Stage 3 — the visit read cap (and why it sits above max_samples)</summary>
+        <div class="inner">
+          <p class="note"><code>MAX_VISITS_IN_WINDOW = 5000</code> caps the bulk read of a full window. The cap deliberately sits <b>above</b> <code>max_samples</code>: a heavy month must be read in full so windowing can subdivide it — capping at <code>max_samples</code> would drop the very pages subdivision exists to separate. A cap-hit is logged as a possible truncation; nothing is silently dropped.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Stages 1 &amp; 4 — never-cluster origin exclusion (rebuild_clusters.ts)</summary>
+        <div class="inner">
+          <div class="codewrap">
+            <div class="file"><b>vscode/src/tdt/rebuild_clusters.ts</b> &middot; the filter</div>
+<pre class="code"><span class="kw">const</span> never_origins = <span class="kw">await</span> deps.<span class="fn">list_never_cluster_origins</span>();
+<span class="kw">const</span> never_set = <span class="kw">new</span> <span class="typ">Set</span>(never_origins);
+
+<span class="com">// embed pass skips these origins before re-download (AC #8)</span>
+<span class="kw">await</span> deps.<span class="fn">vectorise</span>(never_origins);
+
+<span class="kw">const</span> all_visits = <span class="kw">await</span> deps.reader.<span class="fn">list_visits_in_window</span>(spec.range_start, spec.range_end);
+
+<span class="com">// a URL that does not parse to a registrable domain is kept</span>
+<span class="kw">const</span> visits = all_visits.<span class="fn">filter</span>((v) =&gt; {
+  <span class="kw">const</span> domain = <span class="fn">getDomain</span>(v.url);
+  <span class="kw">return</span> domain === <span class="kw">null</span> || !never_set.<span class="fn">has</span>(domain);
+});</pre>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <!-- ============ PER-WINDOW ============ -->
+    <section id="perwindow">
+      <h2><span class="secnum">04</span>The per-window decision tree</h2>
+      <p class="note">Each <code>WindowSignal</code> resolves to exactly one of four statuses. Three of them exit <b>before</b> any worker spawns — most importantly the fingerprint match (<code>unchanged</code>), which is what makes a quiet-day scheduled tick almost free.</p>
+
+      <figure class="diagram">
+        <div class="mmd" data-key="perwindow"></div>
+        <figcaption>Fig 4 — four exits; only the rightmost branch spawns a worker and writes to the DB</figcaption>
+      </figure>
+
+      <div class="statuses">
+        <span class="status"><span class="dot d-orange"></span>clustered</span>
+        <span class="status"><span class="dot d-green"></span>unchanged</span>
+        <span class="status"><span class="dot d-dim"></span>skipped_sparse</span>
+        <span class="status"><span class="dot d-dim"></span>skipped_no_vectors</span>
+      </div>
+
+      <div class="callout good">
+        <span class="k">The idempotency no-op</span>
+        <p>The <code>input_fingerprint</code> is computed identically to the value stored on the live run, so an equal value means the window's inputs are byte-for-byte unchanged. On a match the orchestrator returns <code>unchanged</code> immediately — the heavy worker never forks and nothing is written. This is the §6 memoization that makes daily ticks cheap.</p>
+      </div>
+
+      <details>
+        <summary>The fingerprint probe (rebuild_clusters.ts &middot; run_one_window)</summary>
+        <div class="inner">
+          <div class="codewrap">
+            <div class="file"><b>vscode/src/tdt/rebuild_clusters.ts</b> &middot; §6 memoization</div>
+<pre class="code"><span class="kw">const</span> fingerprint = <span class="fn">compute_input_fingerprint</span>(
+  kept_visits.<span class="fn">map</span>((v, i) =&gt; ({
+    page_session_id: v.page_session_id,
+    embedding_vector_version: vector_versions[i],
+  })),
+);
+<span class="kw">const</span> existing = <span class="kw">await</span> deps.<span class="fn">live_run_fingerprint</span>(window_start, window_end, params_hash);
+<span class="hl"><span class="kw">if</span> (existing === fingerprint) {</span>
+  <span class="kw">return</span> { ...signal, status: <span class="str">"unchanged"</span>, persist: <span class="kw">null</span> }; <span class="com">// no re-fit, no persist</span>
+}
+
+<span class="kw">const</span> output = <span class="kw">await</span> deps.<span class="fn">compute</span>({ <span class="com">// forks the worker</span>
+  visits: kept_visits, vectors, hdbscan: deps.hdbscan_config,
+  max_samples: deps.window_config.max_samples,
+});</pre>
+          </div>
+          <p class="note"><b>Memoization key:</b> matched on <code>(window, params_hash, embedding_model_id)</code> but <b>not</b> <code>algo_version</code> — the host cannot resolve <code>algo_version</code> without loading TensorFlow. A pure backend change therefore re-clusters a window only when its inputs next change.</p>
+        </div>
+      </details>
+    </section>
+
+    <!-- ============ WORKER ============ -->
+    <section id="worker">
+      <h2><span class="secnum">05</span>The clustering worker — off-thread compute</h2>
+      <p class="note">When a window must cluster, the dense <code>O(n²)</code> cosine build and HDBSCAN fit run in a <b>forked child process</b> (mirroring the MCP-server spawn pattern). The host driver ships one window's input over IPC and kills the one-shot child as soon as the result returns.</p>
+
+      <figure class="diagram">
+        <div class="mmd" data-key="worker"></div>
+        <figcaption>Fig 5 — one IPC round-trip; the child is killed the instant the parent has its answer</figcaption>
+      </figure>
+
+      <div class="tabs" data-tabs>
+        <div class="tabbar">
+          <button class="on" data-t="0">host driver &middot; fork</button>
+          <button data-t="1">child &middot; entry point</button>
+          <button data-t="2">why a process, not a thread</button>
+        </div>
+        <div class="tab-pane on" data-p="0">
+          <div class="codewrap">
+            <div class="file"><b>vscode/src/tdt/cluster_worker_client.ts</b> &middot; run_cluster_compute()</div>
+<pre class="code"><span class="kw">const</span> child = child_process.<span class="fn">fork</span>(options.worker_path, [], {
+  <span class="com">// the host binary run as node (a packaged install has no `node` on PATH)</span>
+  execPath: process.execPath,
+  env: { ...process.env, ELECTRON_RUN_AS_NODE: <span class="str">"1"</span> },
+  <span class="com">// structured clone so Float32Array vectors survive IPC intact</span>
+  serialization: <span class="str">"advanced"</span>,
+});
+
+<span class="kw">const</span> timer = <span class="fn">setTimeout</span>(() =&gt; <span class="fn">finish</span>(() =&gt; <span class="fn">reject</span>(...)), DEFAULT_TIMEOUT_MS); <span class="com">// 10 min</span>
+
+child.<span class="fn">on</span>(<span class="str">"message"</span>, (m: <span class="typ">ClusterWorkerResponse</span>) =&gt; {
+  <span class="kw">if</span> (m.ok) <span class="fn">finish</span>(() =&gt; <span class="fn">resolve</span>(m.output));
+  <span class="kw">else</span> <span class="fn">finish</span>(() =&gt; <span class="fn">reject</span>(<span class="kw">new</span> <span class="typ">Error</span>(<span class="str">`cluster worker failed: ${m.error}`</span>)));
+});
+<span class="com">// finish() is idempotent: clears the timer, kills the child, settles once —</span>
+<span class="com">// on message, timeout, 'error', or an unexpected early 'exit'.</span></pre>
+          </div>
+        </div>
+        <div class="tab-pane" data-p="1">
+          <div class="codewrap">
+            <div class="file"><b>vscode/src/tdt/cluster_worker.ts</b> &middot; the forked entry point</div>
+<pre class="code"><span class="kw">import</span> { compute_clusters } <span class="kw">from</span> <span class="str">"@bergamot/tdt/out/cluster_pipeline"</span>;
+
+<span class="kw">async function</span> <span class="fn">handle</span>(message: <span class="typ">ClusterWorkerRequest</span>): <span class="typ">Promise</span>&lt;<span class="kw">void</span>&gt; {
+  <span class="kw">try</span> {
+    <span class="kw">const</span> output = <span class="kw">await</span> <span class="fn">compute_clusters</span>(message.input); <span class="com">// the only clustering-tfjs call site</span>
+    <span class="fn">send</span>({ ok: <span class="kw">true</span>, output });
+  } <span class="kw">catch</span> (error) {
+    <span class="fn">send</span>({ ok: <span class="kw">false</span>, error: error <span class="kw">instanceof</span> <span class="typ">Error</span> ? error.message : <span class="typ">String</span>(error) });
+  }
+}
+process.<span class="fn">on</span>(<span class="str">"message"</span>, (m: <span class="typ">ClusterWorkerRequest</span>) =&gt; { <span class="kw">void</span> <span class="fn">handle</span>(m); });
+<span class="com">// touches NO DuckDB and NO vscode APIs — it can never contend for the single writer</span></pre>
+          </div>
+        </div>
+        <div class="tab-pane" data-p="2">
+          <table>
+            <tr><th>Decision</th><th>Why</th></tr>
+            <tr><td>Forked process, not worker thread</td><td>Mirrors the two existing spawn precedents (MCP server, browser provisioner) and gives the native TensorFlow backend a clean process.</td></tr>
+            <tr><td><code>serialization: 'advanced'</code></td><td>Structured clone so <code>Float32Array</code> page + representative vectors cross IPC as typed arrays, not JSON-mangled plain objects.</td></tr>
+            <tr><td>One-shot, killed after result</td><td>No idle child leaks; the model and TF backend it loaded are released with the process.</td></tr>
+            <tr><td>Re-download stays in-host</td><td>A worker cannot hold the single-writer DuckDB it would need to read the corpus and write vectors through; off-the-event-loop is achieved inside the embed pass instead.</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <span class="k">Settle-exactly-once footgun</span>
+        <p>A broken IPC channel makes <code>child.send()</code> throw <b>synchronously</b>, outside the <code>'error'</code> event. The driver wraps the send in <code>try/catch</code> so a failed send still settles via <code>finish()</code> — otherwise it would leak the armed timer and an un-killed child.</p>
+      </div>
+    </section>
+
+    <!-- ============ PERSIST ============ -->
+    <section id="persist">
+      <h2><span class="secnum">06</span>ClusterStore persist — three outcomes</h2>
+      <p class="note"><code>ClusterStore.persist(bundle)</code> performs an atomic read-decide-write against <code>topic_run</code> / <code>topic_cluster</code> / <code>topic_cluster_member</code>. The decision branches on whether a run with this <code>run_id</code> already exists and whether its <code>input_fingerprint</code> matches.</p>
+
+      <figure class="diagram">
+        <div class="mmd" data-key="persist"></div>
+        <figcaption>Fig 6 — replace and create both run inside one isolated transaction and uphold the one-live-run invariant</figcaption>
+      </figure>
+
+      <div class="grid c3">
+        <div class="card">
+          <div class="tag noop">no-op</div>
+          <h4>Unchanged</h4>
+          <p>A <code>complete</code> run with this <code>run_id</code> and matching <code>input_fingerprint</code> already exists. The table is left untouched.</p>
+        </div>
+        <div class="card">
+          <div class="tag replace">replace</div>
+          <h4>Atomic replace</h4>
+          <p>Same <code>run_id</code>, different fingerprint (re-embedding or late visits). Old clusters/members are deleted and new ones inserted in one transaction; <code>created_at</code> is preserved.</p>
+        </div>
+        <div class="card">
+          <div class="tag create">create</div>
+          <h4>Create + supersede</h4>
+          <p>No run with this <code>run_id</code> (model/params/algo changed → new id). The new run is inserted as <code>complete</code> and any other <code>complete</code> run for the window is marked <code>superseded</code>. History is retained.</p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <span class="k">Soft references, not foreign keys</span>
+        <p>Cross-table references between <code>topic_run</code>, <code>topic_cluster</code>, and <code>topic_cluster_member</code> are soft (no FK) because DuckDB cannot cascade-delete within one transaction — the replace path deletes members and clusters explicitly. No DB constraint enforces "one live run per window"; the supersede step upholds it per branch.</p>
+      </div>
+    </section>
+
+    <!-- ============ LIFECYCLE ============ -->
+    <section id="lifecycle">
+      <h2><span class="secnum">07</span>Extension activation &amp; deactivation</h2>
+      <p class="note">Activation initializes the encrypted DuckDB, builds the <code>ServerManager</code> (passing <code>extension_path</code> so it can locate <code>out/tdt/cluster_worker.js</code>), registers commands, and starts the scheduler. Deactivation disposes the scheduler <b>first</b>, before the DB closes, so no pending tick fires into a torn-down writer.</p>
+
+      <figure class="diagram">
+        <div class="mmd" data-key="lifecycle"></div>
+        <figcaption>Fig 7 — dispose-before-close ordering prevents a tick racing a torn-down DB writer</figcaption>
+      </figure>
+
+      <div class="callout warn">
+        <span class="k">Deactivation ordering matters</span>
+        <p><code>cluster_scheduler.dispose()</code> clears the pending <code>setTimeout</code> and sets a <code>disposed</code> flag so no further tick can be armed. Doing this before <code>close_all()</code> guarantees a scheduled run never starts writing into a closing database.</p>
+      </div>
+
+      <details>
+        <summary>Lazy imports — keeping TensorFlow out of activation</summary>
+        <div class="inner">
+          <p class="note"><code>rebuild_clusters.ts</code>, <code>cluster_worker_client.ts</code>, the cluster/vector stores, and the whole TensorFlow chain are dynamically <code>import()</code>-ed inside <code>server_manager.rebuild_clusters()</code> — so the clustering-tfjs chain only ever loads in the forked worker, never eagerly on extension activation.</p>
+          <div class="codewrap">
+            <div class="file"><b>vscode/src/server/server_manager.ts</b> &middot; run_one_cluster_rebuild()</div>
+<pre class="code"><span class="kw">const</span> worker_path = path.<span class="fn">join</span>(<span class="kw">this</span>.config.extension_path, <span class="str">"out"</span>, <span class="str">"tdt"</span>, <span class="str">"cluster_worker.js"</span>);
+
+<span class="kw">const</span> { rebuild_clusters } = <span class="kw">await import</span>(<span class="str">"../tdt/rebuild_clusters"</span>);
+<span class="kw">const</span> { run_cluster_compute } = <span class="kw">await import</span>(<span class="str">"../tdt/cluster_worker_client"</span>);
+<span class="kw">const</span> { ClusterStore } = <span class="kw">await import</span>(<span class="str">"../tdt/cluster_store"</span>);
+<span class="com">// compute injected as: (input) =&gt; run_cluster_compute(input, { worker_path })</span></pre>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <!-- ============ CONSTRAINTS ============ -->
+    <section id="constraints">
+      <h2><span class="secnum">08</span>Key architectural constraints</h2>
+      <p class="note">Five invariants hold across every run. They are the reasons the design looks the way it does.</p>
+
+      <div class="grid c2">
+        <div class="card">
+          <div class="tag noop">single writer</div>
+          <h4>One DuckDB writer</h4>
+          <p>The clustering worker never opens DuckDB. All writes go through the extension's single handle via <code>ClusterStore</code>. The worker returns raw results for the parent to persist.</p>
+        </div>
+        <div class="card">
+          <div class="tag replace">privacy</div>
+          <h4>Never-cluster origins, three levels</h4>
+          <p>Excluded (a) before re-download in the embed-pass corpus, (b) from the clustering input filter, and (c) implicitly from the vector read — they have no vectors.</p>
+        </div>
+        <div class="card">
+          <div class="tag create">idempotency</div>
+          <h4>Quiet days are free</h4>
+          <p>A daily tick over an unchanged window matches its fingerprint → no worker spawn, no DB write. Cost is bounded by §8 idempotency.</p>
+        </div>
+        <div class="card">
+          <div class="tag replace">memoization key</div>
+          <h4>Window + params + model</h4>
+          <p>The live-run probe matches on those three, <b>not</b> <code>algo_version</code> (the host can't resolve it without TensorFlow). A pure backend change re-clusters when inputs next change.</p>
+        </div>
+        <div class="card">
+          <div class="tag noop">lazy load</div>
+          <h4>No eager TensorFlow</h4>
+          <p>The orchestrator, worker client, and TF chain are dynamically imported inside <code>server_manager.rebuild_clusters()</code>, so they never load on activation.</p>
+        </div>
+        <div class="card">
+          <div class="tag create">resilience</div>
+          <h4>Failures clear the latch</h4>
+          <p>The <code>single_flight</code> latch clears on settle — success or failure — so a failed run never permanently wedges future runs.</p>
+        </div>
+      </div>
+
+      <table>
+        <tr><th>Concern</th><th>Where it lives</th></tr>
+        <tr><td>Manual command</td><td><code>vscode/src/commands/command_manager.ts</code></td></tr>
+        <tr><td>Scheduler</td><td><code>vscode/src/tdt/cluster_scheduler.ts</code></td></tr>
+        <tr><td>Single-flight + DI wiring</td><td><code>vscode/src/server/server_manager.ts</code></td></tr>
+        <tr><td>Orchestrator</td><td><code>vscode/src/tdt/rebuild_clusters.ts</code></td></tr>
+        <tr><td>Worker driver / child</td><td><code>vscode/src/tdt/cluster_worker_client.ts</code>, <code>cluster_worker.ts</code></td></tr>
+        <tr><td>Persistence</td><td><code>vscode/src/tdt/cluster_store.ts</code></td></tr>
+        <tr><td>Activation / deactivation</td><td><code>vscode/src/extension.ts</code></td></tr>
+        <tr><td>Visit read cap</td><td><code>vscode/src/tdt/visit_reads.ts</code> &middot; <code>MAX_VISITS_IN_WINDOW = 5000</code></td></tr>
+      </table>
+    </section>
+
+    <footer>
+      <div class="stamp">
+        Bergamot &middot; Temporal Topic Detection &middot; task 36.9 (status: Done) &middot; lifecycle comprehension companion<br />
+        Generated from vscode/src/tdt/*, server_manager.ts, command_manager.ts, extension.ts on 2026-06-29.
+      </div>
+    </footer>
+
+    </div><!-- /wrap -->
+  </main>
+</div>
+
+<!-- Mermaid (CDN, ESM) + diagram definitions -->
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'loose',
+    theme: 'base',
+    flowchart: { htmlLabels: true, curve: 'basis', useMaxWidth: true },
+    sequence: { useMaxWidth: true, mirrorActors: false },
+    fontFamily: '"SF Mono", "JetBrains Mono", Menlo, ui-monospace, monospace',
+    themeVariables: {
+      background: '#161b22',
+      primaryColor: '#1c2430',
+      primaryBorderColor: '#f0a35e',
+      primaryTextColor: '#d7dde4',
+      secondaryColor: '#161b22',
+      tertiaryColor: '#0c0f14',
+      lineColor: '#9aa6b2',
+      textColor: '#d7dde4',
+      fontSize: '13px',
+      actorBkg: '#1c2430',
+      actorBorder: '#f0a35e',
+      actorTextColor: '#d7dde4',
+      actorLineColor: '#3a434f',
+      signalColor: '#9aa6b2',
+      signalTextColor: '#d7dde4',
+      labelBoxBkgColor: '#1c2430',
+      labelBoxBorderColor: '#3a434f',
+      labelTextColor: '#d7dde4',
+      loopTextColor: '#d7dde4',
+      noteBkgColor: '#20283a',
+      noteTextColor: '#d7dde4',
+      noteBorderColor: '#6cb6ff',
+      altSectionBkgColor: '#12161d',
+      sequenceNumberColor: '#0f1419'
+    }
+  });
+
+  const DIAGRAMS = {
+    overview: `flowchart LR
+  CMD["Manual command"]:::e
+  SCH["Daily scheduler"]:::e
+  CMD --> SF{{"single-flight<br/>cluster_run_flight"}}
+  SCH --> SF
+  SF --> ORCH["rebuild_clusters(deps, spec)"]:::e
+  ORCH --> VEC["vectorise<br/>embed pass"]:::p
+  VEC --> RD["read + filter<br/>visits"]:::p
+  RD --> WIN["compute<br/>windows"]:::p
+  WIN --> LOOP["per-window loop<br/>memoize · fork worker · persist"]:::e
+  LOOP --> DB[("DuckDB<br/>single writer")]:::db
+  classDef e fill:#1c2430,stroke:#f0a35e,color:#d7dde4;
+  classDef p fill:#161b22,stroke:#6cb6ff,color:#d7dde4;
+  classDef db fill:#1c2430,stroke:#7ee787,color:#d7dde4;`,
+
+    triggers: `flowchart TD
+  U(["User invokes command"]) --> C["bergamot.tdt.rebuildClusters<br/>command_manager.ts — progress notification"]:::trig
+  A(["Extension activation"]) --> S["ClusterScheduler.start()<br/>arm +60s catch-up tick"]:::trig
+  S --> T["tick() → default_window_spec(now)"]:::trig
+  T -. "re-arm AFTER each tick settles (no self-overlap)" .-> S
+  C --> R["server_manager.rebuild_clusters(spec)"]:::trig
+  T --> R
+  R --> SF{"single_flight<br/>cluster_run_flight"}
+  SF -- "nothing in flight" --> RUN["run_one_cluster_rebuild(spec)"]:::trig
+  SF -- "run already live" --> JOIN["join the in-flight promise<br/>(no second run)"]:::join
+  RUN --> ORCH["rebuild_clusters(deps, spec)"]:::trig
+  JOIN -.-> ORCH
+  classDef trig fill:#1c2430,stroke:#f0a35e,color:#d7dde4;
+  classDef join fill:#161b22,stroke:#6cb6ff,color:#d7dde4;`,
+
+    window: `flowchart LR
+  START(["range_start = 1st of previous month, 00:00 UTC"]):::pt
+  START --> PM["Previous calendar month<br/>(closed)<br/><small>1st re-run picks up late visits,<br/>then unchanged → no-op</small>"]:::closed
+  PM --> CM["Current month<br/>(open)<br/><small>re-clusters as visits accumulate</small>"]:::open
+  CM --> NOW(["range_end = now"]):::pt
+  classDef closed fill:#1c2430,stroke:#9aa6b2,color:#d7dde4;
+  classDef open fill:#1c2430,stroke:#f0a35e,color:#d7dde4;
+  classDef pt fill:#161b22,stroke:#6cb6ff,color:#6cb6ff;`,
+
+    orchestrator: `flowchart TD
+  S1["1 · list_never_cluster_origins()<br/><small>excluded registrable domains → Set</small>"]:::s
+  S2["2 · vectorise(never_origins)<br/><small>batched embed pass — re-download + ONNX off event loop</small>"]:::s
+  S3["3 · reader.list_visits_in_window(start, end)<br/><small>bulk read · capped at MAX_VISITS_IN_WINDOW = 5000</small>"]:::s
+  S4["4 · filter never-cluster origins<br/><small>getDomain(url) not in blocked set · un-parseable URL kept</small>"]:::s
+  S5["5 · compute_windows()<br/><small>calendar months + count-guarded subdivision (task 36.2)</small>"]:::s
+  S6["6 · per-window loop → run_one_window()"]:::s
+  RPT(["RebuildReport<br/><small>total_visits · excluded_origins · windows[]</small>"]):::r
+  S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> RPT
+  classDef s fill:#1c2430,stroke:#f0a35e,color:#d7dde4;
+  classDef r fill:#161b22,stroke:#7ee787,color:#d7dde4;`,
+
+    perwindow: `flowchart TD
+  W(["WindowSignal"]) --> K{"signal.kind"}
+  K -- "skip" --> SP["status: skipped_sparse<br/><small>below min_window_visits</small>"]:::dim
+  K -- "run" --> RV["read_vectors(page_session_ids)<br/><small>topic_page_vector lookup</small>"]:::hot
+  RV --> NV{"any page<br/>has a vector?"}
+  NV -- "no" --> NVS["status: skipped_no_vectors<br/><small>all auth-walled / no text</small>"]:::dim
+  NV -- "yes" --> FP["compute input_fingerprint<br/><small>hash of (page_session_id, vector_version) pairs</small>"]:::hot
+  FP --> CMP{"fingerprint ==<br/>live_run_fingerprint?"}
+  CMP -- "match" --> UC["status: unchanged<br/><small>NO worker · NO DB write</small>"]:::good
+  CMP -- "differ" --> CO["compute(input)<br/><small>fork worker — O(n²) + HDBSCAN</small>"]:::hot
+  CO --> AB["assemble_run_bundle()<br/><small>fully-keyed RunBundle</small>"]:::hot
+  AB --> PE["sink.persist(bundle)<br/><small>single-writer transaction</small>"]:::hot
+  PE --> CL["status: clustered"]:::good2
+  classDef dim fill:#1c2430,stroke:#9aa6b2,color:#9aa6b2;
+  classDef good fill:#1c2430,stroke:#7ee787,color:#7ee787;
+  classDef good2 fill:#1c2430,stroke:#f0a35e,color:#f0a35e;
+  classDef hot fill:#1c2430,stroke:#f0a35e,color:#d7dde4;`,
+
+    worker: `sequenceDiagram
+  autonumber
+  participant O as rebuild_clusters
+  participant C as run_cluster_compute (host)
+  participant W as cluster_worker (child)
+  O->>C: compute(input)
+  C->>W: fork(worker_path)<br/>execPath + ELECTRON_RUN_AS_NODE=1<br/>serialization 'advanced'
+  C->>W: send({ input }) — Float32Array via structured clone
+  Note over C: 10-min timeout armed — settles exactly once
+  W->>W: compute_clusters(input)<br/>O(n²) cosine · HDBSCAN fit · representations · labels
+  alt success
+    W-->>C: { ok: true, output }
+  else failure
+    W-->>C: { ok: false, error }
+  end
+  C->>W: disconnect() + kill() — release TF backend
+  C-->>O: ClusterComputeOutput`,
+
+    persist: `flowchart TD
+  P["persist(bundle)"]:::neutral --> Q["SELECT input_fingerprint, status<br/>FROM topic_run WHERE id = run.id"]:::neutral
+  Q --> D{"existing run<br/>for this id?"}
+  D -- "complete and<br/>same fingerprint" --> NOOP["NO-OP<br/><small>nothing written · quiet-day path</small>"]:::noop
+  D -- "same id,<br/>different fingerprint" --> REP["ATOMIC REPLACE<br/><small>delete clusters+members, reinsert,<br/>preserve created_at</small>"]:::rep
+  D -- "no run<br/>with this id" --> CRE["CREATE + SUPERSEDE<br/><small>insert as complete, mark every OTHER<br/>complete run for this window superseded</small>"]:::cre
+  REP --> INV(["exactly one live run per window"]):::inv
+  CRE --> INV
+  classDef neutral fill:#1c2430,stroke:#6cb6ff,color:#d7dde4;
+  classDef noop fill:#1c2430,stroke:#9aa6b2,color:#9aa6b2;
+  classDef rep fill:#1c2430,stroke:#f0a35e,color:#d7dde4;
+  classDef cre fill:#1c2430,stroke:#7ee787,color:#d7dde4;
+  classDef inv fill:#161b22,stroke:#6cb6ff,color:#6cb6ff;`,
+
+    lifecycle: `sequenceDiagram
+  autonumber
+  participant VS as VS Code
+  participant E as extension.ts
+  participant SM as ServerManager
+  participant SCH as ClusterScheduler
+  VS->>E: activate(context)
+  E->>E: initialize encrypted DuckDB
+  E->>SM: new ServerManager({ extension_path })
+  E->>E: CommandManager.register_all()
+  E->>SCH: new ClusterScheduler({ run, cadence_hours })
+  E->>SCH: start() — arm +60s catch-up
+  Note over SCH: after delay
+  SCH->>SM: run(default_window_spec(now))
+  SM->>SM: rebuild_clusters() (single-flighted)
+  Note over SCH: re-arm at cadence after tick settles
+  VS->>E: deactivate()
+  E->>SCH: dispose() — clearTimeout BEFORE DB closes
+  E->>SM: stop()
+  E->>E: close databases`
+  };
+
+  async function renderAll() {
+    const targets = document.querySelectorAll('.mmd[data-key]');
+    let i = 0;
+    for (const el of targets) {
+      const key = el.getAttribute('data-key');
+      const def = DIAGRAMS[key];
+      if (!def) continue;
+      try {
+        const { svg } = await mermaid.render('mmd-svg-' + (i++), def);
+        el.innerHTML = svg;
+      } catch (err) {
+        // Graceful degradation: show the diagram source as readable text.
+        el.innerHTML = '<pre class="mmd-fallback"></pre>';
+        el.firstChild.textContent = def;
+        console.error('Mermaid render failed for "' + key + '":', err);
+      }
+    }
+  }
+  renderAll();
+</script>
+
+<!-- Interactivity: scrollspy + tabs (progressive enhancement; content is readable without JS) -->
+<script>
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('nav.rail a.nlink'));
+    var map = {};
+    links.forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      var sec = document.getElementById(id);
+      if (sec) map[id] = a;
+    });
+    var sections = Object.keys(map).map(function (id) { return document.getElementById(id); });
+    if ('IntersectionObserver' in window) {
+      var current = null;
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) {
+            if (current) current.classList.remove('active');
+            var a = map[e.target.id];
+            if (a) { a.classList.add('active'); current = a; }
+          }
+        });
+      }, { rootMargin: '-15% 0px -70% 0px', threshold: 0 });
+      sections.forEach(function (s) { io.observe(s); });
+    }
+
+    document.querySelectorAll('[data-tabs]').forEach(function (group) {
+      var btns = group.querySelectorAll('.tabbar button');
+      var panes = group.querySelectorAll('.tab-pane');
+      btns.forEach(function (b) {
+        b.addEventListener('click', function () {
+          var t = b.getAttribute('data-t');
+          btns.forEach(function (x) { x.classList.toggle('on', x === b); });
+          panes.forEach(function (p) { p.classList.toggle('on', p.getAttribute('data-p') === t); });
+        });
+      });
+    });
+  })();
+</script>
+</body>
+</html>

@@ -22,6 +22,7 @@
  * in-process reader, the forking worker client, and the DuckDB-backed sink.
  */
 import { getDomain } from "tldts";
+import { dev_log } from "../dev_log";
 import {
   compute_windows,
   assemble_run_bundle,
@@ -151,6 +152,11 @@ export async function rebuild_clusters(
   const never_origins = await deps.list_never_cluster_origins();
   const never_set = new Set(never_origins);
 
+  dev_log('cluster_run_started', {
+    range_start: spec.range_start,
+    range_end: spec.range_end,
+  });
+
   // Vectorise ahead of reading: the embed pass re-downloads + embeds any new
   // public page off the event loop, skipping never-cluster origins so their
   // content is never even re-fetched (constitution §3, AC #8).
@@ -180,13 +186,22 @@ export async function rebuild_clusters(
     windows.push(await run_one_window(deps, signal));
   }
 
-  return {
+  const report: RebuildReport = {
     range_start: spec.range_start,
     range_end: spec.range_end,
     total_visits: all_visits.length,
     excluded_origins: never_set.size,
     windows,
   };
+  dev_log('cluster_run_complete', {
+    range_start: report.range_start,
+    range_end: report.range_end,
+    total_visits: report.total_visits,
+    excluded_origins: report.excluded_origins,
+    windows_total: windows.length,
+    windows_clustered: windows.filter((w) => w.status === 'clustered').length,
+  });
+  return report;
 }
 
 async function run_one_window(
@@ -194,6 +209,12 @@ async function run_one_window(
   signal: WindowSignal,
 ): Promise<WindowOutcome> {
   if (signal.kind === "skip") {
+    dev_log('cluster_window_skipped', {
+      window_start: signal.start,
+      window_end: signal.end,
+      reason: 'sparse',
+      min_window_visits: deps.window_config.min_window_visits,
+    });
     return {
       window_start: signal.start,
       window_end: signal.end,
@@ -213,6 +234,11 @@ async function run_one_window(
   // pass excluded. visits[i] / vectors[i] / vector_versions[i] stay parallel.
   const kept_visits = signal.visits.filter((v) => by_id.has(v.page_session_id));
   if (kept_visits.length === 0) {
+    dev_log('cluster_window_skipped', {
+      window_start: signal.start,
+      window_end: signal.end,
+      reason: 'no_vectors',
+    });
     return {
       window_start: signal.start,
       window_end: signal.end,
@@ -259,6 +285,12 @@ async function run_one_window(
     params_hash,
   );
   if (existing === fingerprint) {
+    dev_log('cluster_window_skipped', {
+      window_start,
+      window_end,
+      reason: 'unchanged',
+      visit_count: kept_visits.length,
+    });
     return {
       window_start: signal.start,
       window_end: signal.end,
@@ -267,6 +299,12 @@ async function run_one_window(
       persist: null,
     };
   }
+
+  dev_log('cluster_window_started', {
+    window_start,
+    window_end,
+    visit_count: kept_visits.length,
+  });
 
   const output = await deps.compute({
     visits: kept_visits,
@@ -297,6 +335,18 @@ async function run_one_window(
   });
 
   const persist = await deps.sink.persist(bundle);
+  dev_log('cluster_window_complete', {
+    window_start,
+    window_end,
+    input_count: kept_visits.length,
+    cluster_count: output.cluster_labels.length,
+    // The DB write outcome — `created`/`replaced` wrote rows to topic_run/
+    // topic_cluster/topic_cluster_member; `noop` means an identical complete run
+    // already existed and nothing was written.
+    persist_outcome: persist.outcome,
+    run_id: persist.run_id,
+    superseded_runs: persist.superseded_run_ids.length,
+  });
   return {
     window_start: signal.start,
     window_end: signal.end,

@@ -9,7 +9,6 @@ import { list_replay_visits, load_replay_visit } from '../visit_replay';
 jest.mock('../webpage_hover_provider');
 jest.mock('../dev_log', () => ({
   get_recent_outcomes: jest.fn().mockReturnValue([]),
-  show_dev_log_channel: jest.fn(),
 }));
 jest.mock('../visit_replay', () => ({
   list_replay_visits: jest.fn().mockReturnValue([]),
@@ -243,6 +242,8 @@ describe('CommandManager', () => {
       expect(rendered).toContain('Queue length: 4');
       expect(rendered).toContain('Orphans: 2');
       expect(rendered).toContain('[dropped] https://x (v1) reason=login_wall');
+      // Visit Outcomes channel must be the last shown so it remains visible.
+      expect(channel.show).toHaveBeenCalledTimes(2);
     });
 
     it('renders zeroed counts when no queue processor is running', () => {

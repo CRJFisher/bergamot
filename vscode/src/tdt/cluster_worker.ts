@@ -15,6 +15,7 @@
  * vectors and representative vectors cross the boundary as typed arrays, not as
  * JSON-mangled plain objects (the parent sets `serialization: 'advanced'`).
  */
+import "./util_node24_compat";
 import { compute_clusters } from "@bergamot/tdt/out/cluster_pipeline";
 import type {
   ClusterComputeInput,

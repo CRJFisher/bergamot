@@ -4,7 +4,7 @@ import * as path from 'path';
 import { DuckDB } from '../duck_db';
 import { register_webpage_hover_provider } from '../webpage_hover_provider';
 import { ServerManager } from '../server/server_manager';
-import { get_recent_outcomes, show_dev_log_channel } from '../dev_log';
+import { get_recent_outcomes } from '../dev_log';
 import { list_replay_visits, load_replay_visit } from '../visit_replay';
 import {
   ContentCache,
@@ -297,7 +297,6 @@ export class CommandManager {
     this.visit_outcomes_channel.clear();
     this.visit_outcomes_channel.appendLine(lines.join('\n'));
     this.visit_outcomes_channel.show(true);
-    show_dev_log_channel();
   }
 
   private count_inbox(): number {

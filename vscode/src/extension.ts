@@ -30,7 +30,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // debugging (BERGAMOT_STORAGE_PATH set), so the loop is observable by default.
     init_dev_log(
       storage_base,
-      ConfigManager.get_dev_mode() || !!process.env.BERGAMOT_STORAGE_PATH
+      ConfigManager.get_dev_mode() || !!process.env.BERGAMOT_STORAGE_PATH,
+      () => vscode.window.createOutputChannel('Bergamot Dev Log')
     );
 
     // The metadata store is encrypted at rest; its data-encryption key lives in

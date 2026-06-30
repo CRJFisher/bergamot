@@ -45,6 +45,7 @@ import {
   PAGE_EMBEDDING_DTYPE,
   PAGE_EMBEDDING_MODEL_REPO,
 } from "./embedding_config";
+import { dev_log } from "../dev_log";
 
 export interface LocalEmbedder {
   embed: EmbedFn;
@@ -89,6 +90,7 @@ export async function load_local_embedder(
     });
 
   let extractor: FeatureExtractionPipeline;
+  let downloaded = false;
   // Try fully offline first — inference must never touch the network.
   env.allowRemoteModels = false;
   try {
@@ -97,6 +99,8 @@ export async function load_local_embedder(
     if (!allow_download) throw offline_error;
     // One-time provisioning: fetch the public model weights into the cache,
     // then re-lock so no later load in this process can reach the network.
+    dev_log('embed_model_downloading', { model: PAGE_EMBEDDING_MODEL_REPO });
+    downloaded = true;
     env.allowRemoteModels = true;
     try {
       extractor = await load();
@@ -104,6 +108,7 @@ export async function load_local_embedder(
       env.allowRemoteModels = false;
     }
   }
+  dev_log('embed_model_ready', { model: PAGE_EMBEDDING_MODEL_REPO, cached: !downloaded });
 
   const embed: EmbedFn = async (text: string) => {
     const output = await extractor(text, { pooling: "mean", normalize: false });
