@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/chuck/workspace/code-charter/packages/drift/dist/bin/drift_stop_hook.js\""
+          }
+        ]
+      }
+    ]
+  }
+}

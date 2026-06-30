@@ -22,12 +22,19 @@ coverage/
 .nyc_output
 
 # IDE
-.vscode/
 .cursor/
 .idea/
 *.sublime-*
 *.code-workspace
-.claude/
+
+# .vscode — track shared launch/tasks config; settings.json holds a local API key
+.vscode/settings.json
+
+# .claude — track shared product config; keep drift dev-tooling and personal settings out
+.claude/settings.local.json
+.claude/agents/drift-reconciler.md
+.claude/commands/drift.md
+.claude/skills/drift-sync/
 
 # OS
 .DS_Store

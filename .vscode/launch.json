@@ -1,0 +1,36 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run Extension",
+            "type": "extensionHost",
+            "request": "launch",
+            "args": [
+                "--extensionDevelopmentPath=${workspaceFolder}/vscode",
+                "/Users/chuck/workspace/pkm"
+            ],
+            "outFiles": [
+                "${workspaceFolder}/vscode/out/**/*.js"
+            ],
+            "env": {
+                "BERGAMOT_STORAGE_PATH": "${workspaceFolder}/.dev-storage"
+            },
+            "preLaunchTask": "Run Extension: prepare"
+        },
+        {
+            "name": "Dev: Brave + watch",
+            "type": "node",
+            "request": "launch",
+            "program": "${workspaceFolder}/browser/scripts/dev-brave.js",
+            "cwd": "${workspaceFolder}/browser",
+            "console": "integratedTerminal"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Dev: Full Loop (extension + Brave)",
+            "configurations": ["Run Extension", "Dev: Brave + watch"],
+            "stopAll": true
+        }
+    ]
+}

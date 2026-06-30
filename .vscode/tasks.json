@@ -1,0 +1,49 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "shell",
+            "command": "npm",
+            "args": ["run", "compile"],
+            "options": {
+                "cwd": "${workspaceFolder}/vscode"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$tsc"],
+            "label": "vscode: compile",
+            "detail": "tsc -p ./ (in vscode/)"
+        },
+        {
+            "type": "shell",
+            "command": "npm",
+            "args": ["run", "watch"],
+            "options": {
+                "cwd": "${workspaceFolder}/vscode"
+            },
+            "isBackground": true,
+            "problemMatcher": ["$tsc-watch"],
+            "label": "vscode: watch",
+            "detail": "tsc -watch -p ./ (in vscode/)"
+        },
+        {
+            "type": "process",
+            "command": "node",
+            "args": ["scripts/install-skills.mjs", "/Users/chuck/workspace/pkm"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "label": "install skills",
+            "detail": "copy shipped skills into the launch target workspace's .claude/skills/"
+        },
+        {
+            "label": "Run Extension: prepare",
+            "dependsOn": ["vscode: watch", "install skills"],
+            "dependsOrder": "parallel",
+            "problemMatcher": []
+        }
+    ]
+}
