@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bergamot Topic Clusters — Five User Flows</title>
+<style>
+:root {
+  --ivory: #f7f3ec;
+  --oat: #ece4d6;
+  --paper: #fffdf8;
+  --slate: #2f3338;
+  --ink: #1d2024;
+  --mute: #6c6f73;
+  --faint: #9a9b97;
+  --clay: #c06d4f;
+  --olive: #6f7a4f;
+  --rust: #a8412a;
+  --work: #4a6b8a;
+  --concept: #7d6699;
+  --line: #d8cfbe;
+  --hair: #e4ddce;
+  --serif: ui-serif, Georgia, "Times New Roman", serif;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--ivory);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+.prose { max-width: 68ch; }
+
+/* ---- cross-doc nav ---- */
+.crossdoc {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--oat);
+  border-bottom: 1px solid var(--line);
+  padding: 10px clamp(16px, 5vw, 64px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.crossdoc .cd-brand {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mute);
+  margin-right: 8px;
+}
+.crossdoc a.doc-link, .crossdoc .doc-current {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  text-decoration: none;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--slate);
+  background: var(--paper);
+}
+.crossdoc a.doc-link:hover { border-color: var(--clay); color: var(--clay); }
+.crossdoc .doc-current {
+  background: var(--slate);
+  color: var(--ivory);
+  border-color: var(--slate);
+}
+
+/* ---- risk jump nav ---- */
+.jumpnav {
+  position: sticky;
+  top: 43px;
+  z-index: 9;
+  background: var(--ivory);
+  border-bottom: 1px solid var(--line);
+  padding: 10px clamp(16px, 5vw, 64px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.jumpnav .jn-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mute);
+  margin-right: 6px;
+}
+.jumpnav a.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sans);
+  font-size: 13px;
+  text-decoration: none;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--slate);
+}
+.jumpnav a.chip:hover { border-color: var(--slate); }
+.jumpnav a.chip .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.dot.works { background: var(--olive); }
+.dot.friction { background: var(--clay); }
+.dot.blocked { background: var(--rust); }
+.jumpnav .chip .idx {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+.chip.arrived { box-shadow: 0 0 0 3px rgba(192,109,79,0.35); }
+
+/* ---- main ---- */
+main {
+  padding: 0 clamp(16px, 5vw, 64px) 80px;
+}
+.identity {
+  padding: 42px 0 8px;
+}
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--clay);
+  margin: 0 0 10px;
+}
+h1 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1.12;
+  margin: 0 0 14px;
+  color: var(--ink);
+}
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--mute);
+}
+.meta .badge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+.preamble {
+  font-family: var(--serif);
+  font-size: 18px;
+  line-height: 1.62;
+  color: var(--slate);
+  margin: 22px 0 10px;
+}
+
+/* who's who chips */
+.whowho {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 0 30px;
+}
+.who {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+.who b { font-family: var(--mono); font-size: 12px; color: var(--work); letter-spacing: 0.04em; }
+.who.b b { color: var(--concept); }
+.who span { color: var(--mute); }
+
+/* provenance */
+.prompt-box {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--faint);
+  border-radius: 8px;
+  background: var(--paper);
+  padding: 14px 18px;
+  margin: 0 0 40px;
+}
+.prompt-box .label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin: 0 0 8px;
+}
+.prompt-box .files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.prompt-box .files code {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--mute);
+  background: var(--oat);
+  padding: 2px 8px;
+  border-radius: 5px;
+}
+
+/* ---- flow section ---- */
+.flow {
+  border-top: 1px solid var(--line);
+  padding: 40px 0 16px;
+  scroll-margin-top: 100px;
+}
+.flow-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 6px;
+}
+.flow-head .flow-letter {
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--clay);
+  line-height: 1;
+}
+.flow-head h2 {
+  font-family: var(--serif);
+  font-size: 23px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--ink);
+}
+.flow-head .status-pill {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 11px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.status-pill.works { background: rgba(111,122,79,0.14); color: var(--olive); }
+.status-pill.friction { background: rgba(192,109,79,0.15); color: var(--clay); }
+.status-pill.blocked { background: rgba(168,65,42,0.14); color: var(--rust); }
+.status-pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+.flow-actor {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--mute);
+  margin: 0 0 20px;
+}
+.flow-actor .a { color: var(--work); }
+.flow-actor .b { color: var(--concept); }
+
+/* diagram wrapper */
+.diagram {
+  background: var(--paper);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 20px 18px 12px;
+  margin: 0 0 8px;
+}
+.diagram svg { width: 100%; height: auto; display: block; }
+figure { margin: 0; }
+figcaption {
+  font-size: 13.5px;
+  color: var(--mute);
+  margin: 12px 2px 0;
+  line-height: 1.5;
+}
+figcaption .pain {
+  color: var(--clay);
+  font-weight: 600;
+}
+
+/* steps */
+.steps {
+  list-style: none;
+  margin: 26px 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.step {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--hair);
+  align-items: start;
+}
+.step:last-child { border-bottom: none; }
+.step .badge {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--slate);
+  color: var(--ivory);
+  font-family: var(--mono);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+.step.pain .badge { background: var(--clay); }
+.step .body { min-width: 0; }
+.step .body .head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+}
+.step .title {
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.step .title svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.step .where {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--mute);
+  background: var(--oat);
+  padding: 2px 8px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.step .where .rng { color: var(--faint); }
+.step .desc {
+  font-size: 13.5px;
+  color: var(--mute);
+  margin: 5px 0 0;
+  line-height: 1.5;
+}
+.step.pain .desc { color: var(--clay); }
+.step .pain-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--clay);
+  border: 1px solid var(--clay);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.step .pain-tag.rust { color: var(--rust); border-color: var(--rust); }
+.step.pain.rust .badge { background: var(--rust); }
+.step.pain.rust .desc { color: var(--rust); }
+.step .cmd {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--slate);
+  color: var(--ivory);
+  padding: 1px 7px;
+  border-radius: 5px;
+}
+
+/* recurring blocker callouts */
+.blockers {
+  border-top: 1px solid var(--line);
+  padding-top: 40px;
+  margin-top: 20px;
+}
+.blockers h2 {
+  font-family: var(--serif);
+  font-size: 23px;
+  margin: 0 0 4px;
+  color: var(--ink);
+}
+.blockers .sub {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--mute);
+  margin: 0 0 24px;
+}
+.callout-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.callout {
+  border: 1px solid var(--hair);
+  border-left: 4px solid var(--rust);
+  border-radius: 10px;
+  background: var(--paper);
+  padding: 18px 20px;
+}
+.callout .clabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rust);
+  margin: 0 0 10px;
+}
+.callout .clabel svg { width: 15px; height: 15px; }
+.callout h3 {
+  font-family: var(--serif);
+  font-size: 18px;
+  margin: 0 0 8px;
+  color: var(--ink);
+}
+.callout p {
+  font-size: 13.5px;
+  color: var(--slate);
+  margin: 0 0 10px;
+  line-height: 1.55;
+}
+.callout .hits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.callout .hits .h {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--mute);
+  background: var(--ivory);
+}
+.callout .fwd {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--rust);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--rust);
+}
+.callout .fwd:hover { color: var(--slate); border-color: var(--slate); }
+
+/* legend */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 4px 2px 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--mute);
+}
+.legend .lg { display: inline-flex; align-items: center; gap: 7px; }
+.legend .swatch { width: 22px; height: 0; border-top-width: 2.5px; border-top-style: solid; }
+.legend .swatch.solid { border-top-color: var(--olive); }
+.legend .swatch.dash { border-top-style: dashed; border-top-color: var(--rust); }
+.legend .box { width: 14px; height: 11px; border-radius: 3px; }
+.legend .box.pt { background: var(--clay); }
+
+footer {
+  border-top: 1px solid var(--line);
+  padding: 26px clamp(16px, 5vw, 64px) 40px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--faint);
+  line-height: 1.7;
+}
+
+:focus-visible { outline: 2px solid var(--clay); outline-offset: 2px; }
+
+@media (max-width: 720px) {
+  .callout-grid { grid-template-columns: 1fr; }
+  .step .where { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+
+<!-- icon sprite -->
+<svg style="display:none" aria-hidden="true">
+  <symbol id="ic-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="ic-warn" viewBox="0 0 24 24"><path d="M12 3l9 16H3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.1" fill="currentColor"/></symbol>
+  <symbol id="ic-flow" viewBox="0 0 24 24"><path d="M4 12h11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M13 7l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="ic-block" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="ic-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3.5 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<nav class="crossdoc" aria-label="Related pages">
+  <span class="cd-brand">Bergamot · Topic Clusters UX</span>
+  <a class="doc-link" href="tdt-ux.surface-map.html">Surface Map</a>
+  <span class="doc-current" aria-current="page">User Flows</span>
+  <a class="doc-link" href="tdt-ux.augmentation-proposals.html">Augmentation Proposals</a>
+</nav>
+
+<nav class="jumpnav" aria-label="Five flows">
+  <span class="jn-label">Five flows</span>
+  <a class="chip" href="#flow-a"><span class="dot works"></span><span class="idx">a</span> Weekly discovery</a>
+  <a class="chip" href="#flow-b"><span class="dot blocked"></span><span class="idx">b</span> Note research context</a>
+  <a class="chip" href="#flow-c"><span class="dot friction"></span><span class="idx">c</span> Cluster → note</a>
+  <a class="chip" href="#flow-d"><span class="dot friction"></span><span class="idx">d</span> Fix a wrong cluster</a>
+  <a class="chip" href="#flow-e"><span class="dot blocked"></span><span class="idx">e</span> Freshness check</a>
+</nav>
+
+<main>
+  <section class="identity">
+    <p class="eyebrow">Topic Clusters · User Flows</p>
+    <h1>Five things a person wants — and the exact path to each</h1>
+    <div class="meta">
+      <span class="badge">5 user flows</span>
+      <span class="badge">2 users · 5 flows</span>
+      <span class="badge">olive works · clay friction · rust blocked</span>
+    </div>
+
+    <p class="preamble prose">The Surface Map graded the four doors in the abstract. This page follows two real people through them. User A drives Claude Code as a research agent and thinks in prompts and skill calls. User B keeps a markdown notes vault in VS Code and wants their browsing to feed their notes. Each of the five flows below starts from something a person actually wants — "what have I been researching this week?", "I'm writing a note on topic X, what have I browsed?", "turn this browsing cluster into a note", "this cluster is wrong, fix it", "did the rebuild even run?" — and traces the exact path of surfaces, commands, and routes they'd have to string together to get there. Green steps work today. Where a step forces a workaround, has no surface at all, or silently fails, the path is marked with the pain point in plain terms.</p>
+
+    <div class="whowho">
+      <span class="who"><b>USER A</b> <span>Claude Code agent — thinks in prompts &amp; skill calls</span></span>
+      <span class="who b"><b>USER B</b> <span>PKM practitioner — markdown vault in VS Code</span></span>
+    </div>
+
+    <div class="prompt-box">
+      <p class="label">Traced against source</p>
+      <ul class="files">
+        <li><code>skills/bergamot-clusters/SKILL.md</code></li>
+        <li><code>vscode/src/server/server_manager.ts</code></li>
+        <li><code>vscode/src/commands/command_manager.ts</code></li>
+        <li><code>vscode/src/tdt/cluster_scheduler.ts</code></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ FLOW A ============ -->
+  <section class="flow" id="flow-a">
+    <div class="flow-head">
+      <span class="flow-letter">a</span>
+      <h2>"What have I been researching this week?"</h2>
+      <span class="status-pill friction"><span class="dot friction"></span>Works with friction</span>
+    </div>
+    <p class="flow-actor"><span class="a">User A</span> asks the agent · <span class="b">User B</span> has no passive IDE view and must drop to the same skill</p>
+
+    <div class="diagram">
+      <figure>
+        <svg viewBox="0 0 900 150" role="img" aria-label="Flow A: prompt to skill recent to cluster list; cluster IDs are ephemeral; User B has no IDE surface">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#6f7a4f"/></marker>
+            <marker id="ar-clay" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c06d4f"/></marker>
+            <marker id="ar-rust" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#a8412a"/></marker>
+          </defs>
+          <!-- row 1: happy path -->
+          <g><rect x="8" y="24" width="150" height="52" rx="10" fill="#4a6b8a"/><text x="83" y="46" text-anchor="middle" font-family="var(--sans)" font-size="13" fill="#f7f3ec">User A prompt</text><text x="83" y="63" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="#dce6ef">"what this week?"</text></g>
+          <line x1="160" y1="50" x2="216" y2="50" stroke="#6f7a4f" stroke-width="2.2" marker-end="url(#ar)"/>
+          <g><rect x="218" y="24" width="180" height="52" rx="10" fill="#2f3338"/><text x="308" y="46" text-anchor="middle" font-family="var(--mono)" font-size="12.5" fill="#f7f3ec">recent --days 7</text><text x="308" y="63" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#b7bcc2">skill · loopback</text></g>
+          <line x1="400" y1="50" x2="456" y2="50" stroke="#6f7a4f" stroke-width="2.2" marker-end="url(#ar)"/>
+          <g><rect x="458" y="24" width="176" height="52" rx="10" fill="#ece4d6" stroke="#d8cfbe"/><text x="546" y="46" text-anchor="middle" font-family="var(--sans)" font-size="13" fill="#2f3338">Text list of clusters</text><text x="546" y="63" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#6c6f73">label · size · id</text></g>
+          <!-- pain point: ephemeral id -->
+          <line x1="546" y1="76" x2="546" y2="104" stroke="#c06d4f" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ar-clay)"/>
+          <g><rect x="452" y="106" width="188" height="36" rx="8" fill="#faf1ec" stroke="#c06d4f"/><text x="546" y="129" text-anchor="middle" font-family="var(--mono)" font-size="11" fill="#c06d4f">ids ephemeral — die on recompute</text></g>
+          <!-- User B branch: no native surface -->
+          <g><rect x="676" y="24" width="150" height="52" rx="10" fill="#7d6699"/><text x="751" y="46" text-anchor="middle" font-family="var(--sans)" font-size="13" fill="#f7f3ec">User B in VS Code</text><text x="751" y="63" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#e5def0">wants a panel</text></g>
+          <path d="M751 76 Q751 100 640 124 L580 124" fill="none" stroke="#a8412a" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ar-rust)"/>
+          <text x="800" y="108" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#a8412a">no IDE surface —</text>
+          <text x="800" y="121" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#a8412a">drops to same skill</text>
+        </svg>
+        <figcaption>User A gets a clean answer in one skill call. <span class="pain">Pain point:</span> the cluster ids rotate on the next recompute, so nothing survives to next session — and User B, with no IDE view, must run the same CLI skill.</figcaption>
+      </figure>
+      <div class="legend">
+        <span class="lg"><span class="swatch solid"></span>step works</span>
+        <span class="lg"><span class="swatch dash"></span>workaround / dead-end</span>
+        <span class="lg"><span class="box pt"></span>pain point</span>
+      </div>
+    </div>
+
+    <ol class="steps">
+      <li class="step"><div class="badge">1</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-flow"/></svg>User A prompts the agent</span><span class="where">Claude Code <span class="rng">· skill invocation</span></span></div>
+        <p class="desc">"What have I been researching this week?" The agent reaches for the bergamot-clusters skill — its own natural entry, no MCP tool needed.</p>
+      </div></li>
+      <li class="step"><div class="badge">2</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-check"/></svg>Skill runs <span class="cmd">recent --days 7</span></span><span class="where">bergamot-clusters/SKILL.md <span class="rng">:36</span></span></div>
+        <p class="desc">Calls the loopback <code>/query/clusters</code> route; returns current threads newest-first with label, scope, size, coherence, and id.</p>
+      </div></li>
+      <li class="step pain"><div class="badge">3</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-warn"/></svg>Text list lands — with ephemeral ids <span class="pain-tag">pain point</span></span><span class="where">bergamot-clusters/SKILL.md <span class="rng">:28-31</span></span></div>
+        <p class="desc">Ids rotate every time clustering recomputes — "always take an id from a fresh recent call in the SAME turn; never reuse an id from an earlier session." The answer is good, but nothing in it survives to next session.</p>
+      </div></li>
+      <li class="step pain rust"><div class="badge">B</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-block"/></svg>User B has no IDE surface <span class="pain-tag rust">no surface</span></span><span class="where">no VS Code view <span class="rng">· UX Gap 5</span></span></div>
+        <p class="desc">Clusters appear nowhere passively in the IDE. The PKM user must open a terminal and run the exact same skill — there is no door for someone who lives in the editor.</p>
+      </div></li>
+    </ol>
+  </section>
+
+  <!-- ============ FLOW B ============ -->
+  <section class="flow" id="flow-b">
+    <div class="flow-head">
+      <span class="flow-letter">b</span>
+      <h2>"I'm writing a note on topic X — what browsing do I have?"</h2>
+      <span class="status-pill blocked"><span class="dot blocked"></span>Blocked · no surface</span>
+    </div>
+    <p class="flow-actor"><span class="b">User B</span> editing a note, wants clusters related to the current topic</p>
+
+    <div class="diagram">
+      <figure>
+        <svg viewBox="0 0 900 150" role="img" aria-label="Flow B: editing a note, wants related clusters, but the only route answers which cluster this page is in, not topic-related clusters">
+          <g><rect x="8" y="24" width="176" height="52" rx="10" fill="#7d6699"/><text x="96" y="46" text-anchor="middle" font-family="var(--sans)" font-size="13" fill="#f7f3ec">Editing note on X</text><text x="96" y="63" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#e5def0">VS Code vault</text></g>
+          <line x1="186" y1="50" x2="242" y2="50" stroke="#6f7a4f" stroke-width="2.2" marker-end="url(#ar)"/>
+          <g><rect x="244" y="24" width="208" height="52" rx="10" fill="#ece4d6" stroke="#d8cfbe" stroke-dasharray="6 4"/><text x="348" y="45" text-anchor="middle" font-family="var(--sans)" font-size="12.5" fill="#6c6f73">wants: related clusters</text><text x="348" y="62" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#a8412a">for this file's topic</text></g>
+          <!-- what actually exists -->
+          <path d="M348 76 L348 104" stroke="#a8412a" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ar-rust)"/>
+          <g><rect x="230" y="106" width="236" height="36" rx="8" fill="#faf1ec" stroke="#a8412a"/><text x="348" y="129" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="#a8412a">no "related clusters for file" route</text></g>
+          <!-- the only near route -->
+          <line x1="452" y1="50" x2="508" y2="50" stroke="#c06d4f" stroke-width="2.2" stroke-dasharray="5 4" marker-end="url(#ar-clay)"/>
+          <g><rect x="510" y="24" width="230" height="52" rx="10" fill="#2f3338"/><text x="625" y="45" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="#f7f3ec">clusters_for_page</text><text x="625" y="62" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#b7bcc2">"which cluster is THIS page in"</text></g>
+          <line x1="740" y1="50" x2="796" y2="50" stroke="#a8412a" stroke-width="2.2" stroke-dasharray="5 4" marker-end="url(#ar-rust)"/>
+          <g><rect x="798" y="24" width="94" height="52" rx="10" fill="#faf1ec" stroke="#a8412a"/><text x="845" y="46" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="#a8412a">wrong</text><text x="845" y="63" text-anchor="middle" font-family="var(--sans)" font-size="12" fill="#a8412a">question</text></g>
+        </svg>
+        <figcaption>The one nearby route, <code>clusters_for_page</code>, answers "which cluster is THIS page in" — not "which clusters relate to my topic." <span class="pain">Pain point:</span> no related-clusters-for-file surface and no topic search, so the flow dead-ends at the start.</figcaption>
+      </figure>
+      <div class="legend">
+        <span class="lg"><span class="swatch solid"></span>step works</span>
+        <span class="lg"><span class="swatch dash"></span>workaround / dead-end</span>
+        <span class="lg"><span class="box pt"></span>pain point</span>
+      </div>
+    </div>
+
+    <ol class="steps">
+      <li class="step"><div class="badge">1</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-flow"/></svg>User B is mid-note on topic X</span><span class="where">VS Code vault <span class="rng">· markdown file open</span></span></div>
+        <p class="desc">Wants the browsing threads that relate to what they're writing to pull in for citation or context.</p>
+      </div></li>
+      <li class="step pain rust"><div class="badge">2</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-block"/></svg>No "related clusters for this file" surface exists <span class="pain-tag rust">no surface</span></span><span class="where">server_manager.ts <span class="rng">:597-608</span></span></div>
+        <p class="desc">The nearest route, <code>/query/clusters_for_page</code>, only lists the clusters a specific page-session is a member of — it answers "which cluster is THIS page in," not "what have I browsed about this topic."</p>
+      </div></li>
+      <li class="step pain rust"><div class="badge">3</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-warn"/></svg>No natural-language cluster search either <span class="pain-tag rust">no surface</span></span><span class="where">UX Gap 3 <span class="rng">· no route</span></span></div>
+        <p class="desc">There is no way to say "find clusters about machine learning." Without a topic query and without a per-file relation, this intention has no path at all.</p>
+      </div></li>
+    </ol>
+  </section>
+
+  <!-- ============ FLOW C ============ -->
+  <section class="flow" id="flow-c">
+    <div class="flow-head">
+      <span class="flow-letter">c</span>
+      <h2>"Turn my browsing cluster into a PKM note"</h2>
+      <span class="status-pill friction"><span class="dot friction"></span>Works with friction</span>
+    </div>
+    <p class="flow-actor"><span class="a">User A</span> or <span class="b">User B</span> — the hero loop: read a cluster, stage a stub</p>
+
+    <div class="diagram">
+      <figure>
+        <svg viewBox="0 0 900 150" role="img" aria-label="Flow C: cluster detail to stub to stage_cluster writes a file into bergamot.staging; what happens after staging is opaque">
+          <g><rect x="8" y="24" width="150" height="52" rx="10" fill="#2f3338"/><text x="83" y="45" text-anchor="middle" font-family="var(--mono)" font-size="12.5" fill="#f7f3ec">cluster --id</text><text x="83" y="62" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#b7bcc2">read the material</text></g>
+          <line x1="160" y1="50" x2="216" y2="50" stroke="#6f7a4f" stroke-width="2.2" marker-end="url(#ar)"/>
+          <g><rect x="218" y="24" width="150" height="52" rx="10" fill="#2f3338"/><text x="293" y="45" text-anchor="middle" font-family="var(--mono)" font-size="12.5" fill="#f7f3ec">stub --id</text><text x="293" y="62" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#b7bcc2">draft a MoC stub</text></g>
+          <line x1="370" y1="50" x2="426" y2="50" stroke="#6f7a4f" stroke-width="2.2" marker-end="url(#ar)"/>
+          <g><rect x="428" y="24" width="176" height="52" rx="10" fill="#2f3338"/><text x="516" y="45" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="#f7f3ec">POST /stage_cluster</text><text x="516" y="62" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#b7bcc2">the one writer</text></g>
+          <line x1="604" y1="50" x2="660" y2="50" stroke="#6f7a4f" stroke-width="2.2" marker-end="url(#ar)"/>
+          <g><rect x="662" y="24" width="150" height="52" rx="10" fill="#ece4d6" stroke="#d8cfbe"/><text x="737" y="45" text-anchor="middle" font-family="var(--sans)" font-size="12.5" fill="#2f3338">file written</text><text x="737" y="62" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#6c6f73">bergamot.staging/</text></g>
+          <!-- opaque step -->
+          <line x1="737" y1="76" x2="737" y2="104" stroke="#c06d4f" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ar-clay)"/>
+          <g><rect x="640" y="106" width="194" height="36" rx="8" fill="#faf1ec" stroke="#c06d4f"/><text x="737" y="129" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="#c06d4f">stub → promotable note: opaque</text></g>
+        </svg>
+        <figcaption>Three clean steps write an agent-authored stub into the quarantined <code>bergamot.staging/</code> directory. <span class="pain">Pain point:</span> how a staged stub becomes a promoted vault note is never surfaced, so the loop appears to end in a folder.</figcaption>
+      </figure>
+      <div class="legend">
+        <span class="lg"><span class="swatch solid"></span>step works</span>
+        <span class="lg"><span class="swatch dash"></span>workaround / dead-end</span>
+        <span class="lg"><span class="box pt"></span>pain point</span>
+      </div>
+    </div>
+
+    <ol class="steps">
+      <li class="step"><div class="badge">1</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-check"/></svg><span class="cmd">cluster --id &lt;id&gt;</span> reads the detail</span><span class="where">server_manager.ts <span class="rng">:588-595</span></span></div>
+        <p class="desc">Pulls the cluster's exemplar and member pages (with live URLs) so the agent has real material to summarise.</p>
+      </div></li>
+      <li class="step"><div class="badge">2</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-check"/></svg><span class="cmd">stub --id &lt;id&gt;</span> drafts the note</span><span class="where">bergamot-clusters/SKILL.md <span class="rng">:49-60</span></span></div>
+        <p class="desc">The agent composes a one-line summary, then <code>stub</code> writes a promotable Map-of-Content stub. Idempotent: re-running overwrites its own un-promoted draft only.</p>
+      </div></li>
+      <li class="step"><div class="badge">3</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-check"/></svg><span class="cmd">POST /stage_cluster</span> writes the file</span><span class="where">server_manager.ts <span class="rng">:634-654</span></span></div>
+        <p class="desc">The single writer lands the draft in <code>bergamot.staging/</code> so the forget-sweep and ledger stay in one place. A 409 tells the user to refresh if the cluster recomputed away.</p>
+      </div></li>
+      <li class="step pain"><div class="badge">4</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-warn"/></svg>Path from staged stub to vault note is opaque <span class="pain-tag">pain point</span></span><span class="where">UX Gap 7 <span class="rng">· no follow-through</span></span></div>
+        <p class="desc">Bergamot never writes into canonical notes (constitution principle 8) — the user must review and promote by hand. But nothing shows the file arrived or how to promote it, so the loop feels like it stops at a directory.</p>
+      </div></li>
+    </ol>
+  </section>
+
+  <!-- ============ FLOW D ============ -->
+  <section class="flow" id="flow-d">
+    <div class="flow-head">
+      <span class="flow-letter">d</span>
+      <h2>"This cluster is wrong — fix it"</h2>
+      <span class="status-pill friction"><span class="dot friction"></span>Works with friction</span>
+    </div>
+    <p class="flow-actor"><span class="a">User A</span> or <span class="b">User B</span> — suppress, rename, or block a bad cluster</p>
+
+    <div class="diagram">
+      <figure>
+        <svg viewBox="0 0 900 150" role="img" aria-label="Flow D: suppress rename or block via cluster_control which translates the ephemeral on-screen id to a recompute-stable anchor; curation is CLI-only and the id rotates">
+          <g><rect x="8" y="24" width="172" height="52" rx="10" fill="#2f3338"/><text x="94" y="45" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="#f7f3ec">suppress / rename</text><text x="94" y="62" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="#b7bcc2">/ block  (skill)</text></g>
+          <line x1="182" y1="50" x2="238" y2="50" stroke="#6f7a4f" stroke-width="2.2" marker-end="url(#ar)"/>
+          <g><rect x="240" y="24" width="188" height="52" rx="10" fill="#2f3338"/><text x="334" y="45" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="#f7f3ec">POST /cluster_control</text><text x="334" y="62" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#b7bcc2">writes control table</text></g>
+          <line x1="428" y1="50" x2="484" y2="50" stroke="#6f7a4f" stroke-width="2.2" marker-end="url(#ar)"/>
+          <g><rect x="486" y="24" width="212" height="52" rx="10" fill="#ece4d6" stroke="#d8cfbe"/><text x="592" y="45" text-anchor="middle" font-family="var(--sans)" font-size="12.5" fill="#2f3338">ephemeral id → stable anchor</text><text x="592" y="62" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#6c6f73">persists across recompute</text></g>
+          <line x1="698" y1="50" x2="754" y2="50" stroke="#6f7a4f" stroke-width="2.2" marker-end="url(#ar)"/>
+          <g><rect x="756" y="24" width="136" height="52" rx="10" fill="#ece4d6" stroke="#d8cfbe"/><text x="824" y="46" text-anchor="middle" font-family="var(--sans)" font-size="12.5" fill="#2f3338">curation sticks</text><text x="824" y="63" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#6c6f73">functionally</text></g>
+          <!-- pain: CLI only + id rotates -->
+          <line x1="94" y1="76" x2="94" y2="104" stroke="#c06d4f" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ar-clay)"/>
+          <g><rect x="14" y="106" width="160" height="36" rx="8" fill="#faf1ec" stroke="#c06d4f"/><text x="94" y="129" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="#c06d4f">CLI/skill only — no UI</text></g>
+          <line x1="592" y1="76" x2="592" y2="104" stroke="#c06d4f" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ar-clay)"/>
+          <g><rect x="500" y="106" width="184" height="36" rx="8" fill="#faf1ec" stroke="#c06d4f"/><text x="592" y="129" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="#c06d4f">id you name rotates on recompute</text></g>
+        </svg>
+        <figcaption>Curation works: the control route translates the ephemeral id into a recompute-stable anchor, so a suppress or rename persists across rebuilds. <span class="pain">Pain point:</span> it is CLI/skill-only — no UI — and the id you name rotates every recompute.</figcaption>
+      </figure>
+      <div class="legend">
+        <span class="lg"><span class="swatch solid"></span>step works</span>
+        <span class="lg"><span class="swatch dash"></span>workaround / dead-end</span>
+        <span class="lg"><span class="box pt"></span>pain point</span>
+      </div>
+    </div>
+
+    <ol class="steps">
+      <li class="step"><div class="badge">1</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-check"/></svg>Run <span class="cmd">suppress</span> / <span class="cmd">rename</span> / <span class="cmd">block</span></span><span class="where">bergamot-clusters/SKILL.md <span class="rng">:64-68</span></span></div>
+        <p class="desc">Hide a cluster, relabel it, or mark an origin never-to-be-clustered. All write to Bergamot's own control tables, never the PKM.</p>
+      </div></li>
+      <li class="step"><div class="badge">2</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-check"/></svg><span class="cmd">POST /cluster_control</span> keys on a stable anchor</span><span class="where">server_manager.ts <span class="rng">:620-626</span></span></div>
+        <p class="desc">"The route translates the on-screen (ephemeral) cluster id into the recompute-stable anchor the control store keys on" — so the curation survives every rebuild.</p>
+      </div></li>
+      <li class="step pain"><div class="badge">3</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-warn"/></svg>CLI-only, and the id rotates <span class="pain-tag">pain point</span></span><span class="where">UX Gaps 8 &amp; 2 <span class="rng">· no UI</span></span></div>
+        <p class="desc">There is no button or panel to suppress or rename — every fix means a skill call. And because the id you name expires on recompute, you must pull a fresh id in the same turn before acting on it.</p>
+      </div></li>
+    </ol>
+  </section>
+
+  <!-- ============ FLOW E ============ -->
+  <section class="flow" id="flow-e">
+    <div class="flow-head">
+      <span class="flow-letter">e</span>
+      <h2>"Are my clusters fresh — did the rebuild run?"</h2>
+      <span class="status-pill blocked"><span class="dot blocked"></span>Blocked · no signal</span>
+    </div>
+    <p class="flow-actor"><span class="a">User A</span> or <span class="b">User B</span> — wants a last-build time or staleness signal</p>
+
+    <div class="diagram">
+      <figure>
+        <svg viewBox="0 0 900 168" role="img" aria-label="Flow E: wants last-build time; only coverage stats or a manual rebuild exist; the 24h scheduler runs silently, failures only in the Output panel">
+          <g><rect x="8" y="30" width="176" height="52" rx="10" fill="#4a6b8a"/><text x="96" y="52" text-anchor="middle" font-family="var(--sans)" font-size="12.5" fill="#f7f3ec">wants freshness</text><text x="96" y="69" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#dce6ef">"did it run? stale?"</text></g>
+          <!-- branch to coverage (partial) -->
+          <path d="M184 48 L242 40" fill="none" stroke="#c06d4f" stroke-width="2.2" stroke-dasharray="5 4" marker-end="url(#ar-clay)"/>
+          <g><rect x="244" y="18" width="176" height="46" rx="10" fill="#ece4d6" stroke="#d8cfbe"/><text x="332" y="38" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="#2f3338">coverage --days 7</text><text x="332" y="54" text-anchor="middle" font-family="var(--mono)" font-size="9.5" fill="#6c6f73">per-window stats, not last-run</text></g>
+          <!-- branch to manual rebuild -->
+          <path d="M184 66 L242 86" fill="none" stroke="#c06d4f" stroke-width="2.2" stroke-dasharray="5 4" marker-end="url(#ar-clay)"/>
+          <g><rect x="244" y="70" width="176" height="46" rx="10" fill="#2f3338"/><text x="332" y="90" text-anchor="middle" font-family="var(--mono)" font-size="11" fill="#f7f3ec">rebuildClusters cmd</text><text x="332" y="106" text-anchor="middle" font-family="var(--mono)" font-size="9.5" fill="#b7bcc2">forces a run — not a check</text></g>
+          <!-- the real answer would come from scheduler, but it's silent -->
+          <g><rect x="480" y="44" width="188" height="52" rx="10" fill="#2f3338"/><text x="574" y="65" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="#f7f3ec">24h ClusterScheduler</text><text x="574" y="82" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="#b7bcc2">fires silently</text></g>
+          <path d="M574 96 L574 126" stroke="#a8412a" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ar-rust)"/>
+          <g><rect x="470" y="128" width="208" height="34" rx="8" fill="#faf1ec" stroke="#a8412a"/><text x="574" y="150" text-anchor="middle" font-family="var(--mono)" font-size="10.5" fill="#a8412a">failures → Output panel only</text></g>
+          <line x1="668" y1="70" x2="724" y2="70" stroke="#a8412a" stroke-width="2.2" stroke-dasharray="5 4" marker-end="url(#ar-rust)"/>
+          <g><rect x="726" y="44" width="166" height="52" rx="10" fill="#faf1ec" stroke="#a8412a"/><text x="809" y="65" text-anchor="middle" font-family="var(--sans)" font-size="12.5" fill="#a8412a">no freshness</text><text x="809" y="82" text-anchor="middle" font-family="var(--sans)" font-size="12.5" fill="#a8412a">signal anywhere</text></g>
+        </svg>
+        <figcaption>The scheduler fires the same rebuild the manual command does, but failures go only to <code>on_error</code> in the Output panel. <span class="pain">Pain point:</span> no last-run or staleness signal exists anywhere — only <code>coverage</code> stats or a forced rebuild, neither answering "did it run?"</figcaption>
+      </figure>
+      <div class="legend">
+        <span class="lg"><span class="swatch solid"></span>step works</span>
+        <span class="lg"><span class="swatch dash"></span>workaround / dead-end</span>
+        <span class="lg"><span class="box pt"></span>pain point</span>
+      </div>
+    </div>
+
+    <ol class="steps">
+      <li class="step"><div class="badge">1</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-clock"/></svg>User wants a last-build time or staleness signal</span><span class="where">UX Gap 4 <span class="rng">· freshness</span></span></div>
+        <p class="desc">A passive "your clusters were rebuilt N hours ago" cue — the ordinary trust signal that the background job is alive.</p>
+      </div></li>
+      <li class="step"><div class="badge">2</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-flow"/></svg>Only <span class="cmd">coverage</span> or a manual rebuild exist</span><span class="where">command_manager.ts <span class="rng">:48-75</span></span></div>
+        <p class="desc"><code>coverage --days 7</code> gives per-window stats, not a last-run time; <code>rebuildClusters</code> forces a run (with a progress notification) but that is triggering work, not checking on it.</p>
+      </div></li>
+      <li class="step pain rust"><div class="badge">3</div><div class="body">
+        <div class="head-row"><span class="title"><svg><use href="#ic-block"/></svg>The 24h scheduler runs silently <span class="pain-tag rust">no signal</span></span><span class="where">cluster_scheduler.ts <span class="rng">:38-39, 62-73</span></span></div>
+        <p class="desc">Each tick re-arms the next; on failure it calls <code>on_error</code> — "a run error must not kill the schedule" — which only logs to the Output panel. Nothing surfaces success, last-run time, or staleness anywhere the user looks.</p>
+      </div></li>
+    </ol>
+  </section>
+
+  <!-- ============ RECURRING BLOCKERS ============ -->
+  <section class="blockers">
+    <h2>Two blockers underneath every flow</h2>
+    <p class="sub">These are not per-flow bugs — they are structural, and they recur across the five paths above.</p>
+
+    <div class="callout-grid">
+      <aside class="callout">
+        <p class="clabel"><svg><use href="#ic-warn"/></svg>Recurring · structural</p>
+        <h3>Cluster ids are ephemeral</h3>
+        <p>Every id rotates on recompute, so nothing a user sees can be referenced next session. Discovery lists (a), the hero loop's target (c), and curation's target id (d) all break the moment clustering re-fits.</p>
+        <div class="hits"><span class="h">flow a</span><span class="h">flow c</span><span class="h">flow d</span></div>
+        <a class="fwd" href="tdt-ux.augmentation-proposals.html">Proposed fix: stable references →</a>
+      </aside>
+
+      <aside class="callout">
+        <p class="clabel"><svg><use href="#ic-block"/></svg>Recurring · structural</p>
+        <h3>There is no passive / IDE surface</h3>
+        <p>Clusters live nowhere the user passively looks. Every flow — discovery, note context, curation, freshness — drops to the CLI/skill because there is no panel, no editor affordance, and no ambient signal in VS Code.</p>
+        <div class="hits"><span class="h">flow a</span><span class="h">flow b</span><span class="h">flow d</span><span class="h">flow e</span></div>
+        <a class="fwd" href="tdt-ux.augmentation-proposals.html">Proposed fix: a passive surface →</a>
+      </aside>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Bergamot · Temporal Topic Detection · Topic-Clusters UX · User Flows.
+  Traced against skills/bergamot-clusters/SKILL.md, vscode/src/server/server_manager.ts, command_manager.ts, and tdt/cluster_scheduler.ts.
+  Semantic color: olive = works · clay = works with friction · rust = blocked / no surface.
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  // Arrival ring on a jumped-to flow (progressive enhancement; anchors work without JS).
+  var chips = document.querySelectorAll(".jumpnav a.chip");
+  function ring() {
+    var id = location.hash.replace("#", "");
+    if (!id) return;
+    chips.forEach(function (c) {
+      var t = c.getAttribute("href").replace("#", "");
+      c.classList.toggle("arrived", t === id);
+    });
+  }
+  window.addEventListener("hashchange", ring);
+  ring();
+})();
+</script>
+</body>
+</html>

@@ -15,7 +15,7 @@
             "env": {
                 "BERGAMOT_STORAGE_PATH": "${workspaceFolder}/.dev-storage"
             },
-            "preLaunchTask": "Run Extension: prepare"
+            "preLaunchTask": "vscode: watch"
         },
         {
             "name": "Dev: Brave + watch",

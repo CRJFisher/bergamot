@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Augmentation Proposals — Bergamot Topic Clusters</title>
+<style>
+:root {
+  --ivory: #f7f3ec;
+  --oat: #ece4d6;
+  --paper: #fffdf8;
+  --slate: #2f3338;
+  --ink: #1d2024;
+  --mute: #6c6f73;
+  --faint: #9a9b97;
+  --clay: #c06d4f;
+  --olive: #6f7a4f;
+  --rust: #a8412a;
+  --work: #4a6b8a;
+  --concept: #7d6699;
+  --line: #d8cfbe;
+  --hair: #e4ddce;
+  --serif: ui-serif, Georgia, "Times New Roman", serif;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--ivory);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+.prose { max-width: 68ch; }
+code, .mono { font-family: var(--mono); }
+
+/* ---- cross-doc nav ---- */
+.crossdoc {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  background: var(--oat);
+  border-bottom: 1px solid var(--line);
+  padding: 10px clamp(16px, 5vw, 64px);
+}
+.crossdoc .axis-label {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--mute);
+  margin-right: 4px;
+}
+.crossdoc .doc-link,
+.crossdoc .doc-current,
+.crossdoc .doc-pending {
+  font-family: var(--mono); font-size: 12.5px;
+  padding: 5px 12px; border-radius: 999px;
+  text-decoration: none; border: 1px solid var(--line);
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.crossdoc .doc-pending {
+  color: var(--mute); background: var(--paper);
+  border-style: dashed;
+}
+.crossdoc .doc-pending .dot { background: var(--clay); }
+.crossdoc .doc-pending .tag {
+  font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--faint);
+}
+.crossdoc .doc-link {
+  color: var(--slate); background: var(--paper);
+}
+.crossdoc .doc-link:hover { border-color: var(--work); color: var(--work); }
+.crossdoc .doc-current {
+  color: var(--ivory); background: var(--work); border-color: var(--work);
+  font-weight: 600;
+}
+.crossdoc .dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--olive);
+  display: inline-block;
+}
+.crossdoc .doc-current .dot { background: var(--ivory); }
+
+/* ---- shell ---- */
+main { padding: 0 clamp(16px, 5vw, 64px) 96px; }
+header.identity { padding: 38px clamp(16px, 5vw, 64px) 0; }
+.eyebrow {
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--clay); margin: 0 0 10px;
+}
+h1 {
+  font-family: var(--serif); font-weight: 600;
+  font-size: clamp(30px, 4.4vw, 46px); line-height: 1.08;
+  margin: 0 0 14px; color: var(--ink); letter-spacing: -0.01em;
+}
+.byline {
+  display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+  font-family: var(--mono); font-size: 12.5px; color: var(--mute);
+  margin: 0 0 4px;
+}
+.byline .pill {
+  border: 1px solid var(--line); background: var(--paper);
+  border-radius: 999px; padding: 3px 10px;
+}
+.preamble {
+  font-size: 18px; line-height: 1.62; color: var(--ink);
+  margin: 22px 0 8px;
+}
+
+/* ---- provenance ---- */
+.prompt-box {
+  margin: 20px clamp(16px, 5vw, 64px) 0;
+  border: 1px solid var(--line); border-left: 3px solid var(--faint);
+  background: var(--paper); border-radius: 8px;
+  padding: 14px 18px;
+}
+.prompt-box .label {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--mute); margin: 0 0 8px;
+}
+.prompt-box .files { list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.prompt-box .files code {
+  font-size: 12px; color: var(--slate);
+  background: var(--oat); border-radius: 5px; padding: 2px 7px;
+}
+
+/* ---- section headings ---- */
+.section-h {
+  font-family: var(--serif); font-weight: 600; font-size: 24px;
+  margin: 54px 0 6px; color: var(--ink); letter-spacing: -0.005em;
+}
+figcaption {
+  color: var(--mute); font-size: 14.5px; margin: 8px 0 0;
+}
+figure { margin: 18px 0 0; }
+
+/* ---- legend ---- */
+.legend {
+  display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center;
+  margin: 16px 0 4px; font-size: 13px; color: var(--mute);
+}
+.legend .grp {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+}
+.legend .lbl {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--faint);
+}
+.effort-chip {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  border-radius: 5px; padding: 2px 8px; letter-spacing: 0.04em;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.effort-S { background: rgba(111,122,79,0.16); color: #4d5636; border-color: rgba(111,122,79,0.4); }
+.effort-M { background: rgba(192,109,79,0.16); color: #8a4327; border-color: rgba(192,109,79,0.42); }
+.effort-L { background: rgba(168,65,42,0.15); color: #8a2f1c; border-color: rgba(168,65,42,0.42); }
+.lane-key { display: inline-flex; align-items: center; gap: 6px; }
+.lane-key .swatch { width: 11px; height: 11px; border-radius: 3px; }
+
+/* ---- toolbar ---- */
+.board-toolbar {
+  display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center;
+  margin: 20px 0 10px; padding: 12px 16px;
+  background: var(--paper); border: 1px solid var(--line); border-radius: 10px;
+}
+.board-toolbar .summary {
+  font-family: var(--mono); font-size: 12.5px; color: var(--slate);
+}
+.board-toolbar .summary b { color: var(--ink); }
+.filter-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-left: auto; }
+.filter-row .flabel {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--faint); margin-right: 2px;
+}
+.gapfilter {
+  font-family: var(--mono); font-size: 11.5px; cursor: pointer;
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--ivory); color: var(--slate);
+}
+.gapfilter:hover { border-color: var(--work); }
+.gapfilter.on { background: var(--work); color: var(--ivory); border-color: var(--work); }
+.export-btn {
+  font-family: var(--mono); font-size: 12px; cursor: pointer;
+  padding: 7px 14px; border-radius: 8px;
+  border: 1px solid var(--slate); background: var(--slate); color: var(--ivory);
+}
+.export-btn:hover { background: var(--ink); }
+.export-btn.copied { background: var(--olive); border-color: var(--olive); }
+
+/* ---- kanban board ---- */
+.board {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px; margin-top: 16px;
+}
+.col {
+  background: var(--paper); border: 1px solid var(--line);
+  border-radius: 12px; display: flex; flex-direction: column;
+  min-height: 220px;
+}
+.col.dropping { outline: 2px dashed var(--work); outline-offset: -4px; }
+.col-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px 16px 12px; border-bottom: 1px solid var(--hair);
+}
+.col-head .rank {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--ivory);
+  border-radius: 5px; padding: 2px 7px;
+}
+.col-head .col-title {
+  font-family: var(--serif); font-size: 18px; font-weight: 600; color: var(--ink);
+}
+.col-head .count {
+  margin-left: auto; font-family: var(--mono); font-size: 12px;
+  color: var(--mute); background: var(--oat);
+  border-radius: 999px; padding: 2px 9px;
+}
+.col[data-col="now"]  .rank { background: var(--olive); }
+.col[data-col="next"] .rank { background: var(--clay); }
+.col[data-col="later"].rank, .col[data-col="later"] .rank { background: var(--faint); }
+.col[data-col="now"]  { border-top: 3px solid var(--olive); }
+.col[data-col="next"] { border-top: 3px solid var(--clay); }
+.col[data-col="later"]{ border-top: 3px solid var(--faint); }
+
+.col-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.col-foot {
+  padding: 11px 16px; border-top: 1px solid var(--hair);
+  font-family: var(--mono); font-size: 11.5px; color: var(--mute);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.col-foot b { color: var(--slate); }
+
+.pcard {
+  background: var(--ivory); border: 1px solid var(--line);
+  border-radius: 9px; padding: 12px 13px; cursor: grab;
+  transition: opacity .12s, box-shadow .12s, transform .12s;
+}
+.pcard:active { cursor: grabbing; }
+.pcard.dragging { opacity: .35; transform: rotate(1.5deg); }
+.pcard.dim { opacity: .22; }
+.pcard-top { display: flex; align-items: flex-start; gap: 8px; }
+.pcard .grip {
+  flex: 0 0 auto; margin-top: 3px;
+  width: 10px; height: 14px;
+  background-image: radial-gradient(var(--faint) 1.1px, transparent 1.2px);
+  background-size: 5px 5px; opacity: .7;
+}
+.pcard .ptitle {
+  font-family: var(--serif); font-size: 15.5px; font-weight: 600;
+  color: var(--ink); line-height: 1.25; flex: 1;
+}
+.pcard .pmeta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
+  margin-top: 10px;
+}
+.pcard .gaptag {
+  font-family: var(--mono); font-size: 10.5px;
+  color: var(--slate); background: var(--oat);
+  border-radius: 5px; padding: 2px 7px;
+}
+.pcard .movesel {
+  margin-top: 10px; width: 100%;
+  font-family: var(--mono); font-size: 11px; color: var(--slate);
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--paper); padding: 4px 6px;
+}
+
+/* ---- magnitude bars ---- */
+.mag-table { margin-top: 18px; display: flex; flex-direction: column; gap: 9px; }
+.mag-row {
+  display: grid; grid-template-columns: minmax(200px, 300px) 1fr auto;
+  gap: 14px; align-items: center;
+}
+.mag-row .mlabel {
+  font-size: 14px; color: var(--slate); font-weight: 500;
+}
+.mag-row .mlabel .mgap {
+  font-family: var(--mono); font-size: 10.5px; color: var(--faint);
+  display: block; margin-top: 1px;
+}
+.mag-track {
+  background: var(--oat); border-radius: 5px; height: 20px;
+  position: relative; overflow: hidden;
+}
+.mag-fill {
+  height: 100%; border-radius: 5px; background: var(--work);
+}
+.mag-row.peak .mag-fill { background: var(--olive); }
+.mag-val {
+  font-family: var(--mono); font-size: 12px; color: var(--mute);
+  min-width: 44px; text-align: right;
+}
+.mag-row.peak .mag-val { color: #4d5636; font-weight: 700; }
+
+/* ---- accent callout ---- */
+.recommend {
+  margin: 26px 0 0; background: var(--slate); color: var(--ivory);
+  border-radius: 12px; padding: 22px 26px;
+  border-left: 5px solid var(--clay);
+}
+.recommend .rlabel {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--clay); margin: 0 0 10px;
+}
+.recommend .rtext {
+  font-family: var(--serif); font-size: 20px; line-height: 1.4;
+  color: var(--ivory); margin: 0;
+}
+.recommend .rtext b { color: #e8c9a0; font-weight: 600; }
+.recommend .rtext code {
+  font-family: var(--mono); font-size: 14px;
+  color: var(--ivory); background: rgba(255,253,248,0.13);
+  border-radius: 5px; padding: 1px 6px;
+}
+
+/* ---- footer ---- */
+footer.stamp {
+  margin-top: 60px; padding: 20px clamp(16px, 5vw, 64px);
+  border-top: 1px solid var(--line);
+  font-family: var(--mono); font-size: 11.5px; color: var(--faint);
+  display: flex; flex-wrap: wrap; gap: 6px 16px;
+}
+
+a:focus-visible, button:focus-visible, select:focus-visible, .pcard:focus-visible {
+  outline: 2px solid var(--work); outline-offset: 2px;
+}
+[id] { scroll-margin-top: 68px; }
+
+@media (max-width: 860px) {
+  .board { grid-template-columns: 1fr; }
+  .mag-row { grid-template-columns: 1fr; gap: 5px; }
+  .mag-val { text-align: left; }
+}
+</style>
+</head>
+<body>
+
+<nav class="crossdoc" aria-label="Bergamot topic-cluster UX pages">
+  <span class="axis-label">Cluster UX</span>
+  <a class="doc-link" href="tdt-ux.surface-map.html"><span class="dot"></span>Surface Map</a>
+  <a class="doc-link" href="tdt-ux.user-flows.html"><span class="dot"></span>User Flows</a>
+  <span class="doc-current" aria-current="page"><span class="dot"></span>Augmentation Proposals</span>
+</nav>
+
+<header class="identity">
+  <p class="eyebrow">Bergamot · Topic Clusters · Build List</p>
+  <h1>Augmentation Proposals</h1>
+  <div class="byline">
+    <span class="pill">9 gaps → proposals</span>
+    <span class="pill">3 priority lanes</span>
+    <span class="pill">effort: S · M · L</span>
+    <span class="pill">drag to re-rank · export as markdown</span>
+  </div>
+</header>
+
+<section class="prompt-box" aria-label="Source provenance">
+  <p class="label">Built from</p>
+  <ul class="files">
+    <li><code>tdt/spec.md — UX Gaps 1–9, Key Constraints</code></li>
+    <li><code>server/server_manager.ts:610–629</code></li>
+    <li><code>server/server_manager.ts:567–570</code></li>
+    <li><code>tdt/cluster_scheduler.ts:38–73</code></li>
+  </ul>
+</section>
+
+<main>
+  <p class="preamble prose">The first two pages found where Bergamot's topic-cluster surfaces fall short: clusters are invisible inside the IDE, their IDs vanish on every rebuild, there's no way to search them in plain language, no signal that they're fresh, and every real task drops down to a command line. This page turns those findings into a build list. Each gap becomes one proposal card carrying what it does, roughly how much work it is (small, medium, or large), and which pain it removes. The cards start pre-sorted into three priority lanes — do now, do next, do later — reflecting how badly each gap blocks a real user against how much it costs to fix. You can drag a card between lanes to re-rank it; each lane keeps a running count and total effort so you can see when a lane is overloaded, then copy the agreed plan out as markdown.</p>
+
+  <h2 class="section-h" id="board">The backlog, ranked</h2>
+  <p class="legend prose">
+    <span class="grp"><span class="lbl">Effort</span>
+      <span class="effort-chip effort-S">S</span> small
+      <span class="effort-chip effort-M">M</span> medium
+      <span class="effort-chip effort-L">L</span> large
+    </span>
+    <span class="grp"><span class="lbl">Lanes</span>
+      <span class="lane-key"><span class="swatch" style="background:var(--olive)"></span>Do now = blocks a real task, cheap to fix</span>
+      <span class="lane-key"><span class="swatch" style="background:var(--clay)"></span>Do next = high value, more work</span>
+      <span class="lane-key"><span class="swatch" style="background:var(--faint)"></span>Do later = nice, not blocking</span>
+    </span>
+  </p>
+
+  <div class="board-toolbar">
+    <span class="summary" id="global-summary">Loading…</span>
+    <div class="filter-row">
+      <span class="flabel">Filter by gap</span>
+      <button class="gapfilter on" data-gap="all">all</button>
+      <button class="gapfilter" data-gap="1">1</button>
+      <button class="gapfilter" data-gap="2">2</button>
+      <button class="gapfilter" data-gap="3">3</button>
+      <button class="gapfilter" data-gap="4">4</button>
+      <button class="gapfilter" data-gap="5">5</button>
+      <button class="gapfilter" data-gap="6">6</button>
+      <button class="gapfilter" data-gap="7">7</button>
+      <button class="gapfilter" data-gap="8">8</button>
+      <button class="gapfilter" data-gap="9">9</button>
+    </div>
+    <button class="export-btn" id="export-btn" type="button">Copy backlog as markdown</button>
+  </div>
+
+  <div class="board" id="board" aria-label="Proposal priority board"></div>
+  <figcaption class="prose">Nine gaps resolve to nine proposals; the “do now” lane is stacked with the cheap, high-impact fixes — a freshness badge, stable anchors, MCP read tools — while the large builds sit in later lanes. Drag a card to re-rank; the footer totals flag an overloaded lane.</figcaption>
+
+  <h2 class="section-h" id="impact">Impact for the cost</h2>
+  <div class="mag-table" id="mag-table" aria-label="Impact-per-cost bars"></div>
+  <figcaption class="prose">Impact divided by cost, per proposal. The three bars that top the chart — the freshness signal, stable anchors, and MCP read tools — are exactly the three cards seeded into the “do now” lane above: they close the pain that blocks a real task at the least new code.</figcaption>
+
+  <h2 class="section-h" id="recommendation">Where the mechanism already exists</h2>
+  <aside class="recommend prose" aria-label="Recommendation">
+    <p class="rlabel">Recommendation</p>
+    <p class="rtext">Two of these are cheap because the plumbing is already there. Stable cluster anchors reuse the recompute-stable anchor that <code>/cluster_control</code> already computes on every curation write; a freshness signal reuses the coverage data <code>/query/cluster_coverage</code> already emits. <b>Ship the freshness signal and stable anchors first — highest value, lowest new code.</b></p>
+  </aside>
+</main>
+
+<footer class="stamp">
+  <span>Bergamot topic-cluster UX · augmentation proposals</span>
+  <span>sources: spec.md · server_manager.ts · cluster_scheduler.ts</span>
+  <span>generated 2026-07-05</span>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // Cross-doc nav axis (identical across all three pages; this page is current).
+  // The two sibling companions render as "soon" chips until their files exist.
+  const SIBLINGS = [
+    { id: "surface-map", title: "Surface Map",
+      files: [{ label: "Surface Map", href: "tdt-ux.surface-map.html" }],
+      status: "present" },
+    { id: "user-flows", title: "User Flows",
+      files: [{ label: "User Flows", href: "tdt-ux.user-flows.html" }],
+      status: "present" },
+    { id: "augmentation-proposals", title: "Augmentation Proposals",
+      files: [{ label: "Augmentation Proposals", href: "tdt-ux.augmentation-proposals.html" }],
+      status: "current" }
+  ];
+  void SIBLINGS;
+
+  var COLUMNS = [
+    { id: "now",   rank: "High",   title: "Do now" },
+    { id: "next",  rank: "Medium", title: "Do next" },
+    { id: "later", rank: "Low",    title: "Do later" }
+  ];
+
+  // effort points: S=1, M=2, L=3
+  var EST_PTS = { S: 1, M: 2, L: 3 };
+
+  // One proposal per identified gap. `impact` and `cost` (1–3) derive the
+  // impact/cost ratio bar; `col` is the seeded lane.
+  var PROPOSALS = [
+    { id: "freshness", title: "Freshness / last-run status", effort: "M",
+      gaps: ["4", "6"], gapText: "gaps 4 + 6",
+      col: "now", impact: 3, cost: 2,
+      blurb: "Passive last-built time + a stale badge; reuses cluster_coverage." },
+    { id: "anchors", title: "Stable cluster anchors surfaced to callers", effort: "S",
+      gaps: ["2"], gapText: "gap 2",
+      col: "now", impact: 3, cost: 1,
+      blurb: "Expose the recompute-stable anchor instead of the ephemeral id." },
+    { id: "mcp", title: "MCP cluster read tools", effort: "M",
+      gaps: ["1"], gapText: "gap 1",
+      col: "now", impact: 3, cost: 2,
+      blurb: "Query clusters natively instead of shelling out to the skill." },
+    { id: "vscodeview", title: "VS Code clusters view", effort: "L",
+      gaps: ["5"], gapText: "gap 5",
+      col: "next", impact: 3, cost: 3,
+      blurb: "Passive IDE visibility for clusters." },
+    { id: "related", title: "Related clusters for current file", effort: "M",
+      gaps: ["9"], gapText: "gap 9",
+      col: "next", impact: 2, cost: 2,
+      blurb: "Surface browsing clusters relevant to the note being edited." },
+    { id: "stubvisible", title: "Stub → note promotion made visible", effort: "M",
+      gaps: ["7"], gapText: "gap 7",
+      col: "next", impact: 2, cost: 2,
+      blurb: "Make the staging → promotable-note path legible." },
+    { id: "nlsearch", title: "Natural-language cluster search", effort: "L",
+      gaps: ["3"], gapText: "gap 3",
+      col: "later", impact: 2, cost: 3,
+      blurb: "Ask 'find clusters about X' in plain language." },
+    { id: "curationui", title: "Curation UI affordance", effort: "M",
+      gaps: ["8"], gapText: "gap 8",
+      col: "later", impact: 2, cost: 2,
+      blurb: "Suppress / rename without a skill invocation." },
+    { id: "runhistory", title: "Scheduler run history in Output panel", effort: "S",
+      gaps: ["6"], gapText: "gap 6",
+      col: "later", impact: 1, cost: 1,
+      blurb: "Surface each auto-run's success / failure trace." }
+  ];
+
+  var GAP_LABELS = {
+    "1": "No MCP cluster tools",
+    "2": "Cluster ID instability",
+    "3": "No natural-language search",
+    "4": "No freshness signal",
+    "5": "No VS Code visibility",
+    "6": "Silent scheduler",
+    "7": "Stub workflow opacity",
+    "8": "Curation is CLI-only",
+    "9": "No related-clusters for current file"
+  };
+
+  var COL_TITLE = {};
+  COLUMNS.forEach(function (c) { COL_TITLE[c.id] = c.title; });
+
+  var activeFilter = "all";
+  var boardEl = document.getElementById("board");
+  var draggingId = null;
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (ch) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+    });
+  }
+
+  function matchesFilter(p) {
+    return activeFilter === "all" || p.gaps.indexOf(activeFilter) !== -1;
+  }
+
+  function moveOptions(p) {
+    return COLUMNS.map(function (c) {
+      var sel = c.id === p.col ? " selected" : "";
+      return '<option value="' + c.id + '"' + sel + '>' + escapeHtml(c.title) + "</option>";
+    }).join("");
+  }
+
+  function cardHtml(p) {
+    var dim = matchesFilter(p) ? "" : " dim";
+    var gaptags = p.gaps.map(function (g) {
+      return '<span class="gaptag" title="' + escapeHtml(GAP_LABELS[g]) + '">gap ' + g + "</span>";
+    }).join("");
+    return (
+      '<article class="pcard' + dim + '" draggable="true" data-id="' + p.id + '" ' +
+        'data-gaps="' + p.gaps.join(",") + '" tabindex="0" ' +
+        'aria-label="' + escapeHtml(p.title) + ', effort ' + p.effort + ', closes ' + p.gapText + '">' +
+        '<div class="pcard-top"><span class="grip" aria-hidden="true"></span>' +
+          '<span class="ptitle">' + escapeHtml(p.title) + "</span></div>" +
+        '<div class="pmeta">' +
+          '<span class="effort-chip effort-' + p.effort + '" title="effort: ' +
+            ({ S: "small", M: "medium", L: "large" }[p.effort]) + '">' + p.effort + "</span>" +
+          gaptags +
+        "</div>" +
+        '<select class="movesel" aria-label="Move ' + escapeHtml(p.title) + ' to lane">' +
+          moveOptions(p) +
+        "</select>" +
+      "</article>"
+    );
+  }
+
+  function render() {
+    var totalPts = 0;
+    boardEl.innerHTML = COLUMNS.map(function (c) {
+      var items = PROPOSALS.filter(function (p) { return p.col === c.id; });
+      var pts = items.reduce(function (a, p) { return a + EST_PTS[p.effort]; }, 0);
+      totalPts += pts;
+      return (
+        '<section class="col" data-col="' + c.id + '">' +
+          '<div class="col-head">' +
+            '<span class="rank">' + escapeHtml(c.rank) + "</span>" +
+            '<span class="col-title">' + escapeHtml(c.title) + "</span>" +
+            '<span class="count">' + items.length + "</span>" +
+          "</div>" +
+          '<div class="col-body">' +
+            (items.length ? items.map(cardHtml).join("") :
+              '<span style="color:var(--faint);font-size:13px;font-style:italic">empty lane</span>') +
+          "</div>" +
+          '<div class="col-foot"><span>effort <b>' + pts + '</b> pts</span>' +
+            '<span>' + items.length + " card" + (items.length === 1 ? "" : "s") + "</span></div>" +
+        "</section>"
+      );
+    }).join("");
+
+    var summary = document.getElementById("global-summary");
+    var nowCount = PROPOSALS.filter(function (p) { return p.col === "now"; }).length;
+    summary.innerHTML = "<b>" + PROPOSALS.length + "</b> proposals · <b>" + totalPts +
+      "</b> effort pts total · <b>" + nowCount + "</b> in Do now";
+
+    wireCards();
+  }
+
+  function wireCards() {
+    var cards = boardEl.querySelectorAll(".pcard");
+    cards.forEach(function (card) {
+      card.addEventListener("dragstart", function (e) {
+        draggingId = card.getAttribute("data-id");
+        card.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+        try { e.dataTransfer.setData("text/plain", draggingId); } catch (err) {}
+      });
+      card.addEventListener("dragend", function () {
+        draggingId = null;
+        card.classList.remove("dragging");
+        boardEl.querySelectorAll(".col").forEach(function (c) { c.classList.remove("dropping"); });
+      });
+    });
+
+    // touch / no-drag fallback: the per-card lane <select>
+    boardEl.querySelectorAll(".movesel").forEach(function (sel) {
+      sel.addEventListener("change", function (e) {
+        var id = sel.closest(".pcard").getAttribute("data-id");
+        setCol(id, sel.value);
+      });
+      // stop the select from starting a drag
+      sel.addEventListener("mousedown", function (e) { e.stopPropagation(); });
+    });
+
+    boardEl.querySelectorAll(".col").forEach(function (col) {
+      col.addEventListener("dragover", function (e) {
+        if (!draggingId) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        col.classList.add("dropping");
+      });
+      col.addEventListener("dragleave", function () { col.classList.remove("dropping"); });
+      col.addEventListener("drop", function (e) {
+        e.preventDefault();
+        if (!draggingId) return;
+        setCol(draggingId, col.getAttribute("data-col"));
+      });
+    });
+  }
+
+  function setCol(id, colId) {
+    var p = PROPOSALS.filter(function (x) { return x.id === id; })[0];
+    if (!p || p.col === colId) return;
+    p.col = colId;
+    render();
+  }
+
+  // ---- gap filter ----
+  document.querySelectorAll(".gapfilter").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      document.querySelectorAll(".gapfilter").forEach(function (b) { b.classList.remove("on"); });
+      btn.classList.add("on");
+      activeFilter = btn.getAttribute("data-gap");
+      render();
+    });
+  });
+
+  // ---- magnitude bars (static: impact / cost) ----
+  function renderMag() {
+    var rows = PROPOSALS.map(function (p) {
+      return { title: p.title, gapText: p.gapText, ratio: p.impact / p.cost };
+    }).sort(function (a, b) { return b.ratio - a.ratio; });
+    var max = rows[0].ratio;
+    var tbl = document.getElementById("mag-table");
+    tbl.innerHTML = rows.map(function (r, i) {
+      var pct = Math.round((r.ratio / max) * 100);
+      var peak = i === 0 ? " peak" : "";
+      return (
+        '<div class="mag-row' + peak + '">' +
+          '<div class="mlabel">' + escapeHtml(r.title) +
+            '<span class="mgap">closes ' + escapeHtml(r.gapText) + "</span></div>" +
+          '<div class="mag-track"><div class="mag-fill" style="width:' + pct + '%"></div></div>' +
+          '<div class="mag-val">' + r.ratio.toFixed(2) + "×</div>" +
+        "</div>"
+      );
+    }).join("");
+  }
+
+  // ---- clipboard export ----
+  function buildMarkdown() {
+    var lines = ["# Topic-cluster augmentation backlog", ""];
+    COLUMNS.forEach(function (c) {
+      var items = PROPOSALS.filter(function (p) { return p.col === c.id; });
+      var pts = items.reduce(function (a, p) { return a + EST_PTS[p.effort]; }, 0);
+      lines.push("## " + c.title + " (" + c.rank + " priority · " +
+        items.length + " · " + pts + " pts)");
+      if (!items.length) {
+        lines.push("- _(empty)_");
+      } else {
+        items.forEach(function (p) {
+          lines.push("- [ ] " + p.title + " — **" + p.effort + "** — closes " + p.gapText);
+        });
+      }
+      lines.push("");
+    });
+    return lines.join("\n").replace(/\n+$/, "\n");
+  }
+
+  function flash(btn, msg) {
+    var orig = btn.textContent;
+    btn.textContent = msg;
+    btn.classList.add("copied");
+    setTimeout(function () {
+      btn.textContent = orig;
+      btn.classList.remove("copied");
+    }, 1200);
+  }
+
+  document.getElementById("export-btn").addEventListener("click", function () {
+    var btn = this;
+    var md = buildMarkdown();
+    function fallback() {
+      var ta = document.createElement("textarea");
+      ta.value = md;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      ta.style.left = "0";
+      ta.style.top = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try { document.execCommand("copy"); } catch (err) {}
+      document.body.removeChild(ta);
+      flash(btn, "Copied ✓");
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(md).then(function () {
+        flash(btn, "Copied ✓");
+      }, fallback);
+    } else {
+      fallback();
+    }
+  });
+
+  render();
+  renderMag();
+})();
+</script>
+</body>
+</html>

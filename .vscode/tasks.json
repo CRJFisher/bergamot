@@ -26,7 +26,8 @@
             "isBackground": true,
             "problemMatcher": ["$tsc-watch"],
             "label": "vscode: watch",
-            "detail": "tsc -watch -p ./ (in vscode/)"
+            "detail": "tsc -watch -p ./ (in vscode/)",
+            "dependsOn": ["install skills"]
         },
         {
             "type": "process",
@@ -38,12 +39,6 @@
             "problemMatcher": [],
             "label": "install skills",
             "detail": "copy shipped skills into the launch target workspace's .claude/skills/"
-        },
-        {
-            "label": "Run Extension: prepare",
-            "dependsOn": ["vscode: watch", "install skills"],
-            "dependsOrder": "parallel",
-            "problemMatcher": []
         }
     ]
 }

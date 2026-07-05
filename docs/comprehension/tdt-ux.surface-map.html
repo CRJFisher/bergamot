@@ -1,0 +1,563 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bergamot topic clusters — the four ways in</title>
+<style>
+:root {
+  --ivory: #f7f3ec;
+  --oat: #ece4d6;
+  --paper: #fffdf8;
+  --slate: #2f3338;
+  --ink: #1d2024;
+  --mute: #6c6f73;
+  --faint: #9a9b97;
+  --clay: #c06d4f;
+  --olive: #6f7a4f;
+  --rust: #a8412a;
+  --work: #4a6b8a;
+  --concept: #7d6699;
+  --line: #d8cfbe;
+  --hair: #e4ddce;
+  --serif: ui-serif, Georgia, "Times New Roman", serif;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--ivory);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+.prose { max-width: 68ch; }
+
+/* cross-doc nav */
+.crossdoc {
+  position: sticky; top: 0; z-index: 10;
+  background: var(--oat);
+  border-bottom: 1px solid var(--line);
+  padding: 10px clamp(16px, 5vw, 64px);
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+}
+.crossdoc .axis-label {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--work); margin-right: 6px;
+}
+.crossdoc a.doc-link, .crossdoc span.doc-current {
+  font-family: var(--mono); font-size: 12px; text-decoration: none;
+  padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line);
+  color: var(--slate); background: var(--paper);
+}
+.crossdoc a.doc-link:hover { border-color: var(--work); color: var(--work); }
+.crossdoc span.doc-current {
+  background: var(--work); border-color: var(--work); color: var(--paper);
+  font-weight: 600;
+}
+.crossdoc span.doc-pending {
+  font-family: var(--mono); font-size: 12px;
+  padding: 5px 11px; border-radius: 999px; border: 1px dashed var(--line);
+  color: var(--faint); background: var(--ivory);
+  display: inline-flex; gap: 7px; align-items: center;
+}
+.crossdoc span.doc-pending .pend-tag {
+  font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--paper); background: var(--faint); padding: 1px 6px; border-radius: 999px;
+}
+
+/* same-page outline */
+.outline {
+  position: sticky; top: 43px; z-index: 9;
+  background: var(--ivory);
+  border-bottom: 1px solid var(--hair);
+  padding: 8px clamp(16px, 5vw, 64px);
+  display: flex; flex-wrap: wrap; gap: 7px; align-items: center;
+}
+.outline a.chip {
+  font-family: var(--mono); font-size: 11.5px; text-decoration: none;
+  color: var(--mute); padding: 3px 10px; border-radius: 999px;
+  border: 1px solid transparent; display: inline-flex; gap: 6px; align-items: center;
+}
+.outline a.chip:hover, .outline a.chip.active { color: var(--slate); border-color: var(--line); background: var(--paper); }
+.outline a.chip .dot { width: 7px; height: 7px; border-radius: 50%; }
+
+main { padding: 0 clamp(16px, 5vw, 64px) 80px; }
+section { padding-top: 46px; scroll-margin-top: 96px; }
+
+/* identity header */
+header.identity { padding: 40px clamp(16px, 5vw, 64px) 0; }
+.eyebrow {
+  font-family: var(--mono); font-size: 12px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--clay); margin: 0 0 10px;
+}
+header.identity h1 {
+  font-family: var(--serif); font-weight: 600; font-size: clamp(30px, 4.4vw, 46px);
+  line-height: 1.1; margin: 0 0 14px; color: var(--ink); max-width: 22ch;
+}
+.byline {
+  display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+  font-family: var(--mono); font-size: 12px; color: var(--mute);
+}
+.byline .pill {
+  border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px;
+  background: var(--paper);
+}
+.preamble {
+  font-family: var(--serif); font-size: 18px; line-height: 1.62;
+  color: var(--slate); margin: 22px clamp(16px, 5vw, 64px) 0;
+}
+
+h2.section-title {
+  font-family: var(--serif); font-weight: 600; font-size: clamp(21px, 2.6vw, 28px);
+  margin: 0 0 6px; color: var(--ink);
+}
+.section-lead {
+  font-family: var(--mono); font-size: 12px; letter-spacing: .04em;
+  color: var(--mute); margin: 0 0 22px; text-transform: uppercase;
+}
+figcaption {
+  font-family: var(--sans); font-size: 13.5px; color: var(--mute);
+  margin-top: 12px; font-style: italic;
+}
+
+/* system-context-map */
+.contextmap {
+  background: var(--paper); border: 1px solid var(--line); border-radius: 14px;
+  padding: 20px; margin-top: 4px;
+}
+.contextmap svg { width: 100%; height: auto; display: block; }
+
+/* comparison grid of surface cards */
+.surface-grid {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px; margin-top: 4px;
+}
+.surface-card {
+  display: flex; flex-direction: column;
+  background: var(--paper); border: 1px solid var(--line); border-radius: 14px;
+  padding: 18px 18px 20px; box-shadow: 0 1px 0 rgba(0,0,0,.02);
+}
+.surface-card .label-pill {
+  align-self: flex-start;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+  text-transform: uppercase; font-weight: 600;
+  padding: 4px 11px; border-radius: 999px; margin-bottom: 12px;
+  border: 1px solid var(--line);
+}
+.surface-card.s-command .label-pill { background: #eef2f6; color: var(--work); border-color: #cdd9e4; }
+.surface-card.s-scheduler .label-pill { background: var(--oat); color: var(--mute); }
+.surface-card.s-http .label-pill { background: #f0eef5; color: var(--concept); border-color: #ddd6e6; }
+.surface-card.s-skill .label-pill { background: #eef2ec; color: var(--olive); border-color: #d3ddce; }
+.surface-card h3 {
+  font-family: var(--serif); font-size: 17px; font-weight: 600;
+  margin: 0 0 4px; color: var(--ink);
+}
+.surface-card .subtitle {
+  font-family: var(--mono); font-size: 11px; color: var(--faint);
+  margin: 0 0 14px; word-break: break-word;
+}
+.surface-card dl { margin: 0; }
+.surface-card .micro { padding: 10px 0; border-top: 1px solid var(--hair); }
+.surface-card .micro:first-of-type { border-top: none; padding-top: 0; }
+.surface-card dt {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--clay); margin: 0 0 4px;
+}
+.surface-card dd {
+  margin: 0; font-size: 13px; line-height: 1.45; color: var(--slate);
+}
+.surface-card dd code {
+  font-family: var(--mono); font-size: 11.5px; background: var(--oat);
+  padding: 1px 5px; border-radius: 4px; color: var(--ink); word-break: break-word;
+}
+.surface-card dd.terminal { color: var(--faint); font-style: italic; }
+
+/* feature-matrix-grid scorecard */
+.matrix-wrap {
+  background: var(--paper); border: 1px solid var(--line); border-radius: 14px;
+  padding: 20px 20px 8px; margin-top: 4px; overflow-x: auto;
+}
+table.matrix { width: 100%; border-collapse: collapse; min-width: 640px; }
+table.matrix th, table.matrix td { padding: 12px 10px; text-align: center; }
+table.matrix thead th {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--slate); font-weight: 600;
+  border-bottom: 2px solid var(--line);
+}
+table.matrix thead th.dim-col { text-align: left; color: var(--mute); }
+table.matrix tbody th {
+  text-align: left; font-family: var(--sans); font-size: 13.5px;
+  font-weight: 600; color: var(--ink); white-space: nowrap;
+}
+table.matrix tbody tr { border-bottom: 1px solid var(--hair); }
+table.matrix tbody tr:last-child { border-bottom: none; }
+table.matrix tbody tr.systemic th { color: var(--rust); }
+table.matrix tbody tr.systemic { background: #fbf2ee; }
+
+.glyph { display: inline-flex; align-items: center; justify-content: center; }
+.glyph .disc {
+  width: 18px; height: 18px; border-radius: 50%; display: inline-block; position: relative;
+}
+.glyph.full .disc { background: var(--olive); }
+.glyph.half .disc {
+  background: linear-gradient(90deg, var(--clay) 0 50%, transparent 50% 100%);
+  border: 1.5px solid var(--clay);
+}
+.glyph.empty .disc { background: transparent; border: 1.5px solid var(--rust); }
+
+.matrix-legend {
+  display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+  padding: 14px 4px 4px; font-family: var(--mono); font-size: 11.5px; color: var(--mute);
+}
+.matrix-legend .lg { display: inline-flex; gap: 7px; align-items: center; }
+
+/* magnitude bars */
+.bars {
+  display: grid; grid-template-columns: 130px 1fr; gap: 14px 16px;
+  align-items: center; margin-top: 4px;
+  background: var(--paper); border: 1px solid var(--line); border-radius: 14px;
+  padding: 22px;
+}
+.bars .bar-label {
+  font-family: var(--mono); font-size: 12px; color: var(--slate); text-align: right;
+}
+.bars .bar-track {
+  height: 26px; background: var(--oat); border-radius: 6px; position: relative;
+  display: flex; align-items: center;
+}
+.bars .bar-fill {
+  height: 100%; border-radius: 6px; background: var(--work);
+  display: flex; align-items: center; justify-content: flex-end;
+}
+.bars .bar-fill.worst { background: var(--rust); }
+.bars .bar-fill .bv {
+  font-family: var(--mono); font-size: 11px; color: var(--paper);
+  padding-right: 8px; font-weight: 600;
+}
+
+/* accent callout */
+aside.callout {
+  border-left: 4px solid var(--clay); background: var(--paper);
+  border-radius: 0 12px 12px 0; padding: 18px 22px; margin-top: 4px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+aside.callout .key {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--clay); font-weight: 600;
+}
+aside.callout p {
+  margin: 0; font-family: var(--serif); font-size: 16px; line-height: 1.55; color: var(--slate);
+}
+aside.callout a { color: var(--clay); text-decoration: underline; text-underline-offset: 2px; }
+
+/* provenance */
+footer.provenance {
+  margin: 60px clamp(16px, 5vw, 64px) 0; padding-top: 24px;
+  border-top: 1px solid var(--line);
+  font-family: var(--mono); font-size: 12px; color: var(--mute);
+}
+footer.provenance .label {
+  font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--faint); margin-bottom: 10px;
+}
+footer.provenance ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 5px; }
+footer.provenance code { color: var(--slate); }
+
+:focus-visible { outline: 2px solid var(--work); outline-offset: 2px; border-radius: 3px; }
+
+@media (max-width: 860px) {
+  .surface-grid { grid-template-columns: 1fr; }
+  .bars { grid-template-columns: 100px 1fr; }
+}
+</style>
+</head>
+<body>
+
+<nav class="crossdoc" aria-label="Related analyses">
+  <span class="axis-label">TDT UX</span>
+  <span class="doc-current" aria-current="page">Surface Map</span>
+  <a class="doc-link" href="tdt-ux.user-flows.html">User Flows</a>
+  <a class="doc-link" href="tdt-ux.augmentation-proposals.html">Augmentation Proposals</a>
+</nav>
+
+<nav class="outline" aria-label="On this page">
+  <a class="chip" href="#context"><span class="dot" style="background:var(--clay)"></span>Pipeline</a>
+  <a class="chip" href="#surfaces"><span class="dot" style="background:var(--work)"></span>Four doors</a>
+  <a class="chip" href="#scorecard"><span class="dot" style="background:var(--olive)"></span>Scorecard</a>
+  <a class="chip" href="#aggregate"><span class="dot" style="background:var(--rust)"></span>Which carries the load</a>
+  <a class="chip" href="#gap"><span class="dot" style="background:var(--clay)"></span>Systemic gap</a>
+</nav>
+
+<header class="identity">
+  <p class="eyebrow">Bergamot · Topic clusters</p>
+  <h1>Four ways into the topics your browsing reveals</h1>
+  <div class="byline">
+    <span class="pill">Temporal Topic Detection</span>
+    <span class="pill">4 entry surfaces</span>
+    <span class="pill">5 UX dimensions</span>
+  </div>
+</header>
+
+<p class="preamble prose">Bergamot watches which pages you browse (only the addresses, never the content) and quietly groups them into topics — the projects you're actually spending time on. It calls each group a "cluster." Once clustering runs, there are exactly four doors into those clusters: a command you type into VS Code, a timer that rebuilds them once a day, internal web addresses the extension calls itself, and a Claude Code skill you drive from prompts. This page lays the four doors side by side, answering plain questions for each — who opens it, how, what they see, and what they can do next — then grades all four on five things a person actually cares about: can I find it, can I act on what I see, do I know if it's fresh, does it plug into my notes, and is it easy for an AI agent to use.</p>
+
+<main>
+
+<section id="context">
+  <h2 class="section-title">One pipeline, four doors</h2>
+  <p class="section-lead">Where the surfaces sit</p>
+  <figure class="contextmap">
+    <svg viewBox="0 0 1180 300" role="img" aria-label="Browsing capture feeds a cluster rebuild, which writes to a DuckDB cluster store, read through a shared cluster read layer that fans out to four entry surfaces: VS Code command, auto scheduler, HTTP read routes, and the Claude skill.">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#6c6f73"/>
+        </marker>
+        <marker id="arrow-clay" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#c06d4f"/>
+        </marker>
+      </defs>
+
+      <!-- backbone -->
+      <g font-family="var(--sans)">
+        <rect x="10" y="118" width="150" height="64" rx="10" fill="#ece4d6" stroke="#d8cfbe"/>
+        <text x="85" y="144" text-anchor="middle" font-size="12.5" fill="#2f3338" font-weight="600">Browsing capture</text>
+        <text x="85" y="162" text-anchor="middle" font-size="10.5" fill="#6c6f73" font-family="'SF Mono',Menlo,monospace">metadata only</text>
+
+        <rect x="196" y="118" width="158" height="64" rx="10" fill="#ece4d6" stroke="#d8cfbe"/>
+        <text x="275" y="144" text-anchor="middle" font-size="12.5" fill="#2f3338" font-weight="600">Cluster rebuild</text>
+        <text x="275" y="162" text-anchor="middle" font-size="10.5" fill="#6c6f73" font-family="'SF Mono',Menlo,monospace">rebuild_clusters</text>
+
+        <rect x="390" y="118" width="150" height="64" rx="10" fill="#ece4d6" stroke="#d8cfbe"/>
+        <text x="465" y="144" text-anchor="middle" font-size="12.5" fill="#2f3338" font-weight="600">Cluster store</text>
+        <text x="465" y="162" text-anchor="middle" font-size="10.5" fill="#6c6f73" font-family="'SF Mono',Menlo,monospace">DuckDB</text>
+
+        <rect x="576" y="110" width="164" height="80" rx="10" fill="#fffdf8" stroke="#c06d4f" stroke-width="1.6"/>
+        <text x="658" y="140" text-anchor="middle" font-size="12.5" fill="#2f3338" font-weight="600">Cluster read</text>
+        <text x="658" y="158" text-anchor="middle" font-size="12.5" fill="#2f3338" font-weight="600">layer</text>
+        <text x="658" y="177" text-anchor="middle" font-size="10" fill="#a8412a" font-family="'SF Mono',Menlo,monospace">the only JOIN layer</text>
+      </g>
+
+      <!-- backbone edges -->
+      <line x1="160" y1="150" x2="192" y2="150" stroke="#6c6f73" stroke-width="1.6" marker-end="url(#arrow)"/>
+      <line x1="354" y1="150" x2="386" y2="150" stroke="#6c6f73" stroke-width="1.6" marker-end="url(#arrow)"/>
+      <line x1="540" y1="150" x2="572" y2="150" stroke="#6c6f73" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+      <!-- fan-out surfaces (highlighted) -->
+      <g font-family="var(--sans)">
+        <rect x="900" y="20" width="264" height="52" rx="10" fill="#eef2f6" stroke="#4a6b8a" stroke-width="1.6"/>
+        <text x="920" y="43" font-size="12.5" fill="#2f3338" font-weight="600">VS Code command</text>
+        <text x="920" y="60" font-size="10" fill="#4a6b8a" font-family="'SF Mono',Menlo,monospace">you type it · manual</text>
+
+        <rect x="900" y="86" width="264" height="52" rx="10" fill="#ece4d6" stroke="#6c6f73" stroke-width="1.6"/>
+        <text x="920" y="109" font-size="12.5" fill="#2f3338" font-weight="600">Auto scheduler</text>
+        <text x="920" y="126" font-size="10" fill="#6c6f73" font-family="'SF Mono',Menlo,monospace">fires itself · 24h</text>
+
+        <rect x="900" y="152" width="264" height="52" rx="10" fill="#f0eef5" stroke="#7d6699" stroke-width="1.6"/>
+        <text x="920" y="175" font-size="12.5" fill="#2f3338" font-weight="600">HTTP read routes</text>
+        <text x="920" y="192" font-size="10" fill="#7d6699" font-family="'SF Mono',Menlo,monospace">internal · JSON</text>
+
+        <rect x="900" y="218" width="264" height="52" rx="10" fill="#eef2ec" stroke="#6f7a4f" stroke-width="1.6"/>
+        <text x="920" y="241" font-size="12.5" fill="#2f3338" font-weight="600">Claude skill</text>
+        <text x="920" y="258" font-size="10" fill="#6f7a4f" font-family="'SF Mono',Menlo,monospace">agent · prompt-driven</text>
+      </g>
+
+      <!-- fan-out edges from read layer -->
+      <path d="M740 140 C 820 120, 840 46, 896 46" fill="none" stroke="#c06d4f" stroke-width="1.6" marker-end="url(#arrow-clay)"/>
+      <path d="M740 145 C 820 130, 840 112, 896 112" fill="none" stroke="#c06d4f" stroke-width="1.6" marker-end="url(#arrow-clay)"/>
+      <path d="M740 155 C 820 165, 840 178, 896 178" fill="none" stroke="#c06d4f" stroke-width="1.6" marker-end="url(#arrow-clay)"/>
+      <path d="M740 160 C 820 180, 840 244, 896 244" fill="none" stroke="#c06d4f" stroke-width="1.6" marker-end="url(#arrow-clay)"/>
+
+      <!-- legend -->
+      <g font-family="'SF Mono',Menlo,monospace" font-size="10.5">
+        <rect x="576" y="248" width="14" height="14" rx="3" fill="#fffdf8" stroke="#c06d4f" stroke-width="1.6"/>
+        <text x="597" y="259" fill="#6c6f73">clay outline = the four entry surfaces analysed here</text>
+      </g>
+    </svg>
+    <figcaption>The four doors all read the same clusters through one shared read layer — the only place that joins the cluster tables — so they inherit the same data and the same limits.</figcaption>
+  </figure>
+</section>
+
+<section id="surfaces">
+  <h2 class="section-title">The four doors, as user stories</h2>
+  <p class="section-lead">Who opens it · how · what they see · what's next</p>
+  <div class="surface-grid">
+
+    <article class="surface-card s-command">
+      <span class="label-pill">Command</span>
+      <h3>Detect topic clusters</h3>
+      <p class="subtitle">bergamot.tdt.rebuildClusters</p>
+      <dl>
+        <div class="micro"><dt>Who invokes</dt><dd>You, from the VS Code Command Palette.</dd></div>
+        <div class="micro"><dt>How</dt><dd><code>bergamot.tdt.rebuildClusters</code> → "Bergamot: Detect topic clusters from browsing".</dd></div>
+        <div class="micro"><dt>What they see</dt><dd>A progress notification, then a result toast: cluster count, visit count, excluded origins.</dd></div>
+        <div class="micro"><dt>What's next</dt><dd class="terminal">Nothing — the toast is terminal. It clears and leaves no trace.</dd></div>
+      </dl>
+    </article>
+
+    <article class="surface-card s-scheduler">
+      <span class="label-pill">Scheduler</span>
+      <h3>Automatic rebuild</h3>
+      <p class="subtitle">ClusterScheduler</p>
+      <dl>
+        <div class="micro"><dt>Who invokes</dt><dd>Nobody — it fires itself on a timer.</dd></div>
+        <div class="micro"><dt>How</dt><dd>Default 24h cadence; first tick 60s after activation.</dd></div>
+        <div class="micro"><dt>What they see</dt><dd class="terminal">Nothing user-visible; failures are logged silently in the Output panel.</dd></div>
+        <div class="micro"><dt>What's next</dt><dd class="terminal">Not applicable — no surface, no signal.</dd></div>
+      </dl>
+    </article>
+
+    <article class="surface-card s-http">
+      <span class="label-pill">HTTP routes</span>
+      <h3>Internal read routes</h3>
+      <p class="subtitle">loopback server</p>
+      <dl>
+        <div class="micro"><dt>Who invokes</dt><dd>The extension itself, or a programmatic caller.</dd></div>
+        <div class="micro"><dt>How</dt><dd>Six internal endpoints: <code>/query/clusters</code>, <code>/query/cluster</code>, <code>/query/clusters_for_page</code>, <code>/query/cluster_coverage</code>, <code>/query/visits_in_window</code>, <code>POST /cluster_control</code>.</dd></div>
+        <div class="micro"><dt>What they see</dt><dd>JSON.</dd></div>
+        <div class="micro"><dt>What's next</dt><dd>Another HTTP call — the caller composes its own flow.</dd></div>
+      </dl>
+    </article>
+
+    <article class="surface-card s-skill">
+      <span class="label-pill">Skill</span>
+      <h3>bergamot-clusters</h3>
+      <p class="subtitle">Claude Code skill</p>
+      <dl>
+        <div class="micro"><dt>Who invokes</dt><dd>Claude Code (an agent), driven by your prompts.</dd></div>
+        <div class="micro"><dt>How</dt><dd><code>node …/bergamot_clusters.js &lt;command&gt;</code>: <code>recent</code>, <code>page</code>, <code>cluster</code>, <code>coverage</code>, <code>stub</code>, <code>suppress</code>/<code>rename</code>/<code>block</code>.</dd></div>
+        <div class="micro"><dt>What they see</dt><dd>Text output the agent reads and relays.</dd></div>
+        <div class="micro"><dt>What's next</dt><dd>Stage a note stub into <code>bergamot.staging/</code>, or run a curation control.</dd></div>
+      </dl>
+    </article>
+
+  </div>
+  <figcaption>Each door is one distinct entry with its own audience and its own dead-end or hand-off — they do not share a workflow.</figcaption>
+</section>
+
+<section id="scorecard">
+  <h2 class="section-title">How each door scores</h2>
+  <p class="section-lead">5 dimensions × 4 surfaces — scan a column for the winner, a row for the gap</p>
+  <div class="matrix-wrap">
+    <table class="matrix">
+      <thead>
+        <tr>
+          <th class="dim-col">Dimension</th>
+          <th>Command</th>
+          <th>Scheduler</th>
+          <th>HTTP routes</th>
+          <th>Skill</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>Discoverability</th>
+          <td><span class="glyph half" title="Half — in the palette, but unlabelled as a cluster feature"><span class="disc"></span></span></td>
+          <td><span class="glyph empty" title="Empty — invisible, fires with no trace"><span class="disc"></span></span></td>
+          <td><span class="glyph empty" title="Empty — internal, not addressable by a user"><span class="disc"></span></span></td>
+          <td><span class="glyph half" title="Half — discoverable to an agent, not to a person"><span class="disc"></span></span></td>
+        </tr>
+        <tr>
+          <th>Actionability</th>
+          <td><span class="glyph half" title="Half — rebuild only, no read"><span class="disc"></span></span></td>
+          <td><span class="glyph empty" title="Empty — no user action possible"><span class="disc"></span></span></td>
+          <td><span class="glyph full" title="Full — full read plus control"><span class="disc"></span></span></td>
+          <td><span class="glyph full" title="Full — read, curate, and stub"><span class="disc"></span></span></td>
+        </tr>
+        <tr class="systemic">
+          <th>Freshness awareness</th>
+          <td><span class="glyph empty" title="Empty — no passive staleness signal"><span class="disc"></span></span></td>
+          <td><span class="glyph empty" title="Empty — silent, no last-run signal"><span class="disc"></span></span></td>
+          <td><span class="glyph half" title="Half — coverage is queryable but must be pulled"><span class="disc"></span></span></td>
+          <td><span class="glyph half" title="Half — coverage on demand, never passive"><span class="disc"></span></span></td>
+        </tr>
+        <tr class="systemic">
+          <th>PKM integration</th>
+          <td><span class="glyph empty" title="Empty — no bridge to notes"><span class="disc"></span></span></td>
+          <td><span class="glyph empty" title="Empty — no bridge to notes"><span class="disc"></span></span></td>
+          <td><span class="glyph half" title="Half — /stage_cluster exists but is a raw endpoint"><span class="disc"></span></span></td>
+          <td><span class="glyph half" title="Half — the stub is the only bridge, and it is opaque"><span class="disc"></span></span></td>
+        </tr>
+        <tr>
+          <th>Agent-friendliness</th>
+          <td><span class="glyph empty" title="Empty — not agent-addressable"><span class="disc"></span></span></td>
+          <td><span class="glyph empty" title="Empty — not agent-addressable"><span class="disc"></span></span></td>
+          <td><span class="glyph half" title="Half — callable, but no MCP tool surface"><span class="disc"></span></span></td>
+          <td><span class="glyph full" title="Full — built for the agent"><span class="disc"></span></span></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="matrix-legend">
+      <span class="lg"><span class="glyph full"><span class="disc"></span></span>Full</span>
+      <span class="lg"><span class="glyph half"><span class="disc"></span></span>Partial</span>
+      <span class="lg"><span class="glyph empty"><span class="disc"></span></span>Absent</span>
+      <span class="lg" style="color:var(--rust)">Tinted rows = weak across every surface</span>
+    </div>
+  </div>
+  <figcaption>No column is filled top to bottom: no single door is strong on all five dimensions, and two whole rows stay weak wherever you look.</figcaption>
+</section>
+
+<section id="aggregate">
+  <h2 class="section-title">Which door carries the load</h2>
+  <p class="section-lead">Aggregate UX score per surface (sum of its column)</p>
+  <div class="bars">
+    <span class="bar-label">Skill</span>
+    <div class="bar-track"><div class="bar-fill" style="width:80%"><span class="bv">4.0 / 5</span></div></div>
+
+    <span class="bar-label">HTTP routes</span>
+    <div class="bar-track"><div class="bar-fill" style="width:70%"><span class="bv">3.5 / 5</span></div></div>
+
+    <span class="bar-label">Command</span>
+    <div class="bar-track"><div class="bar-fill" style="width:20%"><span class="bv">1.0 / 5</span></div></div>
+
+    <span class="bar-label">Scheduler</span>
+    <div class="bar-track"><div class="bar-fill worst" style="width:0%"><span class="bv" style="color:var(--rust);padding-right:0;padding-left:8px">0.0 / 5</span></div></div>
+  </div>
+  <figcaption>The two agent-and-machine surfaces carry almost all the actionability; the two doors a person actually touches — the command and the silent timer — score lowest.</figcaption>
+</section>
+
+<section id="gap">
+  <h2 class="section-title">The product-level gap</h2>
+  <p class="section-lead">Not a per-door problem</p>
+  <aside class="callout">
+    <span class="key">Systemic gap</span>
+    <p>Freshness awareness and PKM integration are weak across <em>every</em> door — those two rows never rise above a half-disc anywhere. That makes them product-level gaps to close once, not four separate surface fixes — the augmentation proposals take these two rows first.</p>
+  </aside>
+</section>
+
+<footer class="provenance">
+  <p class="label">Read from source</p>
+  <ul>
+    <li><code>vscode/src/commands/command_manager.ts:48-75</code> — the manual rebuild command and its result toast</li>
+    <li><code>vscode/src/tdt/cluster_scheduler.ts:1-82</code> — the passive scheduler, 24h cadence, 60s first tick</li>
+    <li><code>vscode/src/server/server_manager.ts:548-644</code> — the read routes, <code>/cluster_control</code>, and <code>/stage_cluster</code></li>
+    <li><code>skills/bergamot-clusters/SKILL.md</code> — the skill commands and the staged-stub hero loop</li>
+    <li><code>vscode/package.json:47-48</code> — the Command Palette title</li>
+  </ul>
+</footer>
+
+</main>
+
+<script>
+(function () {
+  var chips = Array.prototype.slice.call(document.querySelectorAll('.outline a.chip'));
+  var sections = chips.map(function (c) { return document.querySelector(c.getAttribute('href')); });
+  if (!('IntersectionObserver' in window)) return;
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (!e.isIntersecting) return;
+      var i = sections.indexOf(e.target);
+      chips.forEach(function (c, j) { c.classList.toggle('active', i === j); });
+    });
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  sections.forEach(function (s) { if (s) io.observe(s); });
+})();
+</script>
+
+</body>
+</html>
