@@ -11,3 +11,13 @@ task-9: []  # Expose vector DB as RAG - core functionality is documented
 task-10: []  # Implement procedural memory - no dependencies
 task-11: []  # Search command with dropdown - no dependencies
 task-12: []  # Tooltip for webpage links - no dependencies
+
+# IA remodel epic (task-44)
+task-44.1: []  # Browser: dissolve core/ + types/
+task-44.2: []  # VSCode: visit/ pipeline + schema colocation
+task-44.3: []  # VSCode: dissolve config/ + database/
+task-44.4: []  # VSCode: consolidate mcp/
+task-44.5: [task-44.2, task-44.3, task-44.7]  # server_manager split lands after imports/folder shape settle
+task-44.6: []  # tdt library: colocate types.ts + config.ts
+task-44.7: []  # vscode/src/tdt: evict infra, substructure
+task-44.8: [task-44.1, task-44.2, task-44.3, task-44.4, task-44.5, task-44.6, task-44.7]  # docs + enforcement last
